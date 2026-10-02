@@ -1,0 +1,420 @@
+{
+  "phase": "FINAL DATA COVERAGE OPTIMIZATION",
+  "complete": false,
+  "TESTS": "run pytest separately",
+  "DATA_COVERAGE": {
+    "symbols": 527,
+    "ohlcv": {
+      "1m": {
+        "available": 40,
+        "total": 527,
+        "pct": 7.59
+      },
+      "5m": {
+        "available": 40,
+        "total": 527,
+        "pct": 7.59
+      },
+      "15m": {
+        "available": 150,
+        "total": 527,
+        "pct": 28.46
+      },
+      "1h": {
+        "available": 150,
+        "total": 527,
+        "pct": 28.46
+      },
+      "4h": {
+        "available": 218,
+        "total": 527,
+        "pct": 41.37
+      },
+      "1d": {
+        "available": 527,
+        "total": 527,
+        "pct": 100.0
+      }
+    },
+    "market_cap": {
+      "available": 399,
+      "live": 399,
+      "historical": 0,
+      "cached": 0,
+      "stale": 0,
+      "waiting": 0,
+      "unavailable": 128,
+      "total": 527,
+      "pct_available": 75.71
+    },
+    "tvl": {
+      "available": 271,
+      "live": 271,
+      "historical": 0,
+      "cached": 0,
+      "stale": 0,
+      "waiting": 0,
+      "unavailable": 256,
+      "total": 527,
+      "pct_available": 51.42
+    },
+    "goals": {
+      "targets": {
+        "1d": {
+          "goal_pct": 95.0,
+          "pct": 100.0,
+          "covered": 527,
+          "total": 527,
+          "met": true
+        },
+        "4h": {
+          "goal_pct": 95.0,
+          "pct": 41.37,
+          "covered": 218,
+          "total": 527,
+          "met": false
+        },
+        "1h": {
+          "goal_pct": 95.0,
+          "pct": 28.46,
+          "covered": 150,
+          "total": 527,
+          "met": false
+        },
+        "15m": {
+          "goal_pct": 95.0,
+          "pct": 28.46,
+          "covered": 150,
+          "total": 527,
+          "met": false
+        },
+        "5m": {
+          "goal_pct": 95.0,
+          "pct": 7.59,
+          "covered": 40,
+          "total": 527,
+          "met": false
+        },
+        "1m": {
+          "goal": "rolling",
+          "universe": 60,
+          "covered": 40,
+          "pct": 66.67,
+          "met": true
+        },
+        "oi": {
+          "goal_pct": 95.0,
+          "pct": 12.14,
+          "met": false
+        }
+      },
+      "all_measured_targets_met": false,
+      "system_complete": false,
+      "note": "Do not report COMPLETE until measured coverage targets are achieved"
+    }
+  },
+  "BACKFILL_STATUS": {
+    "total_jobs": 3162,
+    "pending": 2036,
+    "running": 2,
+    "complete": 1123,
+    "failed": 0,
+    "retry_wait": 1,
+    "estimated_progress": {
+      "pct_complete": 35.52,
+      "throughput_jobs_per_min": 73.0,
+      "eta_seconds": 1675.9,
+      "eta_note": "derived from actual completion throughput"
+    },
+    "adaptive": {
+      "concurrency": 3,
+      "pause_seconds": 0.35,
+      "avg_latency_ms": 139.5,
+      "successes_per_min": 72.0,
+      "count_429": 0,
+      "count_5xx": 0,
+      "count_timeout": 0,
+      "count_success": 471,
+      "in_backoff": false,
+      "min_concurrency": 1,
+      "max_concurrency": 3
+    }
+  },
+  "OI_COVERAGE": {
+    "pct_available": 12.14,
+    "goal_met": false,
+    "coverage": {
+      "live": 64,
+      "cached": 0,
+      "stale": 0,
+      "waiting": 463,
+      "unavailable": 0,
+      "error": 0,
+      "available": 64,
+      "total": 527
+    },
+    "adaptive": {
+      "concurrency": 3,
+      "pause_seconds": 0.2,
+      "avg_latency_ms": 154.4,
+      "successes_per_min": 0.0,
+      "count_429": 0,
+      "count_5xx": 0,
+      "count_timeout": 0,
+      "count_success": 90,
+      "in_backoff": false,
+      "min_concurrency": 1,
+      "max_concurrency": 3
+    }
+  },
+  "PROVIDER_STATUS": {
+    "providers": [
+      {
+        "provider": "binance_rest",
+        "name": "binance_rest",
+        "enabled": true,
+        "healthy": true,
+        "status": "HEALTHY",
+        "requests": 643,
+        "successful": 643,
+        "failed": 0,
+        "429_count": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "cache_hit_rate": 0.0,
+        "last_success": "2026-10-01T04:27:23.543256+00:00",
+        "last_error": null,
+        "last_error_at": null,
+        "cooldown_until": null,
+        "avg_latency_ms": 162.8,
+        "last_latency_ms": 781.0000000026776
+      },
+      {
+        "provider": "coingecko",
+        "name": "coingecko",
+        "enabled": true,
+        "healthy": true,
+        "status": "HEALTHY",
+        "requests": 4,
+        "successful": 4,
+        "failed": 0,
+        "429_count": 0,
+        "cache_hits": 8,
+        "cache_misses": 4,
+        "cache_hit_rate": 0.6667,
+        "last_success": "2026-10-01T04:22:46.676003+00:00",
+        "last_error": null,
+        "last_error_at": null,
+        "cooldown_until": null,
+        "avg_latency_ms": 132.75,
+        "last_latency_ms": 125.0
+      },
+      {
+        "provider": "defillama",
+        "name": "defillama",
+        "enabled": true,
+        "healthy": true,
+        "status": "HEALTHY",
+        "requests": 1,
+        "successful": 1,
+        "failed": 0,
+        "429_count": 0,
+        "cache_hits": 0,
+        "cache_misses": 1,
+        "cache_hit_rate": 0.0,
+        "last_success": "2026-10-01T04:22:47.342131+00:00",
+        "last_error": null,
+        "last_error_at": null,
+        "cooldown_until": null,
+        "avg_latency_ms": 390.0,
+        "last_latency_ms": 389.9999999994179
+      },
+      {
+        "provider": "onchain",
+        "name": "onchain",
+        "enabled": false,
+        "healthy": false,
+        "status": "DISABLED",
+        "requests": 0,
+        "successful": 0,
+        "failed": 0,
+        "429_count": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "cache_hit_rate": 0.0,
+        "last_success": null,
+        "last_error": null,
+        "last_error_at": null,
+        "cooldown_until": null,
+        "avg_latency_ms": 0.0,
+        "last_latency_ms": null
+      },
+      {
+        "provider": "sentiment",
+        "name": "sentiment",
+        "enabled": false,
+        "healthy": false,
+        "status": "DISABLED",
+        "requests": 0,
+        "successful": 0,
+        "failed": 0,
+        "429_count": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "cache_hit_rate": 0.0,
+        "last_success": null,
+        "last_error": null,
+        "last_error_at": null,
+        "cooldown_until": null,
+        "avg_latency_ms": 0.0,
+        "last_latency_ms": null
+      }
+    ],
+    "fundamentals": {
+      "refresh_seconds": 600.0,
+      "last_refresh": "2026-10-01T04:22:59.290986+00:00",
+      "cached_symbols": 527,
+      "coingecko_cooldown": false,
+      "coingecko_cooldown_remaining": 0.0,
+      "defillama_cooldown": false,
+      "coverage_reasons": {
+        "market_cap": {
+          "counts": {
+            "covered": 399,
+            "asset_not_covered": 128
+          },
+          "covered": 399,
+          "asset_not_covered": 128,
+          "rate_limited": 0,
+          "provider_unavailable": 0,
+          "waiting": 0
+        },
+        "fdv": {
+          "counts": {
+            "covered": 399,
+            "asset_not_covered": 128
+          },
+          "covered": 399,
+          "asset_not_covered": 128,
+          "rate_limited": 0,
+          "provider_unavailable": 0,
+          "waiting": 0
+        },
+        "tvl": {
+          "counts": {
+            "covered": 271,
+            "asset_not_covered": 256
+          },
+          "covered": 271,
+          "asset_not_covered": 256,
+          "rate_limited": 0,
+          "provider_unavailable": 0,
+          "waiting": 0
+        },
+        "market_rank": {
+          "counts": {
+            "covered": 398,
+            "asset_not_covered": 129
+          },
+          "covered": 398,
+          "asset_not_covered": 129,
+          "rate_limited": 0,
+          "provider_unavailable": 0,
+          "waiting": 0
+        },
+        "category": {
+          "counts": {
+            "covered": 411,
+            "waiting": 116
+          },
+          "covered": 411,
+          "asset_not_covered": 0,
+          "rate_limited": 0,
+          "provider_unavailable": 0,
+          "waiting": 116
+        }
+      }
+    },
+    "fundamental_reasons": {
+      "market_cap": {
+        "counts": {
+          "covered": 399,
+          "asset_not_covered": 128
+        },
+        "covered": 399,
+        "asset_not_covered": 128,
+        "rate_limited": 0,
+        "provider_unavailable": 0,
+        "waiting": 0
+      },
+      "fdv": {
+        "counts": {
+          "covered": 399,
+          "asset_not_covered": 128
+        },
+        "covered": 399,
+        "asset_not_covered": 128,
+        "rate_limited": 0,
+        "provider_unavailable": 0,
+        "waiting": 0
+      },
+      "tvl": {
+        "counts": {
+          "covered": 271,
+          "asset_not_covered": 256
+        },
+        "covered": 271,
+        "asset_not_covered": 256,
+        "rate_limited": 0,
+        "provider_unavailable": 0,
+        "waiting": 0
+      },
+      "market_rank": {
+        "counts": {
+          "covered": 398,
+          "asset_not_covered": 129
+        },
+        "covered": 398,
+        "asset_not_covered": 129,
+        "rate_limited": 0,
+        "provider_unavailable": 0,
+        "waiting": 0
+      },
+      "category": {
+        "counts": {
+          "covered": 411,
+          "waiting": 116
+        },
+        "covered": 411,
+        "asset_not_covered": 0,
+        "rate_limited": 0,
+        "provider_unavailable": 0,
+        "waiting": 116
+      }
+    }
+  },
+  "DATABASE_STATUS": "ok",
+  "REDIS_STATUS": "ok",
+  "LIQUIDATION_STATUS": {
+    "liquidation_status": "WAITING",
+    "connection_status": "CONNECTED",
+    "raw_messages": 0,
+    "events_seen": 0,
+    "dns_resolution": {
+      "ok": true,
+      "error": null
+    },
+    "tls_connection": {
+      "ok": true
+    },
+    "bytes_received": 0,
+    "reconnect_count": 0,
+    "note": "WAITING is honest when the stream is quiet or blocked; no fabricated liquidation fallback \u2014 never convert WAITING to zero"
+  },
+  "NO_FAKE_DATA_STATUS": {
+    "use_real_data": true,
+    "ingestion": "live",
+    "rule": "WAITING never converted to zero; no fabricated liquidations/performance"
+  },
+  "verdict": "IN_PROGRESS \u2014 targets not yet measured as met"
+}

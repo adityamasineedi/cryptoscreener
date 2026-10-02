@@ -1,0 +1,80 @@
+exchange: binance
+quote_assets:
+  - USDT
+markets:
+  - futures_usdt_perp
+  - spot
+timeframes:
+  - 1m
+  - 5m
+  - 15m
+  - 1h
+  - 4h
+  - 1d
+websocket:
+  # Safety margin below Binance hard limit of 1024 streams/connection
+  max_streams_per_connection: 900
+  reconnect_base_delay_seconds: 1
+  reconnect_max_delay_seconds: 60
+  force_reconnect_hours: 23
+  ping_interval_seconds: 20
+  stale_ticker_seconds: 15
+  unavailable_after_seconds: 60
+symbol_discovery:
+  refresh_seconds: 300
+  include_inactive: false
+open_interest:
+  refresh_seconds: 120
+  concurrency: 3
+  batch_size: 40
+  # Default: only REST-poll top large caps (+ visible/watchlist). Use FULL_UNIVERSE for all.
+  priority_mode: TOP_MARKET_CAP  # TOP_MARKET_CAP | TOP_VOLUME | WATCHLIST | FULL_UNIVERSE
+  active_count: 40
+  stale_seconds: 300
+  cache_ttl_seconds: 90
+  min_token_headroom: 80
+backfill:
+  # Progressive universe coverage; priority from live quote volume (not hardcoded)
+  tier1_count: 40
+  tier2_count: 150
+  candles_per_request: 200
+  min_token_headroom: 100
+  request_pause_seconds: 0.35
+  workers: 3
+  min_concurrency: 1
+  max_concurrency: 3
+  gap_fill_enabled: true
+  # 1m: rolling top-volume + visible only (never unlimited for all 527)
+  m1_rolling_universe: 60
+  m1_retention_candles: 200
+  # P0: 1d/4h/1h → P1: 15m/5m → P2: 1m
+  timeframes_priority:
+    - 1d
+    - 4h
+    - 1h
+    - 15m
+    - 5m
+    - 1m
+coverage_goals:
+  "1d": 95
+  "4h": 95
+  "1h": 95
+  "15m": 95
+  "5m": 95
+  "1m": rolling
+  oi: 95
+retention:
+  ticks_hours: 6
+  liquidations_hours: 48
+  funding_days: 90
+  open_interest_days: 90
+  signals_days: 365
+  structure_events_days: 365
+  supply_demand_zones_days: 365
+  ohlcv:
+    "1m": 60      # days
+    "5m": 270
+    "15m": 545
+    "1h": 1095
+    "4h": 1825
+    "1d": 3650

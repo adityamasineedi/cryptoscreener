@@ -1,0 +1,20 @@
+# Asset → chain/contract mapping for on-chain providers.
+# Do NOT assume futures symbols map to a particular chain.
+# Without a mapping, on-chain metrics return WAITING.
+#
+# Fields:
+#   asset: base asset ticker (e.g. UNI)
+#   chain: canonical chain id (ethereum, bsc, solana, bitcoin, ...)
+#   contract_address: token contract / mint (null for native L1 coins when provider supports)
+#   decimals: token decimals
+#   provider_id: provider-specific identifier (optional)
+#   symbols: optional list of trading symbols that map to this asset
+
+assets: []
+# Example (disabled until a real on-chain provider is configured):
+# - asset: UNI
+#   chain: ethereum
+#   contract_address: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
+#   decimals: 18
+#   provider_id: uni
+#   symbols: [UNIUSDT]

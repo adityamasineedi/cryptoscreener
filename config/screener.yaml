@@ -1,0 +1,70 @@
+fundamentals:
+  default_sort: market_cap_desc
+  page_size: 100
+  filters:
+    market_cap:
+      - { id: under_100m, label: "0-100M", min: 0, max: 100000000 }
+      - { id: mid, label: "100M-1B", min: 100000000, max: 1000000000 }
+      - { id: large, label: "1B-100B", min: 1000000000, max: 100000000000 }
+# Cap presets are FILTER CONFIGS — never hardcoded coin lists
+presets:
+  large_cap:
+    id: large_cap
+    label: Large Cap
+    description: Market cap >= $10B
+    filters:
+      - { field: market_cap, operator: ">=", value: 10000000000 }
+  mid_cap:
+    id: mid_cap
+    label: Mid Cap
+    description: Market cap $1B–$10B
+    filters:
+      - { field: market_cap, operator: between, value: [1000000000, 10000000000] }
+  small_cap:
+    id: small_cap
+    label: Small Cap
+    description: Market cap $50M–$1B
+    filters:
+      - { field: market_cap, operator: between, value: [50000000, 1000000000] }
+  custom:
+    id: custom
+    label: Custom
+    description: User-defined filters (empty by default)
+    filters: []
+futures:
+  default_sort: volume_desc
+  page_size: 100
+  columns:
+    - symbol
+    - exchange
+    - price
+    - change_24h_pct
+    - volume_24h
+    - volume_change_pct
+    - open_interest
+    - oi_change_pct
+    - funding_rate
+    - long_liquidations
+    - short_liquidations
+    - relative_volume
+    - technical_state
+ui:
+  brand_name: Crypto Screener
+  stale_badge_seconds: 15
+  top_level_domains:
+    - Fundamentals
+    - Futures
+    - Market Structure
+    - Supply/Demand
+    - Liquidations
+    - Volume Analysis
+    - Open Interest
+  coin_detail_tabs:
+    - Overview
+    - Performance
+    - Technicals
+    - Valuation
+    - Derivatives
+    - Addresses
+    - Transactions
+    - Sentiment

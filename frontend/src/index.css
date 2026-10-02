@@ -1,0 +1,415 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --sidebar-width: 13rem;
+  --sidebar-width-collapsed: 3.5rem;
+  --detail-max: 390px;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: "IBM Plex Sans", Segoe UI, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #152033 0%, transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, #0f1a14 0%, transparent 50%),
+    #0b0f14;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #243246;
+  border-radius: 4px;
+}
+
+.nav-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@layer components {
+  .app-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    width: 100%;
+    height: 100dvh;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    transition: grid-template-columns 200ms ease;
+  }
+
+  .app-shell--collapsed {
+    grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr);
+  }
+
+  .app-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .screener-page {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) minmax(300px, 46%);
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .screener-page:has(.charts-section--expanded) {
+    grid-template-rows: auto minmax(120px, 28%) minmax(420px, 72%);
+  }
+
+  .screener-page:has(.charts-section--collapsed) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  /* Market area: table + detail */
+  .market-area {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .table-wrapper {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .table-scroll {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+  }
+
+  /* Sticky identity columns inside Technical View (table scroll only) */
+  .table-sticky-cell {
+    position: sticky;
+    z-index: 2;
+    background: #0b0f14;
+    box-shadow: 1px 0 0 #1e2a38;
+  }
+
+  .table-sticky-cell--header {
+    z-index: 4;
+    background: #121820;
+  }
+
+  /* Do not use class name "table-row" — Tailwind maps that to display:table-row */
+  .screener-row:hover .table-sticky-cell {
+    background: #111821;
+  }
+
+  .screener-row--active .table-sticky-cell {
+    background: #152433;
+  }
+
+  /* Keep numbers on one line without spilling into the next column */
+  .table-cell-numeric {
+    overflow: hidden;
+  }
+
+  .table-cell-numeric .font-mono {
+    white-space: nowrap;
+  }
+
+  .coin-detail {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    max-width: 390px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .coin-detail-content {
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .coin-tabs {
+    display: flex;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .coin-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .charts-section {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .charts-section--collapsed .chart-grid {
+    display: none;
+  }
+
+  .charts-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .charts-page-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .charts-page-detail {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-left: 1px solid theme("colors.terminal.border");
+  }
+
+  .charts-section--page {
+    flex: 1;
+    height: 100%;
+    border-top: none;
+  }
+
+  .charts-section--page .chart-grid {
+    grid-template-rows: minmax(0, 3fr) minmax(160px, 1fr);
+  }
+
+  .charts-section--page .chart-grid.chart-grid--liq-compact {
+    grid-template-rows: minmax(0, 1fr) 48px;
+  }
+
+  @media (min-width: 1100px) {
+    .charts-page {
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+    }
+
+    .charts-section--page .chart-grid {
+      grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    /* Keep WAITING liquidations as a short strip under the price chart */
+    .charts-section--page .chart-grid.chart-grid--liq-compact {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) 48px;
+    }
+
+    .charts-section--page .chart-grid.chart-grid--liq-compact > .chart-panel:first-child {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .chart-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+
+  .chart-timeframes {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .chart-timeframes::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-grid {
+    display: grid;
+    /* Narrow: price full-width on top, secondary chart(s) below */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 2.4fr) minmax(140px, 1fr);
+    gap: 1px;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    background: theme("colors.terminal.border");
+  }
+
+  /* Compact liquidations (WAITING / empty): give price chart the vertical room */
+  .chart-grid.chart-grid--liq-compact {
+    grid-template-rows: minmax(0, 1fr) 48px;
+  }
+
+  .chart-grid > .chart-panel:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .chart-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    background: rgb(11 15 20 / 0.8);
+  }
+
+  .chart-panel--compact {
+    height: 48px;
+    max-height: 48px;
+    min-height: 48px;
+    flex: 0 0 48px;
+  }
+
+  .chart-canvas {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .chart-empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .chart-empty--compact {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0.4rem 0.75rem;
+    gap: 0.15rem;
+  }
+
+  .chart-empty--compact .text-xs {
+    font-size: 10px;
+  }
+
+  /* Drawer overlay for < 1100px */
+  .detail-drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: rgb(0 0 0 / 0.45);
+  }
+
+  .detail-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    width: min(100%, 360px);
+    max-width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-left: 1px solid theme("colors.terminal.border");
+    background: rgb(18 24 32 / 0.97);
+    box-shadow: -8px 0 24px rgb(0 0 0 / 0.35);
+  }
+
+  /* 1100–1399: side-by-side, ~350px detail, 3 charts in a row */
+  @media (min-width: 1100px) {
+    .market-area {
+      grid-template-columns: minmax(0, 1fr) minmax(340px, 350px);
+    }
+
+    .chart-grid {
+      grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .chart-grid.chart-grid--liq-compact {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) 48px;
+    }
+
+    .chart-grid:not(.chart-grid--liq-compact) > .chart-panel:first-child {
+      grid-column: auto;
+    }
+
+    .chart-grid.chart-grid--liq-compact > .chart-panel:first-child {
+      grid-column: 1 / -1;
+    }
+  }
+
+  /* >=1400: detail up to 390px, 3 charts */
+  @media (min-width: 1400px) {
+    .market-area {
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 390px);
+    }
+  }
+
+  @media (max-width: 1099px) {
+    .screener-page {
+      grid-template-rows: auto minmax(0, 1fr) minmax(380px, 55%);
+    }
+
+    .screener-page:has(.charts-section--expanded) {
+      grid-template-rows: auto minmax(80px, 22%) minmax(480px, 78%);
+    }
+  }
+}

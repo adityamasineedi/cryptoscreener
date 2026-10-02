@@ -1,0 +1,119 @@
+mtf:
+  ema_periods: [20, 50, 200]
+  sma_periods: [20]
+  rsi_period: 14
+  atr_period: 14
+  volume_sma_period: 20
+  vwap_enabled: true
+  volatility_period: 20
+  williams_r_period: 14
+entry_exit:
+  require_bullish_structure: true
+  require_rvol_above: 1.2
+  rsi_entry_max: 70
+  rsi_exit_min: 70
+  require_demand_zone: false
+  exit_on_bearish_structure: true
+  exit_on_supply_zone: true
+tech_rating:
+  momentum_weight: 0.15
+  labels:
+    bullish: 0.65
+    bearish: 0.35
+
+volume:
+  sma_period: 20
+  zscore_period: 20
+  rvol_threshold: 1.5
+open_interest:
+  change_windows:
+    - 5m
+    - 15m
+    - 1h
+    - 4h
+    - 24h
+market_structure:
+  swing_left: 2
+  swing_right: 2
+  break_confirmation: 1
+  minimum_break_distance_pct: 0.05
+  atr_tolerance_mult: 0.1
+  timeframes: [5m, 15m, 1h, 4h, 1d]
+supply_demand:
+  impulse_body_ratio: 0.6
+  base_max_candles: 8
+  min_departure_atr_mult: 1.2
+  freshness_decay_hours: 72
+  max_touches_before_weak: 3
+liquidations:
+  spike_zscore: 2.5
+  windows:
+    - 5m
+    - 15m
+    - 1h
+    - 4h
+    - 24h
+signals:
+  weights:
+    structure: 0.25
+    supply_demand: 0.20
+    volume: 0.20
+    liquidation: 0.15
+    open_interest: 0.20
+
+# Structure setup signal engine (Trend→BOS→Impulse→Pullback→Entry→Risk)
+# Thresholds are screening parameters — not claimed optima / profitability.
+setup_signals:
+  swing_left_bars: 3
+  swing_right_bars: 3
+  minimum_swing_distance_atr: 0.0
+  swing_by_timeframe:
+    4h: {swing_left_bars: 3, swing_right_bars: 3}
+    1h: {swing_left_bars: 3, swing_right_bars: 3}
+    15m: {swing_left_bars: 2, swing_right_bars: 2}
+    5m: {swing_left_bars: 2, swing_right_bars: 2}
+    1d: {swing_left_bars: 3, swing_right_bars: 3}
+    1m: {swing_left_bars: 2, swing_right_bars: 2}
+  atr_multiplier: 1.5
+  min_body_ratio: 0.60
+  min_rvol: 1.5
+  atr_period: 14
+  pullback_min_retracement: 0.20
+  pullback_max_retracement: 0.80
+  pullback_invalidation_retracement: 1.05
+  retest_atr_tolerance: 0.25
+  sl_buffer_atr: 0.2
+  min_rr: 2.0
+  allow_entry_below_min_rr: false
+  tp_r_multiples: [2.0, 3.0, 4.0]
+  default_account_equity: 10000
+  default_risk_percent: 0.01
+  default_leverage: 5.0
+  max_leverage: 20.0
+  max_leverage_warning: 25.0
+  fee_rate: 0.0004
+  slippage_rate: 0.0002
+  contract_quantity_step: 0.001
+  minimum_quantity: 0.001
+  stop_too_close_pct: 0.0015
+  liquidation_too_close_pct: 0.01
+  mtf_major: 4h
+  mtf_primary: 1h
+  mtf_setup: 15m
+  mtf_entry: 5m
+  mtf_refine: 1m
+  require_mtf_alignment: true
+  oi_mandatory: false
+  liquidation_mandatory: false
+  stale_data_seconds: 900
+  market_signal_strong_min_confirmations: 7
+  market_signal_buy_min_confirmations: 4
+  score_weights:
+    trend: 20
+    bos: 20
+    impulse: 15
+    pullback: 15
+    volume: 8
+    supply_demand: 4
+    oi: 0
+    liquidation: 0
