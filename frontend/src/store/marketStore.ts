@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import type { FreshValue, ScreenerRow } from "../types/market";
+import type {
+  FreshValue,
+  ScreenFilter,
+  ScreenSize,
+  ScreenerMeta,
+  ScreenerRow,
+} from "../types/market";
 import { mergeScreenerRowPreferLive } from "../utils/freshDisplay";
 
 interface MarketState {
@@ -14,7 +20,15 @@ interface MarketState {
   domain: string;
   /** True while screener REST reload runs after domain/preset/search change */
   domainLoading: boolean;
-  setSnapshot: (rows: ScreenerRow[], total: number, ingestion: string) => void;
+  screenSize: ScreenSize;
+  screenFilter: ScreenFilter;
+  screenMeta: ScreenerMeta | null;
+  setSnapshot: (
+    rows: ScreenerRow[],
+    total: number,
+    ingestion: string,
+    meta?: Partial<ScreenerMeta> | null,
+  ) => void;
   applyBatch: (updates: Array<{ type: string; symbol: string; payload: Record<string, unknown> }>) => void;
   applyRowPatch: (symbol: string, changes: Partial<ScreenerRow>) => void;
   setConnected: (v: boolean) => void;
@@ -23,6 +37,8 @@ interface MarketState {
   setPreset: (id: string | null) => void;
   setDomain: (d: string) => void;
   setDomainLoading: (v: boolean) => void;
+  setScreenSize: (n: ScreenSize) => void;
+  setScreenFilter: (f: ScreenFilter) => void;
 }
 
 function patchFresh(
@@ -50,10 +66,14 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   connected: false,
   selectedSymbol: null,
   search: "",
-  preset: "large_cap",
+  // ALL = null — presets are filter configs, not coin lists
+  preset: null,
   domain: "Futures",
   domainLoading: false,
-  setSnapshot: (rows, total, ingestion) => {
+  screenSize: 100,
+  screenFilter: "ALL_ELIGIBLE",
+  screenMeta: null,
+  setSnapshot: (rows, total, ingestion, meta) => {
     const prev = get().rows;
     const map: Record<string, ScreenerRow> = {};
     const ordered: string[] = [];
@@ -63,7 +83,26 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       map[row.symbol] = mergeScreenerRowPreferLive(prev[row.symbol], row);
       ordered.push(row.symbol);
     }
-    set({ rows: map, orderedSymbols: ordered, total, ingestion, domainLoading: false });
+    const screenMeta: ScreenerMeta | null = meta
+      ? {
+          total_universe: Number(meta.total_universe ?? get().screenMeta?.total_universe ?? total),
+          eligible_count: Number(meta.eligible_count ?? total),
+          returned_count: Number(meta.returned_count ?? rows.length),
+          limit: Number(meta.limit ?? get().screenSize),
+          selection_updated_at: meta.selection_updated_at ?? null,
+          excluded: meta.excluded,
+          search_mode: Boolean(meta.search_mode),
+          screen_filter: meta.screen_filter ?? null,
+        }
+      : get().screenMeta;
+    set({
+      rows: map,
+      orderedSymbols: ordered,
+      total,
+      ingestion,
+      domainLoading: false,
+      screenMeta,
+    });
   },
   applyRowPatch: (symbol, changes) => {
     const existing = get().rows[symbol];
@@ -111,4 +150,6 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   setPreset: (id) => set({ preset: id, domainLoading: true }),
   setDomain: (d) => set({ domain: d, domainLoading: true }),
   setDomainLoading: (v) => set({ domainLoading: v }),
+  setScreenSize: (n) => set({ screenSize: n, domainLoading: true }),
+  setScreenFilter: (f) => set({ screenFilter: f, domainLoading: true }),
 }));

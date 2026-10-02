@@ -22,6 +22,14 @@ class SetupSignalService:
         self.settings = settings or get_settings()
         raw = dict(self.settings.indicators_config or {})
         self.config = SignalConfig.from_mapping(raw)
+        # Env research gates override YAML (still default False)
+        self.config.research_gate_enabled = bool(self.settings.research_gate_enabled)
+        self.config.research_gate_block_shorts = bool(
+            self.settings.research_gate_block_shorts
+        )
+        self.config.research_gate_block_htf_conflict = bool(
+            self.settings.research_gate_block_htf_conflict
+        )
         self.engine = SignalEngine(self.config)
         # Performance counters (process-local)
         self.calc_latencies_ms: list[float] = []
@@ -153,6 +161,17 @@ class SetupSignalService:
         # Mark STALE only via is_stale() after a newer candle arrives without recompute
         if payload.get("signal_status") != "WAITING":
             payload["signal_status"] = "LIVE"
+        # Surface wall-clock tip lag separately — do not conflate with
+        # signal_status=STALE (which means source candle advanced, recompute pending).
+        from app.ingestion.klines import is_trailing_stale
+
+        setup_closed = ohlcv_store.get_closed(sym, cfg.mtf_setup)
+        if not setup_closed:
+            payload["ohlcv_freshness"] = "WAITING"
+        elif is_trailing_stale(setup_closed, cfg.mtf_setup):
+            payload["ohlcv_freshness"] = "TRAILING_STALE"
+        else:
+            payload["ohlcv_freshness"] = "OK"
         payload["triggered_timeframe"] = triggered_timeframe
         engine_store.set_setup_signal(sym, payload)
 

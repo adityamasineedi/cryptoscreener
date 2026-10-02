@@ -159,10 +159,7 @@ export function TradePlanTab({
     );
   }
 
-  const hideLevels =
-    plan.planState === "WAITING" &&
-    plan.entry.price == null &&
-    plan.stop.price == null;
+  const hideLevels = plan.entry.price == null || plan.stop.price == null;
 
   return (
     <div className="space-y-3">
@@ -293,7 +290,11 @@ export function TradePlanTab({
           ) : (
             plan.unavailable.map((c) => (
               <li key={c.id} className="text-terminal-muted">
-                N/A — {c.label} unavailable
+                {c.detail
+                  ? `N/A — ${c.label}: ${c.detail}`
+                  : c.id === "choch" || c.id === "supply_demand" || c.id === "entry_setup"
+                    ? `N/A — ${c.label}`
+                    : `N/A — ${c.label} unavailable`}
               </li>
             ))
           )}

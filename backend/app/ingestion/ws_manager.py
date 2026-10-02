@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
@@ -40,21 +41,33 @@ class WebSocketConnection:
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self.connected = False
+        self.reader_running = False
         self.last_message_at: datetime | None = None
         self.connect_count = 0
+        self.connect_attempts = 0
+        self.disconnect_count = 0
         self.message_count = 0
+        self.frames_received = 0
         self.bytes_received = 0
         self.reconnect_count = 0
         self.connected_at: datetime | None = None
         self.last_frame_bytes: int | None = None
+        self.last_frame_preview: str | None = None
         self.last_handshake_ok: bool | None = None
         self.last_error: str | None = None
+        self.lifecycle: deque[str] = deque(maxlen=50)
+
+    def _life(self, phase: str) -> None:
+        stamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        self.lifecycle.append(f"{stamp} {phase}")
+        logger.info("ws_lifecycle", name=self.name, phase=phase, url=self.url)
 
     async def start(self) -> None:
         if self._task and not self._task.done():
             return
         self._stop.clear()
         self._task = asyncio.create_task(self._run(), name=f"ws:{self.name}")
+        self._life("READER_STARTED")
 
     async def stop(self) -> None:
         self._stop.set()
@@ -65,12 +78,15 @@ class WebSocketConnection:
             except asyncio.CancelledError:
                 pass
             self._task = None
+            self._life("READER_CANCELLED")
         self.connected = False
+        self.reader_running = False
 
     async def _run(self) -> None:
         attempt = 0
         while not self._stop.is_set():
             started = datetime.now(timezone.utc)
+            self.connect_attempts += 1
             try:
                 async with websockets.connect(
                     self.url,
@@ -80,11 +96,13 @@ class WebSocketConnection:
                     open_timeout=20,
                 ) as ws:
                     self.connected = True
+                    self.reader_running = True
                     self.connect_count += 1
                     self.connected_at = datetime.now(timezone.utc)
                     self.last_handshake_ok = True
                     self.last_error = None
                     attempt = 0
+                    self._life("CONNECTED")
                     logger.info("ws_connected", name=self.name, url=self.url)
                     while not self._stop.is_set():
                         # Force reconnect before Binance 24h limit
@@ -104,6 +122,14 @@ class WebSocketConnection:
                         self.last_frame_bytes = nbytes
                         self.last_message_at = datetime.now(timezone.utc)
                         self.message_count += 1
+                        self.frames_received += 1
+                        if isinstance(raw, bytes):
+                            preview = raw.decode("utf-8", errors="replace")[:200]
+                        else:
+                            preview = str(raw)[:200]
+                        self.last_frame_preview = preview
+                        if self.frames_received == 1:
+                            self._life("FIRST_FRAME")
                         try:
                             data = json.loads(raw)
                         except json.JSONDecodeError:
@@ -111,6 +137,7 @@ class WebSocketConnection:
                             continue
                         await self.handler(data)
             except asyncio.CancelledError:
+                self.reader_running = False
                 raise
             except ConnectionClosed as exc:
                 self.last_error = f"closed:{exc.code}:{exc.reason}"
@@ -122,8 +149,13 @@ class WebSocketConnection:
                 self.last_error = str(exc)
                 logger.warning("ws_error", name=self.name, error=str(exc))
             finally:
+                was_connected = self.connected
                 self.connected = False
+                self.reader_running = False
                 self.connected_at = None
+                if was_connected:
+                    self.disconnect_count += 1
+                    self._life("DISCONNECTED")
 
             if self._stop.is_set():
                 break
@@ -133,6 +165,7 @@ class WebSocketConnection:
             )
             attempt += 1
             self.reconnect_count += 1
+            self._life("RECONNECTING")
             logger.info("ws_reconnect_scheduled", name=self.name, delay=round(delay, 2))
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=delay)
@@ -184,21 +217,31 @@ class WebSocketManager:
             age_s = None
             if conn.connected_at is not None:
                 age_s = round((now - conn.connected_at).total_seconds(), 1)
+            task = conn._task
+            reader_running = bool(
+                conn.reader_running and task is not None and not task.done()
+            )
             out.append(
                 {
                     "name": name,
                     "connected": conn.connected,
+                    "reader_running": reader_running,
                     "connect_count": conn.connect_count,
+                    "connect_attempts": conn.connect_attempts,
+                    "disconnect_count": conn.disconnect_count,
                     "reconnect_count": conn.reconnect_count,
                     "message_count": conn.message_count,
+                    "frames_received": conn.frames_received,
                     "bytes_received": conn.bytes_received,
                     "last_frame_bytes": conn.last_frame_bytes,
+                    "last_frame_preview": conn.last_frame_preview,
                     "connection_age_seconds": age_s,
                     "last_handshake_ok": conn.last_handshake_ok,
                     "last_error": conn.last_error,
                     "last_message_at": conn.last_message_at.isoformat()
                     if conn.last_message_at
                     else None,
+                    "lifecycle": list(conn.lifecycle),
                     "url": conn.url,
                 }
             )

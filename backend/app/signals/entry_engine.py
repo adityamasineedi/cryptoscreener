@@ -121,22 +121,43 @@ def evaluate_entry(
             "N/A" if not liquidation_available else "available",
         )
 
-    structure_ok = bool((pullback or {}).get("structure_intact", False))
-    add(
-        "structure",
-        "Structure",
-        ConditionVerdict.PASS.value if structure_ok else ConditionVerdict.FAIL.value,
-        "intact" if structure_ok else "broken",
-    )
+    # Structure is only known once pullback has evaluated; WAITING ≠ broken.
+    if pb_state == "WAITING" or pullback is None:
+        add("structure", "Structure", ConditionVerdict.WAITING.value, "awaiting pullback")
+    elif "structure_intact" not in (pullback or {}):
+        add("structure", "Structure", ConditionVerdict.WAITING.value, "awaiting pullback")
+    else:
+        structure_ok = bool(pullback.get("structure_intact"))
+        add(
+            "structure",
+            "Structure",
+            ConditionVerdict.PASS.value if structure_ok else ConditionVerdict.FAIL.value,
+            "intact" if structure_ok else "broken",
+        )
 
     stop_ok = bool(stop and stop.get("final_stop") is not None)
-    add("risk", "Risk", ConditionVerdict.PASS.value if stop_ok else ConditionVerdict.FAIL.value, "")
-
     targets_ok = bool(targets)
-    add("targets", "Targets", ConditionVerdict.PASS.value if targets_ok else ConditionVerdict.FAIL.value, "")
+    pullback_ready = pb_state in ("ACTIVE", "CONFIRMED")
+    # Provisional BOS stop/targets exist before pullback — do not green-check them yet
+    if not stop_ok:
+        add("risk", "Risk", ConditionVerdict.FAIL.value, "")
+    elif pullback_ready:
+        add("risk", "Risk", ConditionVerdict.PASS.value, "")
+    else:
+        add("risk", "Risk", ConditionVerdict.WAITING.value, "awaiting pullback")
+
+    if not targets_ok:
+        add("targets", "Targets", ConditionVerdict.FAIL.value, "")
+    elif pullback_ready:
+        add("targets", "Targets", ConditionVerdict.PASS.value, "")
+    else:
+        add("targets", "Targets", ConditionVerdict.WAITING.value, "awaiting pullback")
 
     rr_pass = (risk_reward or {}).get("RISK_REWARD") == "PASS"
-    if not rr_pass and config.allow_entry_below_min_rr:
+    if not pullback_ready:
+        add("rr", "R:R", ConditionVerdict.WAITING.value, "awaiting pullback")
+        rr_ok = False
+    elif not rr_pass and config.allow_entry_below_min_rr:
         add("rr", "R:R", ConditionVerdict.PASS.value, "below MIN_RR allowed by config")
         rr_ok = True
     else:

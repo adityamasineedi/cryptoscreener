@@ -29,6 +29,12 @@ describe("chart time axis", () => {
     expect(formatChartTickMark(t, TickMarkType.Time, "1h")).toBe("Sep 30");
   });
 
+  it("Month ticks on intraday use month+day not year", () => {
+    const t = (Date.UTC(2026, 9, 1, 0, 0, 0) / 1000) as Time;
+    expect(formatChartTickMark(t, TickMarkType.Month, "15m")).toBe("Oct 1");
+    expect(formatChartTickMark(t, TickMarkType.Month, "1d")).toBe("Oct 2026");
+  });
+
   it("enables timeVisible for intraday timeframes", () => {
     expect(timeScaleOptionsForTimeframe("1h").timeVisible).toBe(true);
     expect(timeScaleOptionsForTimeframe("1d").timeVisible).toBe(false);

@@ -88,6 +88,21 @@ class Settings(BaseSettings):
     oi_priority_mode: str = Field(default="TOP_MARKET_CAP", alias="OI_PRIORITY_MODE")
     oi_top_n: int = Field(default=40, alias="OI_TOP_N")
 
+    paper_trade_enabled: bool = Field(default=True, alias="PAPER_TRADE_ENABLED")
+    paper_starting_equity: float = Field(default=1000.0, alias="PAPER_STARTING_EQUITY")
+    paper_risk_percent: float = Field(default=0.02, alias="PAPER_RISK_PERCENT")
+    # path_a = Trend+BOS (research COMBO_02); path_b = full LONG_ENTRY_CANDIDATE
+    paper_entry_mode: str = Field(default="path_a", alias="PAPER_ENTRY_MODE")
+
+    # Research gates for live setup candidates — default OFF
+    research_gate_enabled: bool = Field(default=False, alias="RESEARCH_GATE_ENABLED")
+    research_gate_block_shorts: bool = Field(
+        default=False, alias="RESEARCH_GATE_BLOCK_SHORTS"
+    )
+    research_gate_block_htf_conflict: bool = Field(
+        default=False, alias="RESEARCH_GATE_BLOCK_HTF_CONFLICT"
+    )
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]

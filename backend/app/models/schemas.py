@@ -208,6 +208,9 @@ class ScreenerRow(BaseModel):
     social_dominance: FreshValue[float] = Field(default_factory=FreshValue.waiting)
     data_status: DataStatus = DataStatus.WAITING
     updated_at: datetime | None = None
+    # Presentation-only screening rank (never a strategy/profit score)
+    screen_priority_score: float | None = None
+    screen_priority_reason: str | None = None
 
 
 class HealthResponse(BaseModel):

@@ -18,6 +18,7 @@ from app.ingestion.binance_rest import BinanceRestClient
 from app.ingestion.klines import (
     BINANCE_INTERVAL,
     TIMEFRAME_MS,
+    is_trailing_stale,
     missing_fetch_ranges,
     normalize_rest_kline,
     normalize_timeframe,
@@ -156,6 +157,9 @@ class ProgressiveBackfillService:
         self._watchlist: set[str] = set()
         self._completions: deque[float] = deque(maxlen=500)
         self._started_at = datetime.now(timezone.utc)
+        # (symbol, tf) -> monotonic time of last force_tip REST pull
+        self._last_tip_fetch: dict[tuple[str, str], float] = {}
+        self.tip_refresh_min_seconds = 5.0
 
     @property
     def queue_size(self) -> int:
@@ -170,6 +174,7 @@ class ProgressiveBackfillService:
             orch = get_orchestrator()
             if orch is not None:
                 orch.request_setup_for_visible(list(self._visible))
+                orch.set_kline_focus(list(self._visible))
         except Exception:  # noqa: BLE001
             pass
 
@@ -207,6 +212,9 @@ class ProgressiveBackfillService:
         ]
         self._tasks.append(
             asyncio.create_task(self._progress_loop(), name="backfill_progress")
+        )
+        self._tasks.append(
+            asyncio.create_task(self._freshness_loop(), name="backfill_freshness")
         )
 
     async def stop(self) -> None:
@@ -322,10 +330,17 @@ class ProgressiveBackfillService:
             key = self._key(sym, tf)
             st = self._state(key)
             st.candles = len(candles)
-            if len(candles) >= self._target(tf) and not (
-                self.gap_fill and self.ohlcv.find_gaps(sym, tf)
+            gaps = self.gap_fill and self.ohlcv.find_gaps(sym, tf)
+            if (
+                len(candles) >= self._target(tf)
+                and not gaps
+                and not is_trailing_stale(list(candles), tf)
             ):
                 st.touch(JobStatus.COMPLETE, candles=len(candles))
+            else:
+                # Keep PENDING so trailing catch-up / gaps still enqueue
+                if st.status == JobStatus.COMPLETE:
+                    st.touch(JobStatus.PENDING, candles=len(candles))
         self._progress_dirty = True
         logger.info(
             "backfill_hydrated",
@@ -377,15 +392,19 @@ class ProgressiveBackfillService:
     ) -> int:
         key = self._key(symbol, timeframe)
         st = self._state(key)
+        existing = self.ohlcv.get_closed(key[0], key[1])
+        # COMPLETE but tip frozen (WS silent) must re-enter the queue
+        if st.status == JobStatus.COMPLETE and is_trailing_stale(existing, key[1]):
+            st.touch(JobStatus.PENDING, candles=len(existing))
+            reason = "trailing_stale"
         if st.status == JobStatus.COMPLETE:
             return 0
         if key in self._queued or st.status == JobStatus.RUNNING:
             return 0
-        existing = self.ohlcv.get_closed(key[0], key[1])
         st.candles = len(existing)
         st.priority_score = score
         target = self._target(key[1])
-        if len(existing) >= target:
+        if len(existing) >= target and not is_trailing_stale(existing, key[1]):
             gaps = self.ohlcv.find_gaps(key[0], key[1]) if self.gap_fill else []
             if not gaps:
                 st.touch(JobStatus.COMPLETE, candles=len(existing))
@@ -404,6 +423,223 @@ class ProgressiveBackfillService:
             )
         )
         return 1
+
+    async def ensure_series_fresh(
+        self,
+        symbol: str,
+        timeframe: str,
+        *,
+        limit: int = 250,
+        force_tip: bool = False,
+    ) -> int:
+        """On-demand REST tail catch-up for chart / visible symbols.
+
+        Used when the kline websocket is silent so charts do not freeze on a
+        hydrated tip from hours ago.
+
+        force_tip=True (chart / setup polls): refresh the latest few bars /
+        forming candle so OHLC stays live even when the tip is not "stale".
+        Throttled to tip_refresh_min_seconds to protect REST weight budget.
+        """
+        sym = symbol.upper()
+        tf = normalize_timeframe(timeframe)
+        existing = self.ohlcv.get_closed(sym, tf)
+        open_c = self.ohlcv.get_open(sym, tf)
+        tip_view = list(existing)
+        if open_c is not None:
+            tip_view.append(open_c)
+        stale = is_trailing_stale(tip_view, tf)
+        if tip_view and not stale and not force_tip:
+            return 0
+
+        tip_key = (sym, tf)
+        now_m = time.monotonic()
+        if force_tip and not stale:
+            last = self._last_tip_fetch.get(tip_key, 0.0)
+            if now_m - last < self.tip_refresh_min_seconds:
+                return 0
+
+        # Chart/setup polls: cheap tip-only pull when history is already caught up
+        fetch_limit = 5 if force_tip and tip_view and not stale else limit
+        written = await self._fetch_rest_tail(sym, tf, limit=fetch_limit)
+        self._last_tip_fetch[tip_key] = time.monotonic()
+        if written and self.on_series_ready:
+            try:
+                await self.on_series_ready(sym, tf)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "ensure_fresh_ready_failed",
+                    symbol=sym,
+                    timeframe=tf,
+                    error=str(exc),
+                )
+        candles = self.ohlcv.get_closed(sym, tf)
+        open_now = self.ohlcv.get_open(sym, tf)
+        tip_now = list(candles)
+        if open_now is not None:
+            tip_now.append(open_now)
+        st = self._state(self._key(sym, tf))
+        st.candles = len(candles)
+        if tip_now and not is_trailing_stale(tip_now, tf):
+            gaps = self.ohlcv.find_gaps(sym, tf) if self.gap_fill else []
+            if len(candles) >= self._target(tf) and not gaps:
+                st.touch(JobStatus.COMPLETE, last_error=None)
+            else:
+                st.touch(JobStatus.PENDING)
+        else:
+            st.touch(JobStatus.PENDING)
+        self._progress_dirty = True
+        return written
+
+    async def ensure_setup_mtf_fresh(
+        self,
+        symbol: str,
+        timeframes: list[str],
+        *,
+        force_setup_tip: bool = True,
+        setup_tf: str | None = None,
+    ) -> int:
+        """Refresh strategy MTF series before signal compute (WS-silent safe)."""
+        sym = symbol.upper()
+        setup = normalize_timeframe(setup_tf) if setup_tf else None
+        written = 0
+        for raw_tf in timeframes:
+            tf = normalize_timeframe(raw_tf)
+            force = bool(force_setup_tip and setup and tf == setup)
+            written += await self.ensure_series_fresh(
+                sym, tf, limit=120, force_tip=force
+            )
+        return written
+
+    async def _fetch_rest_tail(
+        self, symbol: str, timeframe: str, *, limit: int = 250
+    ) -> int:
+        """Fetch missing tip candles via REST and merge into the store."""
+        self._requests += 1
+        interval = BINANCE_INTERVAL.get(timeframe, timeframe)
+        step = TIMEFRAME_MS.get(timeframe, 60_000)
+        existing = self.ohlcv.get_closed(symbol, timeframe)
+        known = {c.open_time for c in existing}
+        want_end = int(datetime.now(timezone.utc).timestamp() * 1000)
+        page = max(50, min(int(limit), self.candles_per_request))
+
+        ranges = missing_fetch_ranges(
+            existing,
+            timeframe,
+            want_start_ms=(
+                int(existing[-1].open_time.timestamp() * 1000) + step
+                if existing
+                else want_end - step * page
+            ),
+            want_end_ms=want_end,
+            max_ranges=2,
+        )
+        kwargs: dict[str, Any] = {"limit": page}
+        if ranges:
+            start_ms, end_ms = ranges[-1]
+            # Prefer the trailing window so the chart tip reaches "now"
+            kwargs["start_time"] = start_ms
+            kwargs["end_time"] = end_ms
+        elif existing:
+            # Tip looks contiguous enough for missing_fetch_ranges to drop the
+            # tiny residual — still pull latest page as a safety net.
+            kwargs["start_time"] = int(existing[-1].open_time.timestamp() * 1000)
+        # else: no history → omit bounds so Binance returns latest N
+
+        raw = await self.rest.futures_klines(symbol, interval, **kwargs)
+        closed: list[Candle] = []
+        open_c: Candle | None = None
+        for row in raw:
+            c = normalize_rest_kline(symbol, timeframe, row)
+            if c is None:
+                continue
+            if not c.is_closed:
+                open_c = c
+                continue
+            if c.open_time not in known:
+                closed.append(c)
+                known.add(c.open_time)
+            else:
+                # Replace matching tip with fresher REST bar
+                closed.append(c)
+
+        written = 0
+        if closed:
+            # Prefer replace-aware ingest so overlapping tip bars update OHLC
+            unique_by_time: dict[Any, Candle] = {c.open_time: c for c in closed}
+            batch = list(unique_by_time.values())
+            before_times = {c.open_time for c in self.ohlcv.get_closed(symbol, timeframe)}
+            await self.ohlcv.ingest_history(batch)
+            after = self.ohlcv.get_closed(symbol, timeframe)
+            written = sum(1 for c in after if c.open_time not in before_times)
+            # Count replacements of the tip as progress too
+            if written == 0 and batch:
+                written = len(batch)
+            self._candles_written += written
+        if open_c is not None:
+            await self.ohlcv.upsert_candle(open_c)
+        logger.info(
+            "rest_tail_catchup",
+            symbol=symbol,
+            timeframe=timeframe,
+            written=written,
+            open=open_c is not None,
+            last=(
+                self.ohlcv.get_closed(symbol, timeframe)[-1].open_time.isoformat()
+                if self.ohlcv.get_closed(symbol, timeframe)
+                else None
+            ),
+        )
+        return written
+
+    async def _freshness_loop(self) -> None:
+        """Periodically reopen COMPLETE series whose tip has gone stale."""
+        while self._running:
+            await asyncio.sleep(45.0)
+            if not self._running:
+                break
+            try:
+                await self._enqueue_stale_tips()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("freshness_loop_failed", error=str(exc))
+
+    async def _enqueue_stale_tips(self) -> int:
+        ranked = self.ranked_symbols(list(self.market.tickers.keys()) or list(self._visible))
+        if not ranked and self._visible:
+            ranked = sorted(self._visible)
+        # Prefer visible / watchlist, then top volume
+        prefer = list(dict.fromkeys([*sorted(self._visible), *sorted(self._watchlist), *ranked]))
+        n = 0
+        # Cap work per tick — rest of universe waits for next cycle
+        for sym in prefer[:80]:
+            for tf in self.tf_priority:
+                if tf == "1m" and not self._include_1m(sym, ranked or prefer):
+                    continue
+                existing = self.ohlcv.get_closed(sym, tf)
+                if not existing:
+                    continue
+                if not is_trailing_stale(existing, tf):
+                    continue
+                score = self.priority_score(
+                    sym,
+                    tf,
+                    volume_rank=ranked.index(sym) if sym in ranked else len(prefer),
+                    universe_size=max(len(ranked), 1),
+                )
+                # Visible chart symbols jump the queue
+                if sym in self._visible:
+                    score += 500.0
+                n += await self._offer(
+                    sym,
+                    tf,
+                    self._priority_key(score),
+                    "trailing_stale",
+                    score=score,
+                )
+        if n:
+            logger.info("enqueued_trailing_stale", jobs=n, queue=self.queue_size)
+            self._progress_dirty = True
+        return n
 
     def _sync_semaphore(self) -> None:
         """Resize permit count toward adaptive concurrency (best-effort)."""
@@ -452,7 +688,9 @@ class ProgressiveBackfillService:
                     if self.gap_fill
                     else []
                 )
-                if count >= self._target(job.timeframe) and not gaps:
+                tip = self.ohlcv.get_closed(job.symbol, job.timeframe)
+                tip_stale = is_trailing_stale(tip, job.timeframe)
+                if count >= self._target(job.timeframe) and not gaps and not tip_stale:
                     st.touch(JobStatus.COMPLETE, last_error=None)
                     self._completions.append(time.monotonic())
                 elif gaps and self.gap_fill:
@@ -462,6 +700,15 @@ class ProgressiveBackfillService:
                         job.timeframe,
                         job.priority + 1,
                         "gap",
+                        score=job.score - 10,
+                    )
+                elif tip_stale:
+                    st.touch(JobStatus.PENDING)
+                    await self._offer(
+                        job.symbol,
+                        job.timeframe,
+                        job.priority + 1,
+                        "trailing_stale",
                         score=job.score - 10,
                     )
                 elif count > 0 and written == 0:
@@ -557,15 +804,20 @@ class ProgressiveBackfillService:
                 interval,
                 **kwargs,
             )
-            candles: list[Candle] = []
+            candles_closed: list[Candle] = []
             for row in raw:
                 c = normalize_rest_kline(job.symbol, job.timeframe, row)
-                if c and c.open_time not in known:
-                    candles.append(c)
+                if c is None:
+                    continue
+                if not c.is_closed:
+                    await self.ohlcv.upsert_candle(c)
+                    continue
+                if c.open_time not in known:
+                    candles_closed.append(c)
                     known.add(c.open_time)
-            if candles:
+            if candles_closed:
                 before = len(self.ohlcv.get_closed(job.symbol, job.timeframe))
-                await self.ohlcv.ingest_history(candles)
+                await self.ohlcv.ingest_history(candles_closed)
                 after = len(self.ohlcv.get_closed(job.symbol, job.timeframe))
                 written_total += max(0, after - before)
             # One page per job cycle keeps rate polite; gaps re-queue

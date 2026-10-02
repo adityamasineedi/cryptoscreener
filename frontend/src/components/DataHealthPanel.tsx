@@ -29,6 +29,10 @@ type Coverage = {
     missing_count: number;
     note?: string;
   }>;
+  screen?: {
+    max_screen_symbols?: number;
+    note?: string;
+  };
 };
 
 type Backfill = {
@@ -171,6 +175,23 @@ export function DataHealthPanel() {
         Measured coverage only — incomplete targets are never marked complete. LIVE vs HISTORICAL
         fields update at different frequencies.
       </p>
+      <div className="mt-3 rounded border border-terminal-border/70 bg-terminal-panel/40 px-3 py-2 font-mono text-xs">
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          <span>
+            Symbols (full universe): <span className="text-terminal-text">{total}</span>
+          </span>
+          <span>
+            Screen (display max):{" "}
+            <span className="text-terminal-text">
+              {cov?.screen?.max_screen_symbols ?? 100} / {total}
+            </span>
+          </span>
+        </div>
+        <p className="mt-1 text-[10px] text-terminal-muted">
+          {cov?.screen?.note ||
+            "Main screener shows ≤100 dynamically selected symbols. This page reports the full backend universe."}
+        </p>
+      </div>
 
       <section className="mt-5 grid max-w-4xl gap-6 md:grid-cols-2">
         <div className="rounded border border-terminal-border/80 p-3">

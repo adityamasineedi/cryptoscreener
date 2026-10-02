@@ -170,9 +170,34 @@ _SCHEMA_STATEMENTS = [
         PRIMARY KEY (time, symbol, timeframe, event_type, price)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS paper_trades (
+        id              TEXT PRIMARY KEY,
+        symbol          TEXT NOT NULL,
+        side            TEXT NOT NULL DEFAULT 'LONG',
+        status          TEXT NOT NULL,
+        entry_price     DOUBLE PRECISION NOT NULL,
+        stop_price      DOUBLE PRECISION NOT NULL,
+        tp1_price       DOUBLE PRECISION,
+        quantity        DOUBLE PRECISION NOT NULL,
+        risk_usd        DOUBLE PRECISION,
+        opened_at       TIMESTAMPTZ NOT NULL,
+        closed_at       TIMESTAMPTZ,
+        exit_price      DOUBLE PRECISION,
+        exit_reason     TEXT,
+        pnl_usd         DOUBLE PRECISION,
+        r_multiple      DOUBLE PRECISION,
+        source_candle_ts TEXT,
+        timeframe       TEXT,
+        signal_snippet  JSONB NOT NULL DEFAULT '{}',
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_signals_symbol_time ON signals (symbol, time DESC)",
     "CREATE INDEX IF NOT EXISTS idx_setup_analyses_sym ON setup_analyses (symbol, time DESC)",
     "CREATE INDEX IF NOT EXISTS idx_setup_events_sym ON setup_events (symbol, timeframe, time DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_paper_trades_sym ON paper_trades (symbol, opened_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_paper_trades_status ON paper_trades (status, opened_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_symbols_market ON symbols (market_type, status)",
     "CREATE INDEX IF NOT EXISTS idx_sd_zones_symbol ON supply_demand_zones (symbol, timeframe, status)",
     "CREATE INDEX IF NOT EXISTS idx_volume_history_sym ON volume_history (symbol, timeframe, time DESC)",

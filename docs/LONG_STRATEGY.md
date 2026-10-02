@@ -216,6 +216,7 @@ Small sample — treat as directional bias for the playbook, not proof.
 | Stop / targets / R:R | `stop_engine.py`, `target_engine.py`, `risk_engine.py` |
 | Config (`min_rr`, MTF, RVOL) | `backend/app/signals/config.py` |
 | Research combos | `backend/app/research/bos_combinations.py` (`COMBO_02` = Trend+BOS) |
+| Opt-in research gates (default OFF) | `backend/app/signals/research_gate.py` + `RESEARCH_GATE_*` env |
 | UI Trade Plan | `frontend/src/tradePlan/`, SETUP / TRADE PLAN tabs |
 
 ---
@@ -238,3 +239,4 @@ Small sample — treat as directional bias for the playbook, not proof.
 |------|--------|
 | 2026-10-02 | Initial long playbook: HL + bullish BOS; TP1 ≥ min_rr; research note on HL longs vs LH shorts; pullback WAITING gap documented |
 | 2026-10-02 | Link short-failure research (`SHORT_FAILURE_RESEARCH.md`): bull drift + delayed thesis failure, not stop bug |
+| 2026-10-02 | Opt-in `RESEARCH_GATE_*` flags (default false). SHORT-policy study may suggest `BLOCK_SHORTS` after larger sample review — not enabled live by default |

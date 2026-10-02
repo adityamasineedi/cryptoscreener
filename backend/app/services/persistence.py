@@ -624,6 +624,67 @@ class PersistenceService:
             logger.warning("persist_setup_events_failed", error=str(exc))
             return 0
 
+    async def persist_paper_trade(self, trade: dict[str, Any]) -> None:
+        """Upsert one paper trade row (open or closed)."""
+        if not self.active or not trade:
+            return
+        sql = text(
+            """
+            INSERT INTO paper_trades (
+                id, symbol, side, status, entry_price, stop_price, tp1_price,
+                quantity, risk_usd, opened_at, closed_at, exit_price, exit_reason,
+                pnl_usd, r_multiple, source_candle_ts, timeframe, signal_snippet, updated_at
+            ) VALUES (
+                :id, :symbol, :side, :status, :entry_price, :stop_price, :tp1_price,
+                :quantity, :risk_usd, CAST(:opened_at AS TIMESTAMPTZ),
+                CAST(:closed_at AS TIMESTAMPTZ), :exit_price, :exit_reason,
+                :pnl_usd, :r_multiple, :source_candle_ts, :timeframe,
+                CAST(:signal_snippet AS JSONB), NOW()
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                closed_at = EXCLUDED.closed_at,
+                exit_price = EXCLUDED.exit_price,
+                exit_reason = EXCLUDED.exit_reason,
+                pnl_usd = EXCLUDED.pnl_usd,
+                r_multiple = EXCLUDED.r_multiple,
+                signal_snippet = EXCLUDED.signal_snippet,
+                updated_at = NOW()
+            """
+        )
+        try:
+            async with db_manager.engine.begin() as conn:
+                await conn.execute(
+                    sql,
+                    {
+                        "id": str(trade.get("id")),
+                        "symbol": str(trade.get("symbol") or "").upper(),
+                        "side": str(trade.get("side") or "LONG"),
+                        "status": str(trade.get("status") or "OPEN"),
+                        "entry_price": float(trade.get("entry_price") or 0),
+                        "stop_price": float(trade.get("stop_price") or 0),
+                        "tp1_price": trade.get("tp1_price"),
+                        "quantity": float(trade.get("quantity") or 0),
+                        "risk_usd": trade.get("risk_usd"),
+                        "opened_at": trade.get("opened_at")
+                        or datetime.now(timezone.utc).isoformat(),
+                        "closed_at": trade.get("closed_at"),
+                        "exit_price": trade.get("exit_price"),
+                        "exit_reason": trade.get("exit_reason"),
+                        "pnl_usd": trade.get("pnl_usd"),
+                        "r_multiple": trade.get("r_multiple"),
+                        "source_candle_ts": trade.get("source_candle_ts"),
+                        "timeframe": trade.get("timeframe"),
+                        "signal_snippet": json.dumps(
+                            trade.get("signal_snippet") or {}, default=str
+                        ),
+                    },
+                )
+            self._writes += 1
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("persist_paper_trade_failed", error=str(exc))
+
     def stats(self) -> dict[str, Any]:
         return {
             "active": self.active,
@@ -631,4 +692,6 @@ class PersistenceService:
             "errors": self._errors,
             "database": db_manager.status,
         }
+
+
 persistence = PersistenceService()

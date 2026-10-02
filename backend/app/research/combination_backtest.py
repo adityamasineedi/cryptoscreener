@@ -354,7 +354,10 @@ def run_combination_backtest(
             rr=setup.get("rr"),
             period_label=period_label,
             asset_group=asset_group,
-            condition_snapshot=setup.get("gates") or {},
+            condition_snapshot={
+                **(setup.get("gates") or {}),
+                "entry_type": setup.get("entry_type"),
+            },
         )
 
     # Drop still-open trades from closed metrics (record as OPEN for transparency)

@@ -668,8 +668,9 @@ export function isLiquidationsCompact(
 
 export function liquidationsSubtitle(symbol: string | null, status: string): string {
   if (!symbol) return "SELECT A COIN";
+  if (status === "LIVE") return "LIVE";
+  if (status === "STALE") return "STALE";
   if (status === "UNAVAILABLE") return "DATA UNAVAILABLE";
-  if (status === "STALE") return "WAITING FOR DATA";
   return "WAITING FOR DATA";
 }
 

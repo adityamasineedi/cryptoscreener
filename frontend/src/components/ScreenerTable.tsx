@@ -548,6 +548,11 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
   const selected = useMarketStore((s) => s.selectedSymbol);
   const setSelected = useMarketStore((s) => s.setSelected);
   const domainLoading = useMarketStore((s) => s.domainLoading);
+  const screenSize = useMarketStore((s) => s.screenSize);
+  const setScreenSize = useMarketStore((s) => s.setScreenSize);
+  const screenFilter = useMarketStore((s) => s.screenFilter);
+  const setScreenFilter = useMarketStore((s) => s.setScreenFilter);
+  const screenMeta = useMarketStore((s) => s.screenMeta);
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollLeft = useRef(0);
   const modeRef = useRef<"trade" | "technical">("trade");
@@ -557,6 +562,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
   const [signalFilter, setSignalFilter] = useState<SignalFilter>("ALL");
   const [setupFilter, setSetupFilter] = useState<SetupFilter>("ALL");
   const [switching, setSwitching] = useState(false);
+  const [showWhyExcluded, setShowWhyExcluded] = useState(false);
 
   const mode: "trade" | "technical" = technicalView ? "technical" : "trade";
 
@@ -634,6 +640,11 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
     }
   }, [data.length, domain, mode]);
 
+  const universe = screenMeta?.total_universe ?? 0;
+  const shown = screenMeta?.returned_count ?? data.length;
+  const eligible = screenMeta?.eligible_count ?? shown;
+  const excluded = screenMeta?.excluded || {};
+
   return (
     <div className="table-wrapper relative min-w-0 min-h-0">
       {loading ? (
@@ -643,7 +654,72 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
       ) : null}
 
       {domain === "Futures" && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-terminal-border/60 px-2 py-1 text-[10px] text-terminal-muted">
+        <div className="flex flex-col gap-1 border-b border-terminal-border/60 px-2 py-1.5 text-[10px] text-terminal-muted">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="font-mono text-[11px] text-terminal-text" data-testid="screen-universe-label">
+              <span className="text-terminal-muted">SCREEN</span>{" "}
+              <span className="text-terminal-accent">{shown}</span>
+              {" / "}
+              {universe || "—"} symbols
+              {screenMeta?.search_mode ? (
+                <span className="ml-2 text-amber-300">search result</span>
+              ) : (
+                <span className="ml-2 text-terminal-muted">
+                  {shown} of {eligible} eligible · SCREEN TOP 100
+                </span>
+              )}
+            </div>
+            <label className="inline-flex items-center gap-1">
+              Screen size
+              <select
+                className="rounded border border-terminal-border bg-terminal-panel px-1 py-0.5 text-[10px] text-terminal-text"
+                value={screenSize}
+                onChange={(e) => setScreenSize(Number(e.target.value) as 25 | 50 | 100)}
+                data-testid="screen-size"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </label>
+            <label className="inline-flex items-center gap-1">
+              Screen filter
+              <select
+                className="rounded border border-terminal-border bg-terminal-panel px-1 py-0.5 text-[10px] text-terminal-text"
+                value={screenFilter}
+                onChange={(e) => setScreenFilter(e.target.value as typeof screenFilter)}
+                data-testid="screen-filter"
+              >
+                <option value="ALL_ELIGIBLE">ALL ELIGIBLE</option>
+                <option value="SETUPS">SETUPS</option>
+                <option value="ENTRY_READY">ENTRY READY</option>
+                <option value="BUY_BIAS">BUY BIAS</option>
+                <option value="SELL_BIAS">SELL BIAS</option>
+                <option value="WAITING">WAITING</option>
+                <option value="CONFLICT">CONFLICT</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="rounded border border-terminal-border px-1.5 py-0.5 text-[10px] hover:text-terminal-text"
+              onClick={() => setShowWhyExcluded((v) => !v)}
+              data-testid="why-not-top-100"
+            >
+              Why not in Top 100?
+            </button>
+          </div>
+          {showWhyExcluded ? (
+            <div className="font-mono text-[10px] text-terminal-muted" data-testid="exclusion-diagnostics">
+              Excluded — missing price: {excluded.excluded_missing_price ?? 0} · stale:{" "}
+              {excluded.excluded_stale ?? 0} · unavailable: {excluded.excluded_unavailable ?? 0} ·
+              missing OHLCV: {excluded.excluded_missing_ohlcv ?? 0} · screen filter:{" "}
+              {excluded.excluded_screen_filter ?? 0}
+              <span className="ml-2 opacity-70">
+                (backend still monitors full universe; WATCHLIST is separate when enabled)
+              </span>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <label
             className="inline-flex cursor-pointer items-center gap-1.5"
             title="Show detailed structure/setup columns."
@@ -695,6 +771,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
               <option value="WAITING">WAITING</option>
             </select>
           </label>
+          </div>
         </div>
       )}
 
@@ -746,6 +823,11 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
                   key={row.symbol}
                   onClick={() => setSelected(row.symbol)}
                   data-testid={`screener-row-${row.symbol}`}
+                  title={
+                    row.screen_priority_reason
+                      ? `Screen priority: ${row.screen_priority_reason}`
+                      : undefined
+                  }
                   className={`screener-row absolute left-0 flex items-center border-b border-terminal-border/60 text-left transition hover:bg-white/[0.03] ${
                     active ? "screener-row--active bg-terminal-accent/10" : ""
                   }`}

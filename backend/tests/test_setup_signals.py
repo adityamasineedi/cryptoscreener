@@ -315,6 +315,33 @@ class TestEntryStopTargetsRisk:
         assert "Trend" in labels and "BOS" in labels and "R:R" in labels
         assert "BUY" not in result["status"]
 
+    def test_pullback_waiting_structure_not_fail(self):
+        cfg = SignalConfig()
+        cfg.require_mtf_alignment = False
+        result = evaluate_entry(
+            mtf={
+                "MTF_ALIGNMENT": "MIXED",
+                "trends": {"4h": "NEUTRAL", "1h": "NEUTRAL", "15m": "BULLISH", "5m": "BULLISH"},
+                "reason": "mixed",
+            },
+            setup_trend={"trend": "BULLISH"},
+            bos={"state": "CONFIRMED", "direction": "BULLISH_BOS", "broken_level": 110.0},
+            impulse={"is_impulse": True, "quality": "STRONG"},
+            pullback={"pullback_state": "WAITING"},
+            retest={"state": "WAITING"},
+            stop={"final_stop": 100.0},
+            targets=[{"name": "TP1", "target_price": 120.0, "r_multiple": 2.0}],
+            risk_reward={"RISK_REWARD": "PASS", "best_R": 2.0},
+            config=cfg,
+            last_close=110.0,
+        )
+        by_id = {c["id"]: c["verdict"] for c in result["conditions"]}
+        assert by_id["structure"] == "WAITING"
+        assert by_id["risk"] == "WAITING"
+        assert by_id["targets"] == "WAITING"
+        assert result["status"] == "WAITING"
+        assert result["entry_price"] is None
+
     def test_structural_sl(self):
         stop = compute_stop(
             direction="LONG",
@@ -421,6 +448,14 @@ class TestMtfMissingStale:
     def test_mtf_conflict(self):
         out = align_mtf({"4h": "BULLISH", "1h": "BEARISH", "15m": "BULLISH", "5m": "BULLISH"})
         assert out["MTF_ALIGNMENT"] == "CONFLICT"
+
+    def test_neutral_htf_is_not_strong_long(self):
+        """15m bullish alone must not become STRONG_LONG when 4h/1h are NEUTRAL."""
+        out = align_mtf(
+            {"4h": "NEUTRAL", "1h": "NEUTRAL", "15m": "BULLISH", "5m": "BULLISH"}
+        )
+        assert out["MTF_ALIGNMENT"] != "STRONG_LONG"
+        assert out["MTF_ALIGNMENT"] == "MIXED"
 
     def test_missing_data_waiting(self):
         engine = SignalEngine(SignalConfig())

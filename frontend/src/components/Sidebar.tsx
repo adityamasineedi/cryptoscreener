@@ -4,6 +4,7 @@ const items = [
   { to: "/", label: "Screener", short: "Sc" },
   { to: "/health", label: "Data Health", short: "DH" },
   { to: "/bos-research", label: "BOS Research", short: "BR" },
+  { to: "/paper", label: "Paper Trade", short: "Pt" },
   { to: "/watchlist", label: "Watchlist", short: "Wl" },
   { to: "/alerts", label: "Alerts", short: "Al" },
   { to: "/charts", label: "Charts", short: "Ch" },

@@ -72,6 +72,12 @@ class SignalConfig:
     oi_mandatory: bool = False
     liquidation_mandatory: bool = False
 
+    # Research gates — default OFF. Opt-in only; do not enable in production
+    # until larger-sample SHORT/HTF studies are reviewed.
+    research_gate_enabled: bool = False
+    research_gate_block_shorts: bool = False
+    research_gate_block_htf_conflict: bool = False
+
     # Stale invalidation
     stale_data_seconds: float = 900.0
 
@@ -134,6 +140,9 @@ class SignalConfig:
             "require_mtf_alignment",
             "oi_mandatory",
             "liquidation_mandatory",
+            "research_gate_enabled",
+            "research_gate_block_shorts",
+            "research_gate_block_htf_conflict",
             "stale_data_seconds",
             "market_signal_strong_min_confirmations",
             "market_signal_buy_min_confirmations",

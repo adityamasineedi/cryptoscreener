@@ -20,6 +20,13 @@ websocket:
   ping_interval_seconds: 20
   stale_ticker_seconds: 15
   unavailable_after_seconds: 60
+  # Live kline WS — do NOT subscribe full 528×6 (kills the socket).
+  # History for other symbols/TFs still comes from REST backfill.
+  kline_live_max_symbols: 60
+  kline_live_timeframes:
+    - 1m
+    - 5m
+    - 15m
 symbol_discovery:
   refresh_seconds: 300
   include_inactive: false
@@ -74,7 +81,8 @@ retention:
   ohlcv:
     "1m": 60      # days
     "5m": 270
-    "15m": 545
-    "1h": 1095
+    # Research needs multi-year 15m/1h; 545d was deleting 2023 backfills
+    "15m": 1460
+    "1h": 1460
     "4h": 1825
     "1d": 3650

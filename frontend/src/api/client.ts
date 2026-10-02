@@ -50,12 +50,19 @@ export function fetchFuturesScreener(params?: {
   sort_by?: string;
   limit?: number;
   offset?: number;
+  screen_filter?: string;
+  signal?: string;
+  setup?: string;
 }) {
   const q = new URLSearchParams();
   if (params?.search) q.set("search", params.search);
   if (params?.preset) q.set("preset", params.preset);
   if (params?.sort_by) q.set("sort_by", params.sort_by);
-  q.set("limit", String(params?.limit ?? 200));
+  if (params?.screen_filter) q.set("screen_filter", params.screen_filter);
+  if (params?.signal) q.set("signal", params.signal);
+  if (params?.setup) q.set("setup", params.setup);
+  // Main screener hard-caps at 100 on the backend
+  q.set("limit", String(Math.min(params?.limit ?? 100, 100)));
   q.set("offset", String(params?.offset ?? 0));
   return getJson<{
     total: number;
@@ -63,6 +70,15 @@ export function fetchFuturesScreener(params?: {
     ingestion: string;
     use_real_data: boolean;
     preset?: string | null;
+    total_universe?: number;
+    eligible_count?: number;
+    returned_count?: number;
+    limit?: number;
+    selection_updated_at?: string | null;
+    excluded?: Record<string, number>;
+    search_mode?: boolean;
+    screen_filter?: string | null;
+    max_screen_symbols?: number;
   }>(`/api/screener/futures?${q.toString()}`);
 }
 
@@ -219,6 +235,37 @@ export function fetchBosCombinationDetail(
   );
 }
 
+export type StrategyTradeRow = {
+  trade_no?: number;
+  symbol: string;
+  timeframe: string;
+  direction: string;
+  signal_time?: string | null;
+  exit_time?: string | null;
+  entry_price: number;
+  exit_price?: number | null;
+  stop_price: number;
+  tp1?: number | null;
+  tp2?: number | null;
+  rr?: number | null;
+  outcome?: string | null;
+  holding_bars?: number | null;
+  entry_type?: string;
+  qty?: number;
+  risk_usd?: number;
+  fee_entry_usd?: number;
+  fee_exit_usd?: number;
+  fee_total_usd?: number;
+  fee_entry_rate?: number;
+  fee_exit_rate?: number;
+  gross_pnl_usd?: number | null;
+  net_pnl_usd?: number | null;
+  r_gross?: number | null;
+  r_net?: number | null;
+  mae_r?: number | null;
+  mfe_r?: number | null;
+};
+
 export type StrategyMatrixRow = {
   combination_id: string;
   name?: string;
@@ -228,6 +275,7 @@ export type StrategyMatrixRow = {
   structure?: string;
   sample_size: number;
   average_R?: number | null;
+  average_R_net?: number | null;
   expectancy_R?: number | null;
   tp1_hit_rate?: number | null;
   sl_rate?: number | null;
@@ -240,9 +288,12 @@ export type StrategyMatrixRow = {
   r_values?: number[];
   equity_curve_r?: number[];
   pnl_usd?: number | null;
+  pnl_usd_net?: number | null;
+  fees_usd?: number | null;
   risk_usd?: number;
   bars_loaded?: number;
   candle_source?: string;
+  trades?: StrategyTradeRow[];
   status?: string;
 };
 
@@ -255,6 +306,12 @@ export type StrategyMatrixResponse = {
   direction?: string;
   limit?: number;
   risk_usd?: number;
+  fee_model?: {
+    taker_fee?: number;
+    maker_fee?: number;
+    exit_fee?: number;
+    note?: string;
+  };
   symbols?: string[];
   timeframes?: string[];
   rows: StrategyMatrixRow[];
@@ -264,6 +321,27 @@ export type StrategyMatrixResponse = {
   reason?: string;
 };
 
+export type OhlcvRangeRow = {
+  symbol: string;
+  timeframe: string;
+  bars: number;
+  start?: string | null;
+  end?: string | null;
+};
+
+export function fetchResearchOhlcvRange(params?: {
+  symbols?: string[];
+  timeframes?: string[];
+}) {
+  const q = new URLSearchParams();
+  if (params?.symbols?.length) q.set("symbols", params.symbols.join(","));
+  if (params?.timeframes?.length) q.set("timeframes", params.timeframes.join(","));
+  const qs = q.toString();
+  return getJson<{ status: string; rows: OhlcvRangeRow[] }>(
+    `/api/research/ohlcv-range${qs ? `?${qs}` : ""}`
+  );
+}
+
 export function fetchLongStrategyBacktest(params: {
   symbols?: string[];
   timeframes?: string[];
@@ -271,6 +349,9 @@ export function fetchLongStrategyBacktest(params: {
   combination_id?: string;
   limit?: number;
   risk_usd?: number;
+  taker_fee_pct?: number;
+  maker_fee_pct?: number;
+  include_trades?: boolean;
   start_date?: string;
   end_date?: string;
 }) {
@@ -281,6 +362,11 @@ export function fetchLongStrategyBacktest(params: {
   if (params.combination_id) q.set("combination_id", params.combination_id);
   if (params.limit != null) q.set("limit", String(params.limit));
   if (params.risk_usd != null) q.set("risk_usd", String(params.risk_usd));
+  if (params.taker_fee_pct != null) q.set("taker_fee_pct", String(params.taker_fee_pct));
+  if (params.maker_fee_pct != null) q.set("maker_fee_pct", String(params.maker_fee_pct));
+  if (params.include_trades != null) {
+    q.set("include_trades", params.include_trades ? "true" : "false");
+  }
   if (params.start_date) q.set("start_date", params.start_date);
   if (params.end_date) q.set("end_date", params.end_date);
   return getJson<StrategyMatrixResponse>(
@@ -297,6 +383,114 @@ export function formatFresh(
     return "Data unavailable";
   }
   return formatter(fv.value);
+}
+
+export type PaperStatus = {
+  enabled: boolean;
+  paper_only: boolean;
+  disclaimer: string;
+  starting_equity: number;
+  equity: number;
+  realized_pnl_usd: number;
+  open_count: number;
+  closed_count: number;
+  open_risk_usd: number;
+  risk_percent: number;
+  entry_mode?: string;
+  entry_mode_label?: string;
+  timestamp: string;
+};
+
+export type PaperPosition = {
+  id: string;
+  symbol: string;
+  side: string;
+  status: string;
+  entry_price: number;
+  stop_price: number;
+  tp1_price: number | null;
+  quantity: number;
+  risk_usd: number;
+  opened_at: string;
+  closed_at: string | null;
+  exit_price: number | null;
+  exit_reason: string | null;
+  pnl_usd: number | null;
+  r_multiple: number | null;
+  mark_price: number | null;
+  unrealized_pnl_usd: number | null;
+  unrealized_r: number | null;
+  source_candle_ts: string | null;
+  timeframe: string;
+};
+
+export type PaperOpportunity = {
+  symbol: string;
+  tier: "READY" | "NEAR" | "FORMING" | string;
+  chance: string;
+  status: string;
+  direction: string;
+  timeframe: string;
+  setup_trend: string | null;
+  bos: string | null;
+  bos_state: string | null;
+  impulse: string | null;
+  pullback: string | null;
+  retest: string | null;
+  entry_price: number | null;
+  stop_price: number | null;
+  tp1_price: number | null;
+  rr_pass: boolean;
+  pass_count: number;
+  missing: string[];
+  already_open: boolean;
+  ohlcv_freshness?: string | null;
+};
+
+export function fetchPaperStatus() {
+  return getJson<PaperStatus>("/api/paper/status");
+}
+
+export function fetchPaperPositions(closedLimit = 50) {
+  return getJson<{
+    open: PaperPosition[];
+    closed: PaperPosition[];
+    status: PaperStatus;
+  }>(`/api/paper/positions?closed_limit=${closedLimit}`);
+}
+
+export function fetchPaperOpportunities(limit = 120, warm = 8) {
+  return getJson<{
+    rows: PaperOpportunity[];
+    count: number;
+    ready: number;
+    near: number;
+    forming: number;
+    waiting?: number;
+    watch?: number;
+    blocked?: number;
+    warmed?: number;
+    auto_enabled: boolean;
+    note: string;
+  }>(`/api/paper/opportunities?limit=${limit}&warm=${warm}`);
+}
+
+async function postJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST" });
+  if (!res.ok) throw new Error(`API ${path} failed: ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export function enablePaperTrade() {
+  return postJson<PaperStatus>("/api/paper/enable");
+}
+
+export function disablePaperTrade() {
+  return postJson<PaperStatus>("/api/paper/disable");
+}
+
+export function resetPaperTrade() {
+  return postJson<PaperStatus>("/api/paper/reset");
 }
 
 export function wsUrl(path: string): string {

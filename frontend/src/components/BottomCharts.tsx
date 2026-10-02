@@ -658,7 +658,9 @@ function PriceVolumeChart({
       }
     }
     load();
-    const id = window.setInterval(load, 15000);
+    const pollMs =
+      timeframe === "1m" ? 3000 : timeframe === "5m" ? 5000 : timeframe === "15m" ? 8000 : 15000;
+    const id = window.setInterval(load, pollMs);
     return () => {
       alive = false;
       window.clearInterval(id);

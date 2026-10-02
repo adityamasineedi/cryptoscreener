@@ -224,6 +224,80 @@ describe("position sizing & R:R", () => {
   });
 });
 
+describe("WAITING without entry", () => {
+  it("null entry_price is not shown as 0; provisional stop not sized", () => {
+    const plan = buildTradePlan({
+      symbol: "LTCUSDT",
+      setupTab: {
+        market_signal: "NEUTRAL",
+        setup_state: { status: "WAITING" },
+        analysis: { status: "WAITING", timeframe: "15m", direction: "LONG" },
+        trade_plan: {
+          entry: { status: "WAITING", direction: "LONG", entry_price: null },
+          stop: {
+            final_stop: 69.76661736,
+            risk_per_unit: 0.55,
+            provisional: true,
+            invalidation_reason: "Close below structural long stop",
+          },
+          targets: [
+            { name: "TP1", target_price: 71.42, r_multiple: 2 },
+            { name: "TP2", target_price: 71.98, r_multiple: 3 },
+            { name: "TP3", target_price: 72.53, r_multiple: 4 },
+          ],
+          risk_reward: { TP1_R: 2, TP2_R: 3, TP3_R: 4 },
+        },
+        conditions: [
+          cond("mtf", "FAIL"),
+          cond("trend", "PASS"),
+          cond("bos", "PASS"),
+          cond("impulse", "PASS"),
+          cond("pullback", "WAITING"),
+          cond("structure", "WAITING"),
+          cond("risk", "WAITING"),
+          cond("targets", "WAITING"),
+          cond("rr", "WAITING"),
+        ],
+        market_signal_conditions: {
+          mtf_alignment: "PASS",
+          htf_trend: "FAIL",
+          primary_trend: "FAIL",
+          choch: "N/A",
+          supply_demand: "N/A",
+        },
+        data_dependencies: { Liquidations: "WAITING", "15m": "LIVE" },
+      },
+    });
+    expect(plan.entry.price).toBeNull();
+    expect(plan.entry.display).toBe("—");
+    expect(plan.stop.price).toBeNull();
+    expect(plan.riskPerUnit).toBeNull();
+    expect(plan.direction).toBeNull();
+    expect(plan.statusMessage).not.toMatch(/Liquidations/i);
+    // Entry-engine mtf wins; market mtf_alignment must not duplicate as ✓
+    expect(plan.confirmations.some((c) => c.id === "mtf_alignment")).toBe(false);
+    expect(plan.failures.some((c) => c.id === "mtf")).toBe(true);
+    expect(plan.dataNotes.some((n) => /provisional/i.test(n))).toBe(true);
+    const size = computePositionSize({
+      accountSize: 500000,
+      riskPercent: 0.5,
+      entry: plan.entry.price,
+      stop: plan.stop.price,
+    });
+    expect(size.valid).toBe(false);
+  });
+
+  it("dedupes mtf vs mtf_alignment", () => {
+    const list = classifyConditions(
+      [cond("mtf", "FAIL", "MTF")],
+      { mtf_alignment: "PASS", choch: "N/A" },
+    );
+    expect(list.filter((c) => c.id === "mtf" || c.id === "mtf_alignment")).toHaveLength(1);
+    expect(list.find((c) => c.id === "mtf")?.verdict).toBe("FAIL");
+    expect(list.find((c) => c.id === "choch")?.detail).toMatch(/not confirmed/i);
+  });
+});
+
 describe("semantic distinction", () => {
   it("MARKET SIGNAL BUY with NO_SETUP stays BUY_BIAS not ENTRY_READY", () => {
     const plan = buildTradePlan({

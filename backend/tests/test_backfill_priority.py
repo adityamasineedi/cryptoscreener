@@ -138,6 +138,49 @@ def test_missing_fetch_ranges_skips_existing():
     assert ranges[-1][1] == want_end
 
 
+def test_trailing_stale_detects_frozen_tip():
+    from app.ingestion.klines import is_trailing_stale
+
+    now = datetime(2026, 10, 2, 9, 45, tzinfo=timezone.utc)
+    fresh = [_candle("BTCUSDT", "15m", now - timedelta(minutes=10))]
+    assert not is_trailing_stale(fresh, "15m", now=now)
+
+    frozen = [_candle("BTCUSDT", "15m", now - timedelta(hours=30))]
+    assert is_trailing_stale(frozen, "15m", now=now)
+    assert is_trailing_stale([], "15m", now=now)
+
+    # Daily tip stuck on yesterday must refresh once the new day opens
+    day_tip = [_candle("BTCUSDT", "1d", datetime(2026, 10, 1, tzinfo=timezone.utc))]
+    assert is_trailing_stale(day_tip, "1d", now=now)
+
+
+@pytest.mark.asyncio
+async def test_offer_reopens_complete_when_trailing_stale():
+    from app.ingestion.backfill import JobStatus
+
+    settings = Settings(USE_REAL_DATA=True)
+    market = MarketDataStore()
+    ohlcv = OHLCVStore()
+    svc = ProgressiveBackfillService(settings, MagicMock(), market, ohlcv)
+
+    now = datetime.now(timezone.utc)
+    tip = now - timedelta(hours=30)
+    for i in range(220):
+        await ohlcv.ingest_history(
+            [_candle("BTCUSDT", "15m", tip - timedelta(minutes=15 * (219 - i)))]
+        )
+
+    key = svc._key("BTCUSDT", "15m")
+    st = svc._state(key)
+    st.touch(JobStatus.COMPLETE, candles=220)
+
+    n = await svc._offer("BTCUSDT", "15m", priority=1, reason="seed", score=100.0)
+    assert n == 1
+    assert svc._state(key).status == JobStatus.PENDING
+    job = await svc._queue.get()
+    assert job.reason == "trailing_stale"
+
+
 def test_1m_rolling_excludes_long_tail():
     settings = Settings(USE_REAL_DATA=True)
     market = MarketDataStore()

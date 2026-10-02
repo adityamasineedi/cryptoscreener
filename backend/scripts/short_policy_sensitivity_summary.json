@@ -1,0 +1,154 @@
+{
+  "generated_at": "2026-10-02T16:36:12.678044+00:00",
+  "n_trades": 219,
+  "gate_draft": {
+    "holds_for_gate_draft": true,
+    "suggested_defaults": {
+      "research_gate_enabled": false,
+      "research_gate_block_shorts": true,
+      "research_gate_block_htf_conflict": false
+    },
+    "rationale": "SHORT mean R negative while LONG mean R positive; LONG_ONLY improves aggregate mean R vs CURRENT on this sample.",
+    "caveat": "Requires SHORT n>=10 and descriptive improvement; SAMPLE_THRESHOLD=30. Not a profitability claim."
+  },
+  "scenarios": {
+    "A_CURRENT": {
+      "label": "CURRENT",
+      "retained": 219,
+      "mean_R": -0.14567450115833516,
+      "win_rate": 0.2694063926940639,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "short": {
+        "n": 112,
+        "wins": 22,
+        "losses": 90,
+        "win_rate": 0.19642857142857142,
+        "mean_R": -0.3735715382046246,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "long": {
+        "n": 107,
+        "wins": 37,
+        "losses": 70,
+        "win_rate": 0.34579439252336447,
+        "mean_R": 0.09287193014245379,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      }
+    },
+    "B_LONG_ONLY": {
+      "label": "LONG only",
+      "retained": 107,
+      "mean_R": 0.09287193014245379,
+      "win_rate": 0.34579439252336447,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "short": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": null,
+        "mean_R": null,
+        "sample_size_flag": "INSUFFICIENT_SAMPLE"
+      },
+      "long": {
+        "n": 107,
+        "wins": 37,
+        "losses": 70,
+        "win_rate": 0.34579439252336447,
+        "mean_R": 0.09287193014245379,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      }
+    },
+    "C_LONG_PLUS_SHORT_HTF_ALIGNED": {
+      "label": "LONG + SHORT HTF_ALIGNED only",
+      "retained": 131,
+      "mean_R": -0.01558694338481579,
+      "win_rate": 0.31297709923664124,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "short": {
+        "n": 24,
+        "wins": 4,
+        "losses": 20,
+        "win_rate": 0.16666666666666666,
+        "mean_R": -0.49913275452722594,
+        "sample_size_flag": "INSUFFICIENT_SAMPLE"
+      },
+      "long": {
+        "n": 107,
+        "wins": 37,
+        "losses": 70,
+        "win_rate": 0.34579439252336447,
+        "mean_R": 0.09287193014245379,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      }
+    },
+    "D_LONG_PLUS_SHORT_15M_ONLY": {
+      "label": "LONG + SHORT 15m only",
+      "retained": 158,
+      "mean_R": -0.08598494601018888,
+      "win_rate": 0.2848101265822785,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "short": {
+        "n": 51,
+        "wins": 8,
+        "losses": 43,
+        "win_rate": 0.1568627450980392,
+        "mean_R": -0.46123368617357646,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "long": {
+        "n": 107,
+        "wins": 37,
+        "losses": 70,
+        "win_rate": 0.34579439252336447,
+        "mean_R": 0.09287193014245379,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      }
+    },
+    "E_LONG_PLUS_SHORT_1H_ONLY": {
+      "label": "LONG + SHORT 1h only",
+      "retained": 168,
+      "mean_R": -0.049879748564422635,
+      "win_rate": 0.30357142857142855,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "short": {
+        "n": 61,
+        "wins": 14,
+        "losses": 47,
+        "win_rate": 0.22950819672131148,
+        "mean_R": -0.30028023416500915,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "long": {
+        "n": 107,
+        "wins": 37,
+        "losses": 70,
+        "win_rate": 0.34579439252336447,
+        "mean_R": 0.09287193014245379,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      }
+    },
+    "F_LONG_PLUS_SHORT_15M_HTF_ALIGNED": {
+      "label": "LONG + SHORT 15m HTF_ALIGNED",
+      "retained": 118,
+      "mean_R": 0.016594156072789253,
+      "win_rate": 0.3220338983050847,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "short": {
+        "n": 11,
+        "wins": 1,
+        "losses": 10,
+        "win_rate": 0.09090909090909091,
+        "mean_R": -0.7253805553321293,
+        "sample_size_flag": "INSUFFICIENT_SAMPLE"
+      },
+      "long": {
+        "n": 107,
+        "wins": 37,
+        "losses": 70,
+        "win_rate": 0.34579439252336447,
+        "mean_R": 0.09287193014245379,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      }
+    }
+  }
+}

@@ -382,17 +382,44 @@ class ScreenerService:
         filters: list[dict[str, Any]] | None = None,
         preset: str | None = None,
         sort_by: str = "buy_opportunity",
-        limit: int = 200,
+        limit: int = 100,
         offset: int = 0,
-    ) -> tuple[list[ScreenerRow], int]:
+        screen_filter: str | None = None,
+        signal: str | None = None,
+        setup: str | None = None,
+        apply_screen_universe: bool = True,
+        force_screen_refresh: bool = False,
+    ) -> tuple[list[ScreenerRow], int, dict[str, Any]]:
+        """Build screener page.
+
+        Full data universe is still listed/built from market_store. The main
+        screener display is capped via screen_universe (max 100) using existing
+        row fields only — signal/structure/entry math is untouched.
+        """
+        from app.services.screen_universe import (
+            MAX_SCREEN_SYMBOLS,
+            clamp_screen_limit,
+            get_screen_universe_selector,
+            matches_screen_filter,
+            normalize_screen_filter,
+        )
+        from app.services.setup_signals import get_setup_signal_service
+
         symbols = self.store.list_symbols(market_type="futures_perp")
-        if search:
-            q = search.upper()
-            symbols = [
-                s for s in symbols if q in s.symbol or q in s.base_asset.upper()
+        total_universe = len(symbols)
+        search_q = (search or "").strip().upper() or None
+
+        # Search narrows the build set so any Binance symbol can be found even
+        # when it is outside the dynamic top-100 screen universe.
+        build_symbols = symbols
+        if search_q:
+            build_symbols = [
+                s
+                for s in symbols
+                if search_q in s.symbol or search_q in s.base_asset.upper()
             ]
 
-        rows = [self.build_row(s) for s in symbols]
+        rows = [self.build_row(s) for s in build_symbols]
 
         def val(row: ScreenerRow, field: str):
             fv = getattr(row, field, None)
@@ -427,6 +454,112 @@ class ScreenerService:
             kept_syms = {r["symbol"] for r in kept}
             filtered = [r for r in filtered if r.symbol in kept_syms]
 
+        # Optional API signal/setup filters (existing fields only)
+        if signal:
+            sig_u = signal.strip().upper()
+            next_rows: list[ScreenerRow] = []
+            for row in filtered:
+                ms = str(val(row, "market_signal") or "WAITING").upper()
+                if sig_u == "BUY" and ms in {"BUY", "STRONG_BUY"}:
+                    next_rows.append(row)
+                elif sig_u == "SELL" and ms in {"SELL", "STRONG_SELL"}:
+                    next_rows.append(row)
+                elif sig_u == ms:
+                    next_rows.append(row)
+            filtered = next_rows
+        if setup:
+            setup_u = setup.strip().upper()
+            filtered = [
+                r
+                for r in filtered
+                if str(val(r, "setup_signal") or "WAITING").upper() == setup_u
+            ]
+
+        # Map legacy signal/setup into screen_filter when provided alone
+        effective_screen_filter = screen_filter
+        if not effective_screen_filter and signal:
+            su = signal.strip().upper()
+            if su in {"BUY", "STRONG_BUY"}:
+                effective_screen_filter = "BUY_BIAS"
+            elif su in {"SELL", "STRONG_SELL"}:
+                effective_screen_filter = "SELL_BIAS"
+            elif su == "WAITING":
+                effective_screen_filter = "WAITING"
+        if not effective_screen_filter and setup:
+            su = setup.strip().upper()
+            if su in {
+                "ENTRY_READY",
+                "LONG_ENTRY_CANDIDATE",
+                "SHORT_ENTRY_CANDIDATE",
+                "ENTRY_CANDIDATE",
+            }:
+                effective_screen_filter = "ENTRY_READY"
+            elif su == "CONFLICT":
+                effective_screen_filter = "CONFLICT"
+            elif su == "WAITING":
+                effective_screen_filter = "WAITING"
+            elif su in {"NO_SETUP", "INVALIDATED"}:
+                effective_screen_filter = "SETUPS"
+
+        screen_limit = (
+            clamp_screen_limit(limit)
+            if apply_screen_universe
+            else max(1, min(int(limit or MAX_SCREEN_SYMBOLS), 1000))
+        )
+
+        meta: dict[str, Any] = {
+            "total_universe": total_universe,
+            "eligible_count": 0,
+            "returned_count": 0,
+            "limit": screen_limit,
+            "selection_updated_at": None,
+            "excluded": {},
+            "search_mode": bool(search_q),
+            "screen_filter": normalize_screen_filter(effective_screen_filter),
+            "max_screen_symbols": MAX_SCREEN_SYMBOLS,
+        }
+
+        if apply_screen_universe:
+            setup_svc = get_setup_signal_service()
+            selection = get_screen_universe_selector().select(
+                filtered,
+                total_universe=total_universe,
+                limit=screen_limit,
+                screen_filter=effective_screen_filter or "ALL_ELIGIBLE",
+                search=search_q,
+                ohlcv_ready_fn=setup_svc.setup_ohlcv_ready,
+                force_refresh=force_screen_refresh,
+                apply_screen_cap=True,
+            )
+            filtered = selection.rows
+            meta.update(
+                {
+                    "total_universe": selection.total_universe,
+                    "eligible_count": selection.eligible_count,
+                    "returned_count": selection.returned_count,
+                    "limit": selection.limit,
+                    "selection_updated_at": selection.selection_updated_at,
+                    "excluded": selection.excluded,
+                    "search_mode": selection.search_mode,
+                    "screen_filter": selection.screen_filter,
+                }
+            )
+            # Selection already ordered by screen_priority; optional display re-sort
+            display_sort = sort_by not in {
+                None,
+                "",
+                "buy_opportunity",
+                "market_signal",
+                "screen_priority",
+            }
+        else:
+            # Legacy path (e.g. diagnostics): no screen-universe selection
+            filt_norm = normalize_screen_filter(effective_screen_filter)
+            if filt_norm != "ALL_ELIGIBLE":
+                filtered = [r for r in filtered if matches_screen_filter(r, filt_norm)]
+            meta["eligible_count"] = len(filtered)
+            display_sort = True
+
         reverse = True
         sort_key_map = {
             "quote_volume_24h": "quote_volume_24h",
@@ -440,12 +573,25 @@ class ScreenerService:
             "symbol": None,
             "market_signal": "buy_opportunity",
             "buy_opportunity": "buy_opportunity",
+            "screen_priority": "screen_priority",
         }
         key = sort_key_map.get(sort_by, "buy_opportunity")
-        if key is None:
+
+        if apply_screen_universe and not display_sort:
+            # Keep screen_priority order from selector
+            pass
+        elif key is None:
             filtered.sort(key=lambda r: r.symbol)
+        elif key == "screen_priority":
+            filtered.sort(
+                key=lambda r: (
+                    r.screen_priority_score is not None,
+                    r.screen_priority_score or 0,
+                ),
+                reverse=True,
+            )
         elif key == "buy_opportunity":
-            # STRONG_BUY → BUY first; then confirmation strength; then volume
+            # Display sort only — does not change underlying signals
             signal_rank = {
                 "STRONG_BUY": 6,
                 "BUY": 5,
@@ -487,13 +633,19 @@ class ScreenerService:
                 reverse=reverse,
             )
 
-        total = len(filtered)
-        page = filtered[offset : offset + limit]
+        if apply_screen_universe:
+            # Selector already applied limit; honor offset within selected set
+            total = meta["eligible_count"]
+            page = filtered[offset : offset + screen_limit]
+        else:
+            total = len(filtered)
+            page = filtered[offset : offset + screen_limit]
+
         for i, row in enumerate(page, start=offset + 1):
-            # screener_rank = filtered/sorted table position (not market_rank)
             row.rank = i
             row.screener_rank = i
-        return page, total
+        meta["returned_count"] = len(page)
+        return page, total, meta
 
     def row_patch_changes(self, prev: dict[str, Any] | None, row: ScreenerRow) -> dict[str, Any]:
         """Compute incremental field changes for WS row_patch."""

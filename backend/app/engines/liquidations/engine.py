@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
@@ -13,11 +13,46 @@ class LiquidationEvent:
     price: float
     quantity: float
     notional: float
+    order_type: str = ""
+    average_price: float | None = None
+    order_status: str = ""
+    order_time: datetime | None = None
+    event_time: datetime | None = None
+    source: str = "binance_force_order"
+    received_at: datetime | None = None
+    event_key: str = ""
 
 
-def parse_force_order(payload: Mapping[str, Any]) -> LiquidationEvent | None:
+def _ms_to_dt(ts_ms: Any) -> datetime | None:
+    if ts_ms is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(ts_ms) / 1000.0, tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def event_key_from_order(row: Mapping[str, Any], *, event_time: datetime | None) -> str:
+    """Deterministic key from Binance force-order fields (not symbol+ts alone)."""
+    sym = str(row.get("s") or "")
+    side = str(row.get("S") or "")
+    status = str(row.get("X") or "")
+    price = str(row.get("p") or "")
+    qty = str(row.get("q") or "")
+    filled = str(row.get("z") or row.get("l") or "")
+    trade_t = str(row.get("T") or "")
+    avg = str(row.get("ap") or "")
+    et = event_time.isoformat() if event_time else ""
+    return "|".join((sym, side, status, price, qty, filled, avg, trade_t, et))
+
+
+def parse_force_order(
+    payload: Mapping[str, Any],
+    *,
+    received_at: datetime | None = None,
+) -> LiquidationEvent | None:
     """Normalize Binance !forceOrder@arr or single forceOrder event."""
-    row = payload
+    row: Any = payload
     if row.get("e") == "forceOrder" and "o" in row:
         row = row["o"]
     if not isinstance(row, dict):
@@ -33,12 +68,20 @@ def parse_force_order(payload: Mapping[str, Any]) -> LiquidationEvent | None:
         return None
     if price <= 0 or qty <= 0:
         return None
-    ts_ms = row.get("T") or payload.get("E")
-    if ts_ms is None:
-        ts = datetime.now(timezone.utc)
-    else:
-        ts = datetime.fromtimestamp(int(ts_ms) / 1000.0, tz=timezone.utc)
-    notional = price * qty
+
+    avg_price: float | None
+    try:
+        avg_price = float(row["ap"]) if row.get("ap") not in (None, "") else None
+    except (TypeError, ValueError):
+        avg_price = None
+
+    event_time = _ms_to_dt(payload.get("E"))
+    order_time = _ms_to_dt(row.get("T")) or event_time
+    ts = order_time or event_time or datetime.now(timezone.utc)
+    recv = received_at or datetime.now(timezone.utc)
+    notional = (avg_price if avg_price and avg_price > 0 else price) * qty
+    key = event_key_from_order(row, event_time=event_time or ts)
+
     return LiquidationEvent(
         symbol=str(sym),
         timestamp=ts,
@@ -46,6 +89,14 @@ def parse_force_order(payload: Mapping[str, Any]) -> LiquidationEvent | None:
         price=price,
         quantity=qty,
         notional=notional,
+        order_type=str(row.get("o") or ""),
+        average_price=avg_price,
+        order_status=str(row.get("X") or ""),
+        order_time=order_time,
+        event_time=event_time,
+        source="binance_force_order",
+        received_at=recv,
+        event_key=key,
     )
 
 

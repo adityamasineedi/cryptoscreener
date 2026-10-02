@@ -111,15 +111,19 @@ class MarketDataIngestionService:
             )
         )
 
+        # USD-M market streams require /market/ws (legacy /ws accepts sockets
+        # but delivers zero frames after Binance's 2026-04-23 path split).
+        from app.ingestion.binance_futures_ws import market_ws_url
+
         await self.ws.ensure(
             name="futures_ticker_arr",
-            url=f"{base}/ws/!ticker@arr",
+            url=market_ws_url(base, "!ticker@arr"),
             handler=self._on_ticker_message,
             force_reconnect_hours=force_h,
         )
         await self.ws.ensure(
             name="futures_mark_price_arr",
-            url=f"{base}/ws/!markPrice@arr@1s",
+            url=market_ws_url(base, "!markPrice@arr@1s"),
             handler=self._on_mark_message,
             force_reconnect_hours=force_h,
         )
@@ -138,6 +142,13 @@ class MarketDataIngestionService:
             filtered.append(tick)
         if filtered:
             await self.store.update_tickers_batch(filtered)
+            # Keep forming candles glued to live last price even when kline WS is silent
+            for tick in filtered:
+                if tick.price:
+                    try:
+                        await ohlcv_store.apply_live_price(tick.symbol, float(tick.price))
+                    except Exception:  # noqa: BLE001
+                        pass
 
     async def _on_mark_message(self, data: Any) -> None:
         self._ws_message_count += 1
@@ -163,6 +174,12 @@ class MarketDataIngestionService:
             if ticks:
                 await self.store.update_tickers_batch(ticks)
                 await self.store.flush_dirty()
+                for tick in ticks:
+                    if tick.price:
+                        try:
+                            await ohlcv_store.apply_live_price(tick.symbol, float(tick.price))
+                        except Exception:  # noqa: BLE001
+                            pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("rest_ticker_snapshot_failed", error=str(exc))
 

@@ -78,9 +78,10 @@ class KlineShardConnection:
         self._subscribed.clear()
 
     async def update_streams(self, streams: list[str]) -> None:
-        """Replace stream set; forces reconnect to rebalance subscriptions."""
+        """Replace stream set; reconnect only when membership actually changes."""
         new = list(streams)
-        if new == self.streams:
+        if set(new) == set(self.streams):
+            # Keep existing order — avoid bounce on reshuffles
             return
         self.streams = new
         # Bounce connection so SUBSCRIBE set is rebuilt cleanly
@@ -115,7 +116,10 @@ class KlineShardConnection:
 
     async def _run(self) -> None:
         attempt = 0
-        url = f"{self.base_ws}/ws"
+        # Market streams (kline) must use /market/ws after Binance USD-M split.
+        from app.ingestion.binance_futures_ws import market_ws_url
+
+        url = market_ws_url(self.base_ws)
         while not self._stop.is_set():
             if not self.streams:
                 try:

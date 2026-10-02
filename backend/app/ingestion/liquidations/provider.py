@@ -32,7 +32,7 @@ class LiquidationProvider(ABC):
 
 
 class BinanceForceOrderProvider(LiquidationProvider):
-    """Wraps existing LiquidationIngestion (!forceOrder@arr)."""
+    """Wraps LiquidationIngestion (!forceOrder@arr on /market/ws)."""
 
     name = "binance_force_order"
 
@@ -52,6 +52,12 @@ class BinanceForceOrderProvider(LiquidationProvider):
         return self._ingestion.aggregates(symbol)
 
     def liquidation_status(self) -> DataStatus:
+        if hasattr(self._ingestion, "compute_status"):
+            status = self._ingestion.compute_status()
+            try:
+                return DataStatus(status)
+            except ValueError:
+                return DataStatus.WAITING
         base = self._ingestion.status()
         events = int(base.get("total_events") or 0)
         if events > 0:
@@ -63,11 +69,16 @@ class BinanceForceOrderProvider(LiquidationProvider):
         status = self.liquidation_status()
         base["provider"] = self.name
         base["liquidation_status"] = status.value
-        base["note"] = (
-            "WAITING until real !forceOrder events arrive — never fabricated."
-            if status == DataStatus.WAITING
-            else "Receiving real forceOrder events."
-        )
+        if status == DataStatus.WAITING:
+            base["note"] = (
+                "WAITING until real !forceOrder events arrive — never fabricated."
+            )
+        elif status == DataStatus.LIVE:
+            base["note"] = "Receiving real forceOrder events."
+        elif status == DataStatus.STALE:
+            base["note"] = "Prior real events exist but outside freshness window."
+        else:
+            base["note"] = "Liquidation provider/connection unavailable."
         base["checked_at"] = datetime.now(timezone.utc).isoformat()
         return base
 

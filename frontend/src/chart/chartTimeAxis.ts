@@ -71,6 +71,11 @@ export function formatChartTickMark(
     case TickMarkType.Year:
       return String(d.getUTCFullYear());
     case TickMarkType.Month:
+      // On intraday charts a Month tick is usually the month boundary —
+      // "Oct 2026" reads like a year jump between Sep 30 and Oct 2.
+      if (isIntradayTimeframe(timeframe)) {
+        return `${month} ${day}`;
+      }
       return `${month} ${d.getUTCFullYear()}`;
     case TickMarkType.DayOfMonth:
       // Always include month so "30" / "1" are not ambiguous across month change

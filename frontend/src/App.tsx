@@ -7,6 +7,7 @@ import { CoinDetailPanel } from "./components/CoinDetailPanel";
 import { BacktestPanel } from "./components/BacktestPanel";
 import { BosResearchPanel } from "./components/BosResearchPanel";
 import { DataHealthPanel } from "./components/DataHealthPanel";
+import { PaperTradePanel } from "./components/PaperTradePanel";
 import { ScreenerTable } from "./components/ScreenerTable";
 import { Sidebar } from "./components/Sidebar";
 import { TopNav } from "./components/TopNav";
@@ -30,6 +31,7 @@ function ScreenerPage() {
   const connected = useMarketStore((s) => s.connected);
   const ingestion = useMarketStore((s) => s.ingestion);
   const total = useMarketStore((s) => s.total);
+  const screenMeta = useMarketStore((s) => s.screenMeta);
   const tickerCount = useMarketStore((s) => Object.keys(s.rows).length);
   const selected = useMarketStore((s) => s.selectedSymbol);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -67,8 +69,11 @@ function ScreenerPage() {
         health={{
           connected,
           ingestion: health?.ingestion ?? ingestion,
-          symbols: health?.symbols_loaded ?? total,
+          // Data Health / nav: full backend universe (not screen top-100)
+          symbols: health?.symbols_loaded ?? screenMeta?.total_universe ?? total,
           tickers: health?.tickers_live ?? tickerCount,
+          screenReturned: screenMeta?.returned_count,
+          screenUniverse: screenMeta?.total_universe ?? health?.symbols_loaded,
         }}
         detailToggle={
           isNarrow
@@ -136,6 +141,7 @@ export default function App() {
           <Route path="/" element={<ScreenerPage />} />
           <Route path="/health" element={<DataHealthPanel />} />
           <Route path="/bos-research" element={<BosResearchPanel />} />
+          <Route path="/paper" element={<PaperTradePanel />} />
           <Route path="/watchlist" element={<Placeholder title="Watchlist" />} />
           <Route path="/alerts" element={<Placeholder title="Alerts" />} />
           <Route path="/charts" element={<ChartsPage />} />

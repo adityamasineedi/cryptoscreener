@@ -25,6 +25,7 @@ export function dataLane(status: string, source?: string): string {
 
 const SOURCE_LABELS: Record<string, string> = {
   binance_ws: "Binance Futures WebSocket",
+  binance_force_order: "Binance Futures forceOrder stream",
   binance_rest: "Binance Futures REST",
   coingecko: "CoinGecko",
   defillama: "DefiLlama",

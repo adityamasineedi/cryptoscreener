@@ -41,6 +41,8 @@ export function TopNav({
     ingestion: string;
     symbols: number;
     tickers: number;
+    screenReturned?: number;
+    screenUniverse?: number;
   };
   detailToggle?: {
     open: boolean;
@@ -90,9 +92,17 @@ export function TopNav({
           <span className="hidden whitespace-nowrap term-md:inline">
             Ingestion: {health?.ingestion ?? "—"}
           </span>
-          <span className="whitespace-nowrap">
+          <span className="whitespace-nowrap" title="Live tickers / full backend universe">
             {health?.tickers ?? 0}/{health?.symbols ?? 0}
           </span>
+          {health?.screenUniverse != null && health.screenReturned != null ? (
+            <span
+              className="hidden whitespace-nowrap term-md:inline"
+              title="Main screener display vs full monitored universe"
+            >
+              Screen {health.screenReturned}/{health.screenUniverse}
+            </span>
+          ) : null}
         </div>
       </div>
       <FilterBar domain={active} />

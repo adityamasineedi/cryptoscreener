@@ -87,6 +87,30 @@ export interface ScreenerRow {
   social_dominance?: FreshValue<number>;
   data_status?: DataStatus;
   updated_at?: string | null;
+  /** Presentation-only screening rank — not a strategy/profit score */
+  screen_priority_score?: number | null;
+  screen_priority_reason?: string | null;
+}
+
+export type ScreenSize = 25 | 50 | 100;
+export type ScreenFilter =
+  | "ALL_ELIGIBLE"
+  | "SETUPS"
+  | "ENTRY_READY"
+  | "BUY_BIAS"
+  | "SELL_BIAS"
+  | "WAITING"
+  | "CONFLICT";
+
+export interface ScreenerMeta {
+  total_universe: number;
+  eligible_count: number;
+  returned_count: number;
+  limit: number;
+  selection_updated_at?: string | null;
+  excluded?: Record<string, number>;
+  search_mode?: boolean;
+  screen_filter?: string | null;
 }
 
 export interface ScreenerPreset {

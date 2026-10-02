@@ -1,0 +1,349 @@
+{
+  "meta": {
+    "generated_at": "2026-10-02T16:36:15.457825+00:00",
+    "dataset": "BOS Combination Research",
+    "combo": "COMBO_02",
+    "source_rows": "trend_regime_trade_rows.json",
+    "analysis": "htf_alignment_sensitivity",
+    "research_only": true,
+    "live_engine_unchanged": true,
+    "production_thresholds_unchanged": true,
+    "existing_trades_unchanged": true,
+    "no_future_information": true,
+    "no_parameter_optimization": true,
+    "no_new_sideways_detector": true,
+    "no_fabricated_data": true,
+    "no_trade_entry_recalculation": true,
+    "multiple_testing_risk": "MULTIPLE_TESTING_RISK: four predefined scenarios are reported on the same closed-trade sample. Intervals and rates are descriptive only; do not treat any scenario as selected or validated by this study."
+  },
+  "dataset_n": 219,
+  "research_htf_state_counts": {
+    "HTF_CONFLICT": 88,
+    "HTF_NEUTRAL_OR_UNAVAILABLE": 67,
+    "HTF_ALIGNED": 64
+  },
+  "scenarios": {
+    "A_CURRENT": {
+      "label": "CURRENT",
+      "original_trades": 219,
+      "retained_trades": 219,
+      "excluded_trades": 0,
+      "retention_pct": 100.0,
+      "wins": 59,
+      "losses": 160,
+      "win_rate": 0.2694063926940639,
+      "SL_rate": 0.730593607305936,
+      "TP1_rate": 0.2694063926940639,
+      "mean_R": -0.14567450115833516,
+      "median_R": -1.0,
+      "profit_factor": 0.8006080265395287,
+      "max_drawdown_R": 43.725221097018746,
+      "MAE": 339.5332420091325,
+      "MFE": 354.3488584474885,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "LONG": {
+        "n": 107,
+        "wins": 37,
+        "losses": 70,
+        "win_rate": 0.34579439252336447,
+        "mean_R": 0.09287193014245379,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "SHORT": {
+        "n": 112,
+        "wins": 22,
+        "losses": 90,
+        "win_rate": 0.19642857142857142,
+        "mean_R": -0.3735715382046246,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "15m_n": 109,
+      "1h_n": 110,
+      "5m": "NO DATA"
+    },
+    "B_HTF_ALIGNED_ONLY": {
+      "label": "HTF_ALIGNED only",
+      "original_trades": 219,
+      "retained_trades": 64,
+      "excluded_trades": 155,
+      "retention_pct": 29.22374429223744,
+      "wins": 26,
+      "losses": 38,
+      "win_rate": 0.40625,
+      "SL_rate": 0.59375,
+      "TP1_rate": 0.40625,
+      "mean_R": 0.25145974599041604,
+      "median_R": -1.0,
+      "profit_factor": 1.4235111511417535,
+      "max_drawdown_R": 13.930239295199044,
+      "MAE": 264.52374999999984,
+      "MFE": 358.2506249999999,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "LONG": {
+        "n": 40,
+        "wins": 22,
+        "losses": 18,
+        "win_rate": 0.55,
+        "mean_R": 0.7018152463010012,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "SHORT": {
+        "n": 24,
+        "wins": 4,
+        "losses": 20,
+        "win_rate": 0.16666666666666666,
+        "mean_R": -0.49913275452722594,
+        "sample_size_flag": "INSUFFICIENT_SAMPLE"
+      },
+      "15m_n": 34,
+      "1h_n": 30,
+      "5m": "NO DATA"
+    },
+    "C_HTF_ALIGNED_PLUS_NEUTRAL_OR_UNAVAILABLE": {
+      "label": "HTF_ALIGNED + HTF_NEUTRAL_OR_UNAVAILABLE",
+      "original_trades": 219,
+      "retained_trades": 131,
+      "excluded_trades": 88,
+      "retention_pct": 59.817351598173516,
+      "wins": 41,
+      "losses": 90,
+      "win_rate": 0.31297709923664124,
+      "SL_rate": 0.6870229007633588,
+      "TP1_rate": 0.31297709923664124,
+      "mean_R": -0.03751763021420885,
+      "median_R": -1.0,
+      "profit_factor": 0.9453910049104293,
+      "max_drawdown_R": 25.35597354910456,
+      "MAE": 312.2023664122138,
+      "MFE": 366.39374045801526,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "LONG": {
+        "n": 71,
+        "wins": 28,
+        "losses": 43,
+        "win_rate": 0.39436619718309857,
+        "mean_R": 0.22292723561285793,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "SHORT": {
+        "n": 60,
+        "wins": 13,
+        "losses": 47,
+        "win_rate": 0.21666666666666667,
+        "mean_R": -0.3457107214429046,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "15m_n": 56,
+      "1h_n": 75,
+      "5m": "NO DATA"
+    },
+    "D_CURRENT_EXCLUDE_HTF_CONFLICT": {
+      "label": "CURRENT exclude HTF_CONFLICT",
+      "original_trades": 219,
+      "retained_trades": 131,
+      "excluded_trades": 88,
+      "retention_pct": 59.817351598173516,
+      "wins": 41,
+      "losses": 90,
+      "win_rate": 0.31297709923664124,
+      "SL_rate": 0.6870229007633588,
+      "TP1_rate": 0.31297709923664124,
+      "mean_R": -0.03751763021420885,
+      "median_R": -1.0,
+      "profit_factor": 0.9453910049104293,
+      "max_drawdown_R": 25.35597354910456,
+      "MAE": 312.2023664122138,
+      "MFE": 366.39374045801526,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "LONG": {
+        "n": 71,
+        "wins": 28,
+        "losses": 43,
+        "win_rate": 0.39436619718309857,
+        "mean_R": 0.22292723561285793,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "SHORT": {
+        "n": 60,
+        "wins": 13,
+        "losses": 47,
+        "win_rate": 0.21666666666666667,
+        "mean_R": -0.3457107214429046,
+        "sample_size_flag": "SAMPLE_SIZE_OK"
+      },
+      "15m_n": 56,
+      "1h_n": 75,
+      "5m": "NO DATA"
+    }
+  },
+  "loss_share_vs_loss_rate": {
+    "total_losers": 160,
+    "by_htf_state": {
+      "HTF_ALIGNED": {
+        "n": 64,
+        "losses": 38,
+        "loss_rate": 0.59375,
+        "loss_share_of_all_losers": 0.2375,
+        "sample_size_flag": "SAMPLE_SIZE_OK",
+        "definitions": {
+          "loss_rate": "losses_in_category / trades_in_category",
+          "loss_share": "losses_in_category / all_losers"
+        }
+      },
+      "HTF_CONFLICT": {
+        "n": 88,
+        "losses": 70,
+        "loss_rate": 0.7954545454545454,
+        "loss_share_of_all_losers": 0.4375,
+        "sample_size_flag": "SAMPLE_SIZE_OK",
+        "definitions": {
+          "loss_rate": "losses_in_category / trades_in_category",
+          "loss_share": "losses_in_category / all_losers"
+        }
+      },
+      "HTF_NEUTRAL_OR_UNAVAILABLE": {
+        "n": 67,
+        "losses": 52,
+        "loss_rate": 0.7761194029850746,
+        "loss_share_of_all_losers": 0.325,
+        "sample_size_flag": "SAMPLE_SIZE_OK",
+        "definitions": {
+          "loss_rate": "losses_in_category / trades_in_category",
+          "loss_share": "losses_in_category / all_losers"
+        }
+      }
+    }
+  },
+  "cross_tab_tf_direction_htf": {
+    "15M LONG ALIGNED": {
+      "n": 23,
+      "wins": 11,
+      "losses": 12,
+      "loss_rate": 0.5217391304347826,
+      "mean_R": 0.48770460003262905,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "15M LONG CONFLICT": {
+      "n": 23,
+      "wins": 5,
+      "losses": 18,
+      "loss_rate": 0.782608695652174,
+      "mean_R": -0.3345985656989408,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "15M LONG NEUTRAL_OR_UNAVAILABLE": {
+      "n": 12,
+      "wins": 2,
+      "losses": 10,
+      "loss_rate": 0.8333333333333334,
+      "mean_R": -0.46622641829826944,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "15M SHORT ALIGNED": {
+      "n": 11,
+      "wins": 1,
+      "losses": 10,
+      "loss_rate": 0.9090909090909091,
+      "mean_R": -0.7253805553321293,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "15M SHORT CONFLICT": {
+      "n": 30,
+      "wins": 5,
+      "losses": 25,
+      "loss_rate": 0.8333333333333334,
+      "mean_R": -0.38653447285472115,
+      "sample_size_flag": "SAMPLE_SIZE_OK"
+    },
+    "15M SHORT NEUTRAL_OR_UNAVAILABLE": {
+      "n": 10,
+      "wins": 2,
+      "losses": 8,
+      "loss_rate": 0.8,
+      "mean_R": -0.394769770055734,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "1H LONG ALIGNED": {
+      "n": 17,
+      "wins": 11,
+      "losses": 6,
+      "loss_rate": 0.35294117647058826,
+      "mean_R": 0.9914943559582108,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "1H LONG CONFLICT": {
+      "n": 13,
+      "wins": 4,
+      "losses": 9,
+      "loss_rate": 0.6923076923076923,
+      "mean_R": 0.13886383136963684,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "1H LONG NEUTRAL_OR_UNAVAILABLE": {
+      "n": 19,
+      "wins": 4,
+      "losses": 15,
+      "loss_rate": 0.7894736842105263,
+      "mean_R": -0.35000311073410006,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "1H SHORT ALIGNED": {
+      "n": 13,
+      "wins": 3,
+      "losses": 10,
+      "loss_rate": 0.7692307692307693,
+      "mean_R": -0.3076923076923077,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "1H SHORT CONFLICT": {
+      "n": 22,
+      "wins": 4,
+      "losses": 18,
+      "loss_rate": 0.8181818181818182,
+      "mean_R": -0.431878854850093,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "1H SHORT NEUTRAL_OR_UNAVAILABLE": {
+      "n": 26,
+      "wins": 7,
+      "losses": 19,
+      "loss_rate": 0.7307692307692307,
+      "mean_R": -0.18522151836013506,
+      "sample_size_flag": "INSUFFICIENT_SAMPLE"
+    },
+    "5M": {
+      "status": "NO DATA",
+      "n": 0
+    }
+  },
+  "factual_observations": [
+    "Analyzed n=219 existing closed COMBO_02 diagnostic trades.",
+    "HTF_ALIGNED: n=64, losses=38/64, loss_rate=59.4%, loss_share=23.8% of all losers (38/160); SAMPLE_SIZE_OK.",
+    "HTF_CONFLICT: n=88, losses=70/88, loss_rate=79.5%, loss_share=43.8% of all losers (70/160); SAMPLE_SIZE_OK.",
+    "HTF_NEUTRAL_OR_UNAVAILABLE: n=67, losses=52/67, loss_rate=77.6%, loss_share=32.5% of all losers (52/160); SAMPLE_SIZE_OK.",
+    "HTF_ALIGNED only: retained 64/219 (29.2% retention), mean_R=0.251, SAMPLE_SIZE_OK.",
+    "HTF_ALIGNED + HTF_NEUTRAL_OR_UNAVAILABLE: retained 131/219 (59.8% retention), mean_R=-0.038, SAMPLE_SIZE_OK.",
+    "CURRENT exclude HTF_CONFLICT: retained 131/219 (59.8% retention), mean_R=-0.038, SAMPLE_SIZE_OK.",
+    "15M LONG: 18 wins / 40 losses from 58 trades (SAMPLE_SIZE_OK).",
+    "15M SHORT: 8 wins / 43 losses from 51 trades (SAMPLE_SIZE_OK).",
+    "1H LONG: 19 wins / 30 losses from 49 trades (SAMPLE_SIZE_OK).",
+    "1H SHORT: 14 wins / 47 losses from 61 trades (SAMPLE_SIZE_OK).",
+    "5m: NO DATA (zero trades in current dataset).",
+    "Direction asymmetry remains large; regime effects must not be attributed independently of LONG/SHORT mix.",
+    "MULTIPLE_TESTING_RISK: four predefined scenarios are reported on the same closed-trade sample. Intervals and rates are descriptive only; do not treat any scenario as selected or validated by this study."
+  ],
+  "acceptance": {
+    "live_engine_unchanged": true,
+    "production_thresholds_unchanged": true,
+    "existing_trades_unchanged": true,
+    "no_future_information_used": true,
+    "no_parameter_optimization": true,
+    "no_new_sideways_detector": true,
+    "no_fabricated_data": true,
+    "no_trade_entry_recalculation": true,
+    "all_sample_sizes_reported": true,
+    "long_short_separated": true,
+    "tf_15m_1h_separated": true
+  },
+  "multiple_testing_warning": "MULTIPLE_TESTING_RISK: four predefined scenarios are reported on the same closed-trade sample. Intervals and rates are descriptive only; do not treat any scenario as selected or validated by this study."
+}

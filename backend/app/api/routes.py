@@ -91,8 +91,16 @@ async def liquidations_diagnostic() -> dict[str, Any]:
     orch = get_orchestrator()
     if orch is None:
         return {
+            "provider": "binance_force_order",
             "connection_status": "STOPPED",
+            "connected": False,
+            "reader_running": False,
+            "frames_received": 0,
+            "normalized_events": 0,
             "events_seen": 0,
+            "status": "UNAVAILABLE",
+            "liquidation_status": "UNAVAILABLE",
+            "reason": "orchestrator not started",
             "note": "orchestrator not started",
         }
     if hasattr(orch.liquidations, "diagnostic"):
@@ -212,6 +220,40 @@ async def screener_presets() -> dict[str, Any]:
     }
 
 
+def _screener_response(
+    *,
+    rows: list[Any],
+    total: int,
+    meta: dict[str, Any],
+    settings: Any,
+    preset: str | None,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    payload_rows = [r.model_dump(mode="json") for r in rows]
+    return {
+        "total": total,
+        "offset": offset,
+        "limit": meta.get("limit", limit),
+        "preset": preset,
+        "rows": payload_rows,
+        "use_real_data": settings.use_real_data,
+        "ingestion": market_store.ingestion_status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        # Screen-universe metadata (presentation selection — not strategy scores)
+        "total_universe": meta.get("total_universe"),
+        "eligible_count": meta.get("eligible_count"),
+        "returned_count": meta.get("returned_count", len(payload_rows)),
+        "selection_updated_at": meta.get("selection_updated_at"),
+        "excluded": meta.get("excluded") or {},
+        "search_mode": bool(meta.get("search_mode")),
+        "screen_filter": meta.get("screen_filter"),
+        "max_screen_symbols": meta.get("max_screen_symbols", 100),
+        "screen_label": "SCREEN TOP 100",
+    }
+
+
+@router.get("/screener")
 @router.get("/screener/futures")
 async def screener_futures(
     search: str | None = None,
@@ -222,13 +264,25 @@ async def screener_futures(
     max_funding: float | None = None,
     preset: str | None = None,
     sort_by: str = "buy_opportunity",
-    limit: int = Query(default=100, ge=1, le=1000),
+    limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    screen_filter: str | None = None,
+    signal: str | None = None,
+    setup: str | None = None,
 ) -> dict[str, Any]:
+    """Main screener — returns ≤100 dynamically selected symbols.
+
+    Full backend universe remains unchanged for ingestion / Data Health.
+    Search can return symbols outside the current top-100 without permanently
+    adding them to the screen universe.
+    """
+    from app.services.screen_universe import MAX_SCREEN_SYMBOLS, clamp_screen_limit
+
     settings = get_settings()
     svc = ScreenerService(settings, market_store)
+    screen_limit = clamp_screen_limit(limit)
     t0 = asyncio.get_event_loop().time()
-    rows, total = svc.futures_screener(
+    rows, total, meta = svc.futures_screener(
         search=search,
         min_change=min_change,
         max_change=max_change,
@@ -237,8 +291,11 @@ async def screener_futures(
         max_funding=max_funding,
         preset=preset,
         sort_by=sort_by,
-        limit=limit,
+        limit=screen_limit,
         offset=offset,
+        screen_filter=screen_filter,
+        signal=signal,
+        setup=setup,
     )
     performance_monitor.record_screener_latency(
         (asyncio.get_event_loop().time() - t0) * 1000
@@ -254,23 +311,59 @@ async def screener_futures(
         from app.services.setup_signals import get_setup_signal_service
 
         setup_svc = get_setup_signal_service()
-        sync_budget = 40
+        sync_budget = 12
+        cfg = setup_svc.config
+        mtf = [cfg.mtf_major, cfg.mtf_primary, cfg.mtf_setup, cfg.mtf_entry]
         for i, row in enumerate(rows):
             cached = es.get_setup_signal(row.symbol)
             needs = setup_svc.setup_ohlcv_ready(row.symbol) and (
                 not cached or setup_svc.is_stale(cached, row.symbol)
             )
-            if not needs:
+            # Also refresh when OHLCV tip itself is behind (WS silent)
+            from app.ingestion.klines import is_trailing_stale
+
+            tip = ohlcv_store.get_closed(row.symbol, cfg.mtf_setup)
+            tip_stale = bool(tip) and is_trailing_stale(tip, cfg.mtf_setup)
+            if not needs and not tip_stale:
                 continue
             if sync_budget > 0:
-                setup_svc.ensure_computed(row.symbol)
+                try:
+                    await orch.backfill.ensure_setup_mtf_fresh(
+                        row.symbol,
+                        mtf,
+                        force_setup_tip=True,
+                        setup_tf=cfg.mtf_setup,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                setup_svc.ensure_computed(row.symbol, force=tip_stale)
+                try:
+                    from app.services.paper_trade import get_paper_trade_engine
+                    from app.services.engine_store import engine_store as es2
+
+                    get_paper_trade_engine().on_setup_signal(
+                        row.symbol, es2.get_setup_signal(row.symbol)
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
                 info = market_store.symbols.get(row.symbol)
                 if info is not None:
                     rows[i] = svc.build_row(info, rank=row.rank)
+                    # Preserve presentation fields from selection
+                    rows[i].screen_priority_score = row.screen_priority_score
+                    rows[i].screen_priority_reason = row.screen_priority_reason
                 sync_budget -= 1
             else:
                 setup_svc.enqueue_ensure([row.symbol])
-    payload_rows = [r.model_dump(mode="json") for r in rows]
+    payload = _screener_response(
+        rows=rows,
+        total=total,
+        meta=meta,
+        settings=settings,
+        preset=preset,
+        limit=screen_limit,
+        offset=offset,
+    )
     # Mirror latest page into Redis for reconnect (no-op if Redis disabled)
     try:
         from app.services.redis_state import redis_state
@@ -279,52 +372,57 @@ async def screener_futures(
             await redis_state.store_screener_state(
                 {
                     "total": total,
-                    "rows": payload_rows[:100],
-                    "symbols": [r["symbol"] for r in payload_rows[:100]],
+                    "rows": payload["rows"][:MAX_SCREEN_SYMBOLS],
+                    "symbols": [r["symbol"] for r in payload["rows"][:MAX_SCREEN_SYMBOLS]],
                     "ingestion": market_store.ingestion_status,
+                    "total_universe": meta.get("total_universe"),
+                    "eligible_count": meta.get("eligible_count"),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
             performance_monitor.record_redis_op()
     except Exception:  # noqa: BLE001
         pass
-    return {
-        "total": total,
-        "offset": offset,
-        "limit": limit,
-        "preset": preset,
-        "rows": payload_rows,
-        "use_real_data": settings.use_real_data,
-        "ingestion": market_store.ingestion_status,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    return payload
 
 
 @router.post("/screener/filter")
 async def screener_filter(
     body: dict[str, Any] = Body(default_factory=dict),
 ) -> dict[str, Any]:
+    from app.services.screen_universe import clamp_screen_limit
+
     settings = get_settings()
     svc = ScreenerService(settings, market_store)
     filters = body.get("filters") or []
     sort_by = body.get("sort_by") or "buy_opportunity"
-    limit = int(body.get("limit") or 200)
+    limit = clamp_screen_limit(int(body.get("limit") or 100))
     offset = int(body.get("offset") or 0)
     search = body.get("search")
     preset = body.get("preset")
-    rows, total = svc.futures_screener(
+    screen_filter = body.get("screen_filter")
+    rows, total, meta = svc.futures_screener(
         search=search,
         filters=filters,
         preset=preset,
         sort_by=sort_by,
         limit=limit,
         offset=offset,
+        screen_filter=screen_filter,
+        signal=body.get("signal"),
+        setup=body.get("setup"),
     )
     return {
-        "total": total,
-        "rows": [r.model_dump(mode="json") for r in rows],
+        **_screener_response(
+            rows=rows,
+            total=total,
+            meta=meta,
+            settings=settings,
+            preset=preset,
+            limit=limit,
+            offset=offset,
+        ),
         "filters": filters,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -332,23 +430,31 @@ async def screener_filter(
 async def screener_fundamentals(
     preset: str | None = None,
     search: str | None = None,
-    limit: int = Query(default=100, ge=1, le=1000),
+    limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
+    from app.services.screen_universe import clamp_screen_limit
+
     settings = get_settings()
     svc = ScreenerService(settings, market_store)
-    rows, total = svc.futures_screener(
+    screen_limit = clamp_screen_limit(limit)
+    rows, total, meta = svc.futures_screener(
         search=search,
         preset=preset,
         sort_by="market_cap",
-        limit=limit,
+        limit=screen_limit,
         offset=offset,
     )
     return {
-        "total": total,
-        "preset": preset,
-        "rows": [r.model_dump(mode="json") for r in rows],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **_screener_response(
+            rows=rows,
+            total=total,
+            meta=meta,
+            settings=settings,
+            preset=preset,
+            limit=screen_limit,
+            offset=offset,
+        ),
     }
 
 
@@ -558,6 +664,67 @@ async def signal_backtest(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/research/ohlcv-range")
+async def research_ohlcv_range(
+    symbols: str = Query(default="BTCUSDT,ETHUSDT,SOLUSDT"),
+    timeframes: str = Query(default="15m,1h"),
+) -> dict[str, Any]:
+    """Postgres OHLCV min/max times — so Backtest tab can warn about missing years."""
+    from sqlalchemy import text
+
+    from app.research.query_utils import (
+        normalize_research_symbol,
+        normalize_research_timeframe,
+    )
+    from app.services.database import db_manager
+
+    syms = [
+        normalize_research_symbol(s)
+        for s in symbols.split(",")
+        if s.strip()
+    ]
+    tfs = [
+        normalize_research_timeframe(t)
+        for t in timeframes.split(",")
+        if t.strip()
+    ]
+    if db_manager.engine is None:
+        return {
+            "status": "UNAVAILABLE",
+            "rows": [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    rows: list[dict[str, Any]] = []
+    async with db_manager.engine.begin() as conn:
+        for sym in syms:
+            for tf in tfs:
+                r = await conn.execute(
+                    text(
+                        """
+                        SELECT COUNT(*), MIN(time), MAX(time)
+                        FROM ohlcv
+                        WHERE symbol = :s AND timeframe = :tf
+                        """
+                    ),
+                    {"s": sym, "tf": tf},
+                )
+                n, t0, t1 = r.fetchone()
+                rows.append(
+                    {
+                        "symbol": sym,
+                        "timeframe": tf,
+                        "bars": int(n or 0),
+                        "start": t0.isoformat() if t0 else None,
+                        "end": t1.isoformat() if t1 else None,
+                    }
+                )
+    return {
+        "status": "OK",
+        "rows": rows,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/research/long-strategy/backtest")
 async def research_long_strategy_backtest(
     symbols: str = Query(
@@ -577,6 +744,19 @@ async def research_long_strategy_backtest(
         description="OHLCV bars from DB tail (~96 bars/day on 15m)",
     ),
     risk_usd: float = Query(default=20.0, ge=1.0, le=10_000.0),
+    taker_fee_pct: float = Query(
+        default=0.04,
+        ge=0.0,
+        le=1.0,
+        description="Taker fee percent of notional (0.04 = Binance USDT-M VIP0)",
+    ),
+    maker_fee_pct: float = Query(
+        default=0.02,
+        ge=0.0,
+        le=1.0,
+        description="Maker fee percent of notional (used for LIMIT_RETEST entries)",
+    ),
+    include_trades: bool = Query(default=True),
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
 ) -> dict[str, Any]:
@@ -601,6 +781,9 @@ async def research_long_strategy_backtest(
         risk_usd=risk_usd,
         start_date=start_date,
         end_date=end_date,
+        taker_fee=taker_fee_pct / 100.0,
+        maker_fee=maker_fee_pct / 100.0,
+        include_trades=include_trades,
     )
     return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
 
@@ -799,18 +982,153 @@ async def signal_for_symbol(
     leverage: float | None = None,
 ) -> dict[str, Any]:
     from app.services.setup_signals import get_setup_signal_service
+    from app.services.paper_trade import get_paper_trade_engine
 
     svc = get_setup_signal_service()
+    orch = get_orchestrator()
+    # Strategy signals require live closed candles — refresh MTF tips when WS silent
+    if orch is not None and getattr(orch, "backfill", None) is not None:
+        cfg = svc.config
+        try:
+            await orch.backfill.ensure_setup_mtf_fresh(
+                symbol.upper(),
+                [cfg.mtf_major, cfg.mtf_primary, cfg.mtf_setup, cfg.mtf_entry],
+                force_setup_tip=True,
+                setup_tf=cfg.mtf_setup,
+            )
+        except Exception:  # noqa: BLE001
+            pass
     payload = svc.analyze_symbol(
         symbol,
         account_equity=account_equity,
         risk_percent=risk_percent,
         leverage=leverage,
     )
+    # Auto paper: open as soon as this request produces an entry candidate
+    try:
+        get_paper_trade_engine().on_setup_signal(symbol, payload)
+    except Exception:  # noqa: BLE001
+        pass
     return {
         **payload,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/paper/status")
+async def paper_status() -> dict[str, Any]:
+    from app.services.paper_trade import get_paper_trade_engine
+
+    return get_paper_trade_engine().status()
+
+
+@router.get("/paper/positions")
+async def paper_positions(closed_limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+    from app.services.paper_trade import get_paper_trade_engine
+
+    return get_paper_trade_engine().positions(closed_limit=closed_limit)
+
+
+@router.get("/paper/opportunities")
+async def paper_opportunities(
+    limit: int = Query(default=100, ge=1, le=300),
+    warm: int = Query(default=25, ge=0, le=80),
+) -> dict[str, Any]:
+    """List setups across many coins — READY/NEAR plus WAITING/WATCH so the book is visible."""
+    from app.services.paper_trade import get_paper_trade_engine, list_trade_opportunities
+    from app.services.setup_signals import get_setup_signal_service
+    from app.services.market_store import market_store
+
+    eng = get_paper_trade_engine()
+    orch = get_orchestrator()
+    setup_svc = get_setup_signal_service()
+    cfg = setup_svc.config
+    mtf = [cfg.mtf_major, cfg.mtf_primary, cfg.mtf_setup, cfg.mtf_entry]
+
+    # Warm top-volume / visible symbols missing a computed setup (bounded)
+    warmed = 0
+    if warm > 0 and orch is not None and getattr(orch, "backfill", None) is not None:
+        from app.services.engine_store import engine_store as es
+
+        ranked = sorted(
+            market_store.tickers.keys(),
+            key=lambda s: float(getattr(market_store.tickers.get(s), "quote_volume_24h", 0) or 0),
+            reverse=True,
+        )
+        visible = set(getattr(orch.backfill, "_visible", set()) or set())
+        prefer = list(dict.fromkeys([*sorted(visible), *ranked]))
+        for sym in prefer:
+            if warmed >= warm:
+                break
+            cached = es.get_setup_signal(sym)
+            # Skip symbols that already have a non-waiting setup
+            if cached and str(cached.get("status") or "") not in ("", "WAITING"):
+                continue
+            try:
+                # Setup TF tip only — keep warm cheap for the opportunities page
+                await orch.backfill.ensure_series_fresh(
+                    sym, cfg.mtf_setup, limit=80, force_tip=True
+                )
+                for tf in (cfg.mtf_primary, cfg.mtf_major, cfg.mtf_entry):
+                    await orch.backfill.ensure_series_fresh(sym, tf, limit=80, force_tip=False)
+                setup_svc.ensure_computed(sym, force=True)
+                warmed += 1
+            except Exception:  # noqa: BLE001
+                continue
+
+    open_syms = set(eng._open.keys())  # noqa: SLF001
+    rows = list_trade_opportunities(limit=limit, open_symbols=open_syms, include_waiting=True)
+    by_tier: dict[str, int] = {}
+    for r in rows:
+        t = str(r.get("tier") or "?")
+        by_tier[t] = by_tier.get(t, 0) + 1
+    return {
+        "rows": rows,
+        "count": len(rows),
+        "ready": by_tier.get("READY", 0),
+        "near": by_tier.get("NEAR", 0),
+        "forming": by_tier.get("FORMING", 0),
+        "waiting": by_tier.get("WAITING", 0),
+        "watch": by_tier.get("WATCH", 0),
+        "blocked": by_tier.get("BLOCKED", 0),
+        "by_tier": by_tier,
+        "warmed": warmed,
+        "auto_enabled": eng.enabled,
+        "note": (
+            f"Auto mode={eng.entry_mode}. READY = Path A Trend+BOS opens when Auto ON"
+            if eng.entry_mode == "path_a"
+            else "READY = LONG_ENTRY_CANDIDATE. WAITING = OHLCV/setup not ready."
+        ),
+        "entry_mode": eng.entry_mode,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/paper/enable")
+async def paper_enable() -> dict[str, Any]:
+    from app.services.paper_trade import get_paper_trade_engine
+
+    eng = get_paper_trade_engine()
+    eng.enable()
+    return eng.status()
+
+
+@router.post("/paper/disable")
+async def paper_disable() -> dict[str, Any]:
+    from app.services.paper_trade import get_paper_trade_engine
+
+    eng = get_paper_trade_engine()
+    eng.disable()
+    return eng.status()
+
+
+@router.post("/paper/reset")
+async def paper_reset() -> dict[str, Any]:
+    from app.services.paper_trade import get_paper_trade_engine
+
+    eng = get_paper_trade_engine()
+    eng.reset()
+    return eng.status()
 
 
 @router.get("/signals/{symbol}/{timeframe}")
@@ -864,12 +1182,128 @@ async def chart_ohlcv(
     timeframe: str = Query(default="15m"),
     limit: int = Query(default=200, ge=10, le=1000),
 ) -> dict[str, Any]:
+    from app.ingestion.klines import TIMEFRAME_MS, normalize_timeframe
+
     sym = symbol.upper()
+    orch = get_orchestrator()
+    # Serve in-memory tip immediately. REST catch-up runs in the background so
+    # chart polls never queue behind the universe backfill (can take 60s+).
+    if orch is not None and getattr(orch, "backfill", None) is not None:
+        try:
+            visible = set(getattr(orch.backfill, "_visible", set()) or set())
+            visible.add(sym)
+            orch.backfill.set_visible_symbols(list(visible))
+            orch.set_kline_focus([sym])
+            # Only resubscribe when this chart symbol is not already on the live WS
+            current = set(getattr(orch.kline_ws, "_symbols", []) or [])
+            if sym not in current:
+                try:
+                    asyncio.create_task(
+                        orch.refresh_kline_live_subscriptions(),
+                        name=f"kline_focus_{sym}",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            tip_key = (sym, normalize_timeframe(timeframe))
+            last = getattr(orch.backfill, "_last_tip_fetch", {}).get(tip_key, 0.0)
+            import time as _time
+
+            min_s = float(getattr(orch.backfill, "tip_refresh_min_seconds", 10.0))
+            if _time.monotonic() - float(last or 0.0) >= min_s:
+                asyncio.create_task(
+                    orch.backfill.ensure_series_fresh(
+                        sym, timeframe, limit=limit, force_tip=True
+                    ),
+                    name=f"chart_tip_{sym}_{timeframe}",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
     candles = ohlcv_store.get_closed(sym, timeframe, limit=limit)
     open_c = ohlcv_store.get_open(sym, timeframe)
-    rows = [c.model_dump(mode="json") for c in candles]
+
+    # Cold or stale tip: short direct kline pull (not the backfill worker queue)
+    from app.ingestion.klines import BINANCE_INTERVAL, is_trailing_stale, normalize_rest_kline
+
+    tip_view = list(candles)
     if open_c is not None:
-        rows.append(open_c.model_dump(mode="json"))
+        tip_view.append(open_c)
+    need_direct = (not tip_view) or is_trailing_stale(tip_view, timeframe)
+    if need_direct and orch is not None:
+        rest = getattr(getattr(orch, "backfill", None), "rest", None)
+        if rest is not None:
+            try:
+                interval = BINANCE_INTERVAL.get(normalize_timeframe(timeframe), timeframe)
+                raw = await asyncio.wait_for(
+                    rest.futures_klines(sym, interval, limit=min(max(limit, 50), 250)),
+                    timeout=2.5,
+                )
+                batch = []
+                open_new = None
+                for row in raw or []:
+                    c = normalize_rest_kline(sym, timeframe, row)
+                    if c is None:
+                        continue
+                    if not c.is_closed:
+                        open_new = c
+                    else:
+                        batch.append(c)
+                if batch:
+                    await ohlcv_store.ingest_history(batch)
+                if open_new is not None:
+                    await ohlcv_store.upsert_candle(open_new)
+                candles = ohlcv_store.get_closed(sym, timeframe, limit=limit)
+                open_c = ohlcv_store.get_open(sym, timeframe)
+            except Exception:  # noqa: BLE001
+                pass
+
+    rows = [c.model_dump(mode="json") for c in candles]
+
+    # Snap forming candle to live mark/ticker so tip matches Binance price
+    live_px: float | None = None
+    mark = market_store.mark_prices.get(sym)
+    if mark is not None and getattr(mark, "mark_price", None):
+        try:
+            live_px = float(mark.mark_price)
+        except (TypeError, ValueError):
+            live_px = None
+    if live_px is None:
+        tick = market_store.get_ticker(sym)
+        if tick is not None and tick.price:
+            try:
+                live_px = float(tick.price)
+            except (TypeError, ValueError):
+                live_px = None
+
+    if open_c is not None:
+        row = open_c.model_dump(mode="json")
+        if live_px is not None and live_px > 0:
+            hi = max(float(row.get("high") or live_px), live_px)
+            lo = min(float(row.get("low") or live_px), live_px)
+            row["high"] = hi
+            row["low"] = lo
+            row["close"] = live_px
+            row["source"] = f"{row.get('source') or 'ohlcv'}+ticker"
+        rows.append(row)
+    elif live_px is not None and rows:
+        last = rows[-1]
+        try:
+            step = TIMEFRAME_MS.get(normalize_timeframe(timeframe), 60_000)
+            ot = last.get("open_time")
+            if isinstance(ot, str):
+                ot_dt = datetime.fromisoformat(ot.replace("Z", "+00:00"))
+            else:
+                ot_dt = ot
+            age_ms = (datetime.now(timezone.utc) - ot_dt).total_seconds() * 1000
+            if ot_dt is not None and 0 <= age_ms < step:
+                last = dict(last)
+                last["close"] = live_px
+                last["high"] = max(float(last.get("high") or live_px), live_px)
+                last["low"] = min(float(last.get("low") or live_px), live_px)
+                rows[-1] = last
+        except Exception:  # noqa: BLE001
+            pass
+
     status = "LIVE" if rows else "WAITING"
     return {
         "symbol": sym,
@@ -878,6 +1312,7 @@ async def chart_ohlcv(
         "count": len(rows),
         "status": status,
         "source": "ohlcv_store",
+        "live_price": live_px,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -910,11 +1345,17 @@ async def chart_liquidations(
                 for e in list(st.events)[-200:]
             ]
     status = orch.liquidations.liquidation_status().value
+    # Never fabricate events for non-LIVE/STALE presentation
+    if status in ("WAITING", "UNAVAILABLE"):
+        events = []
+    last_event_time = events[-1]["timestamp"] if events else None
     return {
         "symbol": sym,
         "window": window,
         "aggregates": aggs,
         "events": events,
+        "event_count": len(events),
+        "last_event_time": last_event_time,
         "status": status,
         "liquidation_status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1049,9 +1490,11 @@ async def ws_screener(websocket: WebSocket) -> None:
                 if isinstance(r, dict) and r.get("symbol"):
                     prev[r["symbol"]] = r
 
-        # Fresh in-memory snapshot (authoritative)
+        # Fresh in-memory snapshot (authoritative) — ≤100 screen universe
+        from app.services.screen_universe import MAX_SCREEN_SYMBOLS
+
         t0 = asyncio.get_event_loop().time()
-        rows, total = svc.futures_screener(limit=300, offset=0)
+        rows, total, meta = svc.futures_screener(limit=MAX_SCREEN_SYMBOLS, offset=0)
         performance_monitor.record_screener_latency(
             (asyncio.get_event_loop().time() - t0) * 1000
         )
@@ -1071,6 +1514,12 @@ async def ws_screener(websocket: WebSocket) -> None:
             "rows": payload_rows,
             "ingestion": market_store.ingestion_status,
             "source": "memory",
+            "total_universe": meta.get("total_universe"),
+            "eligible_count": meta.get("eligible_count"),
+            "returned_count": meta.get("returned_count"),
+            "limit": meta.get("limit"),
+            "selection_updated_at": meta.get("selection_updated_at"),
+            "excluded": meta.get("excluded") or {},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         await websocket.send_json(snapshot)
@@ -1078,9 +1527,11 @@ async def ws_screener(websocket: WebSocket) -> None:
             await redis_state.store_screener_state(
                 {
                     "total": total,
-                    "rows": payload_rows[:100],
-                    "symbols": [r["symbol"] for r in payload_rows[:100]],
+                    "rows": payload_rows[:MAX_SCREEN_SYMBOLS],
+                    "symbols": [r["symbol"] for r in payload_rows[:MAX_SCREEN_SYMBOLS]],
                     "ingestion": market_store.ingestion_status,
+                    "total_universe": meta.get("total_universe"),
+                    "eligible_count": meta.get("eligible_count"),
                     "timestamp": snapshot["timestamp"],
                 }
             )
@@ -1090,7 +1541,8 @@ async def ws_screener(websocket: WebSocket) -> None:
         while True:
             await asyncio.sleep(1.0)
             t0 = asyncio.get_event_loop().time()
-            rows, total = svc.futures_screener(limit=300, offset=0)
+            # Membership refresh uses selector TTL; row fields still rebuild cheaply
+            rows, total, meta = svc.futures_screener(limit=MAX_SCREEN_SYMBOLS, offset=0)
             performance_monitor.record_screener_latency(
                 (asyncio.get_event_loop().time() - t0) * 1000
             )
@@ -1101,6 +1553,28 @@ async def ws_screener(websocket: WebSocket) -> None:
                     orch.backfill.set_visible_symbols(visible)
                 # Enqueue only — ensure loop drains ≤25 / 0.5s (no universe sync)
                 orch.request_setup_for_visible(visible)
+            # If membership changed, send a fresh snapshot (anti-flicker keeps order stable)
+            new_syms = [r.symbol for r in rows]
+            old_syms = list(prev.keys())
+            if new_syms != old_syms:
+                prev = {r.symbol: r.model_dump(mode="json") for r in rows}
+                await websocket.send_json(
+                    {
+                        "type": "screener_snapshot",
+                        "total": total,
+                        "rows": [r.model_dump(mode="json") for r in rows],
+                        "ingestion": market_store.ingestion_status,
+                        "source": "memory",
+                        "total_universe": meta.get("total_universe"),
+                        "eligible_count": meta.get("eligible_count"),
+                        "returned_count": meta.get("returned_count"),
+                        "limit": meta.get("limit"),
+                        "selection_updated_at": meta.get("selection_updated_at"),
+                        "excluded": meta.get("excluded") or {},
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                continue
             patches = 0
             for row in rows:
                 changes = svc.row_patch_changes(prev.get(row.symbol), row)
@@ -1138,6 +1612,9 @@ async def ws_screener(websocket: WebSocket) -> None:
                     "type": "screener_heartbeat",
                     "total": total,
                     "patches": patches,
+                    "total_universe": meta.get("total_universe"),
+                    "eligible_count": meta.get("eligible_count"),
+                    "returned_count": meta.get("returned_count"),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )

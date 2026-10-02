@@ -24,6 +24,7 @@ from app.signals.risk_engine import (
     risk_reward,
 )
 from app.signals.market_signal_engine import classify_market_signal
+from app.signals.research_gate import apply_research_gate
 from app.signals.schemas import SetupAnalysis, SignalStatus, TrendState
 from app.signals.stop_engine import compute_stop
 from app.signals.swing_detector import swings_for_timeframe
@@ -341,19 +342,50 @@ class SignalEngine:
             liquidation_available=liquidation_status == "LIVE",
         )
 
-        # Recompute stop/targets with final entry price when available
-        direction = entry.get("direction") or direction_hint
+        # Invalidation checks (may upgrade status before publishing direction/levels)
         entry_price = entry.get("entry_price")
-        if (
-            entry_price
-            and direction
-            and entry.get("status")
-            in (
-                SignalStatus.LONG_ENTRY_CANDIDATE.value,
-                SignalStatus.SHORT_ENTRY_CANDIDATE.value,
-                SignalStatus.ENTRY_CANDIDATE.value,
-            )
-        ):
+        status = str(entry.get("status"))
+        invalidation = None
+        if pullback and pullback.get("pullback_state") == "INVALIDATED":
+            status = SignalStatus.INVALIDATED.value
+            invalidation = pullback.get("reason")
+        if choch and choch.get("state") == "CONFIRMED" and bos and bos.get("state") == "CONFIRMED":
+            # Opposite character change after setup
+            if (
+                bos.get("direction") == "BULLISH_BOS"
+                and choch.get("direction") == "CHOCH_BEARISH"
+            ) or (
+                bos.get("direction") == "BEARISH_BOS"
+                and choch.get("direction") == "CHOCH_BULLISH"
+            ):
+                status = SignalStatus.INVALIDATED.value
+                invalidation = "Opposite CHOCH after BOS"
+
+        entry_candidate = status in (
+            SignalStatus.LONG_ENTRY_CANDIDATE.value,
+            SignalStatus.SHORT_ENTRY_CANDIDATE.value,
+            SignalStatus.ENTRY_CANDIDATE.value,
+        )
+        # Publish trade direction only for confirmed candidates (not provisional BOS hints)
+        direction = entry.get("direction") if entry_candidate else None
+        if entry_candidate and not direction:
+            direction = direction_hint
+        # Optional research gate (default OFF) — demote candidates only; no math changes
+        gate = apply_research_gate(
+            status=status, direction=direction, mtf=mtf, config=cfg
+        )
+        research_gate_reason = gate.get("research_gate_reason")
+        if gate.get("research_gate_applied"):
+            status = str(gate["status"])
+            direction = gate.get("direction")
+            entry_candidate = False
+            entry = {
+                **(entry or {}),
+                "status": status,
+                "direction": direction,
+                "research_gate": gate,
+            }
+        if entry_candidate and entry_price and direction:
             stop = compute_stop(
                 direction=direction,
                 entry_price=float(entry_price),
@@ -379,24 +411,10 @@ class SignalEngine:
                     targets,
                     min_rr=cfg.min_rr,
                 )
-
-        # Invalidation checks
-        invalidation = None
-        status = str(entry.get("status"))
-        if pullback and pullback.get("pullback_state") == "INVALIDATED":
-            status = SignalStatus.INVALIDATED.value
-            invalidation = pullback.get("reason")
-        if choch and choch.get("state") == "CONFIRMED" and bos and bos.get("state") == "CONFIRMED":
-            # Opposite character change after setup
-            if (
-                bos.get("direction") == "BULLISH_BOS"
-                and choch.get("direction") == "CHOCH_BEARISH"
-            ) or (
-                bos.get("direction") == "BEARISH_BOS"
-                and choch.get("direction") == "CHOCH_BULLISH"
-            ):
-                status = SignalStatus.INVALIDATED.value
-                invalidation = "Opposite CHOCH after BOS"
+        elif not entry_candidate:
+            # Provisional BOS-based levels stay for invalidation context only
+            if stop:
+                stop = {**stop, "provisional": True}
 
         eq = account_equity if account_equity is not None else cfg.default_account_equity
         rp = risk_percent if risk_percent is not None else cfg.default_risk_percent
@@ -457,6 +475,11 @@ class SignalEngine:
             data_deps=data_deps,
             conditions=entry.get("conditions") or [],
         )
+        if research_gate_reason:
+            explanation = [
+                f"Research gate applied: {research_gate_reason} (opt-in; not a live default)",
+                *explanation,
+            ]
 
         annotations = self._annotations(
             swings=setup.get("swings") or [],

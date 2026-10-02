@@ -84,9 +84,27 @@ function asArray(v: unknown): Array<Record<string, unknown>> {
 }
 
 function numOrNull(v: unknown): number | null {
-  const n = Number(v);
+  // Number(null) === 0 in JS — treat null/undefined/"" as missing
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 }
+
+/** Valid trade entry price (rejects null and non-positive). */
+function validEntryPrice(v: unknown): number | null {
+  const n = numOrNull(v);
+  if (n == null || !(n > 0)) return null;
+  return n;
+}
+
+/** Condition ids that are aliases across entry vs market-signal payloads */
+const CONDITION_ALIASES: Record<string, string> = {
+  mtf_alignment: "mtf",
+  risk_reward: "rr",
+};
+
+/** Soft/contextual N/A — not a missing data feed */
+const CONTEXT_NA_IDS = new Set(["choch", "supply_demand", "entry_setup"]);
 
 function fmtPrice(v: number | null): string {
   if (v == null) return "—";
@@ -248,10 +266,19 @@ export function classifyConditions(
   const out: TradeCondition[] = [];
   const seen = new Set<string>();
 
+  const markSeen = (id: string) => {
+    seen.add(id);
+    const alias = CONDITION_ALIASES[id];
+    if (alias) seen.add(alias);
+    for (const [from, to] of Object.entries(CONDITION_ALIASES)) {
+      if (to === id) seen.add(from);
+    }
+  };
+
   for (const c of conditions) {
     const id = String(c.id || "");
     if (!id || seen.has(id)) continue;
-    seen.add(id);
+    markSeen(id);
     let verdict = normalizeVerdict(c.verdict);
     // Soft data: never treat missing OI/liq as FAIL in presentation
     if ((id === "oi" || id === "liquidation") && (verdict === "FAIL" || verdict === "WAITING")) {
@@ -269,15 +296,22 @@ export function classifyConditions(
   if (marketConds) {
     for (const [id, raw] of Object.entries(marketConds)) {
       if (seen.has(id)) continue;
-      seen.add(id);
+      // Prefer entry-engine mtf/rr over market-signal aliases
+      if (CONDITION_ALIASES[id] && seen.has(CONDITION_ALIASES[id])) continue;
+      markSeen(id);
       let verdict = normalizeVerdict(raw);
       if ((id === "oi" || id === "liquidation") && verdict !== "PASS") {
         verdict = "N/A";
       }
+      let detail: string | undefined;
+      if (verdict === "N/A" && id === "choch") detail = "not confirmed on setup TF";
+      if (verdict === "N/A" && id === "supply_demand") detail = "no zone interaction yet";
+      if (verdict === "N/A" && id === "liquidation") detail = "stream not live";
       out.push({
         id,
         label: conditionLabel(id),
         verdict,
+        detail,
         bucket: bucketCondition(verdict),
       });
     }
@@ -328,7 +362,7 @@ export function computePositionSize(input: {
       error: "Enter account size and risk %",
     };
   }
-  if (entry == null || stop == null) {
+  if (entry == null || stop == null || !(entry > 0) || !(stop > 0)) {
     return {
       maxRisk: accountSize * (riskPercent / 100),
       riskPerUnit: null,
@@ -362,9 +396,13 @@ export function computePositionSize(input: {
 
 function waitingReasonFromDeps(deps: Record<string, string>, timeframe: string): string {
   const entries = Object.entries(deps || {});
-  const waiting = entries.filter(([, v]) => /WAIT|MISSING|UNAVAILABLE/i.test(String(v)));
+  // Soft feeds (OI / liquidations) must not dominate setup WAITING status copy
+  const softKey = (k: string) => /^(oi|liquidations?)$/i.test(k.trim());
+  const waiting = entries.filter(
+    ([k, v]) => /WAIT|MISSING|UNAVAILABLE/i.test(String(v)) && !softKey(k),
+  );
   if (waiting.length === 0) return `WAITING FOR ${timeframe.toUpperCase()} CONFIRMATION`;
-  const ohlcv = waiting.find(([k]) => /ohlcv|candle/i.test(k));
+  const ohlcv = waiting.find(([k]) => /ohlcv|candle|^[0-9]+[mhdw]$/i.test(k));
   if (ohlcv) {
     return `WAITING FOR ${timeframe.toUpperCase()} OHLCV`;
   }
@@ -443,31 +481,57 @@ export function buildTradePlan(input: {
 
   const directionRaw = String(entry.direction || analysis.direction || "").toUpperCase();
   let direction: "LONG" | "SHORT" | null = null;
-  if (directionRaw === "LONG" || directionRaw === "SHORT") direction = directionRaw;
-  else if (planState === "LONG_ENTRY_CANDIDATE" || planState === "BUY_BIAS") direction = "LONG";
+  if (planState === "LONG_ENTRY_CANDIDATE" || planState === "BUY_BIAS") direction = "LONG";
   else if (planState === "SHORT_ENTRY_CANDIDATE" || planState === "SELL_BIAS") direction = "SHORT";
   else if (planState === "ENTRY_READY") {
     if (setupStatusRaw.includes("SHORT")) direction = "SHORT";
     else if (setupStatusRaw.includes("LONG") || setupStatusRaw === "ENTRY_CANDIDATE")
       direction = "LONG";
+  } else if (
+    (directionRaw === "LONG" || directionRaw === "SHORT") &&
+    planState !== "WAITING" &&
+    planState !== "NO_SETUP"
+  ) {
+    direction = directionRaw;
   }
 
-  const entryPrice = numOrNull(entry.entry_price);
-  const stopPrice = numOrNull(stop.final_stop ?? stop.structural_stop);
-  const riskPerUnit = numOrNull(stop.risk_per_unit) ??
-    (entryPrice != null && stopPrice != null ? Math.abs(entryPrice - stopPrice) : null);
+  const entryPrice = validEntryPrice(entry.entry_price);
+  const stopProvisional = Boolean(stop.provisional);
+  const rawStop = numOrNull(stop.final_stop ?? stop.structural_stop);
+  // Provisional BOS stops without a confirmed entry are not actionable trade levels
+  const stopPrice =
+    stopProvisional && entryPrice == null
+      ? null
+      : rawStop != null && rawStop > 0
+        ? rawStop
+        : null;
+  // Require a real entry+stop; hide WAITING provisional ladders (entry null → was shown as 0)
+  const levelsActionable =
+    entryPrice != null && stopPrice != null && planState !== "WAITING";
+  const riskPerUnit =
+    levelsActionable
+      ? (numOrNull(stop.risk_per_unit) ?? Math.abs(entryPrice! - stopPrice!))
+      : null;
 
-  const tp1 = pickTarget(targets, "TP1");
-  const tp2 = pickTarget(targets, "TP2");
-  const tp3 = pickTarget(targets, "TP3");
+  const emptyLevel = (name: string): TradePlanLevel => ({
+    label: name,
+    price: null,
+    rMultiple: null,
+    display: "—",
+  });
+  const tp1 = levelsActionable ? pickTarget(targets, "TP1") : emptyLevel("TP1");
+  const tp2 = levelsActionable ? pickTarget(targets, "TP2") : emptyLevel("TP2");
+  const tp3 = levelsActionable ? pickTarget(targets, "TP3") : emptyLevel("TP3");
 
   const rrLines: string[] = [];
-  const tp1R = numOrNull(rr.TP1_R) ?? tp1.rMultiple;
-  const tp2R = numOrNull(rr.TP2_R) ?? tp2.rMultiple;
-  const tp3R = numOrNull(rr.TP3_R) ?? tp3.rMultiple;
-  rrLines.push(`TP1 ${tp1R != null ? fmtR(tp1R) : "—"}`);
-  rrLines.push(`TP2 ${tp2R != null ? fmtR(tp2R) : "—"}`);
-  rrLines.push(`TP3 ${tp3R != null ? fmtR(tp3R) : "—"}`);
+  if (levelsActionable) {
+    const tp1R = numOrNull(rr.TP1_R) ?? tp1.rMultiple;
+    const tp2R = numOrNull(rr.TP2_R) ?? tp2.rMultiple;
+    const tp3R = numOrNull(rr.TP3_R) ?? tp3.rMultiple;
+    rrLines.push(`TP1 ${tp1R != null ? fmtR(tp1R) : "—"}`);
+    rrLines.push(`TP2 ${tp2R != null ? fmtR(tp2R) : "—"}`);
+    rrLines.push(`TP3 ${tp3R != null ? fmtR(tp3R) : "—"}`);
+  }
 
   const confirmations = classified.filter((c) => c.bucket === "confirm");
   const missing = classified.filter((c) => c.bucket === "missing");
@@ -488,7 +552,13 @@ export function buildTradePlan(input: {
     why.push(`○ ${c.label}${c.detail ? ` — ${c.detail}` : ""}`);
   }
   for (const c of unavailable) {
-    why.push(`N/A — ${c.label} unavailable`);
+    if (CONTEXT_NA_IDS.has(c.id) && c.detail) {
+      why.push(`N/A — ${c.label}: ${c.detail}`);
+    } else if (CONTEXT_NA_IDS.has(c.id)) {
+      why.push(`N/A — ${c.label}`);
+    } else {
+      why.push(`N/A — ${c.label} unavailable`);
+    }
   }
 
   const mtfLines = Object.entries(asRecord(mtf.trends || trend)).map(
@@ -528,7 +598,18 @@ export function buildTradePlan(input: {
     // Skip duplicates like deps "OI: WAITING" + condition "OI: N/A"
     if ([...seenNoteKeys].some((s) => s.includes(key) || key.includes(s))) continue;
     seenNoteKeys.add(key);
-    dataNotes.push(`${c.label}: N/A — data unavailable`);
+    if (CONTEXT_NA_IDS.has(c.id)) {
+      dataNotes.push(
+        c.detail ? `${c.label}: N/A — ${c.detail}` : `${c.label}: N/A`,
+      );
+    } else {
+      dataNotes.push(`${c.label}: N/A — data unavailable`);
+    }
+  }
+  if (stopProvisional && rawStop != null && rawStop > 0 && !levelsActionable) {
+    dataNotes.push(
+      `Structural stop (provisional, not actionable): ${fmtPrice(rawStop)}`,
+    );
   }
 
   return {
@@ -542,20 +623,15 @@ export function buildTradePlan(input: {
     direction,
     entry: {
       label: "ENTRY",
-      price: entryPrice,
+      price: levelsActionable ? entryPrice : null,
       rMultiple: null,
-      display:
-        planState === "WAITING" || planState === "NO_SETUP" || planState === "BUY_BIAS" || planState === "SELL_BIAS"
-          ? entryPrice != null
-            ? fmtPrice(entryPrice)
-            : "—"
-          : fmtPrice(entryPrice),
+      display: levelsActionable && entryPrice != null ? fmtPrice(entryPrice) : "—",
     },
     stop: {
       label: "STOP LOSS",
-      price: stopPrice,
+      price: levelsActionable ? stopPrice : null,
       rMultiple: null,
-      display: fmtPrice(stopPrice),
+      display: levelsActionable && stopPrice != null ? fmtPrice(stopPrice) : "—",
     },
     riskPerUnit,
     targets: [tp1, tp2, tp3],

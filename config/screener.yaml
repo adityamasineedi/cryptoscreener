@@ -33,7 +33,10 @@ presets:
     filters: []
 futures:
   default_sort: volume_desc
+  # Main screener display hard-cap (dynamic selection — not a coin list)
   page_size: 100
+  max_screen_symbols: 100
+  screen_selection_ttl_seconds: 12
   columns:
     - symbol
     - exchange

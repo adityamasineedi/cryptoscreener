@@ -149,6 +149,9 @@ def normalize_rest_kline(
     try:
         open_time = ms_to_dt(row[0])
         close_time = ms_to_dt(row[6])
+        now = datetime.now(timezone.utc)
+        # Last REST bar is often still forming (close_time in the future)
+        is_closed = close_time <= now
         return Candle(
             symbol=symbol.upper(),
             timeframe=normalize_timeframe(timeframe),
@@ -163,13 +166,44 @@ def normalize_rest_kline(
             trade_count=int(row[8]) if row[8] is not None else None,
             taker_buy_volume=float(row[9]) if row[9] is not None else None,
             taker_buy_quote_volume=float(row[10]) if row[10] is not None else None,
-            is_closed=True,
-            timestamp=close_time,
+            is_closed=is_closed,
+            timestamp=close_time if is_closed else now,
             source="binance_rest",
             status=DataStatus.LIVE,
         )
     except (TypeError, ValueError, IndexError):
         return None
+
+
+def is_trailing_stale(
+    candles: list[Candle],
+    timeframe: str,
+    *,
+    max_lag_intervals: float = 1.25,
+    now: datetime | None = None,
+) -> bool:
+    """True when the newest closed/open bar lags wall-clock by > N intervals.
+
+    Internal gaps are handled by find_gaps / missing_fetch_ranges. This catches
+    the common failure mode where history looks COMPLETE but the tip is frozen
+    because the kline websocket went silent.
+
+    Default 1.25 intervals: a closed tip must advance into the current bar
+    (e.g. daily must pick up today's forming candle once the day opens).
+    """
+    if not candles:
+        return True
+    tf = normalize_timeframe(timeframe)
+    step = TIMEFRAME_MS.get(tf)
+    if not step:
+        return False
+    tip = max(candles, key=lambda c: c.open_time)
+    tip_ot = tip.open_time
+    if tip_ot.tzinfo is None:
+        tip_ot = tip_ot.replace(tzinfo=timezone.utc)
+    wall = now or datetime.now(timezone.utc)
+    lag_ms = (wall - tip_ot).total_seconds() * 1000.0
+    return lag_ms > step * max(max_lag_intervals, 1.0)
 
 
 def detect_gaps(

@@ -1,0 +1,626 @@
+{
+  "generated_at": "2026-10-02T16:36:12.678044+00:00",
+  "dataset": {
+    "label": "BOS Combination Research",
+    "combo": "COMBO_02",
+    "source": "trend_regime_trade_rows.json",
+    "n_trades": 219,
+    "directions": {
+      "LONG": 107,
+      "SHORT": 112
+    },
+    "research_htf_state_counts": {
+      "HTF_CONFLICT": 88,
+      "HTF_NEUTRAL_OR_UNAVAILABLE": 67,
+      "HTF_ALIGNED": 64
+    },
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "timeframes": [
+      "15m",
+      "1h"
+    ]
+  },
+  "scenarios": {
+    "A_CURRENT": {
+      "id": "A_CURRENT",
+      "label": "CURRENT",
+      "description": "All historical closed trades; no SHORT policy filter.",
+      "orig": 219,
+      "retained_trades": 219,
+      "excluded_trades": 0,
+      "retention_pct": 100.0,
+      "shorts_dropped": 0,
+      "n": 219,
+      "sample_size": 219,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "wins": 59,
+      "losses": 160,
+      "win_rate": 0.2694063926940639,
+      "SL_rate": 0.730593607305936,
+      "TP1_rate": 0.2694063926940639,
+      "mean_R": -0.14567450115833516,
+      "median_R": -1.0,
+      "profit_factor": 0.8006080265395287,
+      "max_drawdown_R": 43.725221097018746,
+      "MAE": 339.5332420091325,
+      "MFE": 354.3488584474885,
+      "avg_MAE_R": 1.0888931186614534,
+      "avg_MFE_R": 1.2063757454200428,
+      "mean_R_bootstrap_95ci": {
+        "low": -0.32482205787249624,
+        "high": 0.04019002974175516,
+        "mean": -0.14567450115833516
+      },
+      "by_direction": {
+        "LONG": {
+          "n": 107,
+          "wins": 37,
+          "losses": 70,
+          "win_rate": 0.34579439252336447,
+          "mean_R": 0.09287193014245379,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        },
+        "SHORT": {
+          "n": 112,
+          "wins": 22,
+          "losses": 90,
+          "win_rate": 0.19642857142857142,
+          "mean_R": -0.3735715382046246,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        }
+      },
+      "by_timeframe": {
+        "15m": {
+          "n": 109,
+          "sample_size": 109,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 26,
+          "losses": 83,
+          "win_rate": 0.23853211009174313,
+          "SL_rate": 0.7614678899082569,
+          "TP1_rate": 0.23853211009174313,
+          "mean_R": -0.23482748830052114,
+          "median_R": -1.0,
+          "profit_factor": 0.6916120936776289,
+          "max_drawdown_R": 41.163695829712786,
+          "MAE": 254.44990825688072,
+          "MFE": 229.5821100917429,
+          "avg_MAE_R": 1.1589627849177857,
+          "avg_MFE_R": 1.1718904816663969,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.4897414352728157,
+            "high": 0.034504422885708576,
+            "mean": -0.23482748830052114
+          }
+        },
+        "1h": {
+          "n": 110,
+          "sample_size": 110,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 33,
+          "losses": 77,
+          "win_rate": 0.3,
+          "SL_rate": 0.7,
+          "TP1_rate": 0.3,
+          "mean_R": -0.0573319957174418,
+          "median_R": -1.0,
+          "profit_factor": 0.9180971489750831,
+          "max_drawdown_R": 11.991178185054963,
+          "MAE": 423.843090909091,
+          "MFE": 477.98136363636365,
+          "avg_MAE_R": 1.019460449371088,
+          "avg_MFE_R": 1.2405475067759284,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.3257213266048934,
+            "high": 0.24214865282423514,
+            "mean": -0.0573319957174418
+          }
+        }
+      }
+    },
+    "B_LONG_ONLY": {
+      "id": "B_LONG_ONLY",
+      "label": "LONG only",
+      "description": "Retain LONG trades only; drop all SHORTs.",
+      "orig": 219,
+      "retained_trades": 107,
+      "excluded_trades": 112,
+      "retention_pct": 48.9,
+      "shorts_dropped": 112,
+      "n": 107,
+      "sample_size": 107,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "wins": 37,
+      "losses": 70,
+      "win_rate": 0.34579439252336447,
+      "SL_rate": 0.6542056074766355,
+      "TP1_rate": 0.34579439252336447,
+      "mean_R": 0.09287193014245379,
+      "median_R": -1.0,
+      "profit_factor": 1.1419613789320366,
+      "max_drawdown_R": 26.545770206124857,
+      "MAE": 254.03121495327076,
+      "MFE": 339.98682242990645,
+      "avg_MAE_R": 1.0362700109286374,
+      "avg_MFE_R": 1.3537653136136767,
+      "mean_R_bootstrap_95ci": {
+        "low": -0.18236691623488674,
+        "high": 0.38525292267403516,
+        "mean": 0.09287193014245379
+      },
+      "by_direction": {
+        "LONG": {
+          "n": 107,
+          "wins": 37,
+          "losses": 70,
+          "win_rate": 0.34579439252336447,
+          "mean_R": 0.09287193014245379,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        },
+        "SHORT": {
+          "n": 0,
+          "wins": 0,
+          "losses": 0,
+          "win_rate": null,
+          "mean_R": null,
+          "sample_size_flag": "INSUFFICIENT_SAMPLE"
+        }
+      },
+      "by_timeframe": {
+        "15m": {
+          "n": 58,
+          "sample_size": 58,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 18,
+          "losses": 40,
+          "win_rate": 0.3103448275862069,
+          "SL_rate": 0.6896551724137931,
+          "TP1_rate": 0.3103448275862069,
+          "mean_R": -0.03574617637766215,
+          "median_R": -1.0,
+          "profit_factor": 0.9481680442523899,
+          "max_drawdown_R": 26.545770206124857,
+          "MAE": 234.7362068965513,
+          "MFE": 234.71931034482762,
+          "avg_MAE_R": 1.1163953115999123,
+          "avg_MFE_R": 1.2401518226498691,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.3968146268865973,
+            "high": 0.33872535165190437,
+            "mean": -0.03574617637766215
+          }
+        },
+        "1h": {
+          "n": 49,
+          "sample_size": 49,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 19,
+          "losses": 30,
+          "win_rate": 0.3877551020408163,
+          "SL_rate": 0.6122448979591837,
+          "TP1_rate": 0.3877551020408163,
+          "mean_R": 0.24511377051320324,
+          "median_R": -1.0,
+          "profit_factor": 1.400352491838232,
+          "max_drawdown_R": 11.0,
+          "MAE": 276.87020408163255,
+          "MFE": 464.58918367346905,
+          "avg_MAE_R": 0.9414278182973325,
+          "avg_MFE_R": 1.4882465886320613,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.20423640961281567,
+            "high": 0.7017322631072319,
+            "mean": 0.24511377051320324
+          }
+        }
+      }
+    },
+    "C_LONG_PLUS_SHORT_HTF_ALIGNED": {
+      "id": "C_LONG_PLUS_SHORT_HTF_ALIGNED",
+      "label": "LONG + SHORT HTF_ALIGNED only",
+      "description": "Retain all LONGs; retain SHORT only when research HTF state is HTF_ALIGNED.",
+      "orig": 219,
+      "retained_trades": 131,
+      "excluded_trades": 88,
+      "retention_pct": 59.8,
+      "shorts_dropped": 88,
+      "n": 131,
+      "sample_size": 131,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "wins": 41,
+      "losses": 90,
+      "win_rate": 0.31297709923664124,
+      "SL_rate": 0.6870229007633588,
+      "TP1_rate": 0.31297709923664124,
+      "mean_R": -0.01558694338481579,
+      "median_R": -1.0,
+      "profit_factor": 0.9773123379621015,
+      "max_drawdown_R": 32.52495631477828,
+      "MAE": 305.7851908396945,
+      "MFE": 374.5909923664119,
+      "avg_MAE_R": 1.072883388513629,
+      "avg_MFE_R": 1.2939355087289721,
+      "mean_R_bootstrap_95ci": {
+        "low": -0.2541820015615567,
+        "high": 0.2536247743241807,
+        "mean": -0.01558694338481579
+      },
+      "by_direction": {
+        "LONG": {
+          "n": 107,
+          "wins": 37,
+          "losses": 70,
+          "win_rate": 0.34579439252336447,
+          "mean_R": 0.09287193014245379,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        },
+        "SHORT": {
+          "n": 24,
+          "wins": 4,
+          "losses": 20,
+          "win_rate": 0.16666666666666666,
+          "mean_R": -0.49913275452722594,
+          "sample_size_flag": "INSUFFICIENT_SAMPLE"
+        }
+      },
+      "by_timeframe": {
+        "15m": {
+          "n": 69,
+          "sample_size": 69,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 19,
+          "losses": 50,
+          "win_rate": 0.2753623188405797,
+          "SL_rate": 0.7246376811594203,
+          "TP1_rate": 0.2753623188405797,
+          "mean_R": -0.1456878889646062,
+          "median_R": -1.0,
+          "profit_factor": 0.7989507132288435,
+          "max_drawdown_R": 30.524956314778276,
+          "MAE": 234.2291304347823,
+          "MFE": 219.46304347826063,
+          "avg_MAE_R": 1.1519491701414253,
+          "avg_MFE_R": 1.1731471097092947,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.4632466372256114,
+            "high": 0.1749144478933576,
+            "mean": -0.1456878889646062
+          }
+        },
+        "1h": {
+          "n": 62,
+          "sample_size": 62,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 22,
+          "losses": 40,
+          "win_rate": 0.3548387096774194,
+          "SL_rate": 0.6451612903225806,
+          "TP1_rate": 0.3548387096774194,
+          "mean_R": 0.12920281863140257,
+          "median_R": -1.0,
+          "profit_factor": 1.200264368878674,
+          "max_drawdown_R": 9.0,
+          "MAE": 385.4201612903226,
+          "MFE": 547.2333870967739,
+          "avg_MAE_R": 0.9848908250891465,
+          "avg_MFE_R": 1.4283613076379682,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.24903452697464676,
+            "high": 0.529067820279963,
+            "mean": 0.12920281863140257
+          }
+        }
+      }
+    },
+    "D_LONG_PLUS_SHORT_15M_ONLY": {
+      "id": "D_LONG_PLUS_SHORT_15M_ONLY",
+      "label": "LONG + SHORT 15m only",
+      "description": "Retain all LONGs; retain SHORT only on 15m setups.",
+      "orig": 219,
+      "retained_trades": 158,
+      "excluded_trades": 61,
+      "retention_pct": 72.1,
+      "shorts_dropped": 61,
+      "n": 158,
+      "sample_size": 158,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "wins": 45,
+      "losses": 113,
+      "win_rate": 0.2848101265822785,
+      "SL_rate": 0.7151898734177216,
+      "TP1_rate": 0.2848101265822785,
+      "mean_R": -0.08598494601018888,
+      "median_R": -1.0,
+      "profit_factor": 0.8797732613308863,
+      "max_drawdown_R": 39.1831640831808,
+      "MAE": 261.4030379746835,
+      "MFE": 302.46405063291115,
+      "avg_MAE_R": 1.0914994091937211,
+      "avg_MFE_R": 1.270000919902584,
+      "mean_R_bootstrap_95ci": {
+        "low": -0.3138950367137027,
+        "high": 0.1653252276393118,
+        "mean": -0.08598494601018888
+      },
+      "by_direction": {
+        "LONG": {
+          "n": 107,
+          "wins": 37,
+          "losses": 70,
+          "win_rate": 0.34579439252336447,
+          "mean_R": 0.09287193014245379,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        },
+        "SHORT": {
+          "n": 51,
+          "wins": 8,
+          "losses": 43,
+          "win_rate": 0.1568627450980392,
+          "mean_R": -0.46123368617357646,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        }
+      },
+      "by_timeframe": {
+        "15m": {
+          "n": 109,
+          "sample_size": 109,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 26,
+          "losses": 83,
+          "win_rate": 0.23853211009174313,
+          "SL_rate": 0.7614678899082569,
+          "TP1_rate": 0.23853211009174313,
+          "mean_R": -0.23482748830052114,
+          "median_R": -1.0,
+          "profit_factor": 0.6916120936776289,
+          "max_drawdown_R": 41.163695829712786,
+          "MAE": 254.44990825688072,
+          "MFE": 229.5821100917429,
+          "avg_MAE_R": 1.1589627849177857,
+          "avg_MFE_R": 1.1718904816663969,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.4897414352728157,
+            "high": 0.034504422885708576,
+            "mean": -0.23482748830052114
+          }
+        },
+        "1h": {
+          "n": 49,
+          "sample_size": 49,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 19,
+          "losses": 30,
+          "win_rate": 0.3877551020408163,
+          "SL_rate": 0.6122448979591837,
+          "TP1_rate": 0.3877551020408163,
+          "mean_R": 0.24511377051320324,
+          "median_R": -1.0,
+          "profit_factor": 1.400352491838232,
+          "max_drawdown_R": 11.0,
+          "MAE": 276.87020408163255,
+          "MFE": 464.58918367346905,
+          "avg_MAE_R": 0.9414278182973325,
+          "avg_MFE_R": 1.4882465886320613,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.20423640961281567,
+            "high": 0.7017322631072319,
+            "mean": 0.24511377051320324
+          }
+        }
+      }
+    },
+    "E_LONG_PLUS_SHORT_1H_ONLY": {
+      "id": "E_LONG_PLUS_SHORT_1H_ONLY",
+      "label": "LONG + SHORT 1h only",
+      "description": "Retain all LONGs; retain SHORT only on 1h setups.",
+      "orig": 219,
+      "retained_trades": 168,
+      "excluded_trades": 51,
+      "retention_pct": 76.7,
+      "shorts_dropped": 51,
+      "n": 168,
+      "sample_size": 168,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "wins": 51,
+      "losses": 117,
+      "win_rate": 0.30357142857142855,
+      "SL_rate": 0.6964285714285714,
+      "TP1_rate": 0.30357142857142855,
+      "mean_R": -0.049879748564422635,
+      "median_R": -1.0,
+      "profit_factor": 0.9283777969331367,
+      "max_drawdown_R": 28.23189942742402,
+      "MAE": 358.5561904761904,
+      "MFE": 393.9980357142857,
+      "avg_MAE_R": 1.0529260565691345,
+      "avg_MFE_R": 1.2404109015419318,
+      "mean_R_bootstrap_95ci": {
+        "low": -0.2637803787267888,
+        "high": 0.17325423813360344,
+        "mean": -0.049879748564422635
+      },
+      "by_direction": {
+        "LONG": {
+          "n": 107,
+          "wins": 37,
+          "losses": 70,
+          "win_rate": 0.34579439252336447,
+          "mean_R": 0.09287193014245379,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        },
+        "SHORT": {
+          "n": 61,
+          "wins": 14,
+          "losses": 47,
+          "win_rate": 0.22950819672131148,
+          "mean_R": -0.30028023416500915,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        }
+      },
+      "by_timeframe": {
+        "15m": {
+          "n": 58,
+          "sample_size": 58,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 18,
+          "losses": 40,
+          "win_rate": 0.3103448275862069,
+          "SL_rate": 0.6896551724137931,
+          "TP1_rate": 0.3103448275862069,
+          "mean_R": -0.03574617637766215,
+          "median_R": -1.0,
+          "profit_factor": 0.9481680442523899,
+          "max_drawdown_R": 26.545770206124857,
+          "MAE": 234.7362068965513,
+          "MFE": 234.71931034482762,
+          "avg_MAE_R": 1.1163953115999123,
+          "avg_MFE_R": 1.2401518226498691,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.3968146268865973,
+            "high": 0.33872535165190437,
+            "mean": -0.03574617637766215
+          }
+        },
+        "1h": {
+          "n": 110,
+          "sample_size": 110,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 33,
+          "losses": 77,
+          "win_rate": 0.3,
+          "SL_rate": 0.7,
+          "TP1_rate": 0.3,
+          "mean_R": -0.0573319957174418,
+          "median_R": -1.0,
+          "profit_factor": 0.9180971489750831,
+          "max_drawdown_R": 11.991178185054963,
+          "MAE": 423.843090909091,
+          "MFE": 477.98136363636365,
+          "avg_MAE_R": 1.019460449371088,
+          "avg_MFE_R": 1.2405475067759284,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.3257213266048934,
+            "high": 0.24214865282423514,
+            "mean": -0.0573319957174418
+          }
+        }
+      }
+    },
+    "F_LONG_PLUS_SHORT_15M_HTF_ALIGNED": {
+      "id": "F_LONG_PLUS_SHORT_15M_HTF_ALIGNED",
+      "label": "LONG + SHORT 15m HTF_ALIGNED",
+      "description": "Retain all LONGs; retain SHORT only on 15m with HTF_ALIGNED.",
+      "orig": 219,
+      "retained_trades": 118,
+      "excluded_trades": 101,
+      "retention_pct": 53.9,
+      "shorts_dropped": 101,
+      "n": 118,
+      "sample_size": 118,
+      "sample_size_flag": "SAMPLE_SIZE_OK",
+      "wins": 38,
+      "losses": 80,
+      "win_rate": 0.3220338983050847,
+      "SL_rate": 0.6779661016949152,
+      "TP1_rate": 0.3220338983050847,
+      "mean_R": 0.016594156072789253,
+      "median_R": -1.0,
+      "profit_factor": 1.0244763802073642,
+      "max_drawdown_R": 30.52495631477828,
+      "MAE": 251.9360169491523,
+      "MFE": 321.25271186440654,
+      "avg_MAE_R": 1.0645292867485392,
+      "avg_MFE_R": 1.303993503499257,
+      "mean_R_bootstrap_95ci": {
+        "low": -0.25376954347403713,
+        "high": 0.28428619921306475,
+        "mean": 0.016594156072789253
+      },
+      "by_direction": {
+        "LONG": {
+          "n": 107,
+          "wins": 37,
+          "losses": 70,
+          "win_rate": 0.34579439252336447,
+          "mean_R": 0.09287193014245379,
+          "sample_size_flag": "SAMPLE_SIZE_OK"
+        },
+        "SHORT": {
+          "n": 11,
+          "wins": 1,
+          "losses": 10,
+          "win_rate": 0.09090909090909091,
+          "mean_R": -0.7253805553321293,
+          "sample_size_flag": "INSUFFICIENT_SAMPLE"
+        }
+      },
+      "by_timeframe": {
+        "15m": {
+          "n": 69,
+          "sample_size": 69,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 19,
+          "losses": 50,
+          "win_rate": 0.2753623188405797,
+          "SL_rate": 0.7246376811594203,
+          "TP1_rate": 0.2753623188405797,
+          "mean_R": -0.1456878889646062,
+          "median_R": -1.0,
+          "profit_factor": 0.7989507132288435,
+          "max_drawdown_R": 30.524956314778276,
+          "MAE": 234.2291304347823,
+          "MFE": 219.46304347826063,
+          "avg_MAE_R": 1.1519491701414253,
+          "avg_MFE_R": 1.1731471097092947,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.4632466372256114,
+            "high": 0.1749144478933576,
+            "mean": -0.1456878889646062
+          }
+        },
+        "1h": {
+          "n": 49,
+          "sample_size": 49,
+          "sample_size_flag": "SAMPLE_SIZE_OK",
+          "wins": 19,
+          "losses": 30,
+          "win_rate": 0.3877551020408163,
+          "SL_rate": 0.6122448979591837,
+          "TP1_rate": 0.3877551020408163,
+          "mean_R": 0.24511377051320324,
+          "median_R": -1.0,
+          "profit_factor": 1.400352491838232,
+          "max_drawdown_R": 11.0,
+          "MAE": 276.87020408163255,
+          "MFE": 464.58918367346905,
+          "avg_MAE_R": 0.9414278182973325,
+          "avg_MFE_R": 1.4882465886320613,
+          "mean_R_bootstrap_95ci": {
+            "low": -0.20423640961281567,
+            "high": 0.7017322631072319,
+            "mean": 0.24511377051320324
+          }
+        }
+      }
+    }
+  },
+  "gate_draft": {
+    "holds_for_gate_draft": true,
+    "suggested_defaults": {
+      "research_gate_enabled": false,
+      "research_gate_block_shorts": true,
+      "research_gate_block_htf_conflict": false
+    },
+    "rationale": "SHORT mean R negative while LONG mean R positive; LONG_ONLY improves aggregate mean R vs CURRENT on this sample.",
+    "caveat": "Requires SHORT n>=10 and descriptive improvement; SAMPLE_THRESHOLD=30. Not a profitability claim."
+  },
+  "warnings": [
+    "MULTIPLE_TESTING_RISK: six predefined SHORT-policy scenarios are reported on the same closed-trade sample. Descriptive only; not a production selection.",
+    "Research only. Live engines unchanged unless research_gate_* flags are explicitly enabled.",
+    "Unavailable HTF never treated as bullish/bearish."
+  ]
+}

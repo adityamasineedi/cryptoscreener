@@ -198,6 +198,14 @@ async def build_data_coverage(settings) -> dict[str, Any]:
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "note": "available/waiting/stale/unavailable counts — incomplete coverage is not hidden",
+        # Screen display universe is separate from full backend ingestion universe
+        "screen": {
+            "max_screen_symbols": 100,
+            "note": (
+                "Main screener shows ≤100 dynamically selected symbols. "
+                "This Data Health page reports the full backend universe."
+            ),
+        },
     }
     payload = _attach_pct(payload, len(symbols))
     payload["coverage_goals"] = _coverage_goals(payload, orch)

@@ -7,6 +7,7 @@ OHLCV. They do NOT read candle12_v2_research_result*.json.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from datetime import datetime, timezone
@@ -39,6 +40,11 @@ from app.research.query_utils import (
 )
 from app.research.repository import save_research_run
 from app.research.schemas import ResearchTrade
+from app.research.trade_fees import (
+    DEFAULT_MAKER_FEE,
+    DEFAULT_TAKER_FEE,
+    enrich_trades,
+)
 from app.services.engine_store import engine_store
 from app.services.ohlcv_store import ohlcv_store
 from app.signals.config import SignalConfig
@@ -673,6 +679,9 @@ class BosResearchService:
         risk_usd: float = 20.0,
         start_date: str | None = None,
         end_date: str | None = None,
+        taker_fee: float = DEFAULT_TAKER_FEE,
+        maker_fee: float = DEFAULT_MAKER_FEE,
+        include_trades: bool = True,
     ) -> dict[str, Any]:
         """Lean multi-symbol/TF backtest for the UI Backtest tab (no OOS/WF)."""
         clear_candle_cache()
@@ -700,25 +709,54 @@ class BosResearchService:
                     end_date=end_date,
                     warmup_bars=warmup,
                 )
-                out = run_combination_backtest(
-                    load_meta["symbol"],
-                    load_meta["timeframe"],
-                    candles,
-                    combo,
-                    signal_config=_signal_config(),
-                    research_config=rcfg,
-                    market_cap=_market_cap(load_meta["symbol"]),
-                    direction_filter=direction_u,
-                    index_start=eval_start if eval_start > 0 else None,
-                )
+                # CPU-heavy sync path — run in a thread so the API event loop
+                # (health, progress cell requests) is not blocked for minutes.
+                scfg = _signal_config()
+                mcap = _market_cap(load_meta["symbol"])
+                sym_u = load_meta["symbol"]
+                tf_u = load_meta["timeframe"]
+                idx0 = eval_start if eval_start > 0 else None
+
+                def _run_bt() -> dict[str, Any]:
+                    return run_combination_backtest(
+                        sym_u,
+                        tf_u,
+                        candles,
+                        combo,
+                        signal_config=scfg,
+                        research_config=rcfg,
+                        market_cap=mcap,
+                        direction_filter=direction_u,
+                        index_start=idx0,
+                    )
+
+                out = await asyncio.to_thread(_run_bt)
                 r = out.get("result") or {}
                 n = int(out.get("sample_size") or r.get("sample_size") or 0)
-                avg = r.get("average_R")
-                pnl = (
-                    float(avg) * n * float(risk_usd)
-                    if avg is not None and n
+                trades = enrich_trades(
+                    out.get("trades") or [],
+                    risk_usd=risk_usd,
+                    taker_fee=taker_fee,
+                    maker_fee=maker_fee,
+                    closed_only=True,
+                ) if include_trades else []
+                net_pnls = [
+                    float(t["net_pnl_usd"])
+                    for t in trades
+                    if t.get("net_pnl_usd") is not None
+                ]
+                pnl_gross = (
+                    float(r["average_R"]) * n * float(risk_usd)
+                    if r.get("average_R") is not None and n
                     else None
                 )
+                pnl_net = sum(net_pnls) if net_pnls else None
+                avg_r_net = (
+                    (sum(float(t["r_net"]) for t in trades if t.get("r_net") is not None) / n)
+                    if n and trades
+                    else None
+                )
+                fee_total = sum(float(t.get("fee_total_usd") or 0) for t in trades)
                 structure = (
                     "HL (bullish HH+HL)"
                     if direction_u == "LONG"
@@ -733,7 +771,8 @@ class BosResearchService:
                         "direction": direction_u,
                         "structure": structure,
                         "sample_size": n,
-                        "average_R": avg,
+                        "average_R": r.get("average_R"),
+                        "average_R_net": avg_r_net,
                         "expectancy_R": r.get("expectancy_R"),
                         "tp1_hit_rate": r.get("tp1_hit_rate"),
                         "sl_rate": r.get("sl_rate"),
@@ -745,10 +784,13 @@ class BosResearchService:
                         "period_end": r.get("period_end"),
                         "r_values": r.get("r_values") or [],
                         "equity_curve_r": r.get("equity_curve_r") or [],
-                        "pnl_usd": pnl,
+                        "pnl_usd": pnl_gross,
+                        "pnl_usd_net": pnl_net,
+                        "fees_usd": fee_total,
                         "risk_usd": risk_usd,
                         "bars_loaded": len(candles),
                         "candle_source": load_meta.get("candle_source"),
+                        "trades": trades,
                         "status": out.get("status") or ("OK" if n else "SUCCESS_EMPTY"),
                     }
                 )
@@ -768,6 +810,15 @@ class BosResearchService:
             "direction": direction_u,
             "limit": limit,
             "risk_usd": risk_usd,
+            "fee_model": {
+                "taker_fee": taker_fee,
+                "maker_fee": maker_fee,
+                "exit_fee": taker_fee,
+                "note": (
+                    "Entry uses maker fee for LIMIT_RETEST, else taker. "
+                    "Exit uses taker. Binance USDT-M VIP0 defaults unless overridden."
+                ),
+            },
             "symbols": [normalize_research_symbol(s) for s in symbols],
             "timeframes": [normalize_research_timeframe(t) for t in timeframes],
             "start_date": start_date,
@@ -778,7 +829,7 @@ class BosResearchService:
             "disclaimer": (
                 "Historical research only — not a profitability claim. "
                 f"Path matches docs/LONG_STRATEGY.md Path A when direction=LONG. "
-                f"Dataset={DATASET_LABEL}."
+                f"Dataset={DATASET_LABEL}. Fees modeled; not live exchange fills."
             ),
         }
 

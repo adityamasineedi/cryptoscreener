@@ -100,6 +100,34 @@ class OHLCVStore:
                 logger.warning("redis_open_set_failed", error=str(exc))
         return False, candle
 
+    async def apply_live_price(self, symbol: str, price: float) -> int:
+        """Nudge all open candles for a symbol toward the live trade/mark price."""
+        if price is None or price <= 0:
+            return 0
+        sym = symbol.upper()
+        n = 0
+        for (s, tf), candle in list(self._open.items()):
+            if s != sym or candle.is_closed:
+                continue
+            hi = max(float(candle.high), float(price))
+            lo = min(float(candle.low), float(price))
+            if hi == candle.high and lo == candle.low and float(candle.close) == float(price):
+                continue
+            updated = candle.model_copy(
+                update={
+                    "high": hi,
+                    "low": lo,
+                    "close": float(price),
+                    "timestamp": datetime.now(timezone.utc),
+                    "source": f"{candle.source}+live",
+                    "status": DataStatus.LIVE,
+                }
+            )
+            self._open[(s, tf)] = updated
+            self._open_updates += 1
+            n += 1
+        return n
+
     async def ingest_history(self, candles: list[Candle]) -> int:
         """Load closed REST history without duplicate open_times."""
         n = 0

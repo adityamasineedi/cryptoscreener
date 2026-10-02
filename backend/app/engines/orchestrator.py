@@ -16,6 +16,7 @@ from app.engines.volume.engine import VolumeEngine
 from app.ingestion.backfill import ProgressiveBackfillService
 from app.ingestion.binance_rest import BinanceRestClient
 from app.ingestion.kline_ws_manager import KlineWebSocketManager
+from app.ingestion.trade_tip_ws import TradeTipWebSocket
 from app.ingestion.klines import normalize_timeframe
 from app.ingestion.liquidations import BinanceForceOrderProvider, LiquidationIngestion
 from app.ingestion.oi_scheduler import OIScheduler
@@ -53,20 +54,34 @@ class CalculationOrchestrator:
         self.engines = engines or engine_store
         cfg = settings.indicators_config
         market_cfg = settings.market_config
-        tfs = market_cfg.get("timeframes") or ["1m", "5m", "15m", "1h", "4h", "1d"]
+        ws_cfg = market_cfg.get("websocket") or {}
+        # Live WS uses a reduced TF set; 4h/1d stay on REST backfill
+        live_tfs = ws_cfg.get("kline_live_timeframes") or ["1m", "5m", "15m", "1h"]
         max_streams = int(
-            market_cfg.get("websocket", {}).get("max_streams_per_connection")
+            ws_cfg.get("max_streams_per_connection")
             or settings.max_ws_streams_per_connection
             or 900
         )
-        force_h = float(market_cfg.get("websocket", {}).get("force_reconnect_hours", 23))
+        force_h = float(ws_cfg.get("force_reconnect_hours", 23))
+        self._kline_live_max = int(ws_cfg.get("kline_live_max_symbols") or 120)
+        self._kline_focus: set[str] = set()
+        self._kline_live_sticky: set[str] = set()
+        self._universe_symbols: list[str] = []
 
         self.kline_ws = KlineWebSocketManager(
             base_ws=settings.binance_futures_ws,
             max_streams_per_connection=max_streams,
-            timeframes=[normalize_timeframe(t) for t in tfs],
+            timeframes=[normalize_timeframe(t) for t in live_tfs],
             force_reconnect_hours=force_h,
             on_candle=self.on_candle,
+        )
+        self.trade_tips = TradeTipWebSocket(
+            base_ws=settings.binance_futures_ws,
+            ohlcv=self.ohlcv,
+            timeframes=[normalize_timeframe(t) for t in live_tfs],
+            on_closed=self.on_candle,
+            max_symbols=min(self._kline_live_max, 60),
+            max_streams_per_connection=20,
         )
         self.mtf = MTFEngine(cfg)
         self.structure = StructureEngine(cfg)
@@ -120,12 +135,29 @@ class CalculationOrchestrator:
             logger.error("orchestrator_refusing_mock_mode")
             return
         self._running = True
+        self._universe_symbols = [s.upper() for s in symbols]
         await self.fundamentals.start()
-        await self.kline_ws.start(symbols)
+        live_syms = self._select_kline_live_symbols(self._universe_symbols)
+        await self.kline_ws.start(live_syms)
+        await self.trade_tips.sync_symbols(live_syms)
         await self.liquidations.start()
         self.oi.set_symbols(symbols)
         await self.oi.start()
         await self.backfill.start()
+        # Init paper book once with settings (singleton)
+        from app.services.paper_trade import get_paper_trade_engine
+
+        get_paper_trade_engine(
+            starting_equity=float(self.settings.paper_starting_equity),
+            risk_percent=float(self.settings.paper_risk_percent),
+            enabled=bool(self.settings.paper_trade_enabled),
+            entry_mode=str(getattr(self.settings, "paper_entry_mode", "path_a") or "path_a"),
+        )
+        # Open any Path A setups already in cache after boot
+        try:
+            get_paper_trade_engine().scan_cached_setups()
+        except Exception:  # noqa: BLE001
+            pass
         # Background hydrate/enqueue so FastAPI lifespan can yield and bind :8000
         # immediately. Blocking here previously left the API unreachable for minutes
         # while ~symbols×TFs sequential DB loads ran (ERR_CONNECTION_REFUSED / timeouts).
@@ -141,13 +173,147 @@ class CalculationOrchestrator:
         self._tasks.append(
             asyncio.create_task(self._setup_ensure_loop(), name="setup_ensure_loop")
         )
+        self._tasks.append(
+            asyncio.create_task(self._paper_trade_loop(), name="paper_trade_loop")
+        )
+        self._tasks.append(
+            asyncio.create_task(self._kline_live_rebalance_loop(), name="kline_live_rebalance")
+        )
+        self._tasks.append(
+            asyncio.create_task(self._visible_tip_loop(), name="visible_tip_loop")
+        )
         logger.info(
             "orchestrator_started",
             symbols=len(symbols),
-            kline_plan=self.kline_ws.plan_for_symbols(symbols),
+            kline_live_symbols=len(live_syms),
+            kline_plan=self.kline_ws.plan_for_symbols(live_syms),
             oi=self.oi.status(),
             backfill=self.backfill.status(),
         )
+
+    def _select_kline_live_symbols(self, universe: list[str] | None = None) -> list[str]:
+        """Sticky top-volume + focus/visible — avoids WS reconnect thrash."""
+        uni = [s.upper() for s in (universe or self._universe_symbols or list(self.market.tickers.keys()))]
+        ranked = sorted(
+            uni,
+            key=lambda s: float(
+                getattr(self.market.tickers.get(s), "quote_volume_24h", 0) or 0
+            ),
+            reverse=True,
+        )
+        focus = {s.upper() for s in self._kline_focus}
+        visible = set(getattr(self.backfill, "_visible", set()) or set())
+        # Always keep focus/visible; fill remainder from sticky then volume rank
+        must = focus | visible
+        sticky = set(self._kline_live_sticky)
+        ranked_fill = [s for s in ranked if s not in must]
+        sticky_keep = [s for s in ranked if s in sticky and s not in must]
+        combined = list(dict.fromkeys([*sorted(must), *sticky_keep, *ranked_fill]))
+        live = combined[: max(20, self._kline_live_max)]
+        self._kline_live_sticky = set(live)
+        return sorted(live)
+
+    def set_kline_focus(self, symbols: list[str]) -> None:
+        """Chart / screener focus symbols always stay on the live kline WS."""
+        added = {s.upper() for s in symbols if s} - self._kline_focus
+        self._kline_focus |= {s.upper() for s in symbols if s}
+        if len(self._kline_focus) > 40:
+            keep = list(self._kline_focus)[-40:]
+            self._kline_focus = set(keep)
+        if added:
+            self._kline_live_sticky |= added
+
+    async def refresh_kline_live_subscriptions(self, *, force: bool = False) -> None:
+        live = self._select_kline_live_symbols()
+        if not live:
+            return
+        desired = set(live)
+        current = set(getattr(self.kline_ws, "_symbols", []) or [])
+        if force or desired != current:
+            await self.kline_ws.sync_symbols(live)
+        # Trade tips are the live path when kline WS is silent
+        await self.trade_tips.sync_symbols(live)
+
+    async def _kline_live_rebalance_loop(self) -> None:
+        """Periodically re-pick top-volume live set so WS stays healthy."""
+        while self._running:
+            await asyncio.sleep(60.0)
+            try:
+                await self.refresh_kline_live_subscriptions()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("kline_live_rebalance_failed", error=str(exc))
+
+    async def _visible_tip_loop(self) -> None:
+        """Keep chart/screener tips fresh via direct REST when kline WS is silent."""
+        from app.ingestion.klines import BINANCE_INTERVAL, normalize_rest_kline
+
+        while self._running:
+            # Faster when trade tips also quiet
+            trade_ok = bool(
+                self.trade_tips.connected and self.trade_tips.message_count > 0
+            )
+            await asyncio.sleep(3.0 if not trade_ok else 8.0)
+            try:
+                kline_msgs = sum(
+                    int(c.get("message_count") or 0)
+                    for c in (self.kline_ws.status().get("connections") or [])
+                )
+                kline_silent = kline_msgs == 0
+                # When WS quiet, starve non-visible backfill so tip REST gets slots
+                if kline_silent and hasattr(self.backfill, "adaptive"):
+                    try:
+                        self.backfill.adaptive.concurrency = 1
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                visible = list(getattr(self.backfill, "_visible", set()) or set())
+                focus = list(self._kline_focus)
+                targets = list(dict.fromkeys([*focus, *visible]))[:6]
+                if not targets:
+                    # Still refresh a few top-volume tips so paper/signals move
+                    targets = self._select_kline_live_symbols()[:4]
+                tfs = list(self.kline_ws.timeframes)[:3] or ["15m", "5m", "1m"]
+                rest = getattr(self.backfill, "rest", None)
+                if rest is None:
+                    continue
+                for sym in targets:
+                    for tf in tfs:
+                        tip_key = (sym, normalize_timeframe(tf))
+                        last = self.backfill._last_tip_fetch.get(tip_key, 0.0)  # noqa: SLF001
+                        import time as _time
+
+                        min_gap = 3.0 if tip_key[0] in set(focus) else 6.0
+                        if _time.monotonic() - float(last or 0.0) < min_gap:
+                            continue
+                        try:
+                            interval = BINANCE_INTERVAL.get(normalize_timeframe(tf), tf)
+                            raw = await asyncio.wait_for(
+                                rest.futures_klines(sym, interval, limit=5),
+                                timeout=4.0,
+                            )
+                            self.backfill._last_tip_fetch[tip_key] = _time.monotonic()  # noqa: SLF001
+                            batch = []
+                            open_new = None
+                            for row in raw or []:
+                                c = normalize_rest_kline(sym, tf, row)
+                                if c is None:
+                                    continue
+                                if not c.is_closed:
+                                    open_new = c
+                                else:
+                                    batch.append(c)
+                            if batch:
+                                await self.ohlcv.ingest_history(batch)
+                            if open_new is not None:
+                                await self.ohlcv.upsert_candle(open_new)
+                            # Prefer live ticker on tip if present
+                            tick = self.market.get_ticker(sym)
+                            if tick and tick.price:
+                                await self.ohlcv.apply_live_price(sym, float(tick.price))
+                        except Exception:  # noqa: BLE001
+                            continue
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("visible_tip_loop_failed", error=str(exc))
 
     async def _hydrate_and_enqueue(self, symbols: list[str]) -> None:
         """Load OHLCV from DB, restore setups, warm engines, then enqueue gaps."""
@@ -180,13 +346,15 @@ class CalculationOrchestrator:
         self._tasks.clear()
         await self.backfill.stop()
         await self.kline_ws.stop()
+        await self.trade_tips.stop()
         await self.liquidations.stop()
         await self._liq_ws.stop_all()
         await self.oi.stop()
         await self.fundamentals.close()
 
     async def on_symbols_changed(self, symbols: list[str]) -> None:
-        await self.kline_ws.sync_symbols(symbols)
+        self._universe_symbols = [s.upper() for s in symbols]
+        await self.refresh_kline_live_subscriptions()
         self.oi.set_symbols(symbols)
         await self.backfill.enqueue_universe(symbols)
 
@@ -262,6 +430,7 @@ class CalculationOrchestrator:
         """Dependency-aware setup recompute for one symbol after a TF update."""
         try:
             from app.services.setup_signals import get_setup_signal_service
+            from app.services.paper_trade import get_paper_trade_engine
 
             svc = get_setup_signal_service()
             tf_l = normalize_timeframe(timeframe).lower()
@@ -278,6 +447,7 @@ class CalculationOrchestrator:
             if svc.setup_ohlcv_ready(symbol):
                 payload = svc.analyze_symbol(symbol, triggered_timeframe=tf_l)
                 await persistence.persist_setup_analysis(symbol, payload)
+                get_paper_trade_engine().on_setup_signal(symbol, payload)
             else:
                 # Honest WAITING placeholder; queue until setup TF arrives
                 svc.ensure_computed(symbol, triggered_timeframe=tf_l)
@@ -292,20 +462,71 @@ class CalculationOrchestrator:
         return get_setup_signal_service().enqueue_ensure(symbols)
 
     async def _setup_ensure_loop(self) -> None:
-        """Drain visible/stale setup queue without blocking candle path."""
+        """Drain visible/stale setup queue — refresh OHLCV first when WS is silent."""
         from app.services.setup_signals import get_setup_signal_service
+        from app.services.paper_trade import get_paper_trade_engine
 
         while self._running:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.75)
             svc = get_setup_signal_service()
+            paper = get_paper_trade_engine()
             try:
-                updated = svc.drain_ensure_queue(limit=25)
+                batch = list(getattr(svc, "_pending_ensure", set()))[:12]
+                cfg = svc.config
+                mtf = [
+                    cfg.mtf_major,
+                    cfg.mtf_primary,
+                    cfg.mtf_setup,
+                    cfg.mtf_entry,
+                ]
+                for sym in batch:
+                    try:
+                        await self.backfill.ensure_setup_mtf_fresh(
+                            sym,
+                            mtf,
+                            force_setup_tip=True,
+                            setup_tf=cfg.mtf_setup,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "setup_ohlcv_refresh_failed",
+                            symbol=sym,
+                            error=str(exc),
+                        )
+                updated = svc.drain_ensure_queue(limit=12)
                 for sym in updated:
                     payload = self.engines.get_setup_signal(sym)
                     if payload and payload.get("signal_status") != "WAITING":
                         await persistence.persist_setup_analysis(sym, payload)
+                    if payload:
+                        paper.on_setup_signal(sym, payload)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("setup_ensure_loop_failed", error=str(exc))
+
+    async def _paper_trade_loop(self) -> None:
+        """Poll marks for open paper positions; persist fills."""
+        from app.services.market_store import market_store
+        from app.services.paper_trade import get_paper_trade_engine
+
+        paper = get_paper_trade_engine()
+        while self._running:
+            await asyncio.sleep(2.0)
+            try:
+                prices: dict[str, float] = {}
+                for sym in list(paper._open.keys()):  # noqa: SLF001
+                    mark = market_store.mark_prices.get(sym)
+                    if mark is not None and getattr(mark, "mark_price", None):
+                        prices[sym] = float(mark.mark_price)
+                        continue
+                    tick = market_store.get_ticker(sym)
+                    if tick is not None and tick.price:
+                        prices[sym] = float(tick.price)
+                if prices:
+                    paper.tick(prices)
+                for row in paper.drain_persist_queue():
+                    await persistence.persist_paper_trade(row)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("paper_trade_loop_failed", error=str(exc))
 
     async def _warm_engines_from_store(self, symbols: list[str]) -> None:
         """
@@ -420,6 +641,7 @@ class CalculationOrchestrator:
             "candle_events": self._candle_events,
             "calc_events": self._calc_events,
             "kline": kstat,
+            "trade_tips": self.trade_tips.status(),
             "ohlcv": self.ohlcv.stats(),
             "oi": self.oi.status(),
             "liquidations": self.liquidations.status(),

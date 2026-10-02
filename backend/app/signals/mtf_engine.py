@@ -43,15 +43,17 @@ def align_mtf(
     if major in ("BULLISH", "BEARISH") and primary in ("BULLISH", "BEARISH") and major != primary:
         alignment = MTFAlignment.CONFLICT.value
         reason = f"{cfg.mtf_major.upper()} {major} vs {cfg.mtf_primary.upper()} {primary}"
-    elif all(t == "BULLISH" for t in (major, primary, setup) if t not in (None, "WAITING", "INSUFFICIENT_DATA", "NEUTRAL")):
-        if setup == "BULLISH" and (entry in ("BULLISH", "WAITING", "INSUFFICIENT_DATA", None) or entry_trigger):
+    # STRONG_* requires major + primary + setup all directional — NEUTRAL must not
+    # be skipped (that previously labeled 15m-only bullish as STRONG_LONG).
+    elif major == "BULLISH" and primary == "BULLISH" and setup == "BULLISH":
+        if entry in ("BULLISH", "WAITING", "INSUFFICIENT_DATA", None) or entry_trigger:
             alignment = MTFAlignment.STRONG_LONG.value
             reason = "Higher TFs bullish with setup alignment"
         else:
             alignment = MTFAlignment.MIXED.value
             reason = "Partial bullish alignment"
-    elif all(t == "BEARISH" for t in (major, primary, setup) if t not in (None, "WAITING", "INSUFFICIENT_DATA", "NEUTRAL")):
-        if setup == "BEARISH" and (entry in ("BEARISH", "WAITING", "INSUFFICIENT_DATA", None) or entry_trigger):
+    elif major == "BEARISH" and primary == "BEARISH" and setup == "BEARISH":
+        if entry in ("BEARISH", "WAITING", "INSUFFICIENT_DATA", None) or entry_trigger:
             alignment = MTFAlignment.STRONG_SHORT.value
             reason = "Higher TFs bearish with setup alignment"
         else:

@@ -217,6 +217,13 @@ describe("liquidations WAITING", () => {
     expect(isLiquidationsCompact("LIVE", 3)).toBe(false);
     expect(isLiquidationsCompact("UNAVAILABLE", 0)).toBe(true);
   });
+
+  it("frontend LIVE vs WAITING subtitles stay honest", () => {
+    expect(liquidationsSubtitle("BTCUSDT", "LIVE")).toBe("LIVE");
+    expect(liquidationsSubtitle("BTCUSDT", "WAITING")).toBe("WAITING FOR DATA");
+    expect(liquidationsSubtitle("BTCUSDT", "STALE")).toBe("STALE");
+    expect(liquidationsSubtitle(null, "LIVE")).toBe("SELECT A COIN");
+  });
 });
 
 describe("overlay toggles independent", () => {
