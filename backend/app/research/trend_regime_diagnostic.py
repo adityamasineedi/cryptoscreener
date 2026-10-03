@@ -590,6 +590,8 @@ def collect_combo02_trades(
     signal_config: SignalConfig,
     research_config: ResearchConfig,
     direction: str | None = None,
+    candles_1h: Sequence[Mapping[str, Any]] | None = None,
+    candles_4h: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     combo = get_combination(COMBO_ID)
     assert combo is not None
@@ -601,6 +603,8 @@ def collect_combo02_trades(
         signal_config=signal_config,
         research_config=research_config,
         direction_filter=direction,
+        candles_1h=candles_1h,
+        candles_4h=candles_4h,
     )
     return list(out.get("trades") or [])
 

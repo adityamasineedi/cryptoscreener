@@ -107,6 +107,8 @@ class LiquidationIngestion:
             name=self.STREAM_NAME,
             url=url,
             handler=self._on_message,
+            stream_type="liquidation",
+            expected_streams=1,
         )
         self._started = True
         self._subscription_status = "subscribed_via_url"
@@ -237,18 +239,20 @@ class LiquidationIngestion:
             pass
 
         try:
+            from app.ingestion.handler_latency import handler_latency
             from app.services.persistence import persistence
 
             before = getattr(persistence, "_writes", 0)
-            await persistence.persist_liquidation(
-                symbol=ev.symbol,
-                side=ev.side,
-                price=ev.price,
-                quantity=ev.quantity,
-                quote_qty=getattr(ev, "notional", None),
-                source=ev.source,
-                ts=ev.timestamp,
-            )
+            with handler_latency.time("persist_liquidation"):
+                await persistence.persist_liquidation(
+                    symbol=ev.symbol,
+                    side=ev.side,
+                    price=ev.price,
+                    quantity=ev.quantity,
+                    quote_qty=getattr(ev, "notional", None),
+                    source=ev.source,
+                    ts=ev.timestamp,
+                )
             after = getattr(persistence, "_writes", 0)
             if after > before:
                 self._db_rows_written += 1
@@ -403,12 +407,19 @@ class LiquidationIngestion:
             "ws_connect_attempts": conn.get("connect_attempts") if conn else 0,
             "ws_connected": conn.get("connect_count") if conn else 0,
             "ws_disconnected": conn.get("disconnect_count") if conn else 0,
+            # Aliases for diagnostics collectors (same values; do not invent)
+            "disconnect_count": conn.get("disconnect_count") if conn else 0,
+            "last_error": conn.get("last_error") if conn else None,
+            "disconnect_reason": conn.get("disconnect_reason") if conn else None,
+            "disconnect_evidence": conn.get("disconnect_evidence") if conn else None,
+            "close_code": conn.get("close_code") if conn else None,
             "ws_frames_received": frames,
             "ws_bytes_received": conn.get("bytes_received") if conn else 0,
             "ws_parse_attempts": self._ws_parse_attempts,
             "ws_parse_success": self._ws_parse_success,
             "ws_parse_errors": self._ws_parse_errors,
             "parser_errors": self._ws_parse_errors,
+            "parse_errors": self._ws_parse_errors,
             "raw_events": self._raw_events,
             "normalized_events": self._normalized_events,
             "duplicates_removed": self._duplicates_removed,
@@ -421,6 +432,14 @@ class LiquidationIngestion:
             ),
             "last_event_at": (
                 self._last_parsed_at.isoformat() if self._last_parsed_at else None
+            ),
+            "last_parsed_at": (
+                self._last_parsed_at.isoformat() if self._last_parsed_at else None
+            ),
+            "seconds_since_last_event": (
+                (datetime.now(timezone.utc) - self._last_parsed_at).total_seconds()
+                if self._last_parsed_at
+                else None
             ),
             "last_message_time": self._last_raw_at.isoformat() if self._last_raw_at else None,
             "last_parsed_time": (

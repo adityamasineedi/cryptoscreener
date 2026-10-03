@@ -17,6 +17,8 @@ def detect_impulse(
     *,
     rvol: float | None = None,
     as_of_index: int | None = None,
+    atr_value: float | None = None,
+    volumes: Sequence[float] | None = None,
 ) -> dict[str, Any]:
     if not candles:
         return {
@@ -30,13 +32,22 @@ def detect_impulse(
     rng = h - l
     body = abs(c - o)
     body_ratio = (body / rng) if rng > 0 else 0.0
-    _, highs, lows, closes, vols = series_ohlcv(list(candles[: end + 1]))
-    atr_val = calc_atr(highs, lows, closes, config.atr_period) or 0.0
+    if atr_value is None or (rvol is None and volumes is None):
+        _, highs, lows, closes, vols = series_ohlcv(list(candles[: end + 1]))
+        atr_val = (
+            float(atr_value)
+            if atr_value is not None
+            else (calc_atr(highs, lows, closes, config.atr_period) or 0.0)
+        )
+        if volumes is None:
+            volumes = vols
+    else:
+        atr_val = float(atr_value)
     atr_multiple = (rng / atr_val) if atr_val > 0 else 0.0
 
-    if rvol is None and len(vols) >= 20:
-        avg = sum(vols[-21:-1]) / 20.0
-        rvol = (vols[end] / avg) if avg > 0 else None
+    if rvol is None and volumes is not None and len(volumes) >= 20 and end < len(volumes):
+        avg = sum(volumes[max(0, end - 20) : end]) / 20.0
+        rvol = (volumes[end] / avg) if avg > 0 else None
 
     bos_dir = (bos or {}).get("direction")
     candle_bull = c > o

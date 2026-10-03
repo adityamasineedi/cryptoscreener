@@ -117,7 +117,7 @@ class TestEmptyMetricsNull:
 
 
 class TestCompareMetadata:
-    def test_eight_combinations_produce_eight_rows(self):
+    def test_all_combinations_produce_rows(self):
         series = make_series(160)
         cmp = compare_combinations(
             "BTCUSDT",
@@ -126,8 +126,9 @@ class TestCompareMetadata:
             research_config=ResearchConfig(min_bars=40),
             signal_config=SignalConfig(),
         )
-        assert cmp["combinations_tested"] == 8
-        assert len(cmp["rows"]) == 8
+        n = len(COMBINATIONS)
+        assert cmp["combinations_tested"] == n
+        assert len(cmp["rows"]) == n
         assert cmp["dataset_id"] == DATASET_ID
         assert cmp["not_dataset"] == OTHER_DATASET_ID
         assert set(r["combination_id"] for r in cmp["rows"]) == set(COMBINATIONS)
@@ -188,14 +189,15 @@ class TestServiceCompareAsync:
             )
         assert payload["dataset_id"] == DATASET_ID
         assert payload["not_dataset"] == OTHER_DATASET_ID
-        assert payload["combinations_tested"] == 8
+        n = len(COMBINATIONS)
+        assert payload["combinations_tested"] == n
         assert payload["parameter_variants_tested"] == 1
         assert payload["parameters_tested"] == 1
         assert "parameter grid" in (payload.get("parameters_tested_meaning") or "").lower()
         assert payload["date_filter"]["end_exclusive_utc"] == "2026-10-02T00:00:00+00:00"
         assert payload["timezone"] == "UTC"
         assert payload["status"] in ("SUCCESS_WITH_DATA", "SUCCESS_EMPTY")
-        assert len(payload["rows"]) == 8
+        assert len(payload["rows"]) == n
         if payload["status"] == "SUCCESS_EMPTY":
             assert payload["empty_reason"] == "NO QUALIFYING DATA FOR SELECTED FILTERS"
             for row in payload["rows"]:
@@ -297,9 +299,10 @@ class TestMultipleTestingTruth:
         with patch("app.research.service._load_research_candles", new=AsyncMock(side_effect=fake_load)):
             payload = await svc.compare(symbol="BTCUSDT", timeframe="15m")
         detail = payload["multiple_testing_detail"]
-        assert detail["combinations_tested"] == 8
+        n = len(COMBINATIONS)
+        assert detail["combinations_tested"] == n
         assert detail["parameter_variants_tested"] == 1
-        assert detail["configurations_explored"] == 8
+        assert detail["configurations_explored"] == n
         assert payload["multiple_testing_flag"] == "MULTIPLE_TESTING_RISK"
 
 

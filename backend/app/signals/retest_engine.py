@@ -17,6 +17,7 @@ def detect_retest(
     *,
     direction: str | None,
     as_of_index: int | None = None,
+    atr_value: float | None = None,
 ) -> dict[str, Any]:
     if not bos or bos.get("state") != "CONFIRMED" or bos.get("broken_level") is None:
         return {"retest": False, "state": "WAITING", "reason": "No broken level to retest"}
@@ -25,8 +26,11 @@ def detect_retest(
 
     end = len(candles) - 1 if as_of_index is None else min(as_of_index, len(candles) - 1)
     level = float(bos["broken_level"])
-    _, highs, lows, closes, _ = series_ohlcv(list(candles[: end + 1]))
-    atr_val = calc_atr(highs, lows, closes, config.atr_period) or 0.0
+    if atr_value is None:
+        _, highs, lows, closes, _ = series_ohlcv(list(candles[: end + 1]))
+        atr_val = calc_atr(highs, lows, closes, config.atr_period) or 0.0
+    else:
+        atr_val = float(atr_value)
     tol = atr_val * config.retest_atr_tolerance
     if config.retest_pct_tolerance is not None:
         tol = max(tol, abs(level) * float(config.retest_pct_tolerance) / 100.0)

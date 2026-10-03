@@ -25,6 +25,9 @@ def detect_swings(
     atr_period: int = 14,
     minimum_swing_distance_atr: float = 0.0,
     as_of_index: int | None = None,
+    highs: Sequence[float] | None = None,
+    lows: Sequence[float] | None = None,
+    closes: Sequence[float] | None = None,
 ) -> list[SwingRecord]:
     """Detect confirmed swings using only candles[:as_of_index+1] (inclusive).
 
@@ -37,7 +40,12 @@ def detect_swings(
     if end < left + right:
         return []
 
-    _, highs, lows, closes, _ = series_ohlcv(list(candles[: end + 1]))
+    if highs is None or lows is None or closes is None:
+        _, highs, lows, closes, _ = series_ohlcv(list(candles[: end + 1]))
+    else:
+        highs = list(highs[: end + 1])
+        lows = list(lows[: end + 1])
+        closes = list(closes[: end + 1])
     atr_val = calc_atr(highs, lows, closes, atr_period) or 0.0
     min_dist = atr_val * float(minimum_swing_distance_atr)
 
@@ -137,3 +145,102 @@ def swings_for_timeframe(
         minimum_swing_distance_atr=sc.minimum_swing_distance_atr,
         as_of_index=as_of_index,
     )
+
+
+def extend_swings(
+    swings: list[SwingRecord],
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    left: int,
+    right: int,
+    symbol: str = "",
+    timeframe: str = "",
+    atr_period: int = 14,
+    minimum_swing_distance_atr: float = 0.0,
+    as_of_index: int,
+    highs: Sequence[float] | None = None,
+    lows: Sequence[float] | None = None,
+    closes: Sequence[float] | None = None,
+) -> list[SwingRecord]:
+    """O(1) swing update when ``as_of_index`` advances by one bar.
+
+    Equivalent to ``detect_swings(..., as_of_index=as_of_index)`` when ``swings``
+    already matches ``as_of_index - 1``. Falls back to a full detect if the
+    cache is empty or lags by more than one bar.
+    """
+    if left < 1 or right < 1 or not candles:
+        return []
+    end = min(as_of_index, len(candles) - 1)
+    if end < left + right:
+        return []
+
+    candidate = end - right
+    if candidate < left:
+        return list(swings)
+
+    # Already applied this confirmable index (common when no new swing forms).
+    if swings and swings[-1].bar_index >= candidate:
+        return list(swings)
+
+    if highs is None or lows is None or closes is None:
+        _, highs, lows, closes, _ = series_ohlcv(list(candles[: end + 1]))
+
+    # Default configs use min distance 0 — skip expensive ATR on the hot path.
+    min_dist_mult = float(minimum_swing_distance_atr)
+    if min_dist_mult > 0:
+        atr_val = calc_atr(highs[: end + 1], lows[: end + 1], closes[: end + 1], atr_period) or 0.0
+        min_dist = atr_val * min_dist_mult
+    else:
+        atr_val = 0.0
+        min_dist = 0.0
+    h = highs[candidate]
+    l = lows[candidate]
+    left_h = highs[candidate - left : candidate]
+    right_h = highs[candidate + 1 : candidate + right + 1]
+    left_l = lows[candidate - left : candidate]
+    right_l = lows[candidate + 1 : candidate + right + 1]
+    if not left_h or not right_h:
+        return list(swings)
+
+    confirmed_at = candle_time(candles[candidate + right])
+    ts = candle_time(candles[candidate])
+    added: list[SwingRecord] = []
+    if h > max(left_h) and h > max(right_h):
+        if min_dist <= 0 or (h - max(max(left_h), max(right_h))) >= min_dist:
+            strength = 1.0
+            if atr_val > 0:
+                strength = min(3.0, (h - max(max(left_h), max(right_h))) / atr_val)
+            added.append(
+                SwingRecord(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    swing_type="HIGH",
+                    price=h,
+                    timestamp=ts,
+                    bar_index=candidate,
+                    strength=float(strength),
+                    confirmed_at=confirmed_at,
+                )
+            )
+    if l < min(left_l) and l < min(right_l):
+        if min_dist <= 0 or (min(min(left_l), min(right_l)) - l) >= min_dist:
+            strength = 1.0
+            if atr_val > 0:
+                strength = min(3.0, (min(min(left_l), min(right_l)) - l) / atr_val)
+            added.append(
+                SwingRecord(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    swing_type="LOW",
+                    price=l,
+                    timestamp=ts,
+                    bar_index=candidate,
+                    strength=float(strength),
+                    confirmed_at=confirmed_at,
+                )
+            )
+    if not added:
+        return list(swings)
+    out = list(swings) + added
+    out.sort(key=lambda s: s.bar_index)
+    return _label_swings(out)

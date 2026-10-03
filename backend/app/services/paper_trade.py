@@ -1,7 +1,7 @@
 """Virtual paper trading — open on Path A (Trend+BOS) or Path B (full entry).
 
 No real exchange orders. Uses setup signal risk sizing + live mark/ticker.
-Default entry mode is path_a (research-validated COMBO_02 / HL longs).
+Default entry mode is path_a (COMBO_02: HL + BOS + 4h/1h HTF hard gate).
 """
 
 from __future__ import annotations
@@ -280,10 +280,13 @@ class PaperTradeEngine:
             return None
         sym = symbol.upper()
         status = str(payload.get("status") or "")
-        if status == SignalStatus.INVALIDATED.value:
-            self._cancel_open(sym, reason="SETUP_INVALIDATED")
-            return None
-        if status == SignalStatus.CONFLICT.value:
+        # INVALIDATED / CONFLICT must not cancel an already-open paper fill.
+        # After restart, setups often recompute as INVALIDATED while OHLCV is
+        # still warming — that was wiping hydrated OPEN positions from the book.
+        if status in (
+            SignalStatus.INVALIDATED.value,
+            SignalStatus.CONFLICT.value,
+        ):
             return None
 
         path_b = status in ENTRY_STATUSES
@@ -616,6 +619,23 @@ class PaperTradeEngine:
             self._pending_persist.clear()
             return out
 
+    def pending_persist_count(self) -> int:
+        with self._lock:
+            return len(self._pending_persist)
+
+
+async def flush_paper_trade_persists(
+    engine: PaperTradeEngine | None = None,
+) -> int:
+    """Write queued paper rows to Postgres immediately (open/close durability)."""
+    from app.services.persistence import persistence
+
+    eng = engine if engine is not None else get_paper_trade_engine()
+    rows = eng.drain_persist_queue()
+    for row in rows:
+        await persistence.persist_paper_trade(row)
+    return len(rows)
+
 
 def _live_price(symbol: str) -> float | None:
     try:
@@ -643,8 +663,30 @@ def _setup_trend(payload: dict[str, Any]) -> str:
     return str(t or "")
 
 
+def _tf_trend_label(payload: dict[str, Any], timeframe: str) -> str:
+    """Normalize trend label for a TF from payload.trend (dict or str)."""
+    trend = payload.get("trend") or {}
+    if not isinstance(trend, dict):
+        return ""
+    raw = trend.get(timeframe) or trend.get(timeframe.lower())
+    if isinstance(raw, dict):
+        return str(raw.get("trend") or "").upper()
+    return str(raw or "").upper()
+
+
+def _htf_bullish_for_long(payload: dict[str, Any]) -> bool:
+    """Hard Path A HTF gate: 4h and 1h must both be BULLISH (fail closed)."""
+    mtf = payload.get("mtf") or {}
+    align = str(mtf.get("MTF_ALIGNMENT") or "").upper()
+    if align == "STRONG_LONG":
+        return True
+    t4 = _tf_trend_label(payload, "4h")
+    t1 = _tf_trend_label(payload, "1h")
+    return t4 == "BULLISH" and t1 == "BULLISH"
+
+
 def _is_path_a_long(payload: dict[str, Any]) -> bool:
-    """Research Path A: setup BULLISH + confirmed BULLISH_BOS (+ stop present)."""
+    """Path A = COMBO_02: setup BULLISH + BULLISH_BOS + 4h/1h HTF (+ stop)."""
     if str(payload.get("status") or "") in (
         SignalStatus.CONFLICT.value,
         SignalStatus.INVALIDATED.value,
@@ -656,11 +698,12 @@ def _is_path_a_long(payload: dict[str, Any]) -> bool:
         and str(bos.get("direction") or "").upper() == "BULLISH_BOS"
     )
     trend_ok = _setup_trend(payload).upper() == "BULLISH"
+    htf_ok = _htf_bullish_for_long(payload)
     stop = payload.get("stop") or {}
     stop_ok = _f(stop.get("final_stop")) is not None or _f(
         (payload.get("risk_management") or {}).get("stop")
     ) is not None
-    return bool(bos_ok and trend_ok and stop_ok)
+    return bool(bos_ok and trend_ok and htf_ok and stop_ok)
 
 
 def _f(raw: Any) -> float | None:
@@ -855,6 +898,7 @@ def _opportunity_from_payload(
         and longish
         and bos_ok
         and trend_ok
+        and _htf_bullish_for_long(payload)
         and stop_px is not None
     )
 

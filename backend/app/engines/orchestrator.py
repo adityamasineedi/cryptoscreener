@@ -506,7 +506,11 @@ class CalculationOrchestrator:
             if svc.setup_ohlcv_ready(symbol):
                 payload = svc.analyze_symbol(symbol, triggered_timeframe=tf_l)
                 await persistence.persist_setup_analysis(symbol, payload)
-                get_paper_trade_engine().on_setup_signal(symbol, payload)
+                from app.services.paper_trade import flush_paper_trade_persists
+
+                paper_eng = get_paper_trade_engine()
+                paper_eng.on_setup_signal(symbol, payload)
+                await flush_paper_trade_persists(paper_eng)
             else:
                 # Honest WAITING placeholder; queue until setup TF arrives
                 svc.ensure_computed(symbol, triggered_timeframe=tf_l)
@@ -553,24 +557,31 @@ class CalculationOrchestrator:
                             error=str(exc),
                         )
                 updated = svc.drain_ensure_queue(limit=12)
+                from app.services.paper_trade import flush_paper_trade_persists
+
                 for sym in updated:
                     payload = self.engines.get_setup_signal(sym)
                     if payload and payload.get("signal_status") != "WAITING":
                         await persistence.persist_setup_analysis(sym, payload)
                     if payload:
                         paper.on_setup_signal(sym, payload)
+                await flush_paper_trade_persists(paper)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("setup_ensure_loop_failed", error=str(exc))
 
     async def _paper_trade_loop(self) -> None:
         """Poll marks for open paper positions; persist fills."""
         from app.services.market_store import market_store
-        from app.services.paper_trade import get_paper_trade_engine
+        from app.services.paper_trade import (
+            flush_paper_trade_persists,
+            get_paper_trade_engine,
+        )
 
         paper = get_paper_trade_engine()
         while self._running:
-            await asyncio.sleep(2.0)
             try:
+                # Flush opens/closes first so a restart mid-sleep cannot drop them
+                await flush_paper_trade_persists(paper)
                 prices: dict[str, float] = {}
                 for sym in list(paper._open.keys()):  # noqa: SLF001
                     mark = market_store.mark_prices.get(sym)
@@ -582,10 +593,10 @@ class CalculationOrchestrator:
                         prices[sym] = float(tick.price)
                 if prices:
                     paper.tick(prices)
-                for row in paper.drain_persist_queue():
-                    await persistence.persist_paper_trade(row)
+                await flush_paper_trade_persists(paper)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("paper_trade_loop_failed", error=str(exc))
+            await asyncio.sleep(2.0)
 
     async def _warm_engines_from_store(self, symbols: list[str]) -> None:
         """

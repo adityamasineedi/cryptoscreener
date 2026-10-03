@@ -19,6 +19,7 @@ def detect_bos(
     atr_period: int = 14,
     rvol: float | None = None,
     as_of_index: int | None = None,
+    atr_value: float | None = None,
 ) -> dict[str, Any] | None:
     """Bullish BOS: close > confirmed swing high while trend bullish.
     Bearish BOS: close < confirmed swing low while trend bearish.
@@ -37,7 +38,10 @@ def detect_bos(
         return None
 
     _, highs, lows, closes, vols = series_ohlcv(list(candles[: end + 1]))
-    atr_val = calc_atr(highs, lows, closes, atr_period)
+    if atr_value is None:
+        atr_val = calc_atr(highs, lows, closes, atr_period)
+    else:
+        atr_val = atr_value
     o, h, l, c = ohlc(candles, end)
     t = candle_time(candles[end])
     vol = volume_at(candles, end)

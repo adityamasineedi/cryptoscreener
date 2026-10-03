@@ -14,7 +14,10 @@ from app.diagnostics.collectors.database import (
 )
 from app.diagnostics.collectors.jobs import collect_jobs_forensics
 from app.diagnostics.collectors.rest import collect_rest_forensics
-from app.diagnostics.collectors.websocket import collect_websocket_forensics
+from app.diagnostics.collectors.websocket import (
+    collect_websocket_connection_detail,
+    collect_websocket_forensics,
+)
 from app.diagnostics.git_info import collect_git_info
 from app.diagnostics.health_eval import evaluate_overview
 from app.diagnostics.issue_detection import ingest_candidates
@@ -160,8 +163,9 @@ class DiagnosticService:
                 payload = await collect_websocket_forensics(settings)
             except Exception as exc:  # noqa: BLE001
                 return {
-                    "phase": 2,
+                    "phase": 17,
                     "status": "UNKNOWN",
+                    "overall_status": "UNKNOWN",
                     "reason": f"collector_failed:{exc.__class__.__name__}",
                     "errors": [{"code": "COLLECTOR", "error": str(exc)}],
                 }
@@ -175,6 +179,20 @@ class DiagnosticService:
                 function=str(payload.get("function") or ""),
             )
         payload["endpoint_latency"] = latency_tracker.snapshot().get("websocket")
+        return redact_value(payload)
+
+    async def websocket_connection(self, connection_id: str) -> dict[str, Any] | None:
+        with timed("websocket_detail"):
+            try:
+                payload = await collect_websocket_connection_detail(connection_id)
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "status": "UNKNOWN",
+                    "reason": f"collector_failed:{exc.__class__.__name__}",
+                    "errors": [{"code": "COLLECTOR", "error": str(exc)}],
+                }
+        if payload is None:
+            return None
         return redact_value(payload)
 
     async def rest(self, settings: Any, *, detect_issues: bool = True) -> dict[str, Any]:

@@ -208,7 +208,13 @@ class BacktestJobService:
                     taker_fee=job.taker_fee_pct / 100.0,
                     maker_fee=job.maker_fee_pct / 100.0,
                     include_trades=job.include_trades,
+                    should_cancel=lambda: job._cancel,
                 )
+                if payload.get("status") == "CANCELLED":
+                    job.status = "cancelled"
+                    job.finished_at = datetime.now(timezone.utc).isoformat()
+                    job.current = ""
+                    return
                 if payload.get("status") == "NOT_FOUND":
                     job.status = "error"
                     job.error = (

@@ -98,6 +98,9 @@ class SignalEngine:
         vwap: float | None = None,
         ema: float | None = None,
         as_of_index: int | None = None,
+        swings: list | None = None,
+        atr_value: float | None = None,
+        volumes: Sequence[float] | None = None,
     ) -> dict[str, Any]:
         if not candles:
             return {
@@ -106,13 +109,14 @@ class SignalEngine:
                 "data_status": "WAITING",
             }
 
-        swings = swings_for_timeframe(
-            candles,
-            self.config,
-            timeframe,
-            symbol=symbol,
-            as_of_index=as_of_index,
-        )
+        if swings is None:
+            swings = swings_for_timeframe(
+                candles,
+                self.config,
+                timeframe,
+                symbol=symbol,
+                as_of_index=as_of_index,
+            )
         trend = infer_trend(swings)
         bos = detect_bos(
             candles,
@@ -123,6 +127,7 @@ class SignalEngine:
             atr_period=self.config.atr_period,
             rvol=rvol,
             as_of_index=as_of_index,
+            atr_value=atr_value,
         )
         choch = detect_choch(
             candles,
@@ -133,7 +138,13 @@ class SignalEngine:
             as_of_index=as_of_index,
         )
         impulse = detect_impulse(
-            candles, bos, self.config, rvol=rvol, as_of_index=as_of_index
+            candles,
+            bos,
+            self.config,
+            rvol=rvol,
+            as_of_index=as_of_index,
+            atr_value=atr_value,
+            volumes=volumes,
         )
         pullback = detect_pullback(
             candles,
@@ -158,6 +169,7 @@ class SignalEngine:
             self.config,
             direction=direction,
             as_of_index=as_of_index,
+            atr_value=atr_value,
         )
         return {
             "timeframe": timeframe,

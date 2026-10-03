@@ -21,6 +21,9 @@ class CombinationDefinition:
     require_rvol: bool = False
     require_sd: bool = False
     require_rr: bool = False
+    # Hard 4h+1h structure alignment (fail closed). Independent of live
+    # SignalConfig.require_mtf_alignment — research must pass HTF candles.
+    require_htf_alignment: bool = False
     conditions: tuple[str, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
@@ -35,6 +38,7 @@ class CombinationDefinition:
             "require_rvol": self.require_rvol,
             "require_sd": self.require_sd,
             "require_rr": self.require_rr,
+            "require_htf_alignment": self.require_htf_alignment,
             "conditions": list(self.conditions),
             "gates": {
                 "BOS": self.require_bos,
@@ -44,6 +48,11 @@ class CombinationDefinition:
                 "RVOL": self.require_rvol,
                 "S/D": self.require_sd,
                 "R:R": self.require_rr,
+                "HTF": self.require_htf_alignment,
+            },
+            "direction_filter_notes": {
+                "setup_tf_only": not self.require_htf_alignment,
+                "htf_hard_gate": self.require_htf_alignment,
             },
         }
 
@@ -59,12 +68,34 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
     "COMBO_02": CombinationDefinition(
         combination_id="COMBO_02",
         name="TREND_BOS",
-        description="BOS confirmed AND trend agrees with BOS direction.",
+        description=(
+            "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF "
+            "structure aligned with BOS direction (fail closed)."
+        ),
         require_bos=True,
         require_trend=True,
+        require_htf_alignment=True,
         conditions=(
             "BOS confirmed",
             "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)",
+        ),
+    ),
+    # Legacy Path A without HTF — for A/B research only. Not the default playbook.
+    "COMBO_02_LOCAL": CombinationDefinition(
+        combination_id="COMBO_02_LOCAL",
+        name="TREND_BOS_SETUP_TF_ONLY",
+        description=(
+            "Legacy TREND_BOS: BOS + setup-TF trend only (no HTF gate). "
+            "Kept for before/after research comparison."
+        ),
+        require_bos=True,
+        require_trend=True,
+        require_htf_alignment=False,
+        conditions=(
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "Setup-TF only (HTF not required)",
         ),
     ),
     "COMBO_03": CombinationDefinition(

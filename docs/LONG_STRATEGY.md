@@ -51,22 +51,27 @@ If structure is `NEUTRAL`, `BEARISH`, `INSUFFICIENT_DATA`, or `WAITING` → **no
 | Setup | 15m | **Must** show HH+HL + bullish BOS |
 | Entry refine | 5m / 1m | Optional timing |
 
-**Research path that showed edge on recent data:** setup TF Trend + BOS only (HL longs).  
+**Research path (COMBO_02):** setup TF Trend + BOS **plus hard 4h/1h HTF alignment** (HL longs).  
+**Legacy A/B (`COMBO_02_LOCAL`):** setup TF Trend + BOS only (no HTF) — research comparison only.  
 **Full live path:** also requires impulse → pullback → retest + MTF alignment (stricter; fewer trades).
 
 ---
 
 ## 4. Entry rules
 
-### 4.1 Allowed long path A — Trend + BOS (research-validated bias)
+### 4.1 Allowed long path A — Trend + BOS + HTF (research default)
 
-Use when you want the path that printed positive expectancy on recent HL samples:
+`COMBO_02` / Path A now hard-requires higher-timeframe alignment (fail closed):
 
 1. Setup TF trend = **BULLISH** (HH + HL)  
 2. Setup TF BOS = **CONFIRMED** + direction **BULLISH_BOS**  
-3. Entry = retest of broken level if available, else market at close (engine rule)  
-4. Stop + targets computable  
-5. **TP1 R ≥ min_rr** (default **2.0**) — micro structural targets are skipped  
+3. **4h trend = BULLISH AND 1h trend = BULLISH** at signal time (closed bars only)  
+4. Entry = retest of broken level if available, else market at close (engine rule)  
+5. Stop + targets computable  
+6. **TP1 R ≥ min_rr** (default **2.0**) — micro structural targets are skipped  
+
+Missing / mixed / conflicting HTF → **no long**.  
+Legacy setup-TF-only Path A is retained as `COMBO_02_LOCAL` for A/B research only.
 
 **Do not** take BOS-only without bullish HL trend.
 
@@ -215,7 +220,8 @@ Small sample — treat as directional bias for the playbook, not proof.
 | Impulse / pullback / entry | `impulse_engine.py`, `pullback_engine.py`, `entry_engine.py` |
 | Stop / targets / R:R | `stop_engine.py`, `target_engine.py`, `risk_engine.py` |
 | Config (`min_rr`, MTF, RVOL) | `backend/app/signals/config.py` |
-| Research combos | `backend/app/research/bos_combinations.py` (`COMBO_02` = Trend+BOS) |
+| Research combos | `backend/app/research/bos_combinations.py` (`COMBO_02` = Trend+BOS+HTF; `COMBO_02_LOCAL` = setup-TF only) |
+| HTF hard gate | `combination_engine.htf_alignment_gate` + `bos_strategy_comparison/htf.py` |
 | Opt-in research gates (default OFF) | `backend/app/signals/research_gate.py` + `RESEARCH_GATE_*` env |
 | UI Trade Plan | `frontend/src/tradePlan/`, SETUP / TRADE PLAN tabs |
 

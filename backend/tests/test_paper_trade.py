@@ -69,12 +69,19 @@ def _path_a_payload(
     tp1: float = 104.0,
     freshness: str = "OK",
     source_ts: str = "2026-10-02T13:15:00+00:00",
+    trend_4h: str = "BULLISH",
+    trend_1h: str = "BULLISH",
 ) -> dict:
     return {
         "status": "WAITING",
         "direction": "LONG",
         "timeframe": "15m",
-        "trend": {"15m": {"trend": "BULLISH"}},
+        "trend": {
+            "15m": {"trend": "BULLISH"},
+            "1h": {"trend": trend_1h},
+            "4h": {"trend": trend_4h},
+        },
+        "mtf": {"MTF_ALIGNMENT": "STRONG_LONG" if trend_4h == trend_1h == "BULLISH" else "MIXED"},
         "bos": {
             "state": "CONFIRMED",
             "direction": "BULLISH_BOS",
@@ -137,6 +144,27 @@ def test_opens_on_path_a_trend_bos(monkeypatch):
     assert pos.tp1_price == 104.0
     assert pos.signal_snippet.get("path") == "PATH_A"
     assert eng.status()["entry_mode"] == "path_a"
+
+
+def test_path_a_blocks_without_htf_bullish(monkeypatch):
+    import app.services.paper_trade as paper_mod
+
+    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    eng = PaperTradeEngine(entry_mode="path_a", starting_equity=1000, risk_percent=0.02)
+    assert (
+        eng.on_setup_signal(
+            "BATUSDT",
+            _path_a_payload(trend_4h="BEARISH", trend_1h="BULLISH"),
+        )
+        is None
+    )
+    assert (
+        eng.on_setup_signal(
+            "BATUSDT",
+            _path_a_payload(trend_4h="BEARISH", trend_1h="BEARISH"),
+        )
+        is None
+    )
 
 
 def test_path_b_mode_skips_trend_bos_only():
@@ -222,6 +250,65 @@ def test_skip_when_no_live_price(monkeypatch):
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: None)
     eng = PaperTradeEngine()
     assert eng.on_setup_signal("BTCUSDT", _candidate()) is None
+
+
+def test_invalidated_setup_does_not_cancel_open(monkeypatch):
+    """Restart warmup often emits INVALIDATED — must not wipe an open fill."""
+    import app.services.paper_trade as paper_mod
+
+    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    eng = PaperTradeEngine(entry_mode="path_b")
+    pos = eng.on_setup_signal("BTCUSDT", _candidate())
+    assert pos is not None
+    assert eng.status()["open_count"] == 1
+    assert (
+        eng.on_setup_signal(
+            "BTCUSDT", _candidate(status="INVALIDATED", source_ts="other")
+        )
+        is None
+    )
+    assert eng.status()["open_count"] == 1
+    assert eng._open["BTCUSDT"].status == "OPEN"
+    assert eng.status()["closed_count"] == 0
+
+
+def test_hydrated_open_survives_invalidated_setup(monkeypatch):
+    import app.services.paper_trade as paper_mod
+
+    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 200.0)
+    eng = PaperTradeEngine(starting_equity=1000.0)
+    eng.hydrate_from_rows(
+        [
+            {
+                "id": "open-1",
+                "symbol": "ETHUSDT",
+                "side": "LONG",
+                "status": "OPEN",
+                "entry_price": 200.0,
+                "stop_price": 190.0,
+                "tp1_price": 220.0,
+                "quantity": 1.0,
+                "risk_usd": 10.0,
+                "opened_at": "2026-10-02T10:00:00+00:00",
+                "source_candle_ts": "ts-eth",
+                "timeframe": "15m",
+                "signal_snippet": {"path": "PATH_A", "bos_level": 200.0},
+            }
+        ]
+    )
+    assert eng.status()["open_count"] == 1
+    eng.on_setup_signal(
+        "ETHUSDT",
+        {
+            "status": "INVALIDATED",
+            "direction": "LONG",
+            "timeframe": "15m",
+            "invalidation_reason": "warmup",
+            "source_candle_timestamps": {"15m": "ts-new"},
+        },
+    )
+    assert eng.status()["open_count"] == 1
+    assert eng._open["ETHUSDT"].id == "open-1"
 
 
 def test_hydrate_from_rows_restores_book_and_equity(monkeypatch):
@@ -336,7 +423,12 @@ def test_list_opportunities_tiers(monkeypatch):
             "status": "LONG_ENTRY_CANDIDATE",
             "direction": "LONG",
             "timeframe": "15m",
-            "trend": {"15m": {"trend": "BULLISH"}},
+            "trend": {
+                "15m": {"trend": "BULLISH"},
+                "1h": {"trend": "BULLISH"},
+                "4h": {"trend": "BULLISH"},
+            },
+            "mtf": {"MTF_ALIGNMENT": "STRONG_LONG"},
             "bos": {"state": "CONFIRMED", "direction": "BULLISH_BOS"},
             "impulse": {"is_impulse": True, "quality": "STRONG"},
             "pullback": {"pullback_state": "CONFIRMED"},
@@ -354,7 +446,12 @@ def test_list_opportunities_tiers(monkeypatch):
             "status": "NO_SETUP",
             "direction": "LONG",
             "timeframe": "15m",
-            "trend": {"15m": {"trend": "BULLISH"}},
+            "trend": {
+                "15m": {"trend": "BULLISH"},
+                "1h": {"trend": "BULLISH"},
+                "4h": {"trend": "BULLISH"},
+            },
+            "mtf": {"MTF_ALIGNMENT": "STRONG_LONG"},
             "bos": {"state": "CONFIRMED", "direction": "BULLISH_BOS"},
             "impulse": {"is_impulse": False},
             "pullback": {"pullback_state": "WAITING"},

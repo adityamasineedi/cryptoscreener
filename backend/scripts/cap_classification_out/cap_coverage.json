@@ -1,0 +1,4438 @@
+{
+  "source": {
+    "provider": "coingecko",
+    "endpoint": "/coins/{id}/market_chart",
+    "observation_source_label": "coingecko_market_chart",
+    "currency": "usd",
+    "units": "USD market capitalization (CoinGecko market_caps)",
+    "classification_rule_version": "research_hist_mcap_v1",
+    "thresholds": {
+      "large_cap_min": 10000000000.0,
+      "mid_cap_min": 1000000000.0,
+      "mid_cap_max": 10000000000.0,
+      "small_cap_min": 50000000.0,
+      "small_cap_max": 1000000000.0
+    },
+    "timestamp_semantics": "effective_time = CoinGecko chart point time (UTC). cap_group_at(T) uses latest observation with effective_time <= T. Never uses future observations.",
+    "missing_data_behavior": "CAP_GROUP_UNAVAILABLE \u2014 no fabrication / no silent substitute",
+    "fallback_behavior": "None \u2014 no price/volume/rank/FDV/name inference",
+    "current_vs_historical": "CURRENT_CAP = live CoinGecko /coins/markets via engine_store. HISTORICAL_CAP = research_market_cap_observations. Primary research uses HISTORICAL_CAP only.",
+    "btc_eth_taxonomy": "classify_asset_group still labels BTC/ETH as BTC/ETH; they do not map to LARGE/MID/SMALL strategy groups."
+  },
+  "as_of": "2026-10-03T13:36:21.489025+00:00",
+  "total_binance_usdt_perp_symbols": 528,
+  "symbols_with_historical_cap": 66,
+  "symbols_with_any_observation": 66,
+  "symbols_with_no_cap": 462,
+  "symbols_with_partial_history_lt_30d": 0,
+  "historical_coverage_counts": {
+    ">=1m": 66,
+    ">=3m": 66,
+    ">=6m": 65,
+    ">=1y": 0,
+    ">=2y": 0,
+    ">=3y": 0,
+    ">=5y": 0
+  },
+  "cap_group_counts_as_of": {
+    "LARGE_CAP": 7,
+    "MID_CAP": 5,
+    "SMALL_CAP": 37,
+    "UNAVAILABLE": 477,
+    "BTC": 1,
+    "ETH": 1,
+    "UNKNOWN": 0
+  },
+  "symbols": [
+    {
+      "symbol": "0GUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000000BOBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000000MOGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000BONKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000CATUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000CHEEMSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000FLOKIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000PEPEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000RATSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000SATSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000SHIBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1000XECUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1INCHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "1MBABYDOGEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "2ZUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "4USDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:24:30+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:21:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "MID_CAP",
+      "taxonomy_label_as_of": "mid-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ACEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:22:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ACHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ACTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ACUUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ADAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AEROUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AEVOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AGLDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AGTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AIGENSYNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AINUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AIOTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AIOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AIXBTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AKEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AKTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ALCHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ALGOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ALICEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ALLOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ALLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ALPINEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ALTUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:24:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ANIMEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ANKRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "APEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "API3USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "APRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "APTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ARBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ARCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ARIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:28:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ARKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ARPAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ARUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ARXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ASRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ASTERUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ASTRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ATHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ATUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AUCTIONUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AVAAIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AVAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AVNTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AWEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AXLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AXSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "AZTECUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "B2USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BABYUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BANANAS31USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BANANAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BANDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BANKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BANUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BARDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BASUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BATUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BCHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BEAMXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BEATUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BELUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BERAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BICOUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:24:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "BIGTIMEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:32:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "BILLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BIOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BIRBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BLESSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BLUAIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BLURUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:17:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "BMTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BNBUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:14:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "LARGE_CAP",
+      "taxonomy_label_as_of": "large-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "BNTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BOMEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BRETTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BREVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BROCCOLI714USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BROCCOLIF3BUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BSBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BSVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BTCDOMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:14:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "BTC",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "BTRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BTWUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BULLAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "BUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "C98USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CAKEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CAPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CARVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CATIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CELOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CELRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CETUSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CFGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CFXUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:28:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "CGPTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CHILLGUYUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CHIPUSDT",
+      "first_cap_timestamp": "2026-04-21T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:34:00+00:00",
+      "observation_count": 167,
+      "history_days": 165.57,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "CHRUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:24:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "CHZUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CKBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CLANKERUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CLOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "COAIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "COLLECTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "COMPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "COOKIEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "COTIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "COWUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CROSSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CRVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CTKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CTRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CTSIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CVCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CVXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "CYBERUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:29:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "CYSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DASHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DATAIPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DEEPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DEXEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:32:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "DIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DODOXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:14:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "LARGE_CAP",
+      "taxonomy_label_as_of": "large-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "DOGSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DOLOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DOODUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DOSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DOTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DRIFTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DUSKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "DYDXUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:16:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "DYMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "EDENUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "EDGEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "EDUUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:29:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "EGLDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ELSAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ENAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ENJUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ENSOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ENSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "EPICUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ERAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ESPORTSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ESPUSDT",
+      "first_cap_timestamp": "2026-02-12T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:25:00+00:00",
+      "observation_count": 235,
+      "history_days": 233.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ETCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ETHFIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ETHUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:13:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "ETH",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ETHWUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "EULUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FARTCOINUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FETUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FFUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FHEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FIDAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FIGHTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FILUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FLOCKUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:16:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "FLOWUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:25:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "FLUIDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FLUXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FOGOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FOLKSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FORMUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:25:30+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "FRAXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "FUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GALAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GASUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GENIUSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GIGGLEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GLMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GMTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GMXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GOATUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GPSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GRAMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GRASSUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:26:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "GRIFFAINUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GRTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GRVTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GTCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GUAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GUNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HAEDALUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HANAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HBARUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HEIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HEMIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HIVEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HMSTRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HOLOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HOMEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HOTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HUMAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HYPERUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ICNTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ICPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "IDOLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "IDUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:29:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ILVUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:32:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "IMXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "INITUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "INJUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "INUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "INXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "IOSTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "IOTAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "IOTXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "IOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "IRYSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "JASMYUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "JCTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "JELLYJELLYUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "JOEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "JSTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "JTOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "JUPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KAIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KAITOUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:17:30+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "KASUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KATUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KAVAUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:26:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "KERNELUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KGENUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KITEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KMNOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KNCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KOMAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "KSMUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:17:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "LABUSDT",
+      "first_cap_timestamp": "2025-10-14T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:16:20+00:00",
+      "observation_count": 356,
+      "history_days": 354.55,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "LAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LAYERUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LDOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LIGHTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LINEAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LINKUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:14:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "LARGE_CAP",
+      "taxonomy_label_as_of": "large-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "LISTAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LITUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LPTUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:32:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "LQTYUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LSKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LTCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LUMIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LUNA2USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "LYNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MAGICUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MAGMAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MANAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MANTAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MANTRAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MARSCOINUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MASKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MAVIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MAVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MELANIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MEMEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MERLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "METISUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "METUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MEWUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MINAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MIRAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MITOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MMTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MOCAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MONUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MOODENGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MORPHOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MOVEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MOVRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MTLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MUBARAKUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:18:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "MUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "MYXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NAORISUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NEARUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NEIROUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NEOUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:30:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "NEWTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NIGHTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NILUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NMRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NOMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NOTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "NXPCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "OGNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "OGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ONEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ONGUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:17:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ONTUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:27:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ONUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "OPENUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "OPGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "OPNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "OPUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:18:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "ORCAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ORDERUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ORDIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "OUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PARTIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PAXGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:22:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "PENGUUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PEOPLEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PHAROSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PHAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PIEVERSEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PIPPINUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PIXELUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PLAYUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PLUMEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:19:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "PNUTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "POLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "POLYXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PONSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "POPCATUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PORTALUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "POWERUSDT",
+      "first_cap_timestamp": "2025-12-05T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:32:30+00:00",
+      "observation_count": 304,
+      "history_days": 302.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "POWRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PRLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PROMPTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PROMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PROVEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PTBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PUMPBTCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PUMPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PUNDIXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "PYTHUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:20:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "QNTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "QTUMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "QUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RAREUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RAVEUSDT",
+      "first_cap_timestamp": "2025-12-12T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:28:30+00:00",
+      "observation_count": 297,
+      "history_days": 295.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "RAYSOLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RECALLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "REDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RENDERUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:16:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "MID_CAP",
+      "taxonomy_label_as_of": "mid-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "RESOLVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "REUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "REZUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RIFUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RIVERUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RLCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ROBOUSDT",
+      "first_cap_timestamp": "2026-02-27T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:27:00+00:00",
+      "observation_count": 220,
+      "history_days": 218.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "RONINUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ROSEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:30:30+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "RPLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RSRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "RUNEUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:24:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "RVNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SAFEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SAGAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SAHARAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SANDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SANTOSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SAPIENUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SCRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SEIUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:21:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SENTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SFPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SHELLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SIGNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SIRENUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SKLUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:33:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SKRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SKYAIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SKYUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:23:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "MID_CAP",
+      "taxonomy_label_as_of": "mid-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SLPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SLXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SNXUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:27:30+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SOLUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:13:30+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "LARGE_CAP",
+      "taxonomy_label_as_of": "large-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SOLVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SOMIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SONICUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SOONUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SOPHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SPACEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SPELLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SPKUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:33:30+00:00",
+      "observation_count": 344,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SPORTFUNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SPXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SQDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SSVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "STABLEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "STARUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "STBLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "STEEMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "STOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "STRKUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:21:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "STXUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:21:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SUIUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:14:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "MID_CAP",
+      "taxonomy_label_as_of": "mid-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SUNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SUPERUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SUSHIUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:22:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "SWARMSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SXTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SYNUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "SYRUPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TACUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TAGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TAIKOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TAKEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TAOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "THETAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "THEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TLMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TNSRUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TOSHIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TOWNSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TRADOORUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TRBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TREEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TRIAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TRUMPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TRUSTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TRUTHUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TRXUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:28:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "LARGE_CAP",
+      "taxonomy_label_as_of": "large-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "TSTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TURBOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TURTLEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:33:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.57,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "TUTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "TWTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "UAIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "UBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "UMAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "UNIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "USDCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "USELESSUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:21:40+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "USTCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "USUALUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "USUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "VANAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "VELODROMEUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "VELVETUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "VETUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:33:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.57,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "VIRTUALUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "VTHOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "VVVUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WALUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WAXPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WCTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WETUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WIFUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WLDUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WLFIUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:21:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "MID_CAP",
+      "taxonomy_label_as_of": "mid-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "WOOUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "WUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:33:50+00:00",
+      "observation_count": 366,
+      "history_days": 364.57,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "XAIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "XANUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "XAUTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "XLMUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "XMRUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:16:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "LARGE_CAP",
+      "taxonomy_label_as_of": "large-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "XNYUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "XPINUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:28:00+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "taxonomy_label_as_of": "UNKNOWN",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "XPLUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "XRPUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:14:20+00:00",
+      "observation_count": 366,
+      "history_days": 364.55,
+      "strategy_cap_group_as_of": "LARGE_CAP",
+      "taxonomy_label_as_of": "large-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "XTZUSDT",
+      "first_cap_timestamp": "2025-10-04T00:00:00+00:00",
+      "last_cap_timestamp": "2026-10-03T13:28:10+00:00",
+      "observation_count": 366,
+      "history_days": 364.56,
+      "strategy_cap_group_as_of": "SMALL_CAP",
+      "taxonomy_label_as_of": "small-cap",
+      "has_historical_cap": true
+    },
+    {
+      "symbol": "XVGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "XVSUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "YBUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "YFIUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "YGGUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZAMAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZBTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZECUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZENUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZEREBROUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZESTUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZETAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZILUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZKCUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZKPUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZKUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZORAUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZROUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "ZRXUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "\u54c8\u57fa\u7c73USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "\u5e01\u5b89\u4eba\u751fUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "\u6211\u8e0f\u9a6c\u6765\u4e86USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "\u725b\u6765USDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    },
+    {
+      "symbol": "\u9f99\u867eUSDT",
+      "first_cap_timestamp": null,
+      "last_cap_timestamp": null,
+      "observation_count": 0,
+      "strategy_cap_group_as_of": "UNAVAILABLE",
+      "has_historical_cap": false
+    }
+  ],
+  "fetch_stats": {
+    "skipped": true
+  },
+  "status": "CAP_DATA_READY_FOR_FULL_RESEARCH",
+  "blockers": [],
+  "remaining_limitations": [
+    "462/528 USDT-perp symbols still have no historical market-cap observations (continue CoinGecko ingest)",
+    "CoinGecko demo/free market_chart span is ~365d; >=1y/2y/3y/5y buckets remain empty without a paid plan or longer persisted history",
+    "BTC/ETH taxonomy labels never map to LARGE/MID/SMALL strategy groups (unchanged classify_asset_group behavior)"
+  ],
+  "selected_universe": {
+    "LARGE_CAP": [
+      "XRPUSDT",
+      "BNBUSDT",
+      "LINKUSDT"
+    ],
+    "MID_CAP": [
+      "SUIUSDT",
+      "RENDERUSDT",
+      "AAVEUSDT"
+    ],
+    "SMALL_CAP": [
+      "DYDXUSDT",
+      "BLURUSDT",
+      "KAITOUSDT"
+    ]
+  },
+  "controlled_matrix_totals": {
+    "signals_detected": 329,
+    "cap_eligible_signals": 274,
+    "cross_cap_signal_count": 55,
+    "candidates": 274,
+    "closed_trades": 150
+  }
+}

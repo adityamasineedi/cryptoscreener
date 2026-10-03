@@ -69,6 +69,28 @@ def atr(
     return atr_val
 
 
+def atr_series(
+    highs: Sequence[float],
+    lows: Sequence[float],
+    closes: Sequence[float],
+    period: int,
+) -> list[float | None]:
+    """Wilder ATR at each index (``atr(series[:i+1])``), O(n) total."""
+    if period < 1:
+        raise ValueError("period must be >= 1")
+    trs = _true_ranges(highs, lows, closes)
+    n = len(trs)
+    out: list[float | None] = [None] * n
+    if n < period:
+        return out
+    atr_val = mean(trs[:period])
+    out[period - 1] = atr_val
+    for i in range(period, n):
+        atr_val = (atr_val * (period - 1) + trs[i]) / period
+        out[i] = atr_val
+    return out
+
+
 def rsi(closes: Sequence[float], period: int) -> float | None:
     if period < 1:
         raise ValueError("period must be >= 1")

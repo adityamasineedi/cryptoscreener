@@ -159,6 +159,64 @@ async def _load_research_candles(
     return window, eval_start, meta
 
 
+async def _load_htf_candles_for_combo(
+    symbol: str,
+    *,
+    require_htf: bool,
+    setup_timeframe: str,
+    limit: int,
+    start_date: str | None,
+    end_date: str | None,
+    warmup_bars: int,
+) -> tuple[list[dict[str, Any]] | None, list[dict[str, Any]] | None]:
+    """Load 1h/4h series for combo HTF gate. Returns (None, None) when not required."""
+    if not require_htf:
+        return None, None
+    tf = normalize_research_timeframe(setup_timeframe)
+    # Cover the same calendar window as setup; size HTF tails for swing history.
+    lim_1h = max(int(limit), 500) if tf == "1h" else max(int(limit) // 4 + 200, 500)
+    lim_4h = max(int(limit), 200) if tf == "4h" else max(int(limit) // 16 + 100, 200)
+    c1h: list[dict[str, Any]] | None = None
+    c4h: list[dict[str, Any]] | None = None
+    if tf != "1h":
+        c1h, _, _ = await _load_research_candles(
+            symbol,
+            "1h",
+            limit=lim_1h,
+            start_date=start_date,
+            end_date=end_date,
+            warmup_bars=warmup_bars,
+        )
+    if tf != "4h":
+        c4h, _, _ = await _load_research_candles(
+            symbol,
+            "4h",
+            limit=lim_4h,
+            start_date=start_date,
+            end_date=end_date,
+            warmup_bars=max(warmup_bars // 4, 50),
+        )
+    return c1h, c4h
+
+
+def _load_htf_candles_sync(
+    symbol: str,
+    *,
+    require_htf: bool,
+    setup_timeframe: str,
+    limit: int,
+) -> tuple[list[dict[str, Any]] | None, list[dict[str, Any]] | None]:
+    """Memory-store HTF load for sync research helpers."""
+    if not require_htf:
+        return None, None
+    tf = normalize_research_timeframe(setup_timeframe)
+    lim_1h = max(int(limit), 500) if tf == "1h" else max(int(limit) // 4 + 200, 500)
+    lim_4h = max(int(limit), 200) if tf == "4h" else max(int(limit) // 16 + 100, 200)
+    c1h = None if tf == "1h" else _load_candles(symbol, "1h", lim_1h)
+    c4h = None if tf == "4h" else _load_candles(symbol, "4h", lim_4h)
+    return c1h, c4h
+
+
 def _market_cap(symbol: str) -> float | None:
     try:
         fv = engine_store.get_fundamental(symbol.upper(), "market_cap")
@@ -220,6 +278,13 @@ class BosResearchService:
         clear_candle_cache()
         candles = _load_candles(symbol, timeframe, limit)
         rcfg = research_config or ResearchConfig()
+        combo = get_combination(combination_id)
+        c1h, c4h = _load_htf_candles_sync(
+            symbol,
+            require_htf=bool(combo and combo.require_htf_alignment),
+            setup_timeframe=timeframe,
+            limit=limit,
+        )
         run = run_combination_backtest(
             symbol,
             timeframe,
@@ -229,6 +294,8 @@ class BosResearchService:
             research_config=rcfg,
             market_cap=_market_cap(symbol),
             direction_filter=direction,
+            candles_1h=c1h,
+            candles_4h=c4h,
         )
         summary = {
             "run_id": str(uuid.uuid4()),
@@ -307,6 +374,21 @@ class BosResearchService:
             end_date=end_date,
             warmup_bars=warmup,
         )
+        # Load HTF once for any combo that requires the hard gate (e.g. COMBO_02).
+        ids = list(combination_ids) if combination_ids else list(COMBINATIONS.keys())
+        needs_htf = any(
+            (get_combination(cid) and get_combination(cid).require_htf_alignment)
+            for cid in ids
+        )
+        c1h, c4h = await _load_htf_candles_for_combo(
+            symbol,
+            require_htf=needs_htf,
+            setup_timeframe=timeframe,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+            warmup_bars=warmup,
+        )
         sym = load_meta["symbol"]
         tf = load_meta["timeframe"]
         # CPU-heavy sync path — must not block the asyncio event loop (health /
@@ -326,6 +408,8 @@ class BosResearchService:
                 market_cap=mcap,
                 direction_filter=direction,
                 index_start=idx0,
+                candles_1h=c1h,
+                candles_4h=c4h,
             )
 
         cmp = await asyncio.to_thread(_run_cmp)
@@ -414,8 +498,15 @@ class BosResearchService:
         tfs = list(timeframes) if timeframes else ["5m", "15m", "1h", "4h"]
         clear_candle_cache()
         out = {}
+        combo = get_combination(combination_id)
         for tf in tfs:
             candles = _load_candles(symbol, tf, limit)
+            c1h, c4h = _load_htf_candles_sync(
+                symbol,
+                require_htf=bool(combo and combo.require_htf_alignment),
+                setup_timeframe=tf,
+                limit=limit,
+            )
             run = run_combination_backtest(
                 symbol,
                 tf,
@@ -424,6 +515,8 @@ class BosResearchService:
                 signal_config=_signal_config(),
                 market_cap=_market_cap(symbol),
                 direction_filter=direction,
+                candles_1h=c1h,
+                candles_4h=c4h,
             )
             res = run.get("result") or {}
             out[tf] = {
@@ -455,8 +548,15 @@ class BosResearchService:
     ) -> dict[str, Any]:
         clear_candle_cache()
         out = {}
+        combo = get_combination(combination_id)
         for sym in symbols:
             candles = _load_candles(sym, timeframe, limit)
+            c1h, c4h = _load_htf_candles_sync(
+                sym,
+                require_htf=bool(combo and combo.require_htf_alignment),
+                setup_timeframe=timeframe,
+                limit=limit,
+            )
             run = run_combination_backtest(
                 sym,
                 timeframe,
@@ -465,6 +565,8 @@ class BosResearchService:
                 signal_config=_signal_config(),
                 market_cap=_market_cap(sym),
                 direction_filter=direction,
+                candles_1h=c1h,
+                candles_4h=c4h,
             )
             res = run.get("result") or {}
             out[sym.upper()] = {
@@ -535,6 +637,13 @@ class BosResearchService:
     ) -> dict[str, Any]:
         clear_candle_cache()
         candles = _load_candles(symbol, timeframe, limit)
+        combo = get_combination(combination_id)
+        c1h, c4h = _load_htf_candles_sync(
+            symbol,
+            require_htf=bool(combo and combo.require_htf_alignment),
+            setup_timeframe=timeframe,
+            limit=limit,
+        )
         return {
             **run_oos_split_backtest(
                 symbol,
@@ -545,6 +654,8 @@ class BosResearchService:
                 research_config=research_config or ResearchConfig(),
                 market_cap=_market_cap(symbol),
                 direction_filter=direction,
+                candles_1h=c1h,
+                candles_4h=c4h,
             ),
             "combination_id": combination_id,
             "symbol": symbol.upper(),
@@ -574,6 +685,16 @@ class BosResearchService:
             end_date=end_date,
             warmup_bars=warmup,
         )
+        combo = get_combination(combination_id)
+        c1h, c4h = await _load_htf_candles_for_combo(
+            symbol,
+            require_htf=bool(combo and combo.require_htf_alignment),
+            setup_timeframe=timeframe,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+            warmup_bars=warmup,
+        )
         sym = load_meta["symbol"]
         tf = load_meta["timeframe"]
         scfg = _signal_config()
@@ -598,6 +719,8 @@ class BosResearchService:
                 market_cap=mcap,
                 direction_filter=direction,
                 index_start=idx0,
+                candles_1h=c1h,
+                candles_4h=c4h,
             )
             oos_local = run_oos_split_backtest(
                 sym,
@@ -608,6 +731,8 @@ class BosResearchService:
                 research_config=rcfg,
                 market_cap=mcap,
                 direction_filter=direction,
+                candles_1h=c1h,
+                candles_4h=c4h,
             )
             wf_local = run_walk_forward(
                 sym,
@@ -618,6 +743,8 @@ class BosResearchService:
                 research_config=wf_cfg,
                 market_cap=mcap,
                 direction_filter=direction,
+                candles_1h=c1h,
+                candles_4h=c4h,
             )
             return run_local, oos_local, wf_local
 
@@ -708,6 +835,7 @@ class BosResearchService:
         taker_fee: float = DEFAULT_TAKER_FEE,
         maker_fee: float = DEFAULT_MAKER_FEE,
         include_trades: bool = True,
+        should_cancel: Any | None = None,
     ) -> dict[str, Any]:
         """Lean multi-symbol/TF backtest for the UI Backtest tab (no OOS/WF)."""
         clear_candle_cache()
@@ -727,9 +855,25 @@ class BosResearchService:
         rows: list[dict[str, Any]] = []
         for tf in timeframes:
             for sym in symbols:
+                if should_cancel is not None and should_cancel():
+                    return {
+                        "status": "CANCELLED",
+                        "combination_id": combination_id,
+                        "rows": rows,
+                        "elapsed_seconds": round(time.perf_counter() - t0, 3),
+                    }
                 candles, eval_start, load_meta = await _load_research_candles(
                     sym,
                     tf,
+                    limit=limit,
+                    start_date=start_date,
+                    end_date=end_date,
+                    warmup_bars=warmup,
+                )
+                c1h, c4h = await _load_htf_candles_for_combo(
+                    sym,
+                    require_htf=bool(combo.require_htf_alignment),
+                    setup_timeframe=tf,
                     limit=limit,
                     start_date=start_date,
                     end_date=end_date,
@@ -754,9 +898,19 @@ class BosResearchService:
                         market_cap=mcap,
                         direction_filter=direction_u,
                         index_start=idx0,
+                        should_cancel=should_cancel,
+                        candles_1h=c1h,
+                        candles_4h=c4h,
                     )
 
                 out = await asyncio.to_thread(_run_bt)
+                if out.get("status") == "CANCELLED":
+                    return {
+                        "status": "CANCELLED",
+                        "combination_id": combination_id,
+                        "rows": rows,
+                        "elapsed_seconds": round(time.perf_counter() - t0, 3),
+                    }
                 r = out.get("result") or {}
                 n = int(out.get("sample_size") or r.get("sample_size") or 0)
                 trades = enrich_trades(
@@ -830,10 +984,17 @@ class BosResearchService:
             "not_dataset": OTHER_DATASET_ID,
             "combination_id": combination_id,
             "combination_name": combo.name,
-            "playbook": "HL Long Path A (Trend + BOS)"
-            if direction_u == "LONG"
-            else "LH Short (Trend + BOS)",
+            "playbook": (
+                "HL Long Path A (Trend + BOS + HTF 4h/1h)"
+                if direction_u == "LONG" and combo.require_htf_alignment
+                else "HL Long Path A local (Trend + BOS, no HTF)"
+                if direction_u == "LONG"
+                else "LH Short (Trend + BOS + HTF)"
+                if combo.require_htf_alignment
+                else "LH Short (Trend + BOS, no HTF)"
+            ),
             "direction": direction_u,
+            "require_htf_alignment": bool(combo.require_htf_alignment),
             "limit": limit,
             "risk_usd": risk_usd,
             "fee_model": {
@@ -854,7 +1015,8 @@ class BosResearchService:
             "timezone": "UTC",
             "disclaimer": (
                 "Historical research only — not a profitability claim. "
-                f"Path matches docs/LONG_STRATEGY.md Path A when direction=LONG. "
+                f"Path matches docs/LONG_STRATEGY.md Path A when direction=LONG "
+                f"(COMBO_02 requires 4h+1h HTF alignment; COMBO_02_LOCAL is setup-TF only). "
                 f"Dataset={DATASET_LABEL}. Fees modeled; not live exchange fills."
             ),
         }

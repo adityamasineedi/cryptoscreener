@@ -1,10 +1,20 @@
 from __future__ import annotations
+
+import time
+from datetime import datetime, timezone
 from typing import Any
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
 from app.config import Settings
 from app.core.logging import get_logger
+
 logger = get_logger("database")
+
+# Schema DDL must not hang forever behind abandoned idle-in-transaction locks.
+_SCHEMA_LOCK_TIMEOUT = "15s"
+_SCHEMA_STATEMENT_TIMEOUT = "60s"
 # Plain-Postgres DDL (no Timescale hypertable calls) — used when extension missing.
 _SCHEMA_STATEMENTS = [
     """
@@ -581,12 +591,121 @@ class DatabaseManager:
         self.status = "disabled"
         self.timescale = False
         self.schema_ready = False
+        self.startup_stages: list[dict[str, Any]] = []
+        self.last_schema_error: str | None = None
+
+    def _stage_begin(self, name: str) -> float:
+        logger.info("startup_stage", startup_stage=name, status="STARTED")
+        return time.perf_counter()
+
+    def _stage_end(
+        self,
+        name: str,
+        started: float,
+        *,
+        status: str = "OK",
+        error: str | None = None,
+        **extra: Any,
+    ) -> None:
+        row = {
+            "startup_stage": name,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": round((time.perf_counter() - started) * 1000.0, 1),
+            "status": status,
+            "error": error,
+            **extra,
+        }
+        self.startup_stages.append(row)
+        logger.info("startup_stage", **row)
+
+    async def _log_blocking_activity(self) -> list[dict[str, Any]]:
+        """Best-effort lock forensics when DDL times out (read-only)."""
+        if self.engine is None:
+            return []
+        try:
+            async with self.engine.connect() as conn:
+                result = await conn.execute(
+                    text(
+                        """
+                        SELECT blocked.pid AS blocked_pid,
+                               blocking.pid AS blocking_pid,
+                               blocked.wait_event_type,
+                               blocked.wait_event,
+                               EXTRACT(EPOCH FROM (now() - blocked.query_start))
+                                   AS blocked_duration_s,
+                               left(blocked.query, 180) AS blocked_query,
+                               left(blocking.query, 180) AS blocking_query,
+                               blocking.state AS blocking_state
+                        FROM pg_stat_activity blocked
+                        JOIN pg_locks bl ON bl.pid = blocked.pid AND NOT bl.granted
+                        JOIN pg_locks kl ON kl.locktype = bl.locktype
+                          AND kl.DATABASE IS NOT DISTINCT FROM bl.DATABASE
+                          AND kl.relation IS NOT DISTINCT FROM bl.relation
+                          AND kl.page IS NOT DISTINCT FROM bl.page
+                          AND kl.tuple IS NOT DISTINCT FROM bl.tuple
+                          AND kl.virtualxid IS NOT DISTINCT FROM bl.virtualxid
+                          AND kl.transactionid IS NOT DISTINCT FROM bl.transactionid
+                          AND kl.classid IS NOT DISTINCT FROM bl.classid
+                          AND kl.objid IS NOT DISTINCT FROM bl.objid
+                          AND kl.objsubid IS NOT DISTINCT FROM bl.objsubid
+                          AND kl.pid <> bl.pid
+                          AND kl.granted
+                        JOIN pg_stat_activity blocking ON blocking.pid = kl.pid
+                        WHERE blocked.datname = current_database()
+                        LIMIT 20
+                        """
+                    )
+                )
+                rows = [dict(r) for r in result.mappings().all()]
+                if rows:
+                    logger.warning(
+                        "schema_ddl_blocked",
+                        blockers=len(rows),
+                        sample=rows[:5],
+                    )
+                return rows
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("schema_blocker_probe_failed", error=str(exc))
+            return []
+
+    async def _exec_ddl(self, stmt: str, *, stage: str) -> None:
+        """Run one DDL statement in its own transaction with lock timeouts.
+
+        One giant schema transaction previously held locks across all statements
+        and hung indefinitely on CREATE INDEX behind idle-in-transaction writers.
+        """
+        assert self.engine is not None
+        preview = " ".join(stmt.split())[:120]
+        t0 = self._stage_begin(stage)
+        try:
+            async with self.engine.begin() as conn:
+                await conn.execute(text(f"SET LOCAL lock_timeout = '{_SCHEMA_LOCK_TIMEOUT}'"))
+                await conn.execute(
+                    text(f"SET LOCAL statement_timeout = '{_SCHEMA_STATEMENT_TIMEOUT}'")
+                )
+                await conn.execute(text(stmt))
+            self._stage_end(stage, t0, status="OK", preview=preview)
+        except Exception as exc:  # noqa: BLE001
+            blockers = await self._log_blocking_activity()
+            self._stage_end(
+                stage,
+                t0,
+                status="ERROR",
+                error=f"{type(exc).__name__}: {exc}",
+                preview=preview,
+                blockers=len(blockers),
+            )
+            raise
+
     async def connect(self, settings: Settings) -> None:
         if not settings.database_enabled:
             self.status = "disabled"
             self.enabled = False
             logger.info("database_disabled")
             return
+        self.startup_stages = []
+        self.last_schema_error = None
+        t0 = self._stage_begin("DB_CONNECT")
         try:
             self.engine = create_async_engine(
                 settings.database_url,
@@ -600,19 +719,28 @@ class DatabaseManager:
                 self.engine, expire_on_commit=False
             )
             self.enabled = True
-            self.status = "ok"
+            self._stage_end("DB_CONNECT", t0, status="OK")
             await self.ensure_schema()
+            self.status = "ok" if self.schema_ready else f"schema_incomplete:{self.last_schema_error or 'unknown'}"
             logger.info(
                 "database_connected",
                 timescale=self.timescale,
                 schema_ready=self.schema_ready,
+                status=self.status,
             )
         except Exception as exc:  # noqa: BLE001
+            self._stage_end(
+                "DB_CONNECT",
+                t0,
+                status="ERROR",
+                error=f"{type(exc).__name__}: {exc}",
+            )
             self.engine = None
             self.session_factory = None
             self.enabled = False
             self.status = f"unavailable:{exc.__class__.__name__}"
             logger.warning("database_unavailable", error=str(exc))
+
     async def ensure_schema(self) -> None:
         """Create tables when DATABASE_ENABLED. Timescale hypertables optional."""
         if not self.enabled or self.engine is None:
@@ -621,22 +749,68 @@ class DatabaseManager:
             # Probe Timescale in its own transaction — a failed CREATE EXTENSION
             # must not abort table DDL (Postgres aborts the whole txn on error).
             self.timescale = False
+            t_ts = self._stage_begin("TIMESCALE_CHECK")
             try:
                 async with self.engine.begin() as conn:
+                    await conn.execute(
+                        text(f"SET LOCAL lock_timeout = '{_SCHEMA_LOCK_TIMEOUT}'")
+                    )
+                    await conn.execute(
+                        text(
+                            f"SET LOCAL statement_timeout = '{_SCHEMA_STATEMENT_TIMEOUT}'"
+                        )
+                    )
                     await conn.execute(
                         text("CREATE EXTENSION IF NOT EXISTS timescaledb")
                     )
                 self.timescale = True
-            except Exception:  # noqa: BLE001
+                self._stage_end("TIMESCALE_CHECK", t_ts, status="OK", timescale=True)
+            except Exception as exc:  # noqa: BLE001
                 self.timescale = False
+                self._stage_end(
+                    "TIMESCALE_CHECK",
+                    t_ts,
+                    status="FALLBACK",
+                    timescale=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
                 logger.info("timescaledb_extension_unavailable_using_plain_postgres")
 
-            async with self.engine.begin() as conn:
-                for stmt in _SCHEMA_STATEMENTS:
-                    await conn.execute(text(stmt))
+            # Per-statement transactions + lock timeouts (see _exec_ddl).
+            t_schema = self._stage_begin("SCHEMA_INIT")
+            failed: list[str] = []
+            for i, stmt in enumerate(_SCHEMA_STATEMENTS):
+                kind = "INDEX_CREATION" if "CREATE INDEX" in stmt.upper() else (
+                    "TABLE_CREATION" if "CREATE TABLE" in stmt.upper() else "SCHEMA_DDL"
+                )
+                if "diagnostic_" in stmt:
+                    stage = f"DIAGNOSTIC_SCHEMA_{i}"
+                elif "research_" in stmt:
+                    stage = f"RESEARCH_SCHEMA_{i}"
+                else:
+                    stage = f"{kind}_{i}"
+                try:
+                    await self._exec_ddl(stmt, stage=stage)
+                except Exception as exc:  # noqa: BLE001
+                    # CREATE INDEX IF NOT EXISTS can block forever behind idle
+                    # writers; after lock_timeout, continue other DDL and surface error.
+                    msg = f"{stage}:{type(exc).__name__}:{exc}"
+                    failed.append(msg)
+                    logger.warning("schema_statement_failed", stage=stage, error=str(exc))
+
+            self._stage_end(
+                "SCHEMA_INIT",
+                t_schema,
+                status="OK" if not failed else "PARTIAL",
+                failed_count=len(failed),
+            )
 
             if self.timescale:
+                t_ht = self._stage_begin("HYPERTABLE_SETUP")
                 async with self.engine.begin() as conn:
+                    await conn.execute(
+                        text(f"SET LOCAL lock_timeout = '{_SCHEMA_LOCK_TIMEOUT}'")
+                    )
                     for table in _HYPERTABLES:
                         try:
                             await conn.execute(
@@ -674,14 +848,28 @@ class DatabaseManager:
                             )
                         except Exception:  # noqa: BLE001
                             pass
-            self.schema_ready = True
-            logger.info(
-                "schema_ready",
-                timescale=self.timescale,
-                tables=len(_SCHEMA_STATEMENTS),
-            )
+                self._stage_end("HYPERTABLE_SETUP", t_ht, status="OK")
+
+            if failed:
+                self.schema_ready = False
+                self.last_schema_error = "; ".join(failed[:5])
+                logger.warning(
+                    "schema_ensure_partial",
+                    failed=len(failed),
+                    error=self.last_schema_error,
+                )
+            else:
+                self.schema_ready = True
+                self.last_schema_error = None
+                logger.info(
+                    "schema_ready",
+                    timescale=self.timescale,
+                    tables=len(_SCHEMA_STATEMENTS),
+                )
         except Exception as exc:  # noqa: BLE001
             self.schema_ready = False
+            self.last_schema_error = f"{type(exc).__name__}: {exc}"
+            await self._log_blocking_activity()
             logger.warning("schema_ensure_failed", error=str(exc))
 
     async def retention_policies(self) -> dict[str, Any]:
@@ -727,27 +915,22 @@ class DatabaseManager:
             await self.engine.dispose()
             self.engine = None
     async def health(self) -> dict[str, Any]:
+        base = {
+            "status": self.status,
+            "enabled": self.enabled,
+            "timescale": self.timescale,
+            "schema_ready": self.schema_ready,
+            "last_schema_error": self.last_schema_error,
+            "startup_stages": list(self.startup_stages[-40:]),
+        }
         if not self.enabled or self.engine is None:
-            return {
-                "status": self.status,
-                "enabled": False,
-                "timescale": self.timescale,
-                "schema_ready": self.schema_ready,
-            }
+            return base
         try:
             async with self.engine.begin() as conn:
                 await conn.execute(text("SELECT 1"))
-            return {
-                "status": "ok",
-                "enabled": True,
-                "timescale": self.timescale,
-                "schema_ready": self.schema_ready,
-            }
+            base["status"] = self.status if self.status.startswith("schema_") else "ok"
+            return base
         except Exception as exc:  # noqa: BLE001
-            return {
-                "status": f"error:{exc}",
-                "enabled": True,
-                "timescale": self.timescale,
-                "schema_ready": self.schema_ready,
-            }
+            base["status"] = f"error:{exc}"
+            return base
 db_manager = DatabaseManager()

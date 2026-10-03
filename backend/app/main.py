@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -39,19 +40,40 @@ async def lifespan(app: FastAPI):
             "USE_REAL_DATA is false — refusing mock market data mode in this build"
         )
 
+    t_app = time.perf_counter()
     await redis_manager.connect(settings)
     if redis_manager.client is not None:
         await market_store.connect_redis(redis_manager.client)
 
     await db_manager.connect(settings)
+    if not db_manager.schema_ready and settings.database_enabled:
+        logger.error(
+            "startup_schema_not_ready",
+            status=db_manager.status,
+            last_schema_error=db_manager.last_schema_error,
+            stages=db_manager.startup_stages[-10:],
+        )
+
+    # WS event-loop lag monitor (diagnostic only — does not alter reconnect policy)
+    from app.ingestion.ws_forensics import ws_forensics
+
+    await ws_forensics.event_loop.start()
 
     ingestion = MarketDataIngestionService(settings, market_store)
     ingestion_mod.ingestion_service = ingestion
     await ingestion.start()
+    logger.info(
+        "startup_stage",
+        startup_stage="APPLICATION_STARTUP",
+        status="OK",
+        duration_ms=round((time.perf_counter() - t_app) * 1000.0, 1),
+        schema_ready=db_manager.schema_ready,
+    )
 
     yield
 
     await ingestion.stop()
+    await ws_forensics.event_loop.stop()
     await db_manager.close()
     await redis_manager.close()
     logger.info("shutdown_complete")

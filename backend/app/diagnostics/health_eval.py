@@ -474,6 +474,24 @@ async def _evaluate_binance_ws(
     sub_errors = 0
     details: list[dict[str, Any]] = []
 
+    def _msg_age(row: dict[str, Any]) -> float | None:
+        age = row.get("seconds_since_last_message")
+        if age is not None:
+            try:
+                return float(age)
+            except (TypeError, ValueError):
+                pass
+        raw = row.get("last_message_at")
+        if not raw:
+            return None
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return max(0.0, (datetime.now(timezone.utc) - dt).total_seconds())
+        except Exception:  # noqa: BLE001
+            return None
+
     if ingestion is not None:
         for c in ingestion.ws.status():
             connections += 1
@@ -481,13 +499,9 @@ async def _evaluate_binance_ws(
                 active += 1
             messages += int(c.get("message_count") or 0)
             details.append(c)
-            age = c.get("seconds_since_last_message")
+            age = _msg_age(c)
             if age is not None:
-                last_msg_age = (
-                    float(age)
-                    if last_msg_age is None
-                    else min(last_msg_age, float(age))
-                )
+                last_msg_age = age if last_msg_age is None else min(last_msg_age, age)
 
     if orch is not None:
         try:
@@ -498,12 +512,10 @@ async def _evaluate_binance_ws(
             for c in kstat.get("connections") or []:
                 messages += int(c.get("message_count") or 0)
                 parse_errors += int(c.get("parse_errors") or 0)
-                age = c.get("seconds_since_last_message")
+                age = _msg_age(c)
                 if age is not None:
                     last_msg_age = (
-                        float(age)
-                        if last_msg_age is None
-                        else min(last_msg_age, float(age))
+                        age if last_msg_age is None else min(last_msg_age, age)
                     )
         except Exception:  # noqa: BLE001
             pass

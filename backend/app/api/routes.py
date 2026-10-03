@@ -409,12 +409,17 @@ async def screener_futures(
                     pass
                 setup_svc.ensure_computed(row.symbol, force=tip_stale)
                 try:
-                    from app.services.paper_trade import get_paper_trade_engine
+                    from app.services.paper_trade import (
+                        flush_paper_trade_persists,
+                        get_paper_trade_engine,
+                    )
                     from app.services.engine_store import engine_store as es2
 
-                    get_paper_trade_engine().on_setup_signal(
+                    eng = get_paper_trade_engine()
+                    eng.on_setup_signal(
                         row.symbol, es2.get_setup_signal(row.symbol)
                     )
+                    await flush_paper_trade_persists(eng)
                 except Exception:  # noqa: BLE001
                     pass
                 info = market_store.symbols.get(row.symbol)
@@ -956,6 +961,71 @@ async def research_long_strategy_backtest_cancel() -> dict[str, Any]:
     }
 
 
+@router.get("/research/trade-plan-forensics")
+async def research_trade_plan_forensics(
+    source: str = Query(
+        default="auto",
+        description="auto|paper|backtest_job|json — research ingest only",
+    ),
+    strategy: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    timeframe: str | None = Query(default=None),
+    start: str | None = Query(default=None, description="UTC YYYY-MM-DD"),
+    end: str | None = Query(default=None, description="UTC YYYY-MM-DD"),
+    max_trades: int = Query(default=150, ge=1, le=500),
+    write_files: bool = Query(default=True),
+) -> dict[str, Any]:
+    """Research-only Trade Plan / entry-timing forensics.
+
+    Does NOT modify live signals, Trade Plan, thresholds, SL/TP, or execution.
+    """
+    from app.research.trade_plan_forensics import run_trade_plan_forensics
+
+    payload = await run_trade_plan_forensics(
+        source=source,
+        strategy=strategy,
+        symbol=symbol,
+        timeframe=timeframe,
+        start=start,
+        end=end,
+        max_trades=max_trades,
+        write_files=write_files,
+    )
+    # Keep HTTP payload lean: drop full per-trade bodies unless small
+    trades = payload.get("trades") or []
+    if len(trades) > 40:
+        lean = dict(payload)
+        lean["trades"] = [
+            {
+                "trade_id": t.get("trade_id"),
+                "outcome_class": t.get("outcome_class"),
+                "htf_state": t.get("htf_state"),
+                "entry_timing": (t.get("entry_timing") or {}).get("class"),
+                "regime": (t.get("regime") or {}).get("primary"),
+                "symbol": (t.get("trade") or {}).get("symbol"),
+                "timeframe": (t.get("trade") or {}).get("timeframe"),
+                "direction": (t.get("trade") or {}).get("direction"),
+                "R": (t.get("trade") or {}).get("R"),
+            }
+            for t in trades
+        ]
+        lean["trades_truncated_in_response"] = True
+        lean["detail_hint"] = "GET /api/research/trade-plan-forensics/{trade_id}"
+        return {**lean, "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/trade-plan-forensics/{trade_id}")
+async def research_trade_plan_forensics_detail(trade_id: str) -> dict[str, Any]:
+    """Per-trade forensic detail from the last forensics run."""
+    from app.research.trade_plan_forensics import get_trade_forensic_detail
+
+    return {
+        **get_trade_forensic_detail(trade_id),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/research/long-strategy/backtest")
 async def research_long_strategy_backtest(
     symbols: str = Query(
@@ -1267,6 +1337,72 @@ async def research_bos_strategies_catalog() -> dict[str, Any]:
     }
 
 
+@router.get("/research/multi-cap-strategies")
+async def research_multi_cap_strategies() -> dict[str, Any]:
+    """Formal multi-cap research strategy definitions (catalog).
+
+    Research only — live engine unchanged. Does not modify S1/S2/S3/C1-C4.
+    """
+    from app.research.multi_cap_strategies.service import (
+        get_multi_cap_strategies_service,
+    )
+
+    return {
+        **get_multi_cap_strategies_service().list_strategies(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/research/multi-cap-strategies/run")
+async def research_multi_cap_strategies_run(
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any]:
+    """Run multi-cap research strategies via existing evaluator infrastructure.
+
+    SIGNAL LOGIC = strategy candidate generation.
+    TRADE EVALUATION LOGIC = combination_backtest + fees/slippage/period splits.
+    """
+    from app.research.multi_cap_strategies.service import (
+        get_multi_cap_strategies_service,
+    )
+
+    strategy_ids = body.get("strategy_ids") or body.get("strategy_id")
+    if isinstance(strategy_ids, str):
+        strategy_ids = [strategy_ids]
+    symbols = body.get("symbols")
+    if isinstance(symbols, str):
+        symbols = [s.strip() for s in symbols.split(",") if s.strip()]
+    timeframes = body.get("timeframes") or body.get("timeframe")
+    if isinstance(timeframes, str):
+        timeframes = [timeframes]
+
+    payload = await get_multi_cap_strategies_service().run(
+        strategy_ids=strategy_ids,
+        symbols=symbols,
+        timeframes=timeframes,
+        start=body.get("start") or body.get("start_date"),
+        end=body.get("end") or body.get("end_date"),
+        limit=body.get("limit"),
+        max_symbols=body.get("max_symbols"),
+        taker_fee=body.get("taker_fee") or body.get("fees"),
+        maker_fee=body.get("maker_fee"),
+        slippage_rate=body.get("slippage") or body.get("slippage_rate"),
+        persist=bool(body.get("persist", True)),
+        market_caps=body.get("market_caps"),
+    )
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/multi-cap-strategies/{run_id}")
+async def research_multi_cap_strategies_run_get(run_id: str) -> dict[str, Any]:
+    from app.research.multi_cap_strategies.service import (
+        get_multi_cap_strategies_service,
+    )
+
+    payload = await get_multi_cap_strategies_service().get_run(run_id)
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
 @router.get("/research/bos-strategies/coverage")
 async def research_bos_strategies_coverage() -> dict[str, Any]:
     from app.research.bos_strategy_comparison.service import (
@@ -1464,7 +1600,11 @@ async def signal_for_symbol(
     )
     # Auto paper: open as soon as this request produces an entry candidate
     try:
-        get_paper_trade_engine().on_setup_signal(symbol, payload)
+        from app.services.paper_trade import flush_paper_trade_persists
+
+        eng = get_paper_trade_engine()
+        eng.on_setup_signal(symbol, payload)
+        await flush_paper_trade_persists(eng)
     except Exception:  # noqa: BLE001
         pass
     return {

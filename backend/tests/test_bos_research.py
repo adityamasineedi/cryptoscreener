@@ -59,10 +59,11 @@ def make_research_series(n: int = 120) -> list[dict]:
 
 
 class TestCombinationsDefined:
-    def test_all_eight_present(self):
+    def test_all_combos_present(self):
         expected = {
             "COMBO_01": "BOS_ONLY",
             "COMBO_02": "TREND_BOS",
+            "COMBO_02_LOCAL": "TREND_BOS_SETUP_TF_ONLY",
             "COMBO_03": "TREND_BOS_PULLBACK",
             "COMBO_04": "TREND_BOS_IMPULSE_PULLBACK",
             "COMBO_05": "TREND_BOS_IMPULSE_PULLBACK_RVOL",
@@ -74,11 +75,14 @@ class TestCombinationsDefined:
         for cid, name in expected.items():
             assert COMBINATIONS[cid].name == name
             assert COMBINATIONS[cid].conditions
+        assert COMBINATIONS["COMBO_02"].require_htf_alignment is True
+        assert COMBINATIONS["COMBO_02_LOCAL"].require_htf_alignment is False
 
     def test_list_and_get(self):
-        assert len(list_combinations()) == 8
+        assert len(list_combinations()) == 9
         assert get_combination("COMBO_05") is not None
         assert get_combination("TREND_BOS") is not None
+        assert get_combination("COMBO_02_LOCAL") is not None
         assert get_combination("NOPE") is None
 
 

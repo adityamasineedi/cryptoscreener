@@ -173,6 +173,14 @@ async def diagnostics_websocket() -> dict[str, Any]:
     return await diagnostic_service.websocket(get_settings())
 
 
+@router.get("/websocket/{connection_id}")
+async def diagnostics_websocket_connection(connection_id: str) -> dict[str, Any]:
+    row = await diagnostic_service.websocket_connection(connection_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="websocket_connection_not_found")
+    return row
+
+
 @router.get("/rest")
 async def diagnostics_rest() -> dict[str, Any]:
     return await diagnostic_service.rest(get_settings())

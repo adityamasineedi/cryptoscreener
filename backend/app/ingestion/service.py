@@ -120,44 +120,57 @@ class MarketDataIngestionService:
             url=market_ws_url(base, "!ticker@arr"),
             handler=self._on_ticker_message,
             force_reconnect_hours=force_h,
+            stream_type="ticker",
+            expected_streams=1,
         )
         await self.ws.ensure(
             name="futures_mark_price_arr",
             url=market_ws_url(base, "!markPrice@arr@1s"),
             handler=self._on_mark_message,
             force_reconnect_hours=force_h,
+            stream_type="mark_price",
+            expected_streams=1,
         )
         logger.info("all_market_streams_subscribed")
 
     async def _on_ticker_message(self, data: Any) -> None:
-        self._ws_message_count += 1
-        self._feed_mode = "websocket"
-        allowed = self._known_symbols
-        ticks = normalize_futures_ticker_array(data)
-        filtered = []
-        for tick in ticks:
-            if tick.symbol not in allowed:
-                continue
-            tick.market_type = allowed[tick.symbol].market_type
-            filtered.append(tick)
-        if filtered:
-            await self.store.update_tickers_batch(filtered)
-            # Keep forming candles glued to live last price even when kline WS is silent
-            for tick in filtered:
-                if tick.price:
-                    try:
-                        await ohlcv_store.apply_live_price(tick.symbol, float(tick.price))
-                    except Exception:  # noqa: BLE001
-                        pass
+        from app.ingestion.handler_latency import handler_latency
+
+        with handler_latency.time("ticker_message"):
+            self._ws_message_count += 1
+            self._feed_mode = "websocket"
+            allowed = self._known_symbols
+            ticks = normalize_futures_ticker_array(data)
+            filtered = []
+            for tick in ticks:
+                if tick.symbol not in allowed:
+                    continue
+                tick.market_type = allowed[tick.symbol].market_type
+                filtered.append(tick)
+            if filtered:
+                await self.store.update_tickers_batch(filtered)
+                # Keep forming candles glued to live last price even when kline WS is silent
+                with handler_latency.time("ticker_apply_live_price"):
+                    for tick in filtered:
+                        if tick.price:
+                            try:
+                                await ohlcv_store.apply_live_price(
+                                    tick.symbol, float(tick.price)
+                                )
+                            except Exception:  # noqa: BLE001
+                                pass
 
     async def _on_mark_message(self, data: Any) -> None:
-        self._ws_message_count += 1
-        self._feed_mode = "websocket"
-        allowed = self._known_symbols
-        marks = normalize_mark_price_array(data)
-        filtered = [m for m in marks if m.symbol in allowed]
-        if filtered:
-            await self.store.update_mark_prices_batch(filtered)
+        from app.ingestion.handler_latency import handler_latency
+
+        with handler_latency.time("mark_message"):
+            self._ws_message_count += 1
+            self._feed_mode = "websocket"
+            allowed = self._known_symbols
+            marks = normalize_mark_price_array(data)
+            filtered = [m for m in marks if m.symbol in allowed]
+            if filtered:
+                await self.store.update_mark_prices_batch(filtered)
 
     async def _poll_rest_snapshots(self) -> None:
         """Batched REST backfill / fallback — never one-request-per-coin."""

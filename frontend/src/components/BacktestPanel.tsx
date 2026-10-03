@@ -754,7 +754,7 @@ export function BacktestPanel() {
               <div className="mt-1.5 font-mono text-[11px] text-terminal-muted">
                 Running {progressView.current}
                 {progressView.done === 0
-                  ? " — first cell can take 1–3 min (structure scan); safe to leave this tab"
+                  ? " — first cell scans structure bar-by-bar (15m date windows are heaviest); safe to leave this tab"
                   : " — safe to leave this tab"}
               </div>
             </div>

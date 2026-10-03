@@ -1,0 +1,74 @@
+{
+  "status": "PASS",
+  "run_id": "20261003T134241Z",
+  "dataset_label": "AVAILABLE_HISTORICAL_CAP_WINDOW",
+  "checks": {
+    "funnel_vs_manifest_closed": {
+      "actual": 9651,
+      "expected": 9651
+    },
+    "cells_vs_manifest_closed": {
+      "actual": 9651,
+      "expected": 9651
+    },
+    "summary_vs_manifest_closed": {
+      "actual": 9651,
+      "expected": 9651
+    },
+    "symbol_vs_manifest_closed": {
+      "actual": 9651,
+      "expected": 9651
+    },
+    "period_vs_manifest_closed": {
+      "actual": 9651,
+      "expected": 9651
+    },
+    "timeframe_vs_manifest_closed": {
+      "actual": 9651,
+      "expected": 9651
+    },
+    "direction_vs_manifest_closed": {
+      "actual": 9651,
+      "expected": 9651
+    },
+    "funnel_vs_manifest_entries": {
+      "actual": 17002,
+      "expected": 17002
+    },
+    "funnel_vs_manifest_signals": {
+      "actual": 56178,
+      "expected": 56178
+    },
+    "funnel_vs_manifest_cap_eligible": {
+      "actual": 17002,
+      "expected": 17002
+    },
+    "funnel_vs_manifest_candidates": {
+      "actual": 23906,
+      "expected": 23906
+    },
+    "funnel_vs_manifest_bars": {
+      "actual": 1413583,
+      "expected": 1413583
+    },
+    "funnel_vs_manifest_open": {
+      "actual": 26,
+      "expected": 26
+    },
+    "cells_count": {
+      "actual": 156,
+      "expected": 156
+    },
+    "funnel_count": {
+      "actual": 156,
+      "expected": 156
+    }
+  },
+  "discrepancies": [],
+  "period_from_cells": {
+    "TRAIN": 6025,
+    "VALIDATION": 1943,
+    "OOS": 1683
+  },
+  "entries_minus_evaluated": 7325
+}

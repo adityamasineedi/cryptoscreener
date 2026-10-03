@@ -9,8 +9,14 @@ from __future__ import annotations
 import time
 from typing import Any, Mapping, Sequence
 
+from app.config import get_settings
+from app.engines.mtf.indicators import atr_series
+from app.engines.supply_demand.engine import SupplyDemandEngine
 from app.research.bos_combinations import CombinationDefinition, get_combination
-from app.research.combination_engine import evaluate_combination_at_bar
+from app.research.combination_engine import (
+    _clone_signal_config,
+    evaluate_combination_at_bar,
+)
 from app.research.config import (
     AMBIGUOUS_CONSERVATIVE,
     AMBIGUOUS_EXCLUDE,
@@ -25,8 +31,40 @@ from app.research.config import (
 from app.research.data_quality import verify_ohlcv
 from app.research.metrics import compute_metrics
 from app.research.schemas import ResearchTrade
-from app.signals._candle_utils import candle_time
+from app.signals._candle_utils import candle_time, ohlc, series_ohlcv
 from app.signals.config import SignalConfig
+from app.signals.schemas import TrendState
+from app.signals.signal_engine import SignalEngine
+from app.signals.swing_detector import detect_swings, extend_swings
+from app.signals.trend_engine import infer_trend
+
+
+def _bos_break_possible(
+    candles: Sequence[Mapping[str, Any]],
+    as_of_index: int,
+    swings: Sequence[Any],
+    *,
+    direction_filter: str | None,
+) -> bool:
+    """Cheap pre-filter matching detect_bos break conditions (no full analyze)."""
+    if not swings:
+        return False
+    end = min(as_of_index, len(candles) - 1)
+    if end < 1:
+        return False
+    trend = infer_trend(list(swings))
+    trend_state = str(trend.get("trend") or "")
+    close = ohlc(candles, end)[3]
+    highs_sw = [s for s in swings if s.swing_type == "HIGH" and s.bar_index < end]
+    lows_sw = [s for s in swings if s.swing_type == "LOW" and s.bar_index < end]
+    if not highs_sw or not lows_sw:
+        return False
+    df = (direction_filter or "").upper()
+    if trend_state == TrendState.BULLISH.value and close > highs_sw[-1].price:
+        return df != "SHORT"
+    if trend_state == TrendState.BEARISH.value and close < lows_sw[-1].price:
+        return df != "LONG"
+    return False
 
 
 def _bar_hits_levels(
@@ -182,6 +220,50 @@ def _simulate_trade(
     return trade
 
 
+def simulate_research_trade(
+    trade: ResearchTrade,
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    handling: str = AMBIGUOUS_CONSERVATIVE,
+) -> ResearchTrade:
+    """Public wrapper for the existing combination_backtest trade simulator.
+
+    Research-only. Inspects candles AFTER entry_index for SL/TP/MAE/MFE.
+    Does not alter production signal or stop engines.
+    """
+    return _simulate_trade(trade, candles, handling=handling)
+
+
+def evaluate_candidate_trades(
+    candles: Sequence[Mapping[str, Any]],
+    candidates: Sequence[ResearchTrade],
+    *,
+    handling: str = AMBIGUOUS_CONSERVATIVE,
+    one_open_at_a_time: bool = True,
+) -> list[ResearchTrade]:
+    """Evaluate pre-built research entry candidates with existing trade mechanics.
+
+    SIGNAL LOGIC lives in the caller (strategy adapter). This function is
+    TRADE EVALUATION LOGIC only: same-bar SL handling, exits, MAE/MFE, R.
+    Candidates must already have entry_index / entry_price / stop / targets.
+    """
+    ordered = sorted(candidates, key=lambda t: (t.entry_index, t.symbol, t.combination_id))
+    out: list[ResearchTrade] = []
+    next_allowed = 0
+    for cand in ordered:
+        if one_open_at_a_time and cand.entry_index < next_allowed:
+            continue
+        closed = _simulate_trade(cand, candles, handling=handling)
+        out.append(closed)
+        if one_open_at_a_time:
+            if closed.exit_index is not None:
+                next_allowed = int(closed.exit_index) + 1
+            else:
+                # Still open — block further entries for this series
+                next_allowed = len(candles)
+    return out
+
+
 def run_combination_backtest(
     symbol: str,
     timeframe: str,
@@ -195,10 +277,18 @@ def run_combination_backtest(
     index_start: int | None = None,
     index_end: int | None = None,
     direction_filter: str | None = None,
+    should_cancel: Any | None = None,
+    candles_1h: Sequence[Mapping[str, Any]] | None = None,
+    candles_4h: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run one combination on one symbol/timeframe series.
 
     Read-only: does not write to live signal store/cache.
+    ``should_cancel`` is an optional zero-arg callable; when it returns True the
+    walk aborts early (used by background UI jobs).
+
+    When the combination requires HTF alignment, pass ``candles_1h`` /
+    ``candles_4h`` (closed bars only). Missing HTF series fail closed (no entries).
     """
     t0 = time.perf_counter()
     combo = (
@@ -211,6 +301,15 @@ def run_combination_backtest(
 
     rcfg = research_config or ResearchConfig()
     scfg = signal_config or SignalConfig()
+    htf_1h = list(candles_1h) if candles_1h is not None else None
+    htf_4h = list(candles_4h) if candles_4h is not None else None
+    # Setup TF may itself be 1h/4h — reuse when HTF series not supplied.
+    tf_l = (timeframe or "").lower()
+    if combo.require_htf_alignment:
+        if htf_1h is None and tf_l == "1h":
+            htf_1h = list(candles)
+        if htf_4h is None and tf_l == "4h":
+            htf_4h = list(candles)
     quality = verify_ohlcv(candles, timeframe, config=rcfg)
     if quality["status"] == "INSUFFICIENT_DATA":
         return {
@@ -252,8 +351,66 @@ def run_combination_backtest(
     min_bars = rcfg.min_bars
     loop_start = max(min_bars, start)
 
+    # Hot-path caches: reuse engines + incremental swings (O(n) not O(n²)).
+    local_cfg = _clone_signal_config(
+        scfg,
+        rcfg,
+        require_htf_alignment=bool(combo.require_htf_alignment),
+    )
+    signal_engine = SignalEngine(local_cfg)
+    sd_engine = SupplyDemandEngine(get_settings().indicators_config)
+    swing_cfg = local_cfg.swing_for(timeframe)
+    _, highs_arr, lows_arr, closes_arr, vols_arr = series_ohlcv(series)
+    atr_arr = atr_series(highs_arr, lows_arr, closes_arr, local_cfg.atr_period)
+    swings = detect_swings(
+        series,
+        left=swing_cfg.swing_left_bars,
+        right=swing_cfg.swing_right_bars,
+        symbol=symbol,
+        timeframe=timeframe,
+        atr_period=local_cfg.atr_period,
+        minimum_swing_distance_atr=swing_cfg.minimum_swing_distance_atr,
+        as_of_index=max(loop_start - 1, 0),
+        highs=highs_arr,
+        lows=lows_arr,
+        closes=closes_arr,
+    ) if loop_start > 0 else []
+    prev_break = False
+    prev_swing_n = len(swings)
+    htf_trend_cache: dict[tuple[str, int], str] = {}
+
     for i in range(loop_start, end):
+        if should_cancel is not None and i % 64 == 0 and should_cancel():
+            return {
+                "status": "CANCELLED",
+                "combination_id": combo.combination_id,
+                "symbol": symbol.upper(),
+                "timeframe": timeframe,
+                "sample_size": 0,
+                "result": {},
+                "trades": [],
+                "elapsed_seconds": time.perf_counter() - t0,
+                "candles_processed": candles_processed,
+                "setups_processed": setups,
+                "disclaimer": "CANCELLED — walk aborted",
+            }
         candles_processed += 1
+        swings = extend_swings(
+            swings,
+            series,
+            left=swing_cfg.swing_left_bars,
+            right=swing_cfg.swing_right_bars,
+            symbol=symbol,
+            timeframe=timeframe,
+            atr_period=local_cfg.atr_period,
+            minimum_swing_distance_atr=swing_cfg.minimum_swing_distance_atr,
+            as_of_index=i,
+            highs=highs_arr,
+            lows=lows_arr,
+            closes=closes_arr,
+        )
+        swing_grew = len(swings) != prev_swing_n
+        prev_swing_n = len(swings)
         if open_trade is not None:
             # Manage with current bar (after entry)
             _simulate_partial = True
@@ -317,7 +474,22 @@ def run_combination_backtest(
                 ):
                     trades.append(open_trade)
                 open_trade = None
+                prev_break = False
             continue
+
+        # COMBO_* that require BOS: skip full structure scan when break impossible.
+        # Also skip sticky same-level breaks until structure (swings) updates —
+        # otherwise uptrends re-evaluate thousands of identical BOS bars.
+        if combo.require_bos:
+            brk = _bos_break_possible(
+                series, i, swings, direction_filter=direction_filter
+            )
+            if not brk:
+                prev_break = False
+                continue
+            if prev_break and not swing_grew:
+                continue
+            prev_break = True
 
         setup = evaluate_combination_at_bar(
             symbol=symbol,
@@ -327,6 +499,15 @@ def run_combination_backtest(
             combination=combo,
             signal_config=scfg,
             research_config=rcfg,
+            signal_engine=signal_engine,
+            sd_engine=sd_engine,
+            swings=swings,
+            compute_sd=bool(combo.require_sd),
+            atr_value=atr_arr[i],
+            volumes=vols_arr,
+            candles_1h=htf_1h,
+            candles_4h=htf_4h,
+            htf_trend_cache=htf_trend_cache,
         )
         if setup.get("status") not in (
             "LONG_ENTRY_CANDIDATE",
@@ -357,6 +538,15 @@ def run_combination_backtest(
             condition_snapshot={
                 **(setup.get("gates") or {}),
                 "entry_type": setup.get("entry_type"),
+                **(
+                    {
+                        "htf_alignment": (setup.get("htf") or {}).get("htf_alignment"),
+                        "trend_4h": (setup.get("htf") or {}).get("trend_4h"),
+                        "trend_1h": (setup.get("htf") or {}).get("trend_1h"),
+                    }
+                    if combo.require_htf_alignment
+                    else {}
+                ),
             },
         )
 
@@ -429,6 +619,8 @@ def run_oos_split_backtest(
     research_config: ResearchConfig | None = None,
     market_cap: float | None = None,
     direction_filter: str | None = None,
+    candles_1h: Sequence[Mapping[str, Any]] | None = None,
+    candles_4h: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Train / validation / out-of-sample separation (chronological).
 
@@ -466,6 +658,8 @@ def run_oos_split_backtest(
             index_start=a,
             index_end=b,
             direction_filter=direction_filter,
+            candles_1h=candles_1h,
+            candles_4h=candles_4h,
         )
         # Filter trades to those with entry inside the period window
         trades = [
@@ -508,6 +702,8 @@ def run_walk_forward(
     research_config: ResearchConfig | None = None,
     market_cap: float | None = None,
     direction_filter: str | None = None,
+    candles_1h: Sequence[Mapping[str, Any]] | None = None,
+    candles_4h: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Optional walk-forward. Windows stored separately — not pooled incorrectly."""
     rcfg = research_config or ResearchConfig()
@@ -531,6 +727,8 @@ def run_walk_forward(
             index_start=w["test_start"],
             index_end=w["test_end"],
             direction_filter=direction_filter,
+            candles_1h=candles_1h,
+            candles_4h=candles_4h,
         )
         results.append(
             {
@@ -560,6 +758,8 @@ def compare_combinations(
     direction_filter: str | None = None,
     index_start: int | None = None,
     index_end: int | None = None,
+    candles_1h: Sequence[Mapping[str, Any]] | None = None,
+    candles_4h: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compare combinations. Never ranks or labels a winner."""
     from app.research.bos_combinations import COMBINATIONS
@@ -587,6 +787,8 @@ def compare_combinations(
             direction_filter=direction_filter,
             index_start=index_start,
             index_end=index_end,
+            candles_1h=candles_1h,
+            candles_4h=candles_4h,
         )
         res = run.get("result") or {}
         sample = int(res.get("sample_size") or 0)

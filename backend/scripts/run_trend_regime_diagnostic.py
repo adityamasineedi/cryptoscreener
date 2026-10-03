@@ -88,6 +88,8 @@ async def main() -> None:
                         signal_config=scfg,
                         research_config=rcfg,
                         direction=direction,
+                        candles_1h=h1_cache[sym],
+                        candles_4h=h4_cache[sym],
                     )
                     closed = [t for t in tlist if t.get("outcome") not in (None, "OPEN")]
                     log(f"  {direction} closed={len(closed)}")

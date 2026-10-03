@@ -27,6 +27,23 @@ function fmtTime(iso: string | null | undefined): string {
   }
 }
 
+/** Stop → entry → TP1 price band for a paper trade. */
+function fmtPriceRange(r: PaperPosition): string {
+  const stop = fmt(r.stop_price, 4);
+  const entry = fmt(r.entry_price, 4);
+  const tp = fmt(r.tp1_price, 4);
+  return `${stop} → ${entry} → ${tp}`;
+}
+
+/** Opened → closed wall-clock range. */
+function fmtTimeRange(r: PaperPosition): string {
+  const a = fmtTime(r.opened_at);
+  const b = fmtTime(r.closed_at);
+  if (a === "—" && b === "—") return "—";
+  if (b === "—") return a;
+  return `${a} → ${b}`;
+}
+
 export function PaperTradePanel() {
   const [status, setStatus] = useState<PaperStatus | null>(null);
   const [open, setOpen] = useState<PaperPosition[]>([]);
@@ -48,7 +65,7 @@ export function PaperTradePanel() {
 
   const refreshBook = useCallback(async () => {
     try {
-      const data = await fetchPaperPositions(50);
+      const data = await fetchPaperPositions(100);
       setStatus(data.status);
       setOpen(data.open || []);
       setClosed(data.closed || []);
@@ -243,7 +260,25 @@ export function PaperTradePanel() {
         <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
           Closed trades
         </h2>
-        <TradeTable rows={closed} empty="No closed paper trades yet." mode="closed" />
+        <TradeTable
+          rows={closed.filter((r) => String(r.status || "").toUpperCase() !== "CANCELLED")}
+          empty="No closed paper trades yet."
+          mode="closed"
+        />
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
+          Cancelled
+          <span className="ml-2 font-mono normal-case text-terminal-muted/80">
+            ({closed.filter((r) => String(r.status || "").toUpperCase() === "CANCELLED").length})
+          </span>
+        </h2>
+        <TradeTable
+          rows={closed.filter((r) => String(r.status || "").toUpperCase() === "CANCELLED")}
+          empty="No cancelled paper trades."
+          mode="cancelled"
+        />
       </section>
     </div>
   );
@@ -354,7 +389,7 @@ function TradeTable({
 }: {
   rows: PaperPosition[];
   empty: string;
-  mode: "open" | "closed";
+  mode: "open" | "closed" | "cancelled";
 }) {
   if (!rows.length) {
     return (
@@ -369,62 +404,88 @@ function TradeTable({
         <thead className="bg-black/20 text-[10px] uppercase tracking-wide text-terminal-muted">
           <tr>
             <th className="px-2 py-1.5">Symbol</th>
-            <th className="px-2 py-1.5">Entry</th>
-            <th className="px-2 py-1.5">Stop</th>
-            <th className="px-2 py-1.5">TP1</th>
-            <th className="px-2 py-1.5">Qty</th>
-            {mode === "open" ? (
+            {mode === "cancelled" ? (
               <>
-                <th className="px-2 py-1.5">Mark</th>
-                <th className="px-2 py-1.5">uPnL</th>
-                <th className="px-2 py-1.5">uR</th>
+                <th className="px-2 py-1.5">Range (stop → entry → tp1)</th>
+                <th className="px-2 py-1.5">Qty</th>
+                <th className="px-2 py-1.5">Reason</th>
+                <th className="px-2 py-1.5">Time range</th>
               </>
             ) : (
               <>
-                <th className="px-2 py-1.5">Exit</th>
-                <th className="px-2 py-1.5">Reason</th>
-                <th className="px-2 py-1.5">PnL</th>
-                <th className="px-2 py-1.5">R</th>
+                <th className="px-2 py-1.5">Entry</th>
+                <th className="px-2 py-1.5">Stop</th>
+                <th className="px-2 py-1.5">TP1</th>
+                <th className="px-2 py-1.5">Qty</th>
+                {mode === "open" ? (
+                  <>
+                    <th className="px-2 py-1.5">Mark</th>
+                    <th className="px-2 py-1.5">uPnL</th>
+                    <th className="px-2 py-1.5">uR</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-2 py-1.5">Exit</th>
+                    <th className="px-2 py-1.5">Reason</th>
+                    <th className="px-2 py-1.5">PnL</th>
+                    <th className="px-2 py-1.5">R</th>
+                  </>
+                )}
+                <th className="px-2 py-1.5">Opened</th>
               </>
             )}
-            <th className="px-2 py-1.5">Opened</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-t border-terminal-border/70">
               <td className="px-2 py-1.5 text-terminal-text">{r.symbol}</td>
-              <td className="px-2 py-1.5">{fmt(r.entry_price, 4)}</td>
-              <td className="px-2 py-1.5">{fmt(r.stop_price, 4)}</td>
-              <td className="px-2 py-1.5">{fmt(r.tp1_price, 4)}</td>
-              <td className="px-2 py-1.5">{fmt(r.quantity, 4)}</td>
-              {mode === "open" ? (
+              {mode === "cancelled" ? (
                 <>
-                  <td className="px-2 py-1.5">{fmt(r.mark_price, 4)}</td>
-                  <td
-                    className={`px-2 py-1.5 ${
-                      (r.unrealized_pnl_usd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
-                    }`}
-                  >
-                    {fmt(r.unrealized_pnl_usd)}
+                  <td className="px-2 py-1.5 whitespace-nowrap" title="stop → entry → tp1">
+                    {fmtPriceRange(r)}
                   </td>
-                  <td className="px-2 py-1.5">{fmt(r.unrealized_r, 2)}</td>
+                  <td className="px-2 py-1.5">{fmt(r.quantity, 4)}</td>
+                  <td className="px-2 py-1.5 text-amber-200/90">{r.exit_reason || "—"}</td>
+                  <td className="px-2 py-1.5 text-terminal-muted whitespace-nowrap">
+                    {fmtTimeRange(r)}
+                  </td>
                 </>
               ) : (
                 <>
-                  <td className="px-2 py-1.5">{fmt(r.exit_price, 4)}</td>
-                  <td className="px-2 py-1.5">{r.exit_reason || "—"}</td>
-                  <td
-                    className={`px-2 py-1.5 ${
-                      (r.pnl_usd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
-                    }`}
-                  >
-                    {fmt(r.pnl_usd)}
-                  </td>
-                  <td className="px-2 py-1.5">{fmt(r.r_multiple, 2)}</td>
+                  <td className="px-2 py-1.5">{fmt(r.entry_price, 4)}</td>
+                  <td className="px-2 py-1.5">{fmt(r.stop_price, 4)}</td>
+                  <td className="px-2 py-1.5">{fmt(r.tp1_price, 4)}</td>
+                  <td className="px-2 py-1.5">{fmt(r.quantity, 4)}</td>
+                  {mode === "open" ? (
+                    <>
+                      <td className="px-2 py-1.5">{fmt(r.mark_price, 4)}</td>
+                      <td
+                        className={`px-2 py-1.5 ${
+                          (r.unrealized_pnl_usd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
+                        }`}
+                      >
+                        {fmt(r.unrealized_pnl_usd)}
+                      </td>
+                      <td className="px-2 py-1.5">{fmt(r.unrealized_r, 2)}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-2 py-1.5">{fmt(r.exit_price, 4)}</td>
+                      <td className="px-2 py-1.5">{r.exit_reason || "—"}</td>
+                      <td
+                        className={`px-2 py-1.5 ${
+                          (r.pnl_usd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
+                        }`}
+                      >
+                        {fmt(r.pnl_usd)}
+                      </td>
+                      <td className="px-2 py-1.5">{fmt(r.r_multiple, 2)}</td>
+                    </>
+                  )}
+                  <td className="px-2 py-1.5 text-terminal-muted">{fmtTime(r.opened_at)}</td>
                 </>
               )}
-              <td className="px-2 py-1.5 text-terminal-muted">{fmtTime(r.opened_at)}</td>
             </tr>
           ))}
         </tbody>
