@@ -1,14 +1,17 @@
 import { NavLink } from "react-router-dom";
+import { useOhlcvExpandStore } from "../store/ohlcvExpandStore";
 
 const items = [
   { to: "/", label: "Screener", short: "Sc" },
   { to: "/health", label: "Data Health", short: "DH" },
   { to: "/bos-research", label: "BOS Research", short: "BR" },
+  { to: "/bos-strategy-research", label: "BOS Strategies", short: "BS" },
   { to: "/paper", label: "Paper Trade", short: "Pt" },
   { to: "/watchlist", label: "Watchlist", short: "Wl" },
   { to: "/alerts", label: "Alerts", short: "Al" },
   { to: "/charts", label: "Charts", short: "Ch" },
   { to: "/backtest", label: "Backtest", short: "Bt" },
+  { to: "/ohlcv-history", label: "OHLCV History", short: "OH" },
   { to: "/settings", label: "Settings", short: "St" },
 ];
 
@@ -19,6 +22,8 @@ export function Sidebar({
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  const expandActive = useOhlcvExpandStore((s) => s.active);
+
   return (
     <aside
       className={`flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-r border-terminal-border bg-terminal-panel/80 backdrop-blur transition-[width] duration-200 ${
@@ -96,7 +101,19 @@ export function Sidebar({
               }`
             }
           >
-            {collapsed ? item.short : item.label}
+            {collapsed ? (
+              item.short
+            ) : (
+              <span className="flex items-center justify-between gap-2">
+                <span>{item.label}</span>
+                {item.to === "/ohlcv-history" && expandActive ? (
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-terminal-accent"
+                    title="Fetch running in background"
+                  />
+                ) : null}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

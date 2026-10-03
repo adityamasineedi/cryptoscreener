@@ -40,6 +40,10 @@ export function fetchProviderHealth() {
   return getJson<Record<string, unknown>>("/api/health/providers");
 }
 
+export function fetchSentimentDiagnostic() {
+  return getJson<Record<string, unknown>>("/api/data/sentiment/diagnostic");
+}
+
 export function fetchPerformance() {
   return getJson<Record<string, unknown>>("/api/system/performance");
 }
@@ -235,6 +239,64 @@ export function fetchBosCombinationDetail(
   );
 }
 
+export type BosStrategiesResponse = {
+  status?: string;
+  dataset?: string;
+  results?: Array<Record<string, unknown>>;
+  condition_contribution?: Array<Record<string, unknown>>;
+  data_period?: Record<string, unknown>;
+  universe?: Record<string, unknown>;
+  data_coverage?: Record<string, unknown>;
+  trade_count?: number;
+  total_trades?: number;
+  fee_assumptions?: Record<string, unknown>;
+  disclaimer?: string;
+  label?: string;
+  note?: string;
+};
+
+export function fetchBosStrategiesCatalog() {
+  return getJson<{
+    strategies: Array<Record<string, unknown>>;
+    disclaimer?: string;
+  }>("/api/research/bos-strategies/catalog");
+}
+
+export function fetchBosStrategiesCoverage() {
+  return getJson<Record<string, unknown>>("/api/research/bos-strategies/coverage");
+}
+
+export function fetchBosStrategies(params?: {
+  symbols?: string;
+  timeframe?: string;
+  start_date?: string;
+  end_date?: string;
+  direction?: string;
+  limit?: number;
+  max_symbols?: number;
+  persist?: boolean;
+  include_walk_forward?: boolean;
+  latest_only?: boolean;
+}) {
+  const q = new URLSearchParams();
+  if (params?.symbols) q.set("symbols", params.symbols);
+  if (params?.timeframe) q.set("timeframe", params.timeframe);
+  if (params?.start_date) q.set("start_date", params.start_date);
+  if (params?.end_date) q.set("end_date", params.end_date);
+  if (params?.direction) q.set("direction", params.direction);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.max_symbols != null) q.set("max_symbols", String(params.max_symbols));
+  if (params?.persist != null) q.set("persist", String(params.persist));
+  if (params?.include_walk_forward != null) {
+    q.set("include_walk_forward", String(params.include_walk_forward));
+  }
+  if (params?.latest_only != null) q.set("latest_only", String(params.latest_only));
+  const qs = q.toString();
+  return getJson<BosStrategiesResponse>(
+    `/api/research/bos-strategies${qs ? `?${qs}` : ""}`
+  );
+}
+
 export type StrategyTradeRow = {
   trade_no?: number;
   symbol: string;
@@ -340,6 +402,79 @@ export function fetchResearchOhlcvRange(params?: {
   return getJson<{ status: string; rows: OhlcvRangeRow[] }>(
     `/api/research/ohlcv-range${qs ? `?${qs}` : ""}`
   );
+}
+
+export type OhlcvExpandResultRow = {
+  symbol: string;
+  timeframe: string;
+  written: number;
+  direction?: string;
+  error?: string | null;
+  db_start?: string | null;
+  db_end?: string | null;
+  bars?: number;
+};
+
+export type OhlcvExpandJob = {
+  job_id?: string | null;
+  status: string;
+  symbols?: string[];
+  timeframes?: string[];
+  until?: string | null;
+  refresh_tip?: boolean;
+  max_pages?: number;
+  total_cells?: number;
+  done_cells?: number;
+  pct?: number;
+  current?: string;
+  written_total?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: string | null;
+  results?: OhlcvExpandResultRow[];
+};
+
+export function fetchOhlcvExpandStatus() {
+  return getJson<OhlcvExpandJob & { timestamp?: string }>(
+    "/api/research/ohlcv-expand"
+  );
+}
+
+export async function startOhlcvExpand(body: {
+  symbols: string[];
+  timeframes: string[];
+  until?: string;
+  refresh_tip?: boolean;
+  max_pages?: number;
+}) {
+  const res = await fetch(`${API_BASE}/api/research/ohlcv-expand`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`API /api/research/ohlcv-expand failed: ${res.status}`);
+  }
+  return res.json() as Promise<{
+    status: string;
+    error?: string;
+    job?: OhlcvExpandJob;
+    timestamp?: string;
+  }>;
+}
+
+export async function cancelOhlcvExpand() {
+  const res = await fetch(`${API_BASE}/api/research/ohlcv-expand/cancel`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(`API /api/research/ohlcv-expand/cancel failed: ${res.status}`);
+  }
+  return res.json() as Promise<{
+    status: string;
+    job?: OhlcvExpandJob;
+    timestamp?: string;
+  }>;
 }
 
 export function fetchLongStrategyBacktest(params: {
@@ -491,6 +626,51 @@ export function disablePaperTrade() {
 
 export function resetPaperTrade() {
   return postJson<PaperStatus>("/api/paper/reset");
+}
+
+export type AlertType =
+  | "BOS"
+  | "SETUP_STATUS"
+  | "MARKET_SIGNAL"
+  | "PAPER_ENTRY"
+  | "PAPER_EXIT"
+  | "LIQ_SPIKE"
+  | string;
+
+export type AlertSeverity = "info" | "watch" | "action" | string;
+
+export type LiveAlert = {
+  id: string;
+  seq: number;
+  time: string;
+  type: AlertType;
+  symbol: string;
+  timeframe?: string | null;
+  severity: AlertSeverity;
+  title: string;
+  detail: string;
+  payload?: Record<string, unknown>;
+};
+
+export function fetchAlerts(params?: {
+  limit?: number;
+  types?: string;
+  symbol?: string;
+  since_seq?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.types) q.set("types", params.types);
+  if (params?.symbol) q.set("symbol", params.symbol);
+  if (params?.since_seq != null) q.set("since_seq", String(params.since_seq));
+  const qs = q.toString();
+  return getJson<{
+    rows: LiveAlert[];
+    count: number;
+    total_buffered: number;
+    latest_seq: number;
+    timestamp: string;
+  }>(`/api/alerts${qs ? `?${qs}` : ""}`);
 }
 
 export function wsUrl(path: string): string {

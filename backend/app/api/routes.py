@@ -116,16 +116,22 @@ async def health_providers() -> dict[str, Any]:
     liq = orch.liquidations.status() if orch else {"liquidation_status": "WAITING"}
     settings = get_settings()
     from app.ingestion.providers.onchain import OnChainProvider
-    from app.ingestion.providers.sentiment import SentimentProvider
+    from app.ingestion.providers.sentiment import get_sentiment_provider
     from app.services.persistence import persistence
     from app.services.redis_state import redis_state
 
     onchain = OnChainProvider(settings)
-    sentiment = SentimentProvider(settings)
+    sentiment = (
+        orch.sentiment
+        if orch is not None and getattr(orch, "sentiment", None) is not None
+        else get_sentiment_provider(settings)
+    )
     if not onchain.configured:
         await provider_health.mark_disabled("onchain")
     if not sentiment.configured:
         await provider_health.mark_disabled("sentiment")
+        await provider_health.mark_disabled("free_social")
+        await provider_health.mark_disabled("lunarcrush")
 
     providers = await provider_health.snapshot_all()
     # Ensure disabled adapters appear even with zero traffic
@@ -144,39 +150,68 @@ async def health_providers() -> dict[str, Any]:
             }
         except Exception:  # noqa: BLE001
             pass
+        try:
+            lc = getattr(sentiment, "client", None)
+            if lc is not None:
+                cooldown_map["lunarcrush"] = {
+                    "cooldown": lc.in_cooldown(),
+                    "remaining": lc.cooldown_remaining(),
+                }
+        except Exception:  # noqa: BLE001
+            pass
     for p in providers:
         pname = p.get("provider") or p.get("name")
         cd = cooldown_map.get(pname or "")
         if cd and cd.get("cooldown"):
             p["cooldown_until"] = f"in_{round(cd.get('remaining') or 0, 1)}s"
-        if pname in ("onchain", "sentiment"):
-            p["enabled"] = False
-            p["healthy"] = False
+        if pname == "onchain":
+            p["enabled"] = bool(onchain.configured)
+            p["healthy"] = bool(onchain.configured)
+        if pname in ("sentiment", "lunarcrush", "free_social", "socialtickers", "xoomar"):
+            st = sentiment.status()
+            p["enabled"] = bool(st.get("configured"))
+            p["healthy"] = bool(st.get("connected")) or (
+                st.get("status") in ("LIVE", "HEALTHY", "CACHED")
+            )
+            p["status"] = st.get("status") or p.get("status")
+            p["vendor"] = st.get("provider")
+            p["assets_received"] = st.get("assets_received")
+            p["assets_mapped"] = st.get("assets_mapped")
+            p["assets_unmapped"] = st.get("assets_unmapped")
+            p["note"] = st.get("note")
 
     for name, status in (
         ("onchain", onchain.status()),
         ("sentiment", sentiment.status()),
+        ("free_social", sentiment.diagnostic()),
     ):
         if name not in names:
             providers.append(
                 {
                     "provider": name,
+                    "name": name,
                     "enabled": bool(status.get("configured")),
-                    "healthy": False,
-                    "status": "DISABLED" if not status.get("configured") else "HEALTHY",
-                    "requests": 0,
-                    "successful": 0,
-                    "failed": 0,
-                    "429_count": 0,
-                    "cache_hits": 0,
-                    "cache_misses": 0,
+                    "healthy": bool(status.get("connected"))
+                    if name in ("sentiment", "lunarcrush")
+                    else False,
+                    "status": status.get("status")
+                    or ("DISABLED" if not status.get("configured") else "HEALTHY"),
+                    "requests": status.get("requests_total") or 0,
+                    "successful": status.get("requests_success") or 0,
+                    "failed": status.get("requests_failed") or 0,
+                    "429_count": status.get("rate_limit_hits") or 0,
+                    "cache_hits": (status.get("cache_stats") or {}).get("hits", 0),
+                    "cache_misses": (status.get("cache_stats") or {}).get("misses", 0),
                     "cache_hit_rate": (status.get("cache_stats") or {}).get(
                         "cache_hit_rate", 0.0
                     ),
-                    "last_success": None,
+                    "last_success": status.get("last_success_at"),
                     "last_error": status.get("last_error"),
                     "cooldown_until": None,
                     "note": status.get("note"),
+                    "assets_received": status.get("assets_received"),
+                    "assets_mapped": status.get("assets_mapped"),
+                    "assets_unmapped": status.get("assets_unmapped"),
                 }
             )
 
@@ -188,12 +223,48 @@ async def health_providers() -> dict[str, Any]:
         "liquidations": liq,
         "onchain": onchain.status(),
         "sentiment": sentiment.status(),
+        "free_social": sentiment.diagnostic(
+            universe_size=len(market_store.list_symbols(market_type="futures_perp"))
+        ),
+        "lunarcrush": (
+            sentiment.diagnostic(
+                universe_size=len(market_store.list_symbols(market_type="futures_perp"))
+            )
+            if str(sentiment.status().get("provider") or "") == "lunarcrush"
+            else {"provider": "lunarcrush", "enabled": False, "status": "DISABLED"}
+        ),
         "persistence": persistence.stats(),
         "redis": await redis_state.health_detail(),
         "database": await db_manager.health(),
         "retention_policies": await db_manager.retention_policies(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/data/sentiment/diagnostic")
+async def sentiment_diagnostic() -> dict[str, Any]:
+    """LunarCrush / sentiment provider diagnostic — never exposes API keys."""
+    orch = get_orchestrator()
+    from app.ingestion.providers.sentiment import get_sentiment_provider
+
+    sentiment = (
+        orch.sentiment
+        if orch is not None and getattr(orch, "sentiment", None) is not None
+        else get_sentiment_provider(get_settings())
+    )
+    universe = [s.symbol for s in market_store.list_symbols(market_type="futures_perp")]
+    client = getattr(sentiment, "client", None)
+    if client is not None and sentiment.configured:
+        try:
+            await client.refresh_universe()
+            client.coverage_for_universe(universe)
+        except Exception:  # noqa: BLE001
+            pass
+    diag = sentiment.diagnostic(universe_size=len(universe))
+    # Never leak secrets
+    diag.pop("api_key", None)
+    diag["api_key_present"] = bool(diag.get("api_key_present"))
+    return diag
 
 
 @router.get("/symbols")
@@ -725,6 +796,85 @@ async def research_ohlcv_range(
     }
 
 
+@router.get("/research/ohlcv-expand")
+async def research_ohlcv_expand_status() -> dict[str, Any]:
+    """Status of the latest OHLCV history expand job."""
+    from app.research.ohlcv_expand import ohlcv_expand_service
+
+    out = ohlcv_expand_service.status()
+    out["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return out
+
+
+@router.post("/research/ohlcv-expand")
+async def research_ohlcv_expand_start(
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any]:
+    """Start fetching Binance Futures OHLCV into Postgres for selected symbols/TFs.
+
+    Body:
+      symbols: list[str] | comma-string
+      timeframes: list[str] | comma-string
+      until: YYYY-MM-DD (walk history back to this UTC day)
+      refresh_tip: bool (also fill forward to now; default true)
+      max_pages: int (safety cap per series; default 200)
+    """
+    from app.research.ohlcv_expand import ohlcv_expand_service
+
+    def _as_list(v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return [s for s in str(v).split(",") if s.strip()]
+
+    symbols = _as_list(body.get("symbols") or "BTCUSDT,ETHUSDT,SOLUSDT")
+    timeframes = _as_list(body.get("timeframes") or "15m,1h")
+    until = body.get("until")
+    until_s = str(until).strip()[:10] if until else None
+    refresh_tip = bool(body.get("refresh_tip", True))
+    max_pages = int(body.get("max_pages") or 200)
+    try:
+        job = await ohlcv_expand_service.start(
+            symbols=symbols,
+            timeframes=timeframes,
+            until=until_s,
+            refresh_tip=refresh_tip,
+            max_pages=max_pages,
+        )
+    except ValueError as exc:
+        return {
+            "status": "ERROR",
+            "error": str(exc),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except RuntimeError as exc:
+        return {
+            "status": "BUSY",
+            "error": str(exc),
+            "job": ohlcv_expand_service.status(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    return {
+        "status": "STARTED",
+        "job": job,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/research/ohlcv-expand/cancel")
+async def research_ohlcv_expand_cancel() -> dict[str, Any]:
+    """Request cancel of the running expand job (stops between pages/cells)."""
+    from app.research.ohlcv_expand import ohlcv_expand_service
+
+    job = await ohlcv_expand_service.cancel()
+    return {
+        "status": job.get("status", "idle"),
+        "job": job,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/research/long-strategy/backtest")
 async def research_long_strategy_backtest(
     symbols: str = Query(
@@ -974,6 +1124,78 @@ async def research_bos_combination_walk_forward(
     }
 
 
+@router.get("/research/bos-strategies")
+async def research_bos_strategies(
+    symbols: str | None = Query(
+        default=None,
+        description="Comma-separated symbols; default = all eligible from Postgres",
+    ),
+    timeframe: str = Query(default="15m"),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    direction: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=50, le=200000),
+    max_symbols: int | None = Query(default=None, ge=1, le=2000),
+    persist: bool = Query(default=True),
+    include_walk_forward: bool = Query(default=False),
+    latest_only: bool = Query(
+        default=False,
+        description="If true, return latest persisted run without re-running",
+    ),
+) -> dict[str, Any]:
+    """BOS Strategy Comparison Research — historical only; never ranks a winner.
+
+    Research only — live engine unchanged.
+    """
+    from app.research.bos_strategy_comparison.service import (
+        get_bos_strategy_comparison_service,
+    )
+
+    svc = get_bos_strategy_comparison_service()
+    if latest_only:
+        payload = await svc.latest()
+        return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+    syms = None
+    if symbols:
+        syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+
+    payload = await svc.compare(
+        symbols=syms,
+        timeframe=timeframe,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        direction=direction,
+        persist=persist,
+        include_walk_forward=include_walk_forward,
+        max_symbols=max_symbols,
+    )
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/bos-strategies/catalog")
+async def research_bos_strategies_catalog() -> dict[str, Any]:
+    from app.research.bos_strategy_comparison.service import (
+        get_bos_strategy_comparison_service,
+    )
+
+    return {
+        **get_bos_strategy_comparison_service().list_strategies(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/research/bos-strategies/coverage")
+async def research_bos_strategies_coverage() -> dict[str, Any]:
+    from app.research.bos_strategy_comparison.service import (
+        get_bos_strategy_comparison_service,
+    )
+
+    payload = await get_bos_strategy_comparison_service().data_coverage()
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
 @router.get("/signals/{symbol}")
 async def signal_for_symbol(
     symbol: str,
@@ -1125,10 +1347,38 @@ async def paper_disable() -> dict[str, Any]:
 @router.post("/paper/reset")
 async def paper_reset() -> dict[str, Any]:
     from app.services.paper_trade import get_paper_trade_engine
+    from app.services.persistence import persistence
 
     eng = get_paper_trade_engine()
     eng.reset()
+    # Keep DB in sync so a restart does not resurrect the wiped book
+    try:
+        await persistence.clear_paper_trades()
+    except Exception:  # noqa: BLE001
+        pass
     return eng.status()
+
+
+@router.get("/alerts")
+async def list_alerts(
+    limit: int = Query(default=100, ge=1, le=500),
+    types: str | None = Query(
+        default=None,
+        description="Comma-separated: BOS,SETUP_STATUS,MARKET_SIGNAL,PAPER_ENTRY,PAPER_EXIT,LIQ_SPIKE",
+    ),
+    symbol: str | None = Query(default=None),
+    since_seq: int | None = Query(default=None, ge=0),
+) -> dict[str, Any]:
+    """Live alert feed — setup / paper / liquidation transitions (in-memory)."""
+    from app.services.alerts import get_alert_feed
+
+    type_list = [t.strip() for t in (types or "").split(",") if t.strip()] or None
+    return get_alert_feed().list(
+        limit=limit,
+        types=type_list,
+        symbol=symbol,
+        since_seq=since_seq,
+    )
 
 
 @router.get("/signals/{symbol}/{timeframe}")
@@ -1435,6 +1685,63 @@ async def _forward_market_events(event: dict[str, Any]) -> None:
         "symbols_updated",
     }:
         await ws_connections.broadcast(event)
+
+
+@ws_router.websocket("/alerts")
+async def ws_alerts(websocket: WebSocket) -> None:
+    """Push new alerts as they fire; initial snapshot of recent buffer."""
+    from app.services.alerts import get_alert_feed
+
+    await websocket.accept()
+    feed = get_alert_feed()
+    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=200)
+
+    async def _on_alert(alert: dict[str, Any]) -> None:
+        try:
+            queue.put_nowait(alert)
+        except asyncio.QueueFull:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                queue.put_nowait(alert)
+            except asyncio.QueueFull:
+                pass
+
+    feed.subscribe(_on_alert)
+    try:
+        snap = feed.list(limit=80)
+        await websocket.send_json(
+            {
+                "type": "alerts_snapshot",
+                "rows": snap.get("rows") or [],
+                "latest_seq": snap.get("latest_seq"),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        while True:
+            try:
+                alert = await asyncio.wait_for(queue.get(), timeout=15.0)
+                await websocket.send_json(
+                    {
+                        "type": "alert",
+                        "alert": alert,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+            except asyncio.TimeoutError:
+                await websocket.send_json(
+                    {
+                        "type": "alerts_heartbeat",
+                        "latest_seq": feed.list(limit=1).get("latest_seq"),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+    except WebSocketDisconnect:
+        pass
+    finally:
+        feed.unsubscribe(_on_alert)
 
 
 @ws_router.websocket("/market")

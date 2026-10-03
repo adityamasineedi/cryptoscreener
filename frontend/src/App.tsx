@@ -6,7 +6,11 @@ import { ChartsPage } from "./components/ChartsPage";
 import { CoinDetailPanel } from "./components/CoinDetailPanel";
 import { BacktestPanel } from "./components/BacktestPanel";
 import { BosResearchPanel } from "./components/BosResearchPanel";
+import { BosStrategyResearchPanel } from "./components/BosStrategyResearchPanel";
 import { DataHealthPanel } from "./components/DataHealthPanel";
+import { AlertsPanel } from "./components/AlertsPanel";
+import { OhlcvExpandBanner } from "./components/OhlcvExpandBanner";
+import { OhlcvHistoryPanel } from "./components/OhlcvHistoryPanel";
 import { PaperTradePanel } from "./components/PaperTradePanel";
 import { ScreenerTable } from "./components/ScreenerTable";
 import { Sidebar } from "./components/Sidebar";
@@ -14,6 +18,7 @@ import { TopNav } from "./components/TopNav";
 import { useMarketStream } from "./hooks/useMarketStream";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useMarketStore } from "./store/marketStore";
+import { startOhlcvExpandBackgroundPoller } from "./store/ohlcvExpandStore";
 import type { HealthResponse } from "./types/market";
 
 function Placeholder({ title }: { title: string }) {
@@ -130,6 +135,9 @@ export default function App() {
     }
   }, [sidebarCollapsed]);
 
+  // OHLCV expand jobs run on the API; keep polling across route changes.
+  useEffect(() => startOhlcvExpandBackgroundPoller(), []);
+
   return (
     <div className={`app-shell ${sidebarCollapsed ? "app-shell--collapsed" : ""}`}>
       <Sidebar
@@ -137,15 +145,18 @@ export default function App() {
         onToggle={() => setSidebarCollapsed((v) => !v)}
       />
       <main className="app-main">
+        <OhlcvExpandBanner />
         <Routes>
           <Route path="/" element={<ScreenerPage />} />
           <Route path="/health" element={<DataHealthPanel />} />
           <Route path="/bos-research" element={<BosResearchPanel />} />
+          <Route path="/bos-strategy-research" element={<BosStrategyResearchPanel />} />
           <Route path="/paper" element={<PaperTradePanel />} />
           <Route path="/watchlist" element={<Placeholder title="Watchlist" />} />
-          <Route path="/alerts" element={<Placeholder title="Alerts" />} />
+          <Route path="/alerts" element={<AlertsPanel />} />
           <Route path="/charts" element={<ChartsPage />} />
           <Route path="/backtest" element={<BacktestPanel />} />
+          <Route path="/ohlcv-history" element={<OhlcvHistoryPanel />} />
           <Route path="/settings" element={<Placeholder title="Settings" />} />
         </Routes>
       </main>
