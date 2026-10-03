@@ -1,4 +1,8 @@
-"""Unit tests for virtual paper trade engine."""
+"""Unit tests for virtual paper trade engine.
+
+v1 GUARDRAIL (tag: v1-combo02-long-htf): Path A HTF enforcement tests in this
+file are freeze-critical — see docs/v1_freeze.md. Path B remains experimental.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,9 @@ import pytest
 
 from app.services.paper_risk import PaperRiskPolicy
 from app.services.paper_trade import PaperTradeEngine
+
+# Path A HTF / COMBO_02 v1 tests share this marker with research HTF suite.
+pytestmark = pytest.mark.v1_freeze
 
 # Existing entry/exit tests focus on Path A/B fills — not cap gates
 _NO_GATES = PaperRiskPolicy(enabled=False)
@@ -41,8 +48,17 @@ def _candidate(
     source_ts: str = "2026-10-02T09:45:00+00:00",
     status: str = "LONG_ENTRY_CANDIDATE",
     ohlcv_freshness: str = "OK",
+    trend_4h: str = "BULLISH",
+    trend_1h: str = "BULLISH",
+    include_path_a_structure: bool = True,
 ) -> dict:
-    return {
+    """LONG_ENTRY_CANDIDATE payload.
+
+    Default includes Path A structure (BOS + HTF) so default entry_mode=path_a
+    still opens under COMBO_02 v1 HTF enforcement. Set
+    ``include_path_a_structure=False`` to simulate a Path-B-only candidate.
+    """
+    payload: dict = {
         "symbol": symbol,
         "status": status,
         "direction": "LONG",
@@ -60,6 +76,24 @@ def _candidate(
         "calculated_at": "2026-10-02T10:00:00+00:00",
         "ohlcv_freshness": ohlcv_freshness,
     }
+    if include_path_a_structure:
+        payload["trend"] = {
+            "15m": {"trend": "BULLISH"},
+            "1h": {"trend": trend_1h},
+            "4h": {"trend": trend_4h},
+        }
+        payload["mtf"] = {
+            "MTF_ALIGNMENT": (
+                "STRONG_LONG" if trend_4h == trend_1h == "BULLISH" else "MIXED"
+            )
+        }
+        payload["bos"] = {
+            "state": "CONFIRMED",
+            "direction": "BULLISH_BOS",
+            "broken_level": entry,
+        }
+        payload["risk_reward"] = {"RISK_REWARD": "PASS"}
+    return payload
 
 
 def _path_a_payload(
@@ -110,7 +144,46 @@ def test_opens_on_long_entry_candidate(monkeypatch):
     assert pos.stop_price == 98.0
     assert pos.tp1_price == 104.0
     assert pos.quantity == 10.0
+    assert pos.signal_snippet.get("path") == "PATH_A"
+    assert pos.signal_snippet.get("combo_version") == "v1-combo02-long-htf"
     assert eng.status()["open_count"] == 1
+
+
+def test_path_a_blocks_entry_candidate_without_htf(monkeypatch):
+    """COMBO_02 v1: LONG_ENTRY_CANDIDATE must not bypass Path A HTF gate."""
+    import app.services.paper_trade as paper_mod
+
+    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    eng = PaperTradeEngine(entry_mode="path_a", starting_equity=1000, risk_percent=0.02)
+    assert (
+        eng.on_setup_signal(
+            "BTCUSDT",
+            _candidate(trend_4h="BEARISH", trend_1h="BULLISH"),
+        )
+        is None
+    )
+    assert (
+        eng.on_setup_signal(
+            "BTCUSDT",
+            _candidate(include_path_a_structure=False),
+        )
+        is None
+    )
+
+
+def test_path_b_opens_entry_candidate_without_path_a_structure(monkeypatch):
+    """Path B experimental may open on ENTRY_CANDIDATE without COMBO_02 HTF."""
+    import app.services.paper_trade as paper_mod
+
+    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    eng = PaperTradeEngine(entry_mode="path_b", starting_equity=1000, risk_percent=0.02)
+    pos = eng.on_setup_signal(
+        "BTCUSDT",
+        _candidate(include_path_a_structure=False),
+    )
+    assert pos is not None
+    assert pos.signal_snippet.get("path") == "PATH_B"
+    assert pos.signal_snippet.get("combo_version") == "experimental-path-b"
 
 
 def test_dedupe_same_source_candle(monkeypatch):

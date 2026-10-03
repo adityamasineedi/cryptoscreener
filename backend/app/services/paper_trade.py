@@ -1,7 +1,11 @@
-"""Virtual paper trading — open on Path A (Trend+BOS) or Path B (full entry).
+"""Virtual paper trading — Path A (COMBO_02 v1) or Path B (experimental).
 
 No real exchange orders. Uses setup signal risk sizing + live mark/ticker.
-Default entry mode is path_a (COMBO_02: HL + BOS + 4h/1h HTF hard gate).
+
+Default entry mode is path_a = COMBO_02 v1 long: setup BULLISH + confirmed
+BULLISH_BOS + 4h/1h HTF hard gate (fail closed). Path B is a separate
+experimental mode (full LONG_ENTRY_CANDIDATE via live entry-engine MTF) and
+must not be labeled or claimed as COMBO_02 v1.
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ ENTRY_STATUSES = {
     SignalStatus.ENTRY_CANDIDATE.value,
 }
 
-# Research Path A — Trend + BOS (aligned with LONG_STRATEGY §4.1 / COMBO_02)
+# Path A = COMBO_02 v1 (Trend + BOS + 4h/1h HTF). Path B = experimental only.
 PATH_A = "path_a"
 PATH_B = "path_b"
 
@@ -257,9 +261,9 @@ class PaperTradeEngine:
                 "risk_percent": self.risk_percent,
                 "entry_mode": self.entry_mode,
                 "entry_mode_label": (
-                    "Path A · Trend+BOS (research)"
+                    "Path A · COMBO_02 v1 (HTF-gated)"
                     if self.entry_mode == PATH_A
-                    else "Path B · full LONG_ENTRY_CANDIDATE"
+                    else "Path B · experimental (not COMBO_02 v1)"
                 ),
                 "risk_policy": self.risk_policy.to_dict(),
                 "last_skip_reason": self._last_skip_reason,
@@ -275,7 +279,15 @@ class PaperTradeEngine:
             }
 
     def on_setup_signal(self, symbol: str, payload: dict[str, Any] | None) -> PaperPosition | None:
-        """Open a paper long when Path A (Trend+BOS) or Path B (full entry) fires."""
+        """Open a paper long under the active entry mode.
+
+        Path A (default, COMBO_02 v1): always requires ``_is_path_a_long``
+        (setup BULLISH + confirmed BULLISH_BOS + 4h/1h HTF + stop). A live
+        ``LONG_ENTRY_CANDIDATE`` status does **not** bypass the HTF gate.
+
+        Path B (experimental): opens only on ``LONG_ENTRY_CANDIDATE`` /
+        ``ENTRY_CANDIDATE`` via live entry-engine MTF — not COMBO_02 v1.
+        """
         if not self.enabled or not payload:
             return None
         sym = symbol.upper()
@@ -289,16 +301,20 @@ class PaperTradeEngine:
         ):
             return None
 
-        path_b = status in ENTRY_STATUSES
         path_a = False
-        path_label = "PATH_B"
-        if path_b:
+        path_b = False
+        if self.entry_mode == PATH_B:
+            # Experimental only — not COMBO_02 v1 HTF-gated research path.
+            if status not in ENTRY_STATUSES:
+                return None
+            path_b = True
             path_label = "PATH_B"
-        elif self.entry_mode == PATH_A:
-            path_a = _is_path_a_long(payload)
-            path_label = "PATH_A"
         else:
-            return None
+            # COMBO_02 v1: HTF hard gate always, even if status is ENTRY_CANDIDATE.
+            if not _is_path_a_long(payload):
+                return None
+            path_a = True
+            path_label = "PATH_A"
 
         if not path_b and not path_a:
             return None
@@ -497,6 +513,11 @@ class PaperTradeEngine:
                     "mcap": gate.mcap,
                     "quote_volume_24h": gate.quote_volume_24h,
                     "path": path_label,
+                    # Freeze metadata for exports / blotter (non-behavioral).
+                    "combo_version": (
+                        "v1-combo02-long-htf" if path_a else "experimental-path-b"
+                    ),
+                    "combo_id": "COMBO_02" if path_a else None,
                     "direction": direction or "LONG",
                     "calculated_at": payload.get("calculated_at"),
                     "ohlcv_freshness": payload.get("ohlcv_freshness"),
@@ -902,19 +923,23 @@ def _opportunity_from_payload(
         and stop_px is not None
     )
 
-    if status in ENTRY_STATUSES and longish:
+    if status in ENTRY_STATUSES and longish and entry_mode == PATH_B:
         tier = "READY"
-        chance = "Auto will open (LONG_ENTRY_CANDIDATE / Path B)"
+        chance = "Auto will open (Path B experimental — not COMBO_02 v1)"
     elif path_a_ready:
         tier = "READY"
-        chance = "Auto will open (Path A: Trend+BOS)"
+        chance = "Auto will open (Path A · COMBO_02 v1: Trend+BOS+HTF)"
     elif status in ("CONFLICT", "INVALIDATED"):
         tier = "BLOCKED"
         chance = status + (f" — {payload.get('invalidation_reason')}" if payload.get("invalidation_reason") else "")
     elif longish and bos_ok and trend_ok and stop_px is not None:
-        # Path B mode: still needs impulse/pullback/retest
-        tier = "NEAR"
-        chance = "Near entry — waiting: " + (", ".join(missing[:4]) or "confirmation")
+        if entry_mode == PATH_A and not _htf_bullish_for_long(payload):
+            tier = "NEAR"
+            chance = "Path A blocked — waiting for 4h+1h HTF_ALIGNED"
+        else:
+            # Path B mode: still needs impulse/pullback/retest
+            tier = "NEAR"
+            chance = "Near entry — waiting: " + (", ".join(missing[:4]) or "confirmation")
     elif longish and (bos_ok or trend_ok or impulse_ok) and status in ("NO_SETUP", "WAITING"):
         tier = "FORMING"
         chance = "Forming structure — waiting: " + (", ".join(missing[:4]) or "more confirms")

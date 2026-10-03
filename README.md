@@ -4,6 +4,8 @@ Production-oriented real-time crypto market screener.
 
 **Hard rule:** when `USE_REAL_DATA=true`, the system never fabricates market data.
 
+**COMBO_02 v1 freeze:** HTF-gated LONG playbook — see [`docs/v1_freeze.md`](./docs/v1_freeze.md) and tag `v1-combo02-long-htf` ([`CHANGELOG.md`](./CHANGELOG.md)).
+
 ## Architecture (Phase 1–2)
 
 ```

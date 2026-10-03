@@ -163,10 +163,12 @@ export function PaperTradePanel() {
           <p className="mt-1 max-w-xl text-[11px] text-terminal-muted">
             Auto-opens a virtual long on{" "}
             <span className="text-terminal-text">
-              {status?.entry_mode_label || "Path A (Trend + BOS)"}
+              {status?.entry_mode_label || "Path A · COMBO_02 v1 (HTF-gated)"}
             </span>
-            . Same gate as research backtest. Exits at stop or TP1 on mark/last. No real
-            exchange orders.
+            . Path A matches research COMBO_02 HTF gates. Path B is experimental
+            and is not COMBO_02 v1. Exits at stop or TP1 on mark/last. No real
+            exchange orders. Freeze:{" "}
+            <span className="font-mono text-terminal-text/80">v1-combo02-long-htf</span>.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -251,7 +253,7 @@ export function PaperTradePanel() {
         </h2>
         <TradeTable
           rows={open}
-          empty="No open paper positions — waiting for Path A READY (Trend+BOS)."
+          empty="No open paper positions — waiting for Path A READY (COMBO_02 v1 Trend+BOS+HTF)."
           mode="open"
         />
       </section>
@@ -404,6 +406,8 @@ function TradeTable({
         <thead className="bg-black/20 text-[10px] uppercase tracking-wide text-terminal-muted">
           <tr>
             <th className="px-2 py-1.5">Symbol</th>
+            <th className="px-2 py-1.5">Path</th>
+            <th className="px-2 py-1.5">Version</th>
             {mode === "cancelled" ? (
               <>
                 <th className="px-2 py-1.5">Range (stop → entry → tp1)</th>
@@ -437,9 +441,22 @@ function TradeTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {rows.map((r) => {
+            const snippet = (r.signal_snippet || {}) as Record<string, unknown>;
+            const path = String(snippet.path || "—");
+            const ver = String(snippet.combo_version || "—");
+            return (
             <tr key={r.id} className="border-t border-terminal-border/70">
               <td className="px-2 py-1.5 text-terminal-text">{r.symbol}</td>
+              <td className="px-2 py-1.5 whitespace-nowrap" title={path}>
+                {path}
+              </td>
+              <td
+                className="px-2 py-1.5 whitespace-nowrap text-terminal-muted"
+                title={ver}
+              >
+                {ver === "v1-combo02-long-htf" ? "v1" : ver === "experimental-path-b" ? "exp" : ver}
+              </td>
               {mode === "cancelled" ? (
                 <>
                   <td className="px-2 py-1.5 whitespace-nowrap" title="stop → entry → tp1">
@@ -487,7 +504,8 @@ function TradeTable({
                 </>
               )}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

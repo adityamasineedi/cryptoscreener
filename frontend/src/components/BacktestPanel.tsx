@@ -389,20 +389,28 @@ export function BacktestPanel() {
           Strategy Backtest
         </h1>
         <p className="mt-1 max-w-3xl text-xs text-terminal-muted">
-          Run the HL Long Path A playbook (Trend + BOS / COMBO_02) on real Postgres
-          OHLCV. Same engine as the research scripts — not a profitability claim.
+          Run the HL Long Path A playbook (COMBO_02 v1: Trend + BOS + 4h/1h HTF)
+          on real Postgres OHLCV. Same engine as the research scripts — not a
+          profitability claim. COMBO_02_LOCAL is legacy/research-only and is not
+          used here.
         </p>
       </div>
 
       <section className="mb-4 rounded border border-terminal-border/80 p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded border border-terminal-accent/40 bg-terminal-accent/10 px-2 py-1 font-mono text-terminal-accent">
-            COMBO_02 · TREND_BOS
+            COMBO_02 v1 · TREND_BOS · HTF
           </span>
-          <span className="text-terminal-muted">
+          <span
+            className="text-terminal-muted"
+            title="COMBO_02 = HTF-gated v1; COMBO_02_LOCAL = legacy/research-only (not used in this UI)."
+          >
             {direction === "LONG"
-              ? "Structure filter: HH + HL (longs only)"
+              ? "Gates: 1h BULLISH + bullish BOS + 4h/1h HTF_ALIGNED (longs only)"
               : "Structure filter: LH + LL (shorts)"}
+          </span>
+          <span className="text-[10px] text-terminal-muted/80">
+            COMBO_02 = HTF-gated v1 · COMBO_02_LOCAL = legacy/research-only
           </span>
         </div>
 

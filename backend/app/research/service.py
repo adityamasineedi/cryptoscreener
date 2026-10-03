@@ -597,8 +597,21 @@ class BosResearchService:
         direction: str | None = None,
         research_config: ResearchConfig | None = None,
     ) -> dict[str, Any]:
+        """Walk-forward research surface — loads HTF when the combo requires it.
+
+        COMBO_02 (require_htf_alignment) receives 1h/4h series the same way as
+        ``out_of_sample`` / ``detail`` so HTF-gated LONGs are not silently
+        fail-closed by missing candles on this endpoint.
+        """
         clear_candle_cache()
         candles = _load_candles(symbol, timeframe, limit)
+        combo = get_combination(combination_id)
+        c1h, c4h = _load_htf_candles_sync(
+            symbol,
+            require_htf=bool(combo and combo.require_htf_alignment),
+            setup_timeframe=timeframe,
+            limit=limit,
+        )
         # Scale walk-forward bars to available history if defaults too large
         rcfg = research_config or ResearchConfig()
         n = len(candles)
@@ -616,12 +629,15 @@ class BosResearchService:
             research_config=rcfg,
             market_cap=_market_cap(symbol),
             direction_filter=direction,
+            candles_1h=c1h,
+            candles_4h=c4h,
         )
         return {
             **wf,
             "combination_id": combination_id,
             "symbol": symbol.upper(),
             "timeframe": timeframe,
+            "require_htf_alignment": bool(combo and combo.require_htf_alignment),
             "regime": "REGIME_NOT_AVAILABLE",
         }
 

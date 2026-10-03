@@ -3,7 +3,8 @@
 **Status:** Working playbook for **long-only** setups  
 **Market:** Binance USDT-M perpetual futures  
 **Engine:** Structure-based setup signals (not prediction, not auto-execution)  
-**Capital example used in research:** `$1,000` · **risk per trade:** `2%` (`$20` = 1R)
+**Capital example used in research:** `$1,000` · **risk per trade:** `2%` (`$20` = 1R)  
+**v1 freeze:** [`v1_freeze.md`](./v1_freeze.md) · git tag `v1-combo02-long-htf`
 
 > Historical research only. Not a claim of future profitability.  
 > Live UI states are **ENTRY candidates** — never automatic BUY orders.

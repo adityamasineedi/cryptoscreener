@@ -65,6 +65,7 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
         require_bos=True,
         conditions=("BOS confirmed",),
     ),
+    # v1 freeze (tag: v1-combo02-long-htf) — do not weaken HTF; see docs/v1_freeze.md
     "COMBO_02": CombinationDefinition(
         combination_id="COMBO_02",
         name="TREND_BOS",
@@ -81,13 +82,14 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
             "4h+1h HTF structure aligned (hard gate)",
         ),
     ),
-    # Legacy Path A without HTF — for A/B research only. Not the default playbook.
+    # Legacy setup-TF-only baseline — research A/B only.
+    # NOT COMBO_02 v1 / NOT HTF-gated production; do not use for v1 claims.
     "COMBO_02_LOCAL": CombinationDefinition(
         combination_id="COMBO_02_LOCAL",
         name="TREND_BOS_SETUP_TF_ONLY",
         description=(
-            "Legacy TREND_BOS: BOS + setup-TF trend only (no HTF gate). "
-            "Kept for before/after research comparison."
+            "LEGACY/RESEARCH-ONLY (not COMBO_02 v1): BOS + setup-TF trend only "
+            "(no 4h+1h HTF hard gate). For before/after comparison vs COMBO_02."
         ),
         require_bos=True,
         require_trend=True,
@@ -95,7 +97,7 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
         conditions=(
             "BOS confirmed",
             "Trend agrees with BOS direction",
-            "Setup-TF only (HTF not required)",
+            "Setup-TF only (HTF not required) — not v1 production",
         ),
     ),
     "COMBO_03": CombinationDefinition(

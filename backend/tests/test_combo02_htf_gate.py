@@ -1,4 +1,8 @@
-"""COMBO_02 HTF hard-gate: longs require 4h+1h bullish structure.
+"""v1 REGRESSION – must pass (tag: v1-combo02-long-htf).
+
+COMBO_02 HTF hard-gate: longs require 4h+1h bullish structure.
+Failures here should block merges that touch frozen COMBO_02 / HTF paths
+unless the change is an intentional version bump (see docs/v1_freeze.md).
 
 Synthetic OHLCV is TEST-ONLY — never used in production paths.
 """
@@ -21,6 +25,9 @@ from app.research.config import ResearchConfig
 from app.signals.config import SignalConfig
 from app.signals.swing_detector import swings_for_timeframe
 from app.signals.trend_engine import infer_trend
+
+# Pytest marker for CI / selective runs: pytest -m v1_freeze
+pytestmark = pytest.mark.v1_freeze
 
 
 def _ts(minutes: int) -> datetime:
@@ -352,3 +359,69 @@ class TestCombo02EvaluateIntegration:
                 snap = t.get("condition_snapshot") or {}
                 if t.get("direction") == "LONG" and snap:
                     assert snap.get("htf") is True or snap.get("htf_alignment") == "HTF_ALIGNED"
+
+
+class TestCombo02V1Regression:
+    """v1-critical contrasts — keep stable across freezes (docs/v1_freeze.md)."""
+
+    def test_combo02_requires_htf_aligned_flag(self):
+        c = COMBINATIONS["COMBO_02"]
+        assert c.require_htf_alignment is True
+        assert c.require_trend is True
+        assert c.require_bos is True
+        local = COMBINATIONS["COMBO_02_LOCAL"]
+        assert local.require_htf_alignment is False
+        assert "LEGACY" in (local.description or "").upper() or "RESEARCH" in (
+            local.description or ""
+        ).upper()
+
+    def test_bearish_4h_zero_longs_combo02_local_may_trade(
+        self, scfg: SignalConfig, rcfg: ResearchConfig
+    ):
+        """COMBO_02 must produce 0 LONGs when 4h is bearish; LOCAL may still trade."""
+        setup = _trending_series(n=180, minutes_per_bar=60, start_price=150.0, drift=0.5)
+        h1 = list(setup)  # setup TF is 1h — reuse as 1h HTF leg
+        h4 = _htf_ending_with_setup(
+            setup, n=100, minutes_per_bar=240, start_price=150.0, drift=-0.8
+        )
+        # Sanity: 4h bears near end
+        t4 = infer_trend(swings_for_timeframe(h4, scfg, "4h", as_of_index=len(h4) - 1))
+        assert t4["trend"] == "BEARISH"
+
+        run_v1 = run_combination_backtest(
+            "TESTUSDT",
+            "1h",
+            setup,
+            "COMBO_02",
+            signal_config=scfg,
+            research_config=rcfg,
+            direction_filter="LONG",
+            candles_1h=h1,
+            candles_4h=h4,
+        )
+        run_local = run_combination_backtest(
+            "TESTUSDT",
+            "1h",
+            setup,
+            "COMBO_02_LOCAL",
+            signal_config=scfg,
+            research_config=rcfg,
+            direction_filter="LONG",
+            candles_1h=h1,
+            candles_4h=h4,
+        )
+
+        def _closed_longs(run: dict) -> list:
+            out = []
+            for t in run.get("trades") or []:
+                direction = t.direction if hasattr(t, "direction") else t.get("direction")
+                outcome = t.outcome if hasattr(t, "outcome") else t.get("outcome")
+                if direction == "LONG" and outcome != "OPEN":
+                    out.append(t)
+            return out
+
+        assert _closed_longs(run_v1) == []
+        # LOCAL is allowed to find longs — proves the HTF gate is doing work when it does.
+        # If LOCAL also finds none (structure/BOS timing), still OK as long as v1 is empty.
+        assert int(run_v1.get("sample_size") or 0) == 0
+        assert int(run_local.get("sample_size") or 0) >= int(run_v1.get("sample_size") or 0)
