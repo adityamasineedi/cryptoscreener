@@ -179,6 +179,37 @@ def test_path_a_15m_blocked_when_watcher_owns_entries():
     assert "v1_watcher_owns_path_a" in (paper._last_skip_reason or "")
 
 
+def test_path_a_15m_opens_in_parallel_when_watcher_does_not_own(monkeypatch):
+    import app.services.paper_trade as paper_mod
+
+    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    paper = PaperTradeEngine(enabled=True, entry_mode=PATH_A, v1_profile_enabled=True)
+    paper.legacy_auto_entry_enabled = True
+    paper.v1_watcher_owns_entries = False
+    paper.risk_policy.enabled = False
+    payload = {
+        "status": "WAITING",
+        "direction": "LONG",
+        "timeframe": "15m",
+        "bos": {"state": "CONFIRMED", "direction": "BULLISH_BOS", "broken_level": 100},
+        "trend": {
+            "15m": {"trend": "BULLISH"},
+            "1h": {"trend": "BULLISH"},
+            "4h": {"trend": "BULLISH"},
+        },
+        "mtf": {"MTF_ALIGNMENT": "STRONG_LONG"},
+        "entry": {"entry_price": 100},
+        "stop": {"final_stop": 98},
+        "targets": [{"target_price": 104}],
+        "risk_reward": {"RISK_REWARD": "PASS"},
+        "ohlcv_freshness": "OK",
+    }
+    pos = paper.on_setup_signal("BTCUSDT", payload)
+    assert pos is not None
+    assert pos.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
+    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
+
+
 def test_path_b_cannot_label_combo02_v1():
     paper = PaperTradeEngine(enabled=True, entry_mode=PATH_B, v1_profile_enabled=True)
     paper.v1_watcher_owns_entries = True

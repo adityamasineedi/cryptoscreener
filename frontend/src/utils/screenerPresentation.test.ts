@@ -4,8 +4,10 @@ import {
   COL_WIDTHS,
   TECHNICAL_PINNED_IDS,
   compactEmptyLabel,
+  displayV1Status,
   formatCompactNumber,
   formatFundingCell,
+  formatPotentialLevel,
   formatSetupStateLabel,
   formatTechRatingDisplay,
   futuresColumnIds,
@@ -13,6 +15,7 @@ import {
   liquidationTooltip,
   matchesSetupFilter,
   matchesSignalFilter,
+  potentialLevelsForRow,
   shortDependencyLabel,
   shouldResetTableScroll,
   stickyOffsets,
@@ -71,6 +74,7 @@ describe("Trade / Technical column modes", () => {
       "market_signal",
       "trend",
       "setup_signal",
+      "v1_status",
       "setup_entry",
       "setup_sl",
       "setup_tp1",
@@ -84,6 +88,7 @@ describe("Trade / Technical column modes", () => {
     expect(ids.slice(0, 4)).toEqual(["symbol", "price", "market_signal", "setup_signal"]);
     expect(ids).toContain("rating");
     expect(ids).toContain("setup_bos");
+    expect(ids).toContain("v1_status");
     expect(ids).toContain("mcap");
     expect(ids).toContain("liq");
     expect(ids).toContain("entry");
@@ -198,5 +203,78 @@ describe("Formatting + filters", () => {
 
   it("18. Live updates do not imply mode change / scroll reset", () => {
     expect(shouldResetTableScroll("technical", "technical")).toBe(false);
+  });
+});
+
+describe("V1 presentation safety", () => {
+  it("never treats a 15m discovery row as V1 ELIGIBLE", () => {
+    const near = row({
+      symbol: "NEARUSDT",
+      setup_trend: fv("BULLISH", "LIVE"),
+      setup_signal: fv("WAITING", "LIVE"),
+      setup_sl: fv(4.7692, "LIVE"),
+      setup_tp1: fv(4.836, "LIVE"),
+      setup_rr: fv(4.0, "LIVE"),
+      v1_status: {
+        in_v1_universe: false,
+        status: "DISCOVERY_ONLY",
+        label: "DISCOVERY ONLY",
+      },
+      is_telegram_eligible: false,
+    });
+    const d = displayV1Status(near);
+    expect(d.text).toBe("DISCOVERY ONLY");
+    expect(d.tone).toBe("discovery");
+    expect(near.is_telegram_eligible).toBe(false);
+  });
+
+  it("ETH without snapshot is UNAVAILABLE, not inferred eligible", () => {
+    const eth = row({
+      symbol: "ETHUSDT",
+      setup_trend: fv("BULLISH", "LIVE"),
+      setup_signal: fv("WAITING", "LIVE"),
+    });
+    const d = displayV1Status(eth);
+    expect(d.text).toBe("V1 DATA UNAVAILABLE");
+    expect(d.tone).toBe("unavailable");
+  });
+
+  it("WAITING/CONFLICT potential levels are reference/candidate only", () => {
+    const waiting = row({
+      setup_signal: fv("WAITING", "LIVE"),
+      setup_entry: fv(null, "WAITING"),
+      setup_sl: fv(1.23, "LIVE"),
+      setup_tp1: fv(1.45, "LIVE"),
+      setup_rr: fv(4, "LIVE"),
+    });
+    const levels = potentialLevelsForRow(waiting);
+    expect(levels.referenceOnly).toBe(true);
+    const sl = formatPotentialLevel(levels.stop, {
+      kind: "stop",
+      referenceOnly: true,
+      entryMissing: true,
+    });
+    expect(sl.muted).toBe(true);
+    expect(sl.text).toMatch(/candidate/i);
+    const entry = formatPotentialLevel(null, {
+      kind: "entry",
+      referenceOnly: true,
+      entryMissing: true,
+    });
+    expect(entry.text).toBe("—");
+  });
+
+  it("V1 ELIGIBLE display only when API status says so (read-only)", () => {
+    const btc = row({
+      symbol: "BTCUSDT",
+      v1_status: {
+        in_v1_universe: true,
+        status: "V1_ELIGIBLE",
+        label: "V1 ELIGIBLE — confirmed 1h entry",
+      },
+      is_telegram_eligible: false,
+    });
+    expect(displayV1Status(btc).tone).toBe("eligible");
+    expect(btc.is_telegram_eligible).toBe(false);
   });
 });

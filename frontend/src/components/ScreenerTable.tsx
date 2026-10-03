@@ -6,15 +6,20 @@ import { Spinner } from "./Spinner";
 import type { FreshValue, ScreenerRow } from "../types/market";
 import {
   COL_WIDTHS,
+  POTENTIAL_LEVELS_TOOLTIP,
+  SCREEN_STATE_LEGEND_SHORT,
   TECHNICAL_CORE_IDS,
   TECHNICAL_MARKET_IDS,
   TECHNICAL_PINNED_IDS,
   TRADE_COL_IDS,
+  V1_DIFFERS_HELP,
   dependencyTooltip,
+  displayV1Status,
   formatCompactNumber,
   formatFundingCell,
   formatMarketSignalLabel,
   formatPctCell,
+  formatPotentialLevel,
   formatPriceCell,
   formatSetupStateLabel,
   formatTechRatingDisplay,
@@ -22,12 +27,15 @@ import {
   liquidationTooltip,
   matchesSetupFilter,
   matchesSignalFilter,
+  potentialLevelsForRow,
   shouldResetTableScroll,
   stickyOffsets,
   tradeStatusLabel,
+  v1StatusClass,
   type SetupFilter,
   type SignalFilter,
 } from "../utils/screenerPresentation";
+import { V1PaperOpenHint, V1WatcherPanel } from "./V1WatcherPanel";
 
 type Col = {
   id: string;
@@ -41,15 +49,53 @@ type Col = {
   numeric?: boolean;
 };
 
-function LevelCell({ fv }: { fv: FreshValue | undefined }) {
-  if (isMissingLevel(fv)) {
-    return (
-      <span className="font-mono text-sm text-terminal-muted" title={dependencyTooltip(fv)}>
-        —
+function LevelCell({
+  row,
+  kind,
+}: {
+  row: ScreenerRow;
+  kind: "entry" | "stop" | "tp1" | "rr";
+}) {
+  const levels = potentialLevelsForRow(row);
+  const value =
+    kind === "entry"
+      ? levels.entry
+      : kind === "stop"
+        ? levels.stop
+        : kind === "tp1"
+          ? levels.tp1
+          : levels.rr;
+  const entryMissing = levels.entry == null;
+  const { text, muted, title } = formatPotentialLevel(value, {
+    kind,
+    referenceOnly: levels.referenceOnly,
+    entryMissing,
+  });
+  return (
+    <span
+      className={`font-mono text-sm ${muted ? "text-terminal-muted/70" : "text-terminal-text"}`}
+      title={title}
+      data-testid={`potential-${kind}`}
+    >
+      {text}
+    </span>
+  );
+}
+
+function V1StatusCell({ row }: { row: ScreenerRow }) {
+  const { text, title, tone } = displayV1Status(row);
+  return (
+    <div className="min-w-0">
+      <span
+        className={`block truncate text-[11px] font-medium ${v1StatusClass(tone)}`}
+        title={title}
+        data-testid={`v1-status-${row.symbol}`}
+      >
+        {text}
       </span>
-    );
-  }
-  return <FreshCell fv={fv} format={formatPriceCell} compact />;
+      <V1PaperOpenHint row={row} />
+    </div>
+  );
 }
 
 function SetupStateCell({ fv }: { fv: FreshValue | undefined }) {
@@ -144,56 +190,58 @@ function futuresTradeColumns(): Col[] {
       },
       { align: "right", numeric: true },
     ),
-    market_signal: buildCol("market_signal", "Signal", (r) => <SignalCell fv={r.market_signal} />),
+    market_signal: buildCol(
+      "market_signal",
+      "Screen Signal",
+      (r) => <SignalCell fv={r.market_signal} />,
+    ),
     trend: buildCol(
       "trend",
-      "Trend",
+      "Local Trend",
       (r) => <FreshCell fv={r.setup_trend ?? r.market_structure ?? r.structure} compact />,
     ),
-    setup_signal: buildCol("setup_signal", "Setup", (r) => <SetupStateCell fv={r.setup_signal} />),
+    setup_signal: buildCol(
+      "setup_signal",
+      "Screen Setup",
+      (r) => <SetupStateCell fv={r.setup_signal} />,
+    ),
+    v1_status: buildCol("v1_status", "V1 Status", (r) => <V1StatusCell row={r} />),
     setup_entry: buildCol(
       "setup_entry",
-      "Entry",
-      (r) => <LevelCell fv={r.setup_entry} />,
+      "Potential Entry",
+      (r) => <LevelCell row={r} kind="entry" />,
       { align: "right", numeric: true },
     ),
     setup_sl: buildCol(
       "setup_sl",
-      "SL",
-      (r) => <LevelCell fv={r.setup_sl} />,
+      "Potential SL",
+      (r) => <LevelCell row={r} kind="stop" />,
       { align: "right", numeric: true },
     ),
     setup_tp1: buildCol(
       "setup_tp1",
-      "TP1",
-      (r) => <LevelCell fv={r.setup_tp1} />,
+      "Potential TP1",
+      (r) => <LevelCell row={r} kind="tp1" />,
       { align: "right", numeric: true },
     ),
     setup_rr: buildCol(
       "setup_rr",
-      "R:R",
-      (r) => {
-        if (isMissingLevel(r.setup_rr)) {
-          return (
-            <span className="font-mono text-sm text-terminal-muted" title={dependencyTooltip(r.setup_rr)}>
-              —
-            </span>
-          );
-        }
-        return (
-          <FreshCell fv={r.setup_rr} format={(v) => Number(v).toFixed(2)} compact />
-        );
-      },
+      "Potential R:R",
+      (r) => <LevelCell row={r} kind="rr" />,
       { align: "right", numeric: true },
     ),
-    status: buildCol("status", "Status", (r) => {
-      const { text, title } = tradeStatusLabel(r);
-      return (
-        <span className="block truncate text-xs text-terminal-muted" title={title}>
-          {text}
-        </span>
-      );
-    }),
+    status: buildCol(
+      "status",
+      "Screen Status",
+      (r) => {
+        const { text, title } = tradeStatusLabel(r);
+        return (
+          <span className="block truncate text-xs text-terminal-muted" title={title}>
+            {text}
+          </span>
+        );
+      },
+    ),
   };
 
   return TRADE_COL_IDS.map((id) => defs[id]).filter(Boolean);
@@ -222,13 +270,13 @@ function futuresTechnicalColumns(): Col[] {
     ),
     market_signal: buildCol(
       "market_signal",
-      "Signal",
+      "Screen Signal",
       (r) => <SignalCell fv={r.market_signal} />,
       { pinned: true, stickyLeft: pinLeft.market_signal },
     ),
     setup_signal: buildCol(
       "setup_signal",
-      "Setup",
+      "Screen Setup",
       (r) => <SetupStateCell fv={r.setup_signal} />,
       { pinned: true, stickyLeft: pinLeft.setup_signal },
     ),
@@ -242,7 +290,7 @@ function futuresTechnicalColumns(): Col[] {
     }),
     trend: buildCol(
       "trend",
-      "Trend",
+      "Local Trend",
       (r) => <FreshCell fv={r.setup_trend ?? r.market_structure ?? r.structure} compact />,
     ),
     setup_bos: buildCol(
@@ -260,37 +308,29 @@ function futuresTechnicalColumns(): Col[] {
       "Pullback",
       (r) => <FreshCell fv={r.setup_pullback} compact />,
     ),
+    v1_status: buildCol("v1_status", "V1 Status", (r) => <V1StatusCell row={r} />),
     setup_entry: buildCol(
       "setup_entry",
-      "Entry",
-      (r) => <LevelCell fv={r.setup_entry} />,
+      "Potential Entry",
+      (r) => <LevelCell row={r} kind="entry" />,
       { align: "right", numeric: true },
     ),
     setup_sl: buildCol(
       "setup_sl",
-      "SL",
-      (r) => <LevelCell fv={r.setup_sl} />,
+      "Potential SL",
+      (r) => <LevelCell row={r} kind="stop" />,
       { align: "right", numeric: true },
     ),
     setup_tp1: buildCol(
       "setup_tp1",
-      "TP1",
-      (r) => <LevelCell fv={r.setup_tp1} />,
+      "Potential TP1",
+      (r) => <LevelCell row={r} kind="tp1" />,
       { align: "right", numeric: true },
     ),
     setup_rr: buildCol(
       "setup_rr",
-      "R:R",
-      (r) => {
-        if (isMissingLevel(r.setup_rr)) {
-          return (
-            <span className="font-mono text-sm text-terminal-muted" title={dependencyTooltip(r.setup_rr)}>
-              —
-            </span>
-          );
-        }
-        return <FreshCell fv={r.setup_rr} format={(v) => Number(v).toFixed(2)} compact />;
-      },
+      "Potential R:R",
+      (r) => <LevelCell row={r} kind="rr" />,
       { align: "right", numeric: true },
     ),
     mcap: buildCol(
@@ -563,6 +603,8 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
   const [setupFilter, setSetupFilter] = useState<SetupFilter>("ALL");
   const [switching, setSwitching] = useState(false);
   const [showWhyExcluded, setShowWhyExcluded] = useState(false);
+  const [showHowDiffers, setShowHowDiffers] = useState(false);
+  const [showLegend, setShowLegend] = useState(false);
 
   const mode: "trade" | "technical" = technicalView ? "technical" : "trade";
 
@@ -644,6 +686,11 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
   const shown = screenMeta?.returned_count ?? data.length;
   const eligible = screenMeta?.eligible_count ?? shown;
   const excluded = screenMeta?.excluded || {};
+  const screenTf =
+    screenMeta?.screen_timeframe ||
+    screenMeta?.screener_identity?.screen_setup_timeframe ||
+    "15m";
+  const identity = screenMeta?.screener_identity;
 
   return (
     <div className="table-wrapper relative min-w-0 min-h-0">
@@ -654,7 +701,51 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
       ) : null}
 
       {domain === "Futures" && (
-        <div className="flex flex-col gap-1 border-b border-terminal-border/60 px-2 py-1.5 text-[10px] text-terminal-muted">
+        <>
+          <div
+            className="border-b border-amber-500/30 bg-amber-500/5 px-2 py-2"
+            data-testid="general-screener-banner"
+          >
+            <div className="font-mono text-[12px] font-semibold tracking-wide text-amber-100">
+              {identity?.title || "GENERAL MARKET SCREENER"}
+            </div>
+            <p className="mt-0.5 text-[11px] text-terminal-text">
+              {identity?.subtitle ||
+                "Structure and setup discovery only. Not a COMBO_02 v1 trade signal."}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-terminal-muted">
+              <span>
+                Screen setup timeframe:{" "}
+                <span className="font-mono text-terminal-text">{screenTf}</span>
+              </span>
+              <span>
+                COMBO_02 v1 execution:{" "}
+                <span className="text-terminal-text">
+                  {identity?.v1_execution ||
+                    "1h setup + 4h/1h HTF alignment + confirmed BOS"}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="rounded border border-terminal-border px-1.5 py-0.5 hover:text-terminal-text"
+                onClick={() => setShowHowDiffers((v) => !v)}
+                data-testid="how-differs-from-v1"
+                title={V1_DIFFERS_HELP}
+              >
+                How this differs from v1
+              </button>
+            </div>
+            {showHowDiffers ? (
+              <pre
+                className="mt-1 whitespace-pre-wrap rounded border border-terminal-border/60 bg-black/30 p-2 font-mono text-[10px] text-terminal-muted"
+                data-testid="how-differs-body"
+              >
+                {V1_DIFFERS_HELP}
+              </pre>
+            ) : null}
+          </div>
+          <V1WatcherPanel rows={screenMeta?.v1_watcher_view} />
+          <div className="flex flex-col gap-1 border-b border-terminal-border/60 px-2 py-1.5 text-[10px] text-terminal-muted">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <div className="font-mono text-[11px] text-terminal-text" data-testid="screen-universe-label">
               <span className="text-terminal-muted">SCREEN</span>{" "}
@@ -707,7 +798,37 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
             >
               Why not in Top 100?
             </button>
+            <button
+              type="button"
+              className="rounded border border-terminal-border px-1.5 py-0.5 text-[10px] hover:text-terminal-text"
+              onClick={() => setShowLegend((v) => !v)}
+              data-testid="screen-state-legend"
+              title={POTENTIAL_LEVELS_TOOLTIP}
+            >
+              Screen state legend
+            </button>
           </div>
+          {showLegend ? (
+            <div
+              className="grid gap-1 font-mono text-[10px] text-terminal-muted sm:grid-cols-2"
+              data-testid="screen-state-legend-body"
+            >
+              {SCREEN_STATE_LEGEND_SHORT.map((item) => (
+                <div key={item.state}>
+                  <span className="text-terminal-text">{item.state}</span>
+                  {" — "}
+                  {item.meaning}
+                </div>
+              ))}
+              <div className="sm:col-span-2 text-[9px] opacity-80" title={POTENTIAL_LEVELS_TOOLTIP}>
+                Potential Entry/SL/TP1/R:R are reference levels only — not orders, not paper, not Telegram.
+              </div>
+            </div>
+          ) : (
+            <div className="text-[9px] text-terminal-muted/80">
+              NEUTRAL · WAITING · CONFLICT · DISCOVERY ONLY are screen states — not v1 trade signals.
+            </div>
+          )}
           {showWhyExcluded ? (
             <div className="font-mono text-[10px] text-terminal-muted" data-testid="exclusion-diagnostics">
               Excluded — missing price: {excluded.excluded_missing_price ?? 0} · stale:{" "}
@@ -740,7 +861,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
             {technicalView ? "Technical view — why this state" : "Trade view — what to investigate"}
           </span>
           <label className="inline-flex items-center gap-1">
-            Signal
+            Screen Signal
             <select
               className="rounded border border-terminal-border bg-terminal-panel px-1 py-0.5 text-[10px] text-terminal-text"
               value={signalFilter}
@@ -755,7 +876,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
             </select>
           </label>
           <label className="inline-flex items-center gap-1">
-            Setup
+            Screen Setup
             <select
               className="rounded border border-terminal-border bg-terminal-panel px-1 py-0.5 text-[10px] text-terminal-text"
               value={setupFilter}
@@ -773,6 +894,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
           </label>
           </div>
         </div>
+        </>
       )}
 
       <div ref={scrollRef} className="table-scroll min-w-0 min-h-0" data-testid="screener-table-scroll">

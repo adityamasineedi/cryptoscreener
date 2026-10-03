@@ -90,6 +90,82 @@ export interface ScreenerRow {
   /** Presentation-only screening rank — not a strategy/profit score */
   screen_priority_score?: number | null;
   screen_priority_reason?: string | null;
+  /** Presentation metadata — discovery vs COMBO_02 v1 (never Telegram-eligible) */
+  screen_timeframe?: string | null;
+  local_trend?: string | null;
+  screen_signal?: string | null;
+  screen_setup?: string | null;
+  potential_levels?: PotentialLevels | null;
+  v1_status?: V1Status | null;
+  v1_paper_trade?: V1PaperTradeHint | null;
+  is_telegram_eligible?: boolean;
+}
+
+export interface PotentialLevels {
+  entry: number | null;
+  stop: number | null;
+  tp1: number | null;
+  rr: number | null;
+  is_confirmed: boolean;
+  reference_only?: boolean;
+  display_mode?: "candidate" | "potential";
+  tooltip?: string;
+}
+
+export interface V1Status {
+  in_v1_universe: boolean;
+  status: string;
+  label?: string;
+  tier?: string | null;
+  risk_percent?: number | null;
+  timeframe?: string | null;
+  trend_1h?: string | null;
+  trend_4h?: string | null;
+  htf_alignment?: string | null;
+  bos_status?: string | null;
+  open_trade_id?: string | null;
+  last_evaluated_at_utc?: string | null;
+  tooltip?: string;
+  eval_status?: string | null;
+  tip_bar?: string | null;
+}
+
+export interface V1PaperTradeHint {
+  open: boolean;
+  trade_id?: string | null;
+  label?: string;
+  href?: string;
+}
+
+export interface ScreenerIdentity {
+  title: string;
+  subtitle: string;
+  screen_setup_timeframe: string;
+  v1_execution: string;
+  is_telegram_eligible: boolean;
+  legend?: Record<string, string>;
+}
+
+export interface V1WatcherViewRow {
+  symbol: string;
+  tier?: string | null;
+  risk_percent?: number | null;
+  risk_label?: string | null;
+  last_closed_1h_bar?: string | null;
+  trend_1h?: string | null;
+  trend_4h?: string | null;
+  htf_alignment?: string | null;
+  bos_status?: string | null;
+  watcher_status?: string | null;
+  watcher_status_code?: string | null;
+  open_trade_id?: string | null;
+  paper_label?: string | null;
+  last_evaluated_at_utc?: string | null;
+  timeframe?: string;
+  path?: string;
+  combo_id?: string;
+  read_only?: boolean;
+  creates_orders?: boolean;
 }
 
 export type ScreenSize = 25 | 50 | 100;
@@ -111,6 +187,9 @@ export interface ScreenerMeta {
   excluded?: Record<string, number>;
   search_mode?: boolean;
   screen_filter?: string | null;
+  screen_timeframe?: string | null;
+  screener_identity?: ScreenerIdentity | null;
+  v1_watcher_view?: V1WatcherViewRow[] | null;
 }
 
 export interface ScreenerPreset {

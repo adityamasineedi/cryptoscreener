@@ -73,7 +73,7 @@ export function PaperTradePanel() {
     watch: 0,
     blocked: 0,
     note: "",
-    watcherOwns: true,
+    watcherOwns: false,
   });
   const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +111,7 @@ export function PaperTradePanel() {
         watch: chances.watch || 0,
         blocked: chances.blocked || 0,
         note: chances.note || "",
-        watcherOwns: chances.v1_watcher_owns_entries !== false,
+        watcherOwns: chances.v1_watcher_owns_entries === true,
       });
     } catch (e) {
       // Don't clear Auto status when opportunities time out
@@ -211,13 +211,12 @@ export function PaperTradePanel() {
         <div>
           <h1 className="font-display text-lg tracking-tight">Paper Trade</h1>
           <p className="mt-1 max-w-xl text-[11px] text-terminal-muted">
-            Auto-opens a virtual long from the{" "}
+            Parallel paper streams:{" "}
             <span className="text-terminal-text">COMBO_02 v1 1h watcher</span>{" "}
-            (BTC / ETH / SOL closed bars only). Path A matches research COMBO_02
-            HTF gates. 15m Trade chances below are screener research and do{" "}
-            <span className="text-terminal-text">not</span> auto-execute while
-            the v1 watcher owns entries. Exits at stop or TP1 on mark/last. No
-            real exchange orders. Freeze:{" "}
+            (BTC / ETH / SOL) and 15m{" "}
+            <span className="text-terminal-text">RESEARCH_15M</span> Trade chances,
+            each with its own source label. One open position per symbol; exits at
+            stop or TP1 on mark/last. No real exchange orders. Freeze:{" "}
             <span className="font-mono text-terminal-text/80">v1-combo02-long-htf</span>.
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
@@ -228,7 +227,7 @@ export function PaperTradePanel() {
               v1 secondary: ETH/SOL @ 0.5%
             </span>
             <span className="rounded border border-terminal-border bg-white/5 px-1.5 py-0.5 text-terminal-muted">
-              research: 15m (not sized as live)
+              research: 15m RESEARCH_15M stream
             </span>
             {status?.v1_profile?.enabled === false ? (
               <span className="rounded border border-rose-500/40 bg-rose-500/10 px-1.5 py-0.5 text-rose-200">

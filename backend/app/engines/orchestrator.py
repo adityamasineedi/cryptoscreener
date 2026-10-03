@@ -170,14 +170,15 @@ class CalculationOrchestrator:
                 getattr(self.settings, "paper_v1_secondary_enabled", True)
             ),
         )
+        # Exclusive ownership is optional — default parallel streams keep sources separate.
         paper.v1_watcher_owns_entries = bool(
-            getattr(self.settings, "paper_v1_watcher_enabled", True)
+            getattr(self.settings, "paper_v1_watcher_owns_entries", False)
         )
         paper.legacy_auto_entry_enabled = bool(
             getattr(self.settings, "paper_legacy_auto_entry_enabled", False)
         )
         v1_watcher = None
-        if paper.v1_watcher_owns_entries:
+        if bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
             from app.services.v1_paper_watcher import get_v1_paper_watcher
 
             v1_watcher = get_v1_paper_watcher(
@@ -201,6 +202,8 @@ class CalculationOrchestrator:
                     books=len(v1_watcher.books),
                     seeded=seeded,
                     replay=v1_watcher.replay_mode,
+                    owns_entries=paper.v1_watcher_owns_entries,
+                    legacy_auto=paper.legacy_auto_entry_enabled,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("v1_paper_watcher_seed_failed", error=str(exc))
@@ -235,8 +238,7 @@ class CalculationOrchestrator:
         except Exception as exc:  # noqa: BLE001
             logger.warning("funding_hydrate_failed", error=str(exc))
         # Open any legacy Path A/B setups already in cache after boot.
-        # Default: legacy auto-entry OFF — screener/BOS continue without paper fills.
-        # When v1 watcher owns entries, skip Path A as well.
+        # Runs alongside the v1 watcher unless exclusive ownership is enabled.
         if paper.legacy_auto_entry_enabled and not paper.v1_watcher_owns_entries:
             try:
                 paper.scan_cached_setups()
@@ -519,6 +521,8 @@ class CalculationOrchestrator:
         await self._recompute_setup(symbol, timeframe)
         # COMBO_02 v1 1h watcher — independent of 15m screener Path A
         await self._maybe_run_v1_watcher(symbol, timeframe)
+        # Dynamic v2 experimental paper — disabled by default; never joins v1
+        await self._maybe_run_v2_candidate_watcher(symbol, timeframe)
 
     async def _maybe_run_v1_watcher(self, symbol: str, timeframe: str) -> None:
         if not bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
@@ -537,6 +541,40 @@ class CalculationOrchestrator:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "v1_paper_watcher_failed",
+                symbol=symbol,
+                timeframe=timeframe,
+                error=str(exc),
+            )
+
+    async def _maybe_run_v2_candidate_watcher(self, symbol: str, timeframe: str) -> None:
+        if not bool(getattr(self.settings, "dynamic_v2_paper_watcher_enabled", False)):
+            return
+        if normalize_timeframe(timeframe).lower() != "1h":
+            return
+        try:
+            from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
+            from app.services.v2_candidate_paper_watcher import get_v2_candidate_paper_watcher
+
+            watcher = get_v2_candidate_paper_watcher(
+                enabled=True,
+                max_open_positions=int(
+                    getattr(self.settings, "dynamic_v2_max_open_positions", 1)
+                ),
+                max_total_risk_percent=float(
+                    getattr(self.settings, "dynamic_v2_max_total_risk_percent", 0.005)
+                ),
+                max_v1_book_risk_percent=float(
+                    getattr(self.settings, "dynamic_v2_max_v1_book_risk_percent", 0.05)
+                ),
+                paper_engine=get_paper_trade_engine(),
+                emit_alerts=False,
+            )
+            pos = await watcher.on_closed_1h(symbol)
+            if pos is not None:
+                await flush_paper_trade_persists(get_paper_trade_engine())
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "v2_candidate_watcher_failed",
                 symbol=symbol,
                 timeframe=timeframe,
                 error=str(exc),

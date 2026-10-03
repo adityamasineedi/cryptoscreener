@@ -93,6 +93,12 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           excluded: meta.excluded,
           search_mode: Boolean(meta.search_mode),
           screen_filter: meta.screen_filter ?? null,
+          screen_timeframe:
+            meta.screen_timeframe ?? get().screenMeta?.screen_timeframe ?? null,
+          screener_identity:
+            meta.screener_identity ?? get().screenMeta?.screener_identity ?? null,
+          v1_watcher_view:
+            meta.v1_watcher_view ?? get().screenMeta?.v1_watcher_view ?? null,
         }
       : get().screenMeta;
     set({

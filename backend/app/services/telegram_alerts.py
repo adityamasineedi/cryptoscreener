@@ -113,6 +113,13 @@ def is_v1_paper_alert(alert: dict[str, Any] | None) -> bool:
     timeframe = str(_pick("timeframe") or "").lower()
     htf = str(_pick("htf_alignment") or snip.get("htf_alignment") or "").upper()
 
+    # Dynamic v2 research / experimental paper must never reach v1 Telegram.
+    if strategy_id in ("COMBO_02_V2_RESEARCH",) or source in (
+        "DYNAMIC_CANDIDATE_PIPELINE",
+        "V2_CANDIDATE_PAPER_WATCHER",
+    ):
+        return False
+
     if strategy_id != "COMBO_02_V1":
         return False
     if source != "V1_PAPER_WATCHER":

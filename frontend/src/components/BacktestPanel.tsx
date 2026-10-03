@@ -11,6 +11,7 @@ import { tradeRowKey } from "../chart/backtestTradeOverlay";
 import { useBacktestJobStore } from "../store/backtestJobStore";
 import { BacktestTradeChart } from "./BacktestTradeChart";
 import { CandidateResearchPanel } from "./CandidateResearchPanel";
+import { DynamicCandidatePipelinePanel } from "./DynamicCandidatePipelinePanel";
 
 type PeriodMode = "lookback" | "dates";
 
@@ -1041,6 +1042,7 @@ export function BacktestPanel() {
       ) : null}
 
       <CandidateResearchPanel />
+      <DynamicCandidatePipelinePanel />
     </div>
   );
 }

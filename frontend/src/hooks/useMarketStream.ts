@@ -51,6 +51,9 @@ export function useMarketStream() {
             excluded: data.excluded,
             search_mode: data.search_mode,
             screen_filter: data.screen_filter,
+            screen_timeframe: data.screen_timeframe,
+            screener_identity: data.screener_identity,
+            v1_watcher_view: data.v1_watcher_view,
           });
         }
       } catch {
@@ -141,6 +144,9 @@ export function useMarketStream() {
               excluded: msg.excluded,
               search_mode: msg.search_mode,
               screen_filter: msg.screen_filter,
+              screen_timeframe: msg.screen_timeframe,
+              screener_identity: msg.screener_identity,
+              v1_watcher_view: msg.v1_watcher_view,
             });
           } else if (msg.type === "row_patch" && msg.symbol && msg.changes) {
             applyRowPatch(msg.symbol as string, msg.changes as Partial<ScreenerRow>);

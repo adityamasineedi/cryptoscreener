@@ -123,6 +123,10 @@ class V1PaperWatcher:
         self._prev_break: dict[str, bool] = {}
         self._prev_swing_n: dict[str, int] = {}
         self._swing_state: dict[str, list[Any]] = {}
+        # Read-only UI snapshots (never open trades). symbol -> payload.
+        self._presentation_snapshots: dict[str, dict[str, Any]] = {}
+        self._presentation_refreshed_at: float = 0.0
+        self._presentation_ttl_sec: float = 20.0
 
     @property
     def books(self) -> list[V1Book]:
@@ -356,6 +360,11 @@ class V1PaperWatcher:
             candles_4h=series_4h,
             as_of_index=tip_idx,
         )
+        self._store_presentation_snapshot(
+            book.symbol,
+            eval_result=result,
+            tip_bar=tip_iso,
+        )
         with self._lock:
             self._processed_bars.add(key)
             if tip_iso:
@@ -485,10 +494,117 @@ class V1PaperWatcher:
             self.replay_mode = prev_replay
         return opened
 
-    def peek_books(self) -> list[dict[str, Any]]:
-        """Cheap tip snapshot per v1 book (no combo evaluation — safe for UI poll)."""
+    def _store_presentation_snapshot(
+        self,
+        symbol: str,
+        *,
+        eval_result: Mapping[str, Any] | None,
+        tip_bar: str | None,
+    ) -> None:
+        """Cache a read-only evaluate_combination_at_bar tip snapshot for UI."""
+        sym = normalize_symbol(symbol)
+        htf = (eval_result or {}).get("htf") if isinstance(eval_result, Mapping) else None
+        htf = htf if isinstance(htf, Mapping) else {}
+        payload = {
+            "symbol": sym,
+            "tip_bar": tip_bar,
+            "evaluated_at_utc": _iso(datetime.now(timezone.utc)),
+            "eval": dict(eval_result) if isinstance(eval_result, Mapping) else None,
+            "trend_1h": htf.get("trend_1h"),
+            "trend_4h": htf.get("trend_4h"),
+            "htf_alignment": htf.get("htf_alignment"),
+            "read_only": True,
+            "opens_trades": False,
+        }
+        with self._lock:
+            self._presentation_snapshots[sym] = payload
+
+    def refresh_presentation_snapshots(self, *, force: bool = False) -> dict[str, dict[str, Any]]:
+        """Evaluate tip for BTC/ETH/SOL only; never opens paper or emits alerts.
+
+        Cached with a short TTL so screener refresh does not re-run combo eval
+        on every poll. Does not touch non-v1 symbols.
+        """
+        import time
+
+        now = time.monotonic()
+        with self._lock:
+            age = now - float(self._presentation_refreshed_at or 0.0)
+            if (
+                not force
+                and self._presentation_snapshots
+                and age < float(self._presentation_ttl_sec)
+            ):
+                return {
+                    k: dict(v) for k, v in self._presentation_snapshots.items()
+                }
+
         from app.services.ohlcv_store import ohlcv_store
 
+        for book in self.books:
+            try:
+                series_1h = ohlcv_store.get_candles_for_engine(
+                    book.symbol, "1h", include_open=False
+                )
+                series_4h = ohlcv_store.get_candles_for_engine(
+                    book.symbol, "4h", include_open=False
+                )
+                if not series_1h:
+                    self._store_presentation_snapshot(
+                        book.symbol,
+                        eval_result={"status": "NO_SETUP", "reason": "missing_1h", "htf": {}},
+                        tip_bar=None,
+                    )
+                    continue
+                tip_idx = len(series_1h) - 1
+                tip_iso = _iso(candle_time(series_1h[tip_idx]))
+                if not series_4h:
+                    self._store_presentation_snapshot(
+                        book.symbol,
+                        eval_result={
+                            "status": "NO_SETUP",
+                            "reason": "missing_4h",
+                            "htf": {},
+                        },
+                        tip_bar=tip_iso,
+                    )
+                    continue
+                result = self.evaluate_at_bar(
+                    symbol=book.symbol,
+                    candles_1h=series_1h,
+                    candles_4h=series_4h,
+                    as_of_index=tip_idx,
+                )
+                self._store_presentation_snapshot(
+                    book.symbol,
+                    eval_result=result,
+                    tip_bar=tip_iso,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "v1_presentation_snapshot_failed",
+                    symbol=book.symbol,
+                    error=str(exc),
+                )
+                # Fail closed — leave prior cache or mark unavailable via absence.
+                continue
+
+        with self._lock:
+            self._presentation_refreshed_at = now
+            return {k: dict(v) for k, v in self._presentation_snapshots.items()}
+
+    def get_presentation_snapshots(self, *, refresh: bool = True) -> dict[str, dict[str, Any]]:
+        """Return cached tip eval snapshots for v1 books (presentation only)."""
+        if refresh:
+            return self.refresh_presentation_snapshots(force=False)
+        with self._lock:
+            return {k: dict(v) for k, v in self._presentation_snapshots.items()}
+
+    def peek_books(self) -> list[dict[str, Any]]:
+        """Cheap tip snapshot per v1 book; merges cached combo eval when present."""
+        from app.services.ohlcv_store import ohlcv_store
+
+        snaps = self.get_presentation_snapshots(refresh=False)
         rows: list[dict[str, Any]] = []
         for book in self.books:
             series_1h = ohlcv_store.get_candles_for_engine(
@@ -523,6 +639,10 @@ class V1PaperWatcher:
             else:
                 tip_status = "SEEDING"
                 tip_reason = "Waiting for first 1h tip seed"
+            snap = snaps.get(book.symbol) or {}
+            eval_result = snap.get("eval") if isinstance(snap.get("eval"), Mapping) else None
+            htf = (eval_result or {}).get("htf") if isinstance(eval_result, Mapping) else {}
+            htf = htf if isinstance(htf, Mapping) else {}
             rows.append(
                 {
                     "symbol": book.symbol,
@@ -535,13 +655,16 @@ class V1PaperWatcher:
                     "waiting_next_closed_bar": waiting_next,
                     "tip_status": tip_status,
                     "tip_reason": tip_reason,
-                    "gates": None,
-                    "htf_alignment": None,
-                    "trend_1h": None,
-                    "trend_4h": None,
+                    "gates": (eval_result or {}).get("gates") if eval_result else None,
+                    "htf_alignment": htf.get("htf_alignment") or snap.get("htf_alignment"),
+                    "trend_1h": htf.get("trend_1h") or snap.get("trend_1h"),
+                    "trend_4h": htf.get("trend_4h") or snap.get("trend_4h"),
+                    "eval_status": (eval_result or {}).get("status") if eval_result else None,
+                    "last_evaluated_at_utc": snap.get("evaluated_at_utc"),
                     "would_open_on_new_bar": False,
                     "bars_1h": len(series_1h or []),
                     "bars_4h": len(series_4h or []),
+                    "presentation_only": True,
                 }
             )
         return rows
@@ -573,7 +696,8 @@ class V1PaperWatcher:
                 "auto_executes_from": (
                     "Closed 1h bars on BTCUSDT / ETHUSDT / SOLUSDT via "
                     "evaluate_combination_at_bar (COMBO_02). "
-                    "15m screener opportunities do not open paper trades."
+                    "15m RESEARCH_15M may also open when legacy auto-entry is on "
+                    "and PAPER_V1_WATCHER_OWNS_ENTRIES=false (separate labels)."
                 ),
             }
         if include_live:

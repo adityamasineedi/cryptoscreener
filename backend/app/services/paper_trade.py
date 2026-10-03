@@ -319,9 +319,14 @@ class PaperTradeEngine:
         if not self.legacy_auto_entry_enabled:
             self._last_skip_reason = f"{str(symbol).upper()}:legacy_auto_entry_disabled"
             return None
-        # V1PaperWatcher owns COMBO_02 v1 entries — do not open from 15m screener Path A.
+        # Optional exclusive mode — default parallel: watcher + RESEARCH_15M coexist.
         if self.v1_watcher_owns_entries and self.entry_mode != PATH_B:
             self._last_skip_reason = f"{symbol.upper()}:v1_watcher_owns_path_a"
+            logger.info(
+                "paper_skip_v1_owns_entries",
+                symbol=str(symbol).upper(),
+                path="PATH_A",
+            )
             return None
         sym = symbol.upper()
         status = str(payload.get("status") or "")
@@ -343,7 +348,7 @@ class PaperTradeEngine:
             path_b = True
             path_label = "PATH_B"
         else:
-            # COMBO_02 v1: HTF hard gate always, even if status is ENTRY_CANDIDATE.
+            # RESEARCH_15M Path A: HTF hard gate (Trend+BOS+HTF). Not COMBO_02 v1.
             if not _is_path_a_long(payload):
                 return None
             path_a = True
@@ -359,26 +364,6 @@ class PaperTradeEngine:
             # Path A may leave direction empty while BOS is bullish
             if not path_a:
                 return None
-
-        v1_tier = ""
-        if path_a and self.v1_profile_enabled:
-            from app.research.v1_production import paper_symbol_allowed
-
-            allowed, tier_or_reason = paper_symbol_allowed(
-                sym,
-                secondary_enabled=self.v1_secondary_enabled,
-                universe_only=self.v1_universe_only,
-            )
-            if not allowed:
-                self._last_skip_reason = f"{sym}:v1_{tier_or_reason}"
-                logger.info(
-                    "paper_skip_v1_profile",
-                    symbol=sym,
-                    path=path_label,
-                    reason=tier_or_reason,
-                )
-                return None
-            v1_tier = tier_or_reason
 
         entry = payload.get("entry") or {}
         stop = payload.get("stop") or {}
@@ -472,8 +457,17 @@ class PaperTradeEngine:
             open_count = len(self._open)
             open_risk = sum(p.risk_usd for p in self._open.values())
             if sym in self._open:
+                self._last_skip_reason = f"{sym}:already_open"
+                logger.info(
+                    "paper_skip_already_open",
+                    symbol=sym,
+                    path=path_label,
+                    open_source=(self._open[sym].signal_snippet or {}).get("source"),
+                )
                 return None
             if dedupe_key in self._opened_keys:
+                self._last_skip_reason = f"{sym}:dedupe"
+                logger.info("paper_skip_dedupe", symbol=sym, path=path_label)
                 return None
 
         gate = evaluate_paper_entry_risk(
@@ -502,17 +496,23 @@ class PaperTradeEngine:
             if self.risk_policy.enabled
             else float(self.risk_percent)
         )
-        # v1 production profile overrides Path A sizing (BTC core / ETH·SOL secondary)
+        # Soft sizing hint for BTC/ETH/SOL only — never blocks outside-universe symbols.
         if path_a and self.v1_profile_enabled:
-            from app.research.v1_production import paper_risk_percent
+            from app.research.v1_production import paper_risk_percent, paper_symbol_allowed
 
-            v1_pct = paper_risk_percent(
+            allowed, _tier = paper_symbol_allowed(
                 sym,
                 secondary_enabled=self.v1_secondary_enabled,
-                fallback=eff_risk_pct,
+                universe_only=True,
             )
-            if v1_pct > 0:
-                eff_risk_pct = float(v1_pct)
+            if allowed:
+                v1_pct = paper_risk_percent(
+                    sym,
+                    secondary_enabled=self.v1_secondary_enabled,
+                    fallback=eff_risk_pct,
+                )
+                if v1_pct > 0:
+                    eff_risk_pct = float(v1_pct)
         sized = position_size(
             account_equity=self.equity,
             risk_percent=eff_risk_pct,
@@ -618,6 +618,8 @@ class PaperTradeEngine:
                 "paper_opened",
                 symbol=sym,
                 path=path_label,
+                source=legacy_snip.get("source"),
+                strategy_id=legacy_snip.get("strategy_id"),
                 entry=entry_price,
                 stop=stop_price,
                 tp1=tp1,
@@ -813,6 +815,138 @@ class PaperTradeEngine:
                 risk_usd=round(risk_usd, 4),
                 setup_bar=setup_bar_time_utc,
                 replay=bool(replay),
+            )
+            if emit_alert:
+                try:
+                    from app.services.alerts import get_alert_feed
+
+                    get_alert_feed().observe_paper_open(pos)
+                except Exception:  # noqa: BLE001
+                    pass
+            return pos
+
+    def open_experimental_position(
+        self,
+        *,
+        symbol: str,
+        timeframe: str,
+        eval_result: dict[str, Any],
+        risk_percent: float,
+        signal_snippet: dict[str, Any],
+        setup_bar_time_utc: str,
+        replay: bool = False,
+        emit_alert: bool = False,
+    ) -> PaperPosition | None:
+        """Open an experimental v2 research paper long (never v1 / never Telegram).
+
+        Used only by ``V2CandidatePaperWatcher``. Does not use v1 universe checks
+        and forces ``telegram_eligible=False`` on the stored snippet.
+        """
+        if not self.enabled and not replay:
+            return None
+        from app.research.dynamic_candidate_constants import (
+            EXPERIMENTAL_LABEL,
+            SOURCE_WATCHER,
+            STRATEGY_ID,
+        )
+
+        sym = str(symbol or "").upper()
+        tf = str(timeframe or "1h").lower()
+        risk_pct = float(risk_percent or 0.0)
+        if risk_pct <= 0 or risk_pct > 0.005:
+            self._last_skip_reason = f"{sym}:v2_risk_out_of_bounds"
+            return None
+
+        snip = dict(signal_snippet or {})
+        if str(snip.get("strategy_id") or "") != STRATEGY_ID:
+            self._last_skip_reason = f"{sym}:v2_bad_strategy_id"
+            return None
+        if str(snip.get("source") or "") != SOURCE_WATCHER:
+            self._last_skip_reason = f"{sym}:v2_bad_source"
+            return None
+        snip["telegram_eligible"] = False
+        snip["experimental_label"] = EXPERIMENTAL_LABEL
+        snip["risk_percent"] = risk_pct
+
+        entry_price = _f(eval_result.get("entry_price"))
+        stop_price = _f(eval_result.get("stop_price"))
+        tp1 = _f(eval_result.get("tp1"))
+        if tp1 is None:
+            targets = eval_result.get("targets") or []
+            if targets and isinstance(targets[0], dict):
+                tp1 = _f(targets[0].get("target_price"))
+        if entry_price is None or stop_price is None or entry_price <= 0:
+            self._last_skip_reason = f"{sym}:v2_missing_prices"
+            return None
+        if stop_price >= entry_price:
+            self._last_skip_reason = f"{sym}:v2_bad_stop"
+            return None
+
+        risk_dist = entry_price - stop_price
+        if tp1 is None and risk_dist > 0:
+            tp1 = entry_price + self.min_rr * risk_dist
+
+        if not replay:
+            live = _live_price(sym)
+            if live is None or live <= 0:
+                self._last_skip_reason = f"{sym}:v2_no_live_price"
+                return None
+            if live <= stop_price:
+                self._last_skip_reason = f"{sym}:v2_already_stopped"
+                return None
+
+        dedupe_key = f"{sym}|{setup_bar_time_utc}|V2|{tf}"
+        with self._lock:
+            if sym in self._open:
+                return None
+            if dedupe_key in self._opened_keys:
+                return None
+
+        sized = position_size(
+            account_equity=self.equity,
+            risk_percent=risk_pct,
+            entry=entry_price,
+            stop=stop_price,
+        )
+        qty = float(sized.get("final_quantity") or 0.0)
+        risk_usd = float(sized.get("max_risk_amount") or 0.0)
+        if qty <= 0:
+            self._last_skip_reason = f"{sym}:v2_zero_qty"
+            return None
+
+        with self._lock:
+            if sym in self._open:
+                return None
+            if dedupe_key in self._opened_keys:
+                return None
+            pos = PaperPosition(
+                id=str(uuid.uuid4()),
+                symbol=sym,
+                side="LONG",
+                status="OPEN",
+                entry_price=entry_price,
+                stop_price=stop_price,
+                tp1_price=tp1,
+                quantity=qty,
+                risk_usd=risk_usd,
+                opened_at=datetime.now(timezone.utc).isoformat(),
+                source_candle_ts=str(setup_bar_time_utc) if setup_bar_time_utc else None,
+                timeframe=tf,
+                signal_snippet=snip,
+            )
+            self._open[sym] = pos
+            self._opened_keys.add(dedupe_key)
+            self._queue_persist(pos)
+            self._last_skip_reason = None
+            logger.info(
+                "paper_opened_v2_candidate",
+                symbol=sym,
+                timeframe=tf,
+                entry=entry_price,
+                stop=stop_price,
+                risk_percent=risk_pct,
+                telegram_eligible=False,
+                label=EXPERIMENTAL_LABEL,
             )
             if emit_alert:
                 try:

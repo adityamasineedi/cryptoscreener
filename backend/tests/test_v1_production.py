@@ -133,25 +133,34 @@ def test_path_a_v1_eth_secondary_risk():
     assert paper_risk_percent("ETHUSDT") == pytest.approx(0.005)
 
 
-def test_path_a_v1_blocks_outside_universe():
+def test_path_a_legacy_allows_outside_v1_universe():
+    """RESEARCH_15M must not be blocked by the v1 BTC/ETH/SOL universe."""
     eng = PaperTradeEngine(
         entry_mode="path_a",
+        starting_equity=1000,
         risk_policy=PaperRiskPolicy(enabled=False),
         v1_profile_enabled=True,
         v1_universe_only=True,
     )
     eng.legacy_auto_entry_enabled = True
-    assert eng.on_setup_signal("BATUSDT", _path_a()) is None
-    assert "v1_outside_v1_universe" in (eng.status()["last_skip_reason"] or "")
+    eng.v1_watcher_owns_entries = False
+    pos = eng.on_setup_signal("BATUSDT", _path_a())
+    assert pos is not None
+    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
+    assert pos.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
 
 
-def test_path_a_v1_secondary_disabled_blocks_eth():
+def test_path_a_legacy_opens_eth_when_v1_secondary_disabled():
+    """v1 secondary flag only affects watcher books / soft sizing, not legacy opens."""
     eng = PaperTradeEngine(
         entry_mode="path_a",
+        starting_equity=1000,
         risk_policy=PaperRiskPolicy(enabled=False),
         v1_profile_enabled=True,
         v1_secondary_enabled=False,
     )
     eng.legacy_auto_entry_enabled = True
-    assert eng.on_setup_signal("ETHUSDT", _path_a()) is None
-    assert "secondary_disabled" in (eng.status()["last_skip_reason"] or "")
+    eng.v1_watcher_owns_entries = False
+    pos = eng.on_setup_signal("ETHUSDT", _path_a())
+    assert pos is not None
+    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"

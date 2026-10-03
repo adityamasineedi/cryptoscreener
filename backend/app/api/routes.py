@@ -302,7 +302,7 @@ def _screener_response(
     offset: int,
 ) -> dict[str, Any]:
     payload_rows = [r.model_dump(mode="json") for r in rows]
-    return {
+    payload = {
         "total": total,
         "offset": offset,
         "limit": meta.get("limit", limit),
@@ -322,6 +322,14 @@ def _screener_response(
         "max_screen_symbols": meta.get("max_screen_symbols", 100),
         "screen_label": "SCREEN TOP 100",
     }
+    # Presentation-only enrichment (v1 labels / potential levels). Never opens trades.
+    try:
+        from app.services.screener_presentation import enrich_screener_payload
+
+        enrich_screener_payload(payload)
+    except Exception:  # noqa: BLE001
+        payload["is_telegram_eligible"] = False
+    return payload
 
 
 @router.get("/screener")
@@ -1161,6 +1169,197 @@ async def research_combo02_candidate_results(
     }
 
 
+
+@router.get("/research/candidates")
+async def research_dynamic_candidates(
+    state: str | None = Query(default=None, description="Optional state filter"),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    """Read-only dynamic candidate pipeline registry (v2 research only)."""
+    from app.research.candidate_state_machine import badge_for_state
+    from app.research.dynamic_candidate_constants import DISCLAIMER, STRATEGY_ID
+    from app.research.strategy_candidate_registry import (
+        serialize_candidate,
+        strategy_candidate_registry,
+    )
+
+    await strategy_candidate_registry.ensure_schema()
+    states = [s.strip().upper() for s in state.split(",")] if state else None
+    rows = await strategy_candidate_registry.list_candidates(states=states, limit=limit)
+    out = []
+    for r in rows:
+        item = serialize_candidate(r)
+        item["badge"] = badge_for_state(
+            str(item.get("state") or ""),
+            state_reason=str(item.get("state_reason") or ""),
+        )
+        item["telegram_eligible"] = False
+        item["enable_for_v1"] = False
+        out.append(item)
+    return {
+        "status": "OK",
+        "strategy_id": STRATEGY_ID,
+        "candidates": out,
+        "count": len(out),
+        "disclaimer": DISCLAIMER,
+        "read_only": True,
+        "v1_unchanged": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/research/candidates/{symbol}")
+async def research_dynamic_candidate_detail(symbol: str) -> dict[str, Any]:
+    from app.research.candidate_state_machine import badge_for_state
+    from app.research.dynamic_candidate_constants import DISCLAIMER
+    from app.research.strategy_candidate_registry import (
+        serialize_candidate,
+        strategy_candidate_registry,
+    )
+
+    row = await strategy_candidate_registry.get_by_symbol(symbol)
+    if row is None:
+        return {
+            "status": "NOT_FOUND",
+            "symbol": symbol.upper(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    item = serialize_candidate(row)
+    item["badge"] = badge_for_state(
+        str(item.get("state") or ""),
+        state_reason=str(item.get("state_reason") or ""),
+    )
+    audit = await strategy_candidate_registry.list_audit(symbol, limit=40)
+    return {
+        "status": "OK",
+        "candidate": item,
+        "audit": audit,
+        "disclaimer": DISCLAIMER,
+        "read_only_except_approve_paper": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/research/candidates/discovery/run")
+async def research_dynamic_discovery_run(
+    body: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
+    """Manual discovery job (also intended for daily schedule). No paper/Telegram."""
+    from app.research.dynamic_candidate_discovery import run_dynamic_discovery
+
+    payload = body or {}
+    settings = get_settings()
+    top_n = int(payload.get("top_n") or settings.dynamic_candidate_discovery_top_n)
+    return await run_dynamic_discovery(top_n=top_n)
+
+
+@router.post("/research/candidates/data-health/run")
+async def research_dynamic_data_health_run(
+    body: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
+    from app.research.candidate_data_health import (
+        check_candidate_data_health,
+        run_data_health_batch,
+    )
+
+    payload = body or {}
+    symbol = payload.get("symbol")
+    if symbol:
+        return await check_candidate_data_health(str(symbol))
+    return await run_data_health_batch(limit=int(payload.get("limit") or 50))
+
+
+@router.post("/research/candidates/advance")
+async def research_dynamic_candidates_advance(
+    body: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
+    """Data-health → frozen COMBO_02 backtest → OOS for registry candidates.
+
+    Research only. Never paper-trades, never Telegram, never joins v1.
+    """
+    from app.research.advance_dynamic_candidates import advance_dynamic_candidates
+
+    payload = body or {}
+    symbols = payload.get("symbols")
+    if isinstance(symbols, str):
+        symbols = [symbols]
+    return await advance_dynamic_candidates(
+        symbols=list(symbols) if symbols else None,
+        run_data_health=not bool(payload.get("backtest_only")),
+        run_backtest=not bool(payload.get("health_only")),
+        run_oos=not bool(payload.get("skip_oos")) and not bool(payload.get("health_only")),
+        limit=int(payload.get("limit") or 50),
+    )
+
+
+@router.post("/research/candidates/{symbol}/approve-paper")
+async def research_approve_candidate_paper(
+    symbol: str,
+    body: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    """Explicit operator gate: V2_PAPER_CANDIDATE → PAPER_VALIDATING.
+
+    Never enables Telegram. Never joins COMBO_02 v1.
+    """
+    from app.research.dynamic_candidate_constants import (
+        DEFAULT_REQUESTED_RISK_PERCENT,
+        DISCLAIMER,
+        STRATEGY_ID,
+    )
+    from app.research.strategy_candidate_registry import (
+        serialize_candidate,
+        strategy_candidate_registry,
+    )
+
+    confirm = bool(body.get("confirm"))
+    note = body.get("approval_note")
+    risk = body.get("requested_risk_percent")
+    if risk is None:
+        risk = DEFAULT_REQUESTED_RISK_PERCENT
+    override = bool(body.get("risk_override_above_half_pct"))
+    actor = str(body.get("operator") or body.get("actor") or "operator")
+
+    try:
+        row = await strategy_candidate_registry.approve_paper(
+            symbol,
+            confirm=confirm,
+            approval_note=str(note) if note is not None else None,
+            requested_risk_percent=float(risk),
+            actor=actor,
+            risk_override_above_half_pct=override,
+        )
+    except KeyError as exc:
+        return {
+            "status": "NOT_FOUND",
+            "error": str(exc),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except PermissionError as exc:
+        return {
+            "status": "REJECTED",
+            "error": str(exc),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "ERROR",
+            "error": str(exc),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    item = serialize_candidate(row)
+    assert item.get("telegram_eligible") is False
+    assert str(item.get("strategy_id")) == STRATEGY_ID
+    return {
+        "status": "OK",
+        "candidate": item,
+        "disclaimer": DISCLAIMER,
+        "telegram_eligible": False,
+        "v1_unchanged": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/research/trade-plan-forensics")
 async def research_trade_plan_forensics(
     source: str = Query(
@@ -1828,25 +2027,39 @@ def _enrich_paper_status(status: dict[str, Any]) -> dict[str, Any]:
     settings = get_settings()
     out = dict(status)
     watcher_enabled = bool(getattr(settings, "paper_v1_watcher_enabled", True))
-    out["monitor"] = {
-        "auto_source": (
-            "V1_PAPER_WATCHER"
-            if watcher_enabled and bool(out.get("v1_watcher_owns_entries"))
-            else "LEGACY_15M_SETUP"
-            if bool(out.get("legacy_auto_entry_enabled"))
-            else "NONE"
-        ),
-        "v1_watcher_enabled": watcher_enabled,
-        "legacy_auto_entry_enabled": bool(out.get("legacy_auto_entry_enabled")),
-        "explanation": (
+    legacy_on = bool(out.get("legacy_auto_entry_enabled"))
+    owns = bool(out.get("v1_watcher_owns_entries"))
+    if watcher_enabled and legacy_on and not owns:
+        auto_source = "V1_PAPER_WATCHER+LEGACY_15M"
+        explanation = (
+            "Parallel paper streams: COMBO_02 v1 1h watcher (BTC/ETH/SOL) and "
+            "15m RESEARCH_15M Trade chances. Separate sources/labels — one open "
+            "position per symbol; follow paper_opened / paper_skip_* logs."
+        )
+    elif watcher_enabled and owns:
+        auto_source = "V1_PAPER_WATCHER"
+        explanation = (
             "Auto paper opens only from the COMBO_02 v1 1h watcher "
-            "(BTC/ETH/SOL closed bars). The Trade chances table is 15m screener "
-            "research and does not auto-execute while the v1 watcher owns entries."
-            if watcher_enabled and bool(out.get("v1_watcher_owns_entries"))
-            else "Legacy 15m Path A/B setup→paper auto-entry is active."
-            if bool(out.get("legacy_auto_entry_enabled"))
-            else "Paper auto-entry is paused — no watcher and legacy auto-entry OFF."
-        ),
+            "(BTC/ETH/SOL closed bars). Trade chances stay research-only while "
+            "PAPER_V1_WATCHER_OWNS_ENTRIES=true."
+        )
+    elif legacy_on:
+        auto_source = "LEGACY_15M_SETUP"
+        explanation = "Legacy 15m Path A/B setup→paper auto-entry is active."
+    elif watcher_enabled:
+        auto_source = "V1_PAPER_WATCHER"
+        explanation = (
+            "COMBO_02 v1 1h watcher active; legacy 15m auto-entry is OFF."
+        )
+    else:
+        auto_source = "NONE"
+        explanation = "Paper auto-entry is paused — no watcher and legacy auto-entry OFF."
+    out["monitor"] = {
+        "auto_source": auto_source,
+        "v1_watcher_enabled": watcher_enabled,
+        "legacy_auto_entry_enabled": legacy_on,
+        "v1_watcher_owns_entries": owns,
+        "explanation": explanation,
     }
     try:
         if watcher_enabled:
@@ -1861,6 +2074,11 @@ def _enrich_paper_status(status: dict[str, Any]) -> dict[str, Any]:
                 wstatus["live"] = cached["rows"]
             else:
                 try:
+                    # Cheap tip rows + refresh presentation snapshots (BTC/ETH/SOL only).
+                    try:
+                        watcher.refresh_presentation_snapshots(force=False)
+                    except Exception:  # noqa: BLE001
+                        pass
                     live = watcher.peek_books()
                     _WATCHER_LIVE_CACHE["at"] = now
                     _WATCHER_LIVE_CACHE["rows"] = live
@@ -2487,15 +2705,6 @@ async def ws_screener(websocket: WebSocket) -> None:
             (asyncio.get_event_loop().time() - t0) * 1000
         )
         payload_rows = [r.model_dump(mode="json") for r in rows]
-        for r in payload_rows:
-            prev[r["symbol"]] = r
-        # Preferential OI / backfill for visible screener symbols
-        orch = get_orchestrator()
-        if orch is not None:
-            visible = [r["symbol"] for r in payload_rows]
-            orch.oi.set_visible_symbols(visible)
-            if getattr(orch, "backfill", None) is not None:
-                orch.backfill.set_visible_symbols(visible)
         snapshot = {
             "type": "screener_snapshot",
             "total": total,
@@ -2510,6 +2719,22 @@ async def ws_screener(websocket: WebSocket) -> None:
             "excluded": meta.get("excluded") or {},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        try:
+            from app.services.screener_presentation import enrich_screener_payload
+
+            enrich_screener_payload(snapshot)
+            payload_rows = snapshot["rows"]
+        except Exception:  # noqa: BLE001
+            snapshot["is_telegram_eligible"] = False
+        for r in payload_rows:
+            prev[r["symbol"]] = r
+        # Preferential OI / backfill for visible screener symbols
+        orch = get_orchestrator()
+        if orch is not None:
+            visible = [r["symbol"] for r in payload_rows]
+            orch.oi.set_visible_symbols(visible)
+            if getattr(orch, "backfill", None) is not None:
+                orch.backfill.set_visible_symbols(visible)
         await websocket.send_json(snapshot)
         try:
             await redis_state.store_screener_state(
@@ -2545,31 +2770,78 @@ async def ws_screener(websocket: WebSocket) -> None:
             new_syms = [r.symbol for r in rows]
             old_syms = list(prev.keys())
             if new_syms != old_syms:
-                prev = {r.symbol: r.model_dump(mode="json") for r in rows}
-                await websocket.send_json(
-                    {
-                        "type": "screener_snapshot",
-                        "total": total,
-                        "rows": [r.model_dump(mode="json") for r in rows],
-                        "ingestion": market_store.ingestion_status,
-                        "source": "memory",
-                        "total_universe": meta.get("total_universe"),
-                        "eligible_count": meta.get("eligible_count"),
-                        "returned_count": meta.get("returned_count"),
-                        "limit": meta.get("limit"),
-                        "selection_updated_at": meta.get("selection_updated_at"),
-                        "excluded": meta.get("excluded") or {},
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
+                membership_snap: dict[str, Any] = {
+                    "type": "screener_snapshot",
+                    "total": total,
+                    "rows": [r.model_dump(mode="json") for r in rows],
+                    "ingestion": market_store.ingestion_status,
+                    "source": "memory",
+                    "total_universe": meta.get("total_universe"),
+                    "eligible_count": meta.get("eligible_count"),
+                    "returned_count": meta.get("returned_count"),
+                    "limit": meta.get("limit"),
+                    "selection_updated_at": meta.get("selection_updated_at"),
+                    "excluded": meta.get("excluded") or {},
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                try:
+                    from app.services.screener_presentation import enrich_screener_payload
+
+                    enrich_screener_payload(membership_snap)
+                except Exception:  # noqa: BLE001
+                    membership_snap["is_telegram_eligible"] = False
+                prev = {
+                    r["symbol"]: r
+                    for r in (membership_snap.get("rows") or [])
+                    if isinstance(r, dict) and r.get("symbol")
+                }
+                await websocket.send_json(membership_snap)
                 continue
             patches = 0
             for row in rows:
                 changes = svc.row_patch_changes(prev.get(row.symbol), row)
                 if not changes:
                     continue
-                # Always refresh cache
+                # Always refresh cache — preserve presentation labels from prior row
                 full = row.model_dump(mode="json")
+                prior = prev.get(row.symbol) or {}
+                for key in (
+                    "screen_timeframe",
+                    "local_trend",
+                    "screen_signal",
+                    "screen_setup",
+                    "potential_levels",
+                    "v1_status",
+                    "v1_paper_trade",
+                    "is_telegram_eligible",
+                ):
+                    if key in prior:
+                        full[key] = prior[key]
+                full["is_telegram_eligible"] = False
+                # Recompute potential levels from updated setup fields (presentation only)
+                try:
+                    from app.services.screener_presentation import build_potential_levels
+
+                    full["potential_levels"] = build_potential_levels(full)
+                    full["local_trend"] = (
+                        str(
+                            (full.get("setup_trend") or {}).get("value")
+                            or (full.get("market_structure") or {}).get("value")
+                            or (full.get("structure") or {}).get("value")
+                            or ""
+                        ).upper()
+                        or full.get("local_trend")
+                    )
+                    full["screen_signal"] = (
+                        str((full.get("market_signal") or {}).get("value") or "").upper()
+                        or full.get("screen_signal")
+                    )
+                    full["screen_setup"] = (
+                        str((full.get("setup_signal") or {}).get("value") or "").upper()
+                        or full.get("screen_setup")
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
                 prev[row.symbol] = full
                 # Only send changed fields (plus identity)
                 slim = {
@@ -2584,6 +2856,20 @@ async def ws_screener(websocket: WebSocket) -> None:
                         "market_type",
                     }
                 }
+                # Include refreshed presentation keys so UI keeps labels current
+                for key in (
+                    "potential_levels",
+                    "local_trend",
+                    "screen_signal",
+                    "screen_setup",
+                    "is_telegram_eligible",
+                ):
+                    if key in full:
+                        slim[key] = full[key]
+                if "v1_status" in full:
+                    slim["v1_status"] = full["v1_status"]
+                if "v1_paper_trade" in full:
+                    slim["v1_paper_trade"] = full["v1_paper_trade"]
                 if not slim:
                     continue
                 await websocket.send_json(

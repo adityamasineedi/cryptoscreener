@@ -248,7 +248,14 @@ def alert_badge_category(alert: dict[str, Any]) -> str:
         fields = classification_fields_from_position(alert)
         if is_v1_classified(fields):
             return BADGE_V1_VERIFIED
-        if str(fields.get("strategy_id") or "") == STRATEGY_EXPERIMENTAL_PATH_B or str(
+        sid = str(fields.get("strategy_id") or "")
+        src = str(fields.get("source") or "")
+        if sid == "COMBO_02_V2_RESEARCH" or src in (
+            "V2_CANDIDATE_PAPER_WATCHER",
+            "DYNAMIC_CANDIDATE_PIPELINE",
+        ):
+            return BADGE_EXPERIMENTAL
+        if sid == STRATEGY_EXPERIMENTAL_PATH_B or str(
             fields.get("path") or ""
         ).upper().replace("PATH_", "") == "B":
             return BADGE_EXPERIMENTAL
@@ -268,6 +275,8 @@ def alert_subtitle(alert: dict[str, Any]) -> str:
         tf = fields.get("timeframe") or alert.get("timeframe") or "15m"
         return f"RESEARCH ONLY • {tf} • Not Telegram eligible"
     if cat == BADGE_EXPERIMENTAL:
+        if str(fields.get("strategy_id") or "") == "COMBO_02_V2_RESEARCH":
+            return "EXPERIMENTAL — NOT COMBO_02 v1 • PAPER ONLY"
         return "EXPERIMENTAL • Path B • Not Telegram eligible"
     if cat == BADGE_LIQUIDATIONS:
         return "Liquidation spike"

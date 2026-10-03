@@ -134,15 +134,40 @@ class Settings(BaseSettings):
     paper_v1_secondary_enabled: bool = Field(
         default=True, alias="PAPER_V1_SECONDARY_ENABLED"
     )
-    # Dedicated 1h COMBO_02 watcher (evaluate_combination_at_bar) — owns v1 entries
+    # Dedicated 1h COMBO_02 watcher (evaluate_combination_at_bar)
     paper_v1_watcher_enabled: bool = Field(
         default=True, alias="PAPER_V1_WATCHER_ENABLED"
+    )
+    # When True, blocks legacy 15m Path A opens so only the watcher fills COMBO_02 v1.
+    # Keep False to run v1 watcher + RESEARCH_15M as separate labeled paper streams.
+    paper_v1_watcher_owns_entries: bool = Field(
+        default=False, alias="PAPER_V1_WATCHER_OWNS_ENTRIES"
     )
     paper_v1_timeframe: str = Field(default="1h", alias="PAPER_V1_TIMEFRAME")
     paper_v1_telegram_enabled: bool = Field(
         default=False, alias="PAPER_V1_TELEGRAM_ENABLED"
     )
     paper_v1_replay_mode: bool = Field(default=False, alias="PAPER_V1_REPLAY_MODE")
+
+    # Dynamic COMBO_02 v2 research candidate pipeline (never joins v1)
+    dynamic_candidate_discovery_enabled: bool = Field(
+        default=False, alias="DYNAMIC_CANDIDATE_DISCOVERY_ENABLED"
+    )
+    dynamic_candidate_discovery_top_n: int = Field(
+        default=30, alias="DYNAMIC_CANDIDATE_DISCOVERY_TOP_N"
+    )
+    dynamic_v2_paper_watcher_enabled: bool = Field(
+        default=False, alias="DYNAMIC_V2_PAPER_WATCHER_ENABLED"
+    )
+    dynamic_v2_max_open_positions: int = Field(
+        default=1, alias="DYNAMIC_V2_MAX_OPEN_POSITIONS"
+    )
+    dynamic_v2_max_total_risk_percent: float = Field(
+        default=0.005, alias="DYNAMIC_V2_MAX_TOTAL_RISK_PERCENT"
+    )
+    dynamic_v2_max_v1_book_risk_percent: float = Field(
+        default=0.05, alias="DYNAMIC_V2_MAX_V1_BOOK_RISK_PERCENT"
+    )
 
     # Telegram alerts for v1 paper PAPER_ENTRY / PAPER_EXIT (optional)
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")

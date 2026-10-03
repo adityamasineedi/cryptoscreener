@@ -83,6 +83,10 @@ export function fetchFuturesScreener(params?: {
     search_mode?: boolean;
     screen_filter?: string | null;
     max_screen_symbols?: number;
+    screen_timeframe?: string;
+    screener_identity?: import("../types/market").ScreenerIdentity;
+    v1_watcher_view?: import("../types/market").V1WatcherViewRow[];
+    is_telegram_eligible?: boolean;
   }>(`/api/screener/futures?${q.toString()}`);
 }
 
@@ -591,6 +595,89 @@ export function fetchCombo02CandidateResults(stamp?: string) {
   return getJson<Combo02CandidateResultsResponse>(
     `/api/research/combo02-candidate-results${qs ? `?${qs}` : ""}`
   );
+}
+
+export type DynamicCandidateRow = {
+  id?: string;
+  symbol: string;
+  state?: string;
+  state_reason?: string | null;
+  badge?: string;
+  discovery_rank?: number | null;
+  discovery_volume_usd?: number | null;
+  ohlcv_1h_completeness?: number | null;
+  ohlcv_4h_completeness?: number | null;
+  data_health_block_reason?: string | null;
+  backtest_tier?: string | null;
+  backtest_status?: string | null;
+  backtest_trade_count?: number | null;
+  backtest_net_avg_r?: number | null;
+  backtest_profit_factor?: number | null;
+  oos_status?: string | null;
+  oos_trade_count?: number | null;
+  oos_net_avg_r?: number | null;
+  portfolio_overlap_btc?: number | null;
+  portfolio_overlap_eth?: number | null;
+  portfolio_overlap_sol?: number | null;
+  operator_approved?: boolean;
+  telegram_eligible?: boolean;
+  risk_percent?: number | null;
+  updated_at_utc?: string | null;
+  state_updated_at_utc?: string | null;
+};
+
+export type DynamicCandidatesResponse = {
+  status: string;
+  strategy_id?: string;
+  candidates?: DynamicCandidateRow[];
+  count?: number;
+  disclaimer?: string;
+  read_only?: boolean;
+  v1_unchanged?: boolean;
+  timestamp?: string;
+};
+
+/** Read-only dynamic v2 candidate registry (no enable-for-v1). */
+export function fetchDynamicCandidates(state?: string) {
+  const q = new URLSearchParams();
+  if (state) q.set("state", state);
+  const qs = q.toString();
+  return getJson<DynamicCandidatesResponse>(
+    `/api/research/candidates${qs ? `?${qs}` : ""}`
+  );
+}
+
+export type DynamicAdvanceResponse = DynamicCandidatesResponse & {
+  health_checked?: number;
+  health_ready?: number;
+  health_blocked?: number;
+  backtests_run?: number;
+  oos_run?: number;
+  health?: Array<Record<string, unknown>>;
+  backtests?: Array<Record<string, unknown>>;
+  oos?: Array<Record<string, unknown>>;
+  telegram_eligible?: boolean;
+  paper_trades_created?: number;
+};
+
+/** Research-only advance: data-health → COMBO_02 backtest → OOS. */
+export async function advanceDynamicCandidates(body?: {
+  symbols?: string[];
+  skip_oos?: boolean;
+  health_only?: boolean;
+  backtest_only?: boolean;
+  limit?: number;
+}) {
+  const res = await fetch(`${API_BASE}/api/research/candidates/advance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return (await res.json()) as DynamicAdvanceResponse;
 }
 
 export type BacktestJob = {
