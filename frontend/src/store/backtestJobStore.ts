@@ -25,6 +25,7 @@ type BacktestStore = {
     combination_id?: string;
     limit?: number;
     risk_usd?: number;
+    principal_usd?: number;
     taker_fee_pct?: number;
     maker_fee_pct?: number;
     include_trades?: boolean;
@@ -41,6 +42,7 @@ function optimisticJob(body: {
   combination_id?: string;
   limit?: number;
   risk_usd?: number;
+  principal_usd?: number;
   taker_fee_pct?: number;
   maker_fee_pct?: number;
   include_trades?: boolean;

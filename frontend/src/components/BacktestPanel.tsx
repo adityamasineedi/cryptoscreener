@@ -7,7 +7,10 @@ import {
   type StrategyMatrixRow,
   type StrategyTradeRow,
 } from "../api/client";
+import { tradeRowKey } from "../chart/backtestTradeOverlay";
 import { useBacktestJobStore } from "../store/backtestJobStore";
+import { BacktestTradeChart } from "./BacktestTradeChart";
+import { CandidateResearchPanel } from "./CandidateResearchPanel";
 
 type PeriodMode = "lookback" | "dates";
 
@@ -20,6 +23,41 @@ const YEAR_PRESETS = [
 
 const SYMBOL_OPTIONS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"] as const;
 const TF_OPTIONS = ["15m", "1h", "4h"] as const;
+
+/** COMBO_02 v1 production book labels (see docs/v1_production.md). */
+const V1_BOOK_TIER: Record<string, "core" | "secondary" | "research"> = {
+  "BTCUSDT|1h": "core",
+  "ETHUSDT|1h": "secondary",
+  "SOLUSDT|1h": "secondary",
+  "BTCUSDT|4h": "secondary",
+  "ETHUSDT|4h": "secondary",
+  "BTCUSDT|15m": "research",
+  "ETHUSDT|15m": "research",
+  "SOLUSDT|15m": "research",
+  "SOLUSDT|4h": "research",
+};
+
+function v1TierBadge(tier: "core" | "secondary" | "research"): {
+  label: string;
+  className: string;
+} {
+  if (tier === "core") {
+    return {
+      label: "v1 core",
+      className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    };
+  }
+  if (tier === "secondary") {
+    return {
+      label: "v1 secondary",
+      className: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+    };
+  }
+  return {
+    label: "research only",
+    className: "border-terminal-border bg-white/5 text-terminal-muted",
+  };
+}
 const LOOKBACKS = [
   { id: "12d", label: "~12 days", limit: 1200, hint: "15m ≈ 12.5d · 1h ≈ 50d" },
   { id: "30d", label: "~30 days", limit: 2880, hint: "15m ≈ 30d · 1h ≈ 120d" },
@@ -104,7 +142,7 @@ function formatDuration(ms: number): string {
 
 export function BacktestPanel() {
   const [symbols, setSymbols] = useState<string[]>(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
-  const [timeframes, setTimeframes] = useState<string[]>(["15m", "1h"]);
+  const [timeframes, setTimeframes] = useState<string[]>(["1h"]);
   const [direction, setDirection] = useState<"LONG" | "SHORT">("LONG");
   const [lookbackId, setLookbackId] = useState<(typeof LOOKBACKS)[number]["id"]>("60d");
   const [customLimit, setCustomLimit] = useState("");
@@ -312,6 +350,7 @@ export function BacktestPanel() {
       combination_id: "COMBO_02",
       limit,
       risk_usd: riskUsd,
+      principal_usd: principalUsd,
       taker_fee_pct: takerFeePct,
       maker_fee_pct: makerFeePct,
       include_trades: true,
@@ -324,6 +363,7 @@ export function BacktestPanel() {
     direction,
     limit,
     riskUsd,
+    principalUsd,
     takerFeePct,
     makerFeePct,
     periodMode,
@@ -391,8 +431,8 @@ export function BacktestPanel() {
         <p className="mt-1 max-w-3xl text-xs text-terminal-muted">
           Run the HL Long Path A playbook (COMBO_02 v1: Trend + BOS + 4h/1h HTF)
           on real Postgres OHLCV. Same engine as the research scripts — not a
-          profitability claim. COMBO_02_LOCAL is legacy/research-only and is not
-          used here.
+          profitability claim. Core/secondary cells size from the v1 production
+          profile (BTC 1h 1.5%, ETH/SOL 1h 0.5%); 15m is research-only.
         </p>
       </div>
 
@@ -401,16 +441,22 @@ export function BacktestPanel() {
           <span className="rounded border border-terminal-accent/40 bg-terminal-accent/10 px-2 py-1 font-mono text-terminal-accent">
             COMBO_02 v1 · TREND_BOS · HTF
           </span>
+          <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+            core: BTC 1h @ 1.5%
+          </span>
+          <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">
+            secondary: ETH/SOL 1h @ 0.5% · 4h optional
+          </span>
+          <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-muted">
+            research: 15m
+          </span>
           <span
             className="text-terminal-muted"
             title="COMBO_02 = HTF-gated v1; COMBO_02_LOCAL = legacy/research-only (not used in this UI)."
           >
             {direction === "LONG"
-              ? "Gates: 1h BULLISH + bullish BOS + 4h/1h HTF_ALIGNED (longs only)"
+              ? "Gates: setup BULLISH + bullish BOS + 4h/1h HTF_ALIGNED (longs only)"
               : "Structure filter: LH + LL (shorts)"}
-          </span>
-          <span className="text-[10px] text-terminal-muted/80">
-            COMBO_02 = HTF-gated v1 · COMBO_02_LOCAL = legacy/research-only
           </span>
         </div>
 
@@ -422,10 +468,14 @@ export function BacktestPanel() {
             <div className="flex flex-wrap gap-1">
               {SYMBOL_OPTIONS.map((s) => {
                 const on = symbols.includes(s);
+                const symTier =
+                  s === "BTCUSDT" ? "core" : ("secondary" as const);
+                const badge = v1TierBadge(symTier);
                 return (
                   <button
                     key={s}
                     type="button"
+                    title={`${s} — ${badge.label} on 1h`}
                     onClick={() => setSymbols((prev) => toggleInList(prev, s))}
                     className={`rounded border px-2 py-1 font-mono text-xs ${
                       on
@@ -434,6 +484,9 @@ export function BacktestPanel() {
                     }`}
                   >
                     {s.replace("USDT", "")}
+                    <span className={`ml-1 text-[9px] ${badge.className} rounded px-1`}>
+                      {badge.label}
+                    </span>
                   </button>
                 );
               })}
@@ -447,10 +500,14 @@ export function BacktestPanel() {
             <div className="flex flex-wrap gap-1">
               {TF_OPTIONS.map((tf) => {
                 const on = timeframes.includes(tf);
+                const tfTier =
+                  tf === "1h" ? "core" : tf === "4h" ? "secondary" : "research";
+                const badge = v1TierBadge(tfTier);
                 return (
                   <button
                     key={tf}
                     type="button"
+                    title={`${tf} — ${badge.label}`}
                     onClick={() => setTimeframes((prev) => toggleInList(prev, tf))}
                     className={`rounded border px-2 py-1 font-mono text-xs ${
                       on
@@ -459,6 +516,9 @@ export function BacktestPanel() {
                     }`}
                   >
                     {tf}
+                    <span className={`ml-1 text-[9px] ${badge.className} rounded px-1`}>
+                      {badge.label}
+                    </span>
                   </button>
                 );
               })}
@@ -917,6 +977,19 @@ export function BacktestPanel() {
                   >
                     <td className="px-2 py-2 font-mono text-terminal-text">
                       {row.symbol}
+                      {(() => {
+                        const tier =
+                          V1_BOOK_TIER[`${row.symbol}|${row.timeframe}`];
+                        if (!tier) return null;
+                        const b = v1TierBadge(tier);
+                        return (
+                          <span
+                            className={`ml-1 rounded border px-1 text-[9px] ${b.className}`}
+                          >
+                            {b.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-2 py-2 font-mono">{row.timeframe}</td>
                     <td className="px-2 py-2 font-mono">{row.sample_size}</td>
@@ -960,8 +1033,14 @@ export function BacktestPanel() {
       </div>
 
       {selected ? (
-        <SelectedDetail row={selected} principalUsd={principalUsd} />
+        <SelectedDetail
+          key={`${selected.symbol}:${selected.timeframe}:${selected.direction}`}
+          row={selected}
+          principalUsd={principalUsd}
+        />
       ) : null}
+
+      <CandidateResearchPanel />
     </div>
   );
 }
@@ -974,6 +1053,12 @@ function SelectedDetail({
   principalUsd: number;
 }) {
   const trades = row.trades || [];
+  const [selectedTradeKey, setSelectedTradeKey] = useState<string | null>(
+    () => (trades[0] ? tradeRowKey(trades[0]) : null),
+  );
+  const selectedTrade =
+    trades.find((t) => tradeRowKey(t) === selectedTradeKey) || null;
+
   let running = principalUsd;
   const withEquity = trades.map((t) => {
     running += Number(t.net_pnl_usd || 0);
@@ -1014,8 +1099,17 @@ function SelectedDetail({
             Principal ${principalUsd.toFixed(2)} + net profit {money(row.pnl_usd_net)} ={" "}
             <span className="text-terminal-accent">total ${ending.toFixed(2)}</span>
           </div>
+          <div className="mt-2 text-terminal-accent/90">
+            Click a blotter row to overlay entry / SL / TP1 / exit on the price chart below.
+          </div>
         </div>
       </div>
+
+      {selectedTrade ? (
+        <div className="mb-3">
+          <BacktestTradeChart trade={selectedTrade} />
+        </div>
+      ) : null}
 
       <div className="max-h-[420px] min-w-0 overflow-auto rounded border border-terminal-border/60">
         <table className="w-full min-w-[1180px] border-collapse text-left text-[11px]">
@@ -1048,13 +1142,18 @@ function SelectedDetail({
                 </td>
               </tr>
             ) : null}
-            {withEquity.map(({ t, equity }) => (
-              <TradeRow
-                key={`${t.signal_time}-${t.entry_price}-${t.trade_no}`}
-                t={t}
-                equityUsd={equity}
-              />
-            ))}
+            {withEquity.map(({ t, equity }) => {
+              const key = tradeRowKey(t);
+              return (
+                <TradeRow
+                  key={`${t.signal_time}-${t.entry_price}-${t.trade_no}`}
+                  t={t}
+                  equityUsd={equity}
+                  selected={key === selectedTradeKey}
+                  onSelect={() => setSelectedTradeKey(key)}
+                />
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1062,12 +1161,37 @@ function SelectedDetail({
   );
 }
 
-function TradeRow({ t, equityUsd }: { t: StrategyTradeRow; equityUsd: number }) {
+function TradeRow({
+  t,
+  equityUsd,
+  selected,
+  onSelect,
+}: {
+  t: StrategyTradeRow;
+  equityUsd: number;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const net = t.net_pnl_usd;
   const netCls =
     net == null ? "text-terminal-muted" : net >= 0 ? "text-emerald-400" : "text-red-400";
   return (
-    <tr className="border-t border-terminal-border/40 hover:bg-white/[0.03]">
+    <tr
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`border-t border-terminal-border/40 cursor-pointer ${
+        selected
+          ? "bg-terminal-accent/10 ring-1 ring-inset ring-terminal-accent/40"
+          : "hover:bg-white/[0.03]"
+      }`}
+    >
       <td className="px-2 py-1.5 font-mono text-terminal-muted">{t.trade_no ?? "—"}</td>
       <td className="px-2 py-1.5 font-mono whitespace-nowrap">{fmtTime(t.signal_time)}</td>
       <td className="px-2 py-1.5 font-mono whitespace-nowrap">{fmtTime(t.exit_time)}</td>

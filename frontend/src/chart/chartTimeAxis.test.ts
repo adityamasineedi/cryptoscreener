@@ -4,6 +4,7 @@ import {
   formatChartCrosshairTime,
   formatChartTickMark,
   isIntradayTimeframe,
+  ensureAscendingByTime,
   timeScaleOptionsForTimeframe,
 } from "./chartTimeAxis";
 
@@ -43,5 +44,19 @@ describe("chart time axis", () => {
   it("crosshair includes UTC clock on 1h", () => {
     const t = (Date.UTC(2026, 9, 1, 14, 0, 0) / 1000) as Time;
     expect(formatChartCrosshairTime(t, "1h")).toMatch(/1 Oct 14:00 UTC/);
+  });
+
+  it("sorts and dedupes series points ascending by time", () => {
+    const rows = [
+      { time: 300 as Time, close: 3 },
+      { time: 100 as Time, close: 1 },
+      { time: 200 as Time, close: 2 },
+      { time: 200 as Time, close: 22 },
+    ];
+    expect(ensureAscendingByTime(rows)).toEqual([
+      { time: 100, close: 1 },
+      { time: 200, close: 22 },
+      { time: 300, close: 3 },
+    ]);
   });
 });

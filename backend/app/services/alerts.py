@@ -92,6 +92,7 @@ class AlertFeed:
         timeframe: str | None = None,
         payload: dict[str, Any] | None = None,
         dedupe_key: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         sym = symbol.upper()
         with self._lock:
@@ -114,6 +115,10 @@ class AlertFeed:
                 "payload": payload or {},
                 "dedupe_key": dedupe_key,
             }
+            if extra:
+                for k, v in extra.items():
+                    if k not in alert:
+                        alert[k] = v
             self._alerts.appendleft(alert)
         self._fanout(alert)
         self._schedule_persist(alert)
@@ -317,7 +322,47 @@ class AlertFeed:
 
     def observe_paper_open(self, pos: Any) -> dict[str, Any] | None:
         d = pos.to_dict() if hasattr(pos, "to_dict") else dict(pos)
-        path = ((d.get("signal_snippet") or {}) or {}).get("path") or "PAPER"
+        from app.services.paper_classification import (
+            alert_badge_category,
+            classification_fields_from_position,
+        )
+
+        fields = classification_fields_from_position(d)
+        # Persist classification on payload root + snippet (explicit, not title-inferred).
+        snip = dict(d.get("signal_snippet") or {})
+        for k, v in fields.items():
+            if k in (
+                "strategy_id",
+                "source",
+                "combo_id",
+                "combo_version",
+                "path",
+                "telegram_eligible",
+                "symbol",
+                "timeframe",
+            ):
+                snip[k] = v
+                d[k] = v
+        d["signal_snippet"] = snip
+        path = fields.get("path") or snip.get("path") or "PAPER"
+        class_extra = {
+            "strategy_id": fields.get("strategy_id"),
+            "source": fields.get("source"),
+            "combo_id": fields.get("combo_id"),
+            "combo_version": fields.get("combo_version"),
+            "path": fields.get("path"),
+            "telegram_eligible": fields.get("telegram_eligible"),
+        }
+        # Badge needs type + payload classification context.
+        class_extra["badge"] = alert_badge_category(
+            {
+                "type": "PAPER_ENTRY",
+                "symbol": str(d.get("symbol") or ""),
+                "timeframe": str(d.get("timeframe") or "") or None,
+                "payload": d,
+                **class_extra,
+            }
+        )
         return self.emit(
             alert_type="PAPER_ENTRY",
             symbol=str(d.get("symbol") or ""),
@@ -330,10 +375,32 @@ class AlertFeed:
             ),
             payload=d,
             dedupe_key=f"paper_open|{d.get('id')}",
+            extra=class_extra,
         )
 
     def observe_paper_close(self, pos: Any) -> dict[str, Any] | None:
         d = pos.to_dict() if hasattr(pos, "to_dict") else dict(pos)
+        from app.services.paper_classification import (
+            alert_badge_category,
+            classification_fields_from_position,
+        )
+
+        fields = classification_fields_from_position(d)
+        snip = dict(d.get("signal_snippet") or {})
+        for k, v in fields.items():
+            if k in (
+                "strategy_id",
+                "source",
+                "combo_id",
+                "combo_version",
+                "path",
+                "telegram_eligible",
+                "symbol",
+                "timeframe",
+            ):
+                snip[k] = v
+                d[k] = v
+        d["signal_snippet"] = snip
         reason = str(d.get("exit_reason") or "EXIT")
         pnl = d.get("pnl_usd")
         r = d.get("r_multiple")
@@ -342,6 +409,23 @@ class AlertFeed:
             sev = "action"
         elif reason == "STOP":
             sev = "watch"
+        class_extra = {
+            "strategy_id": fields.get("strategy_id"),
+            "source": fields.get("source"),
+            "combo_id": fields.get("combo_id"),
+            "combo_version": fields.get("combo_version"),
+            "path": fields.get("path"),
+            "telegram_eligible": fields.get("telegram_eligible"),
+        }
+        class_extra["badge"] = alert_badge_category(
+            {
+                "type": "PAPER_EXIT",
+                "symbol": str(d.get("symbol") or ""),
+                "timeframe": str(d.get("timeframe") or "") or None,
+                "payload": d,
+                **class_extra,
+            }
+        )
         return self.emit(
             alert_type="PAPER_EXIT",
             symbol=str(d.get("symbol") or ""),
@@ -351,6 +435,7 @@ class AlertFeed:
             detail=f"PnL {pnl} · R {r}",
             payload=d,
             dedupe_key=f"paper_close|{d.get('id')}|{reason}",
+            extra=class_extra,
         )
 
     def observe_liquidation_spike(

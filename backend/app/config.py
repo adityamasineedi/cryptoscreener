@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     paper_risk_percent: float = Field(default=0.02, alias="PAPER_RISK_PERCENT")
     # path_a = Trend+BOS (research COMBO_02); path_b = full LONG_ENTRY_CANDIDATE
     paper_entry_mode: str = Field(default="path_a", alias="PAPER_ENTRY_MODE")
+    # Legacy 15m setup → PaperTradeEngine.on_setup_signal auto-entry.
+    # Default OFF so screener/BOS/liq alerts continue without RESEARCH_15M paper fills.
+    paper_legacy_auto_entry_enabled: bool = Field(
+        default=False, alias="PAPER_LEGACY_AUTO_ENTRY_ENABLED"
+    )
     # Cap / liquidity / liq-spike gates (fail-closed for unknown mcap)
     paper_risk_gates_enabled: bool = Field(default=True, alias="PAPER_RISK_GATES_ENABLED")
     paper_allowed_groups: str = Field(
@@ -119,6 +124,29 @@ class Settings(BaseSettings):
     paper_liq_min_long_notional_5m: float = Field(
         default=25_000.0, alias="PAPER_LIQ_MIN_LONG_NOTIONAL_5M"
     )
+    # COMBO_02 v1 production profile (see app.research.v1_production / docs/v1_production.md)
+    paper_v1_profile_enabled: bool = Field(
+        default=True, alias="PAPER_V1_PROFILE_ENABLED"
+    )
+    paper_v1_universe_only: bool = Field(
+        default=True, alias="PAPER_V1_UNIVERSE_ONLY"
+    )
+    paper_v1_secondary_enabled: bool = Field(
+        default=True, alias="PAPER_V1_SECONDARY_ENABLED"
+    )
+    # Dedicated 1h COMBO_02 watcher (evaluate_combination_at_bar) — owns v1 entries
+    paper_v1_watcher_enabled: bool = Field(
+        default=True, alias="PAPER_V1_WATCHER_ENABLED"
+    )
+    paper_v1_timeframe: str = Field(default="1h", alias="PAPER_V1_TIMEFRAME")
+    paper_v1_telegram_enabled: bool = Field(
+        default=False, alias="PAPER_V1_TELEGRAM_ENABLED"
+    )
+    paper_v1_replay_mode: bool = Field(default=False, alias="PAPER_V1_REPLAY_MODE")
+
+    # Telegram alerts for v1 paper PAPER_ENTRY / PAPER_EXIT (optional)
+    telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")
 
     # Research gates for live setup candidates — default OFF
     research_gate_enabled: bool = Field(default=False, alias="RESEARCH_GATE_ENABLED")

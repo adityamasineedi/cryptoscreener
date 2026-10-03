@@ -1,0 +1,2155 @@
+{
+  "generated_at_utc": "2026-10-03T19:55:59.226048+00:00",
+  "selector_version": "v1",
+  "criteria": {
+    "quote_asset": "USDT",
+    "market_type": "perpetual",
+    "top_n": 5,
+    "min_history_days": 540.0,
+    "min_ohlcv_completeness": 0.99,
+    "min_avg_24h_quote_volume_usd": 5000000.0,
+    "exclude_stablecoins": true,
+    "exclude_leveraged_tokens": true,
+    "exclude_inactive_or_delisted": true,
+    "exclude_nonstandard_symbols": true,
+    "exclude_v1_universe": true,
+    "setup_timeframe": "1h",
+    "selector_version": "v1"
+  },
+  "screen_timestamp_utc": "2026-10-03T19:55:59.226048+00:00",
+  "symbols": [],
+  "excluded": [
+    {
+      "symbol": "0GUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000000BOBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000000MOGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000BONKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000CATUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000CHEEMSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000FLOKIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000PEPEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000RATSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000SATSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000SHIBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1000XECUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1INCHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "1MBABYDOGEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "2ZUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "4USDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ACEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ACHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ACTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ACUUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ADAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AEROUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AEVOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AGLDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AGTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AIGENSYNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AINUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AIOTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AIOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AIXBTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AKEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AKTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ALCHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ALGOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ALICEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ALLOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ALLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ALPINEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ALTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ANIMEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ANKRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "APEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "API3USDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "APRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "APTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARPAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ARXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ASRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ASTERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ASTRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ATHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ATUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AUCTIONUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AVAAIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AVAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AVNTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AWEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AXLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AXSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "AZTECUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "B2USDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BANANAS31USDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BANANAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BANDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BANKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BANUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BARDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BASUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BATUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BCHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BEAMXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BEATUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BELUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BERAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BICOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BIGTIMEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BILLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BIOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BIRBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BLESSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BLUAIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BLURUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BMTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BNBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BNTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BOMEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BRETTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BREVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BROCCOLI714USDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BROCCOLIF3BUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BSBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BSVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BTCDOMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BTCUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "BTRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BTWUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "BULLAUSDT",
+      "reason": "leveraged_token"
+    },
+    {
+      "symbol": "BUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "C98USDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CAKEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CAPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CARVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CATIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CELOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CELRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CETUSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CFGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CFXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CGPTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CHILLGUYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CHIPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CHRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CHZUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CKBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CLANKERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "COAIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "COLLECTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "COMPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "COOKIEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "COTIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "COWUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CROSSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CRVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CTKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CTRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CTSIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CVCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CVXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CYBERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "CYSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DATAIPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DEEPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DEXEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DODOXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DOGSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DOLOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DOODUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DOSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DRIFTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DUSKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DYDXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "DYMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EDENUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EDGEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EDUUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EGLDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ELSAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ENAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ENJUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ENSOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ENSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EPICUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ERAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ESPORTSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ESPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ETCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ETHFIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ETHUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "ETHWUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EULUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FARTCOINUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FETUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FFUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FHEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FIDAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FIGHTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FILUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FLOCKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FLOWUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FLUIDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FLUXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FOGOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FOLKSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FORMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FRAXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "FUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GALAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GASUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GENIUSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GIGGLEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GLMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GMTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GMXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GOATUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GPSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GRAMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GRASSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GRIFFAINUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GRTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GRVTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GTCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GUAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GUNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HAEDALUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HANAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HBARUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HEIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HEMIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HIVEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HMSTRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HOLOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HOMEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HOTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HUMAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HYPERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ICNTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ICPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IDOLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ILVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IMXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "INITUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "INJUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "INUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "INXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IOSTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IOTAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IOTXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "IRYSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "JASMYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "JCTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "JELLYJELLYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "JOEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "JSTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "JUPUSDT",
+      "reason": "leveraged_token"
+    },
+    {
+      "symbol": "KAIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KAITOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KASUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KATUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KAVAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KERNELUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KGENUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KITEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KMNOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KNCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KOMAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "KSMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LABUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LAYERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LDOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LIGHTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LINEAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LINKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LISTAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LITUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LPTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LQTYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LSKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LUMIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LUNA2USDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "LYNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MAGICUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MAGMAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MANAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MANTAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MANTRAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MARSCOINUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MASKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MAVIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MAVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MELANIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MEMEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MERLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "METISUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "METUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MEWUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MINAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MIRAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MITOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MMTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MOCAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MONUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MOODENGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MORPHOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MOVEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MOVRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MTLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MUBARAKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "MYXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NAORISUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NEIROUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NEOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NEWTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NIGHTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NILUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NMRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NOMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NOTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "NXPCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "OGNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "OGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ONEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ONGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ONTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ONUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "OPENUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "OPGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "OPNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "OPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ORCAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ORDERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ORDIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "OUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PARTIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PAXGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PENGUUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PEOPLEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PHAROSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PHAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PIEVERSEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PIPPINUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PIXELUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PLAYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PLUMEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PNUTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "POLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "POLYXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PONSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "POPCATUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PORTALUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "POWERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "POWRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PRLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PROMPTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PROMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PROVEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PTBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PUMPBTCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PUMPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PUNDIXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "PYTHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "QNTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "QTUMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "QUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RAREUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RAVEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RAYSOLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RECALLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "REDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RENDERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RESOLVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "REUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "REZUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RIFUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RIVERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RLCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ROBOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RONINUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ROSEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RPLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RSRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RUNEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "RVNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SAFEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SAGAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SAHARAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SANDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SANTOSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SAPIENUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SCRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SEIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SENTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SFPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SHELLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SIGNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SIRENUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SKLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SKRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SKYAIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SKYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SLPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SLXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SNXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SOLUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "SOLVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SOMIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SONICUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SOONUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SOPHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SPACEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SPELLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SPKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SPORTFUNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SPXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SQDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SSVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "STABLEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "STARUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "STBLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "STEEMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "STOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "STRKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "STXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SUIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SUNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SUPERUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SUSHIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SWARMSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SXTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SYNUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "SYRUPUSDT",
+      "reason": "leveraged_token"
+    },
+    {
+      "symbol": "TACUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TAGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TAIKOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TAKEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TAOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "THETAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "THEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TLMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TNSRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TOSHIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TOWNSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TRADOORUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TRBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TREEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TRIAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TRUMPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TRUSTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TRUTHUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TRXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TSTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TURBOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TURTLEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TUTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "TWTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "UAIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "UBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "UMAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "UNIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "USDCUSDT",
+      "reason": "stablecoin"
+    },
+    {
+      "symbol": "USELESSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "USTCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "USUALUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "USUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "VANAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "VELODROMEUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "VELVETUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "VETUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "VIRTUALUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "VTHOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "VVVUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WALUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WAXPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WCTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WETUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WIFUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WLDUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WLFIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WOOUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "WUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XAIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XANUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XAUTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XLMUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XMRUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XNYUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XPINUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XPLUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XRPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XTZUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XVGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "XVSUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "YBUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "YFIUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "YGGUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZAMAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZBTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZECUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZENUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZEREBROUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZESTUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZETAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZILUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZKCUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZKPUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZKUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZORAUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZROUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "ZRXUSDT",
+      "reason": "volume_unavailable"
+    },
+    {
+      "symbol": "\u54c8\u57fa\u7c73USDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "\u5e01\u5b89\u4eba\u751fUSDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "\u6211\u8e0f\u9a6c\u6765\u4e86USDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "\u725b\u6765USDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "\u9f99\u867eUSDT",
+      "reason": "nonstandard_symbol"
+    }
+  ],
+  "disclaimer": "Research only. No symbol from this report was added to the frozen COMBO_02 v1 paper/live universe or Telegram eligibility list.",
+  "selected_at_utc": "2026-10-03T19:55:59.226048+00:00",
+  "selection_rules": {
+    "quote_asset": "USDT",
+    "market_type": "perpetual",
+    "top_n": 5,
+    "min_history_days": 540.0,
+    "min_ohlcv_completeness": 0.99,
+    "min_avg_24h_quote_volume_usd": 5000000.0,
+    "exclude_stablecoins": true,
+    "exclude_leveraged_tokens": true,
+    "exclude_inactive_or_delisted": true,
+    "exclude_nonstandard_symbols": true,
+    "exclude_v1_universe": true,
+    "setup_timeframe": "1h",
+    "selector_version": "v1"
+  },
+  "candidates": [],
+  "candidate_count": 0,
+  "excluded_count": 528
+}

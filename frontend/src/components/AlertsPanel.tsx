@@ -3,15 +3,123 @@ import { useNavigate } from "react-router-dom";
 import { fetchAlerts, wsUrl, type LiveAlert } from "../api/client";
 import { useMarketStore } from "../store/marketStore";
 
-const TYPE_FILTERS = [
-  "ALL",
-  "BOS",
-  "SETUP_STATUS",
-  "MARKET_SIGNAL",
-  "PAPER_ENTRY",
-  "PAPER_EXIT",
-  "LIQ_SPIKE",
+const QUICK_FILTERS = [
+  "All",
+  "V1 Trades",
+  "Research Paper",
+  "Structure",
+  "Liquidations",
+  "Experimental",
 ] as const;
+
+type QuickFilter = (typeof QUICK_FILTERS)[number];
+
+type BadgeKind =
+  | "V1_VERIFIED"
+  | "RESEARCH_15M"
+  | "STRUCTURE"
+  | "LIQUIDATIONS"
+  | "EXPERIMENTAL";
+
+function snipOf(a: LiveAlert): Record<string, unknown> {
+  const payload = (a.payload || {}) as Record<string, unknown>;
+  const snip = (payload.signal_snippet || {}) as Record<string, unknown>;
+  return snip && typeof snip === "object" ? snip : {};
+}
+
+function pickField(a: LiveAlert, key: string): unknown {
+  const snip = snipOf(a);
+  const payload = (a.payload || {}) as Record<string, unknown>;
+  return (a as Record<string, unknown>)[key] ?? payload[key] ?? snip[key];
+}
+
+function classifyBadge(a: LiveAlert): BadgeKind {
+  if (a.badge === "V1_VERIFIED" || a.badge === "RESEARCH_15M" || a.badge === "STRUCTURE" || a.badge === "LIQUIDATIONS" || a.badge === "EXPERIMENTAL") {
+    return a.badge;
+  }
+  const t = String(a.type || "").toUpperCase();
+  if (t === "LIQ_SPIKE") return "LIQUIDATIONS";
+  if (t === "BOS" || t === "CHOCH" || t === "SETUP_STATUS" || t === "MARKET_SIGNAL") {
+    return "STRUCTURE";
+  }
+  if (t === "PAPER_ENTRY" || t === "PAPER_EXIT") {
+    const strategyId = String(pickField(a, "strategy_id") || "");
+    const source = String(pickField(a, "source") || "");
+    const path = String(pickField(a, "path") || "").toUpperCase().replace("PATH_", "");
+    if (strategyId === "COMBO_02_V1" && source === "V1_PAPER_WATCHER") {
+      return "V1_VERIFIED";
+    }
+    if (strategyId === "EXPERIMENTAL_PATH_B" || path === "B") {
+      return "EXPERIMENTAL";
+    }
+    return "RESEARCH_15M";
+  }
+  return "STRUCTURE";
+}
+
+function badgeLabel(kind: BadgeKind): string {
+  switch (kind) {
+    case "V1_VERIFIED":
+      return "V1 VERIFIED";
+    case "RESEARCH_15M":
+      return "RESEARCH 15M";
+    case "STRUCTURE":
+      return "STRUCTURE";
+    case "LIQUIDATIONS":
+      return "LIQUIDATIONS";
+    case "EXPERIMENTAL":
+      return "EXPERIMENTAL";
+  }
+}
+
+function badgeClass(kind: BadgeKind): string {
+  switch (kind) {
+    case "V1_VERIFIED":
+      return "border-emerald-500/50 bg-emerald-500/15 text-emerald-300";
+    case "RESEARCH_15M":
+      return "border-sky-500/40 bg-sky-500/10 text-sky-200";
+    case "STRUCTURE":
+      return "border-terminal-border bg-white/5 text-terminal-muted";
+    case "LIQUIDATIONS":
+      return "border-rose-500/40 bg-rose-500/10 text-rose-200";
+    case "EXPERIMENTAL":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  }
+}
+
+function alertSubtitle(a: LiveAlert, kind: BadgeKind): string {
+  const snip = snipOf(a);
+  if (kind === "V1_VERIFIED") {
+    const tier = String(pickField(a, "v1_tier") || snip.v1_tier || "—").toUpperCase();
+    const htf = String(pickField(a, "htf_alignment") || snip.htf_alignment || "HTF_ALIGNED").replace(
+      /_/g,
+      " ",
+    );
+    return `COMBO_02 v1 • 1h • ${htf} • ${tier}`;
+  }
+  if (kind === "RESEARCH_15M") {
+    const tf = a.timeframe || String(pickField(a, "timeframe") || "15m");
+    return `RESEARCH ONLY • ${tf} • Not Telegram eligible`;
+  }
+  if (kind === "EXPERIMENTAL") {
+    return "EXPERIMENTAL • Path B • Not Telegram eligible";
+  }
+  if (kind === "LIQUIDATIONS") {
+    return "Liquidation spike";
+  }
+  return "Structure / setup";
+}
+
+function matchesQuickFilter(a: LiveAlert, filter: QuickFilter): boolean {
+  if (filter === "All") return true;
+  const kind = classifyBadge(a);
+  if (filter === "V1 Trades") return kind === "V1_VERIFIED";
+  if (filter === "Research Paper") return kind === "RESEARCH_15M";
+  if (filter === "Structure") return kind === "STRUCTURE";
+  if (filter === "Liquidations") return kind === "LIQUIDATIONS";
+  if (filter === "Experimental") return kind === "EXPERIMENTAL";
+  return true;
+}
 
 function fmtTime(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -35,7 +143,7 @@ function mergeAlerts(prev: LiveAlert[], incoming: LiveAlert[]): LiveAlert[] {
 
 export function AlertsPanel() {
   const [rows, setRows] = useState<LiveAlert[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("All");
   const [symbolQuery, setSymbolQuery] = useState("");
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +177,6 @@ export function AlertsPanel() {
     }
   }, [applySnapshot]);
 
-  // REST load + incremental poll (backup even when WS is up)
   useEffect(() => {
     let alive = true;
     async function tick() {
@@ -84,7 +191,6 @@ export function AlertsPanel() {
     };
   }, [pollOnce]);
 
-  // Live WebSocket push
   useEffect(() => {
     let stopped = false;
     let retry = 0;
@@ -150,16 +256,21 @@ export function AlertsPanel() {
   const filtered = useMemo(() => {
     const q = symbolQuery.trim().toUpperCase();
     return rows.filter((r) => {
-      if (typeFilter !== "ALL" && r.type !== typeFilter) return false;
+      if (!matchesQuickFilter(r, quickFilter)) return false;
       if (q && !r.symbol.includes(q)) return false;
       return true;
     });
-  }, [rows, typeFilter, symbolQuery]);
+  }, [rows, quickFilter, symbolQuery]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: rows.length };
+    const c: Record<string, number> = { All: rows.length };
     for (const r of rows) {
-      c[r.type] = (c[r.type] || 0) + 1;
+      const kind = classifyBadge(r);
+      if (kind === "V1_VERIFIED") c["V1 Trades"] = (c["V1 Trades"] || 0) + 1;
+      else if (kind === "RESEARCH_15M") c["Research Paper"] = (c["Research Paper"] || 0) + 1;
+      else if (kind === "STRUCTURE") c.Structure = (c.Structure || 0) + 1;
+      else if (kind === "LIQUIDATIONS") c.Liquidations = (c.Liquidations || 0) + 1;
+      else if (kind === "EXPERIMENTAL") c.Experimental = (c.Experimental || 0) + 1;
     }
     return c;
   }, [rows]);
@@ -175,8 +286,8 @@ export function AlertsPanel() {
         <div>
           <h1 className="font-display text-lg tracking-tight">Alerts</h1>
           <p className="mt-1 max-w-xl text-[11px] text-terminal-muted">
-            Live feed of BOS confirmations, setup status changes, market-signal flips, paper
-            entries/exits, and liquidation spikes. Transition-only — no mock events.
+            Live feed with explicit source badges. V1 VERIFIED = COMBO_02 watcher (1h). RESEARCH 15M =
+            legacy paper only — not Telegram eligible. Structure / liquidations continue independently.
           </p>
         </div>
         <div className="flex items-center gap-2 text-[11px]">
@@ -199,31 +310,30 @@ export function AlertsPanel() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Buffered" value={String(rows.length)} />
-        <Stat label="BOS" value={String(counts.BOS || 0)} tone={(counts.BOS || 0) > 0 ? "up" : undefined} />
-        <Stat label="Setup" value={String(counts.SETUP_STATUS || 0)} />
-        <Stat label="Market" value={String(counts.MARKET_SIGNAL || 0)} />
-        <Stat label="Paper in" value={String(counts.PAPER_ENTRY || 0)} tone={(counts.PAPER_ENTRY || 0) > 0 ? "up" : undefined} />
-        <Stat label="Paper out" value={String(counts.PAPER_EXIT || 0)} />
-        <Stat label="Liq spike" value={String(counts.LIQ_SPIKE || 0)} tone={(counts.LIQ_SPIKE || 0) > 0 ? "down" : undefined} />
+        <Stat label="V1 trades" value={String(counts["V1 Trades"] || 0)} tone={(counts["V1 Trades"] || 0) > 0 ? "up" : undefined} />
+        <Stat label="Research paper" value={String(counts["Research Paper"] || 0)} />
+        <Stat label="Structure" value={String(counts.Structure || 0)} />
+        <Stat label="Liquidations" value={String(counts.Liquidations || 0)} tone={(counts.Liquidations || 0) > 0 ? "down" : undefined} />
+        <Stat label="Experimental" value={String(counts.Experimental || 0)} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1">
-          {TYPE_FILTERS.map((t) => (
+          {QUICK_FILTERS.map((t) => (
             <button
               key={t}
               type="button"
-              onClick={() => setTypeFilter(t)}
+              onClick={() => setQuickFilter(t)}
               className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
-                typeFilter === t
+                quickFilter === t
                   ? "bg-white/10 text-terminal-text"
                   : "text-terminal-muted hover:bg-white/5"
               }`}
             >
               {t}
-              {t !== "ALL" && counts[t] ? ` ${counts[t]}` : ""}
+              {t !== "All" && counts[t] ? ` ${counts[t]}` : ""}
             </button>
           ))}
         </div>
@@ -250,6 +360,7 @@ export function AlertsPanel() {
               <thead className="bg-black/20 text-[10px] uppercase tracking-wide text-terminal-muted">
                 <tr>
                   <th className="px-2 py-1.5">Time</th>
+                  <th className="px-2 py-1.5">Badge</th>
                   <th className="px-2 py-1.5">Sev</th>
                   <th className="px-2 py-1.5">Type</th>
                   <th className="px-2 py-1.5">Symbol</th>
@@ -259,28 +370,44 @@ export function AlertsPanel() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((a) => (
-                  <tr
-                    key={a.id}
-                    className="cursor-pointer border-t border-terminal-border/70 hover:bg-white/[0.03]"
-                    onClick={() => openSymbol(a.symbol)}
-                  >
-                    <td className="whitespace-nowrap px-2 py-1.5 text-terminal-muted">
-                      {fmtTime(a.time)}
-                    </td>
-                    <td className={`px-2 py-1.5 ${sevClass(a.severity)}`}>{a.severity}</td>
-                    <td className="px-2 py-1.5">{a.type}</td>
-                    <td className="px-2 py-1.5 text-terminal-text">{a.symbol}</td>
-                    <td className="px-2 py-1.5">{a.timeframe || "—"}</td>
-                    <td className="px-2 py-1.5 font-semibold">{a.title}</td>
-                    <td
-                      className="max-w-[18rem] truncate px-2 py-1.5 text-terminal-muted"
-                      title={a.detail}
+                {filtered.map((a) => {
+                  const kind = classifyBadge(a);
+                  const subtitle = alertSubtitle(a, kind);
+                  return (
+                    <tr
+                      key={a.id}
+                      className="cursor-pointer border-t border-terminal-border/70 hover:bg-white/[0.03]"
+                      onClick={() => openSymbol(a.symbol)}
                     >
-                      {a.detail || "—"}
-                    </td>
-                  </tr>
-                ))}
+                      <td className="whitespace-nowrap px-2 py-1.5 text-terminal-muted">
+                        {fmtTime(a.time)}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={`inline-flex w-fit rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide ${badgeClass(kind)}`}
+                          >
+                            {badgeLabel(kind)}
+                          </span>
+                          <span className="max-w-[14rem] truncate text-[9px] text-terminal-muted" title={subtitle}>
+                            {subtitle}
+                          </span>
+                        </div>
+                      </td>
+                      <td className={`px-2 py-1.5 ${sevClass(a.severity)}`}>{a.severity}</td>
+                      <td className="px-2 py-1.5">{a.type}</td>
+                      <td className="px-2 py-1.5 text-terminal-text">{a.symbol}</td>
+                      <td className="px-2 py-1.5">{a.timeframe || "—"}</td>
+                      <td className="px-2 py-1.5 font-semibold">{a.title}</td>
+                      <td
+                        className="max-w-[18rem] truncate px-2 py-1.5 text-terminal-muted"
+                        title={a.detail}
+                      >
+                        {a.detail || "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -165,13 +165,20 @@ def test_engine_skips_meme_path_a(monkeypatch):
         entry_mode="path_a",
         risk_policy=PaperRiskPolicy(enabled=True),
     )
+    eng.legacy_auto_entry_enabled = True
     pos = eng.on_setup_signal(
         "MEMEUSDT",
         {
             "status": "WAITING",
             "direction": "LONG",
             "timeframe": "15m",
-            "trend": {"15m": {"trend": "BULLISH"}},
+            # Path A requires HTF before risk gates run
+            "trend": {
+                "15m": {"trend": "BULLISH"},
+                "1h": {"trend": "BULLISH"},
+                "4h": {"trend": "BULLISH"},
+            },
+            "mtf": {"MTF_ALIGNMENT": "STRONG_LONG"},
             "bos": {
                 "state": "CONFIRMED",
                 "direction": "BULLISH_BOS",

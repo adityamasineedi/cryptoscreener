@@ -36,6 +36,7 @@ import {
 import {
   isIntradayTimeframe,
   localizationForTimeframe,
+  ensureAscendingByTime,
   timeScaleOptionsForTimeframe,
 } from "../chart/chartTimeAxis";
 
@@ -464,8 +465,8 @@ function PriceVolumeChart({
     volSeries.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     candleRef.current = candleSeries;
     volRef.current = volSeries;
-    candleSeries.setData(candles);
-    volSeries.setData(volumes);
+    candleSeries.setData(ensureAscendingByTime(candles));
+    volSeries.setData(ensureAscendingByTime(volumes));
 
     chart.applyOptions({
       localization: localizationForTimeframe(timeframe),
@@ -502,8 +503,8 @@ function PriceVolumeChart({
 
   useEffect(() => {
     if (!hasData || !chartRef.current) return;
-    candleRef.current?.setData(candles);
-    volRef.current?.setData(volumes);
+    candleRef.current?.setData(ensureAscendingByTime(candles));
+    volRef.current?.setData(ensureAscendingByTime(volumes));
     applyPriceScale();
 
     const key = `${symbol}|${timeframe}`;
@@ -643,10 +644,12 @@ function PriceVolumeChart({
                 : "rgba(240,113,120,0.4)",
           });
         }
-        if (cdata.length > 0 && data.status !== "WAITING") {
-          setCandles(cdata);
-          setVolumes(vdata);
-        } else if (cdata.length === 0) {
+        const sortedCandles = ensureAscendingByTime(cdata);
+        const sortedVolumes = ensureAscendingByTime(vdata);
+        if (sortedCandles.length > 0 && data.status !== "WAITING") {
+          setCandles(sortedCandles);
+          setVolumes(sortedVolumes);
+        } else if (sortedCandles.length === 0) {
           // Only blank the chart when the new TF truly has no bars
           setCandles([]);
           setVolumes([]);

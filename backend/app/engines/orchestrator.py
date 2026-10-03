@@ -160,7 +160,50 @@ class CalculationOrchestrator:
             enabled=bool(self.settings.paper_trade_enabled),
             entry_mode=str(getattr(self.settings, "paper_entry_mode", "path_a") or "path_a"),
             risk_policy=policy_from_settings(self.settings),
+            v1_profile_enabled=bool(
+                getattr(self.settings, "paper_v1_profile_enabled", True)
+            ),
+            v1_universe_only=bool(
+                getattr(self.settings, "paper_v1_universe_only", True)
+            ),
+            v1_secondary_enabled=bool(
+                getattr(self.settings, "paper_v1_secondary_enabled", True)
+            ),
         )
+        paper.v1_watcher_owns_entries = bool(
+            getattr(self.settings, "paper_v1_watcher_enabled", True)
+        )
+        paper.legacy_auto_entry_enabled = bool(
+            getattr(self.settings, "paper_legacy_auto_entry_enabled", False)
+        )
+        v1_watcher = None
+        if paper.v1_watcher_owns_entries:
+            from app.services.v1_paper_watcher import get_v1_paper_watcher
+
+            v1_watcher = get_v1_paper_watcher(
+                enabled=True,
+                timeframe=str(
+                    getattr(self.settings, "paper_v1_timeframe", "1h") or "1h"
+                ),
+                secondary_enabled=bool(
+                    getattr(self.settings, "paper_v1_secondary_enabled", True)
+                ),
+                replay_mode=bool(
+                    getattr(self.settings, "paper_v1_replay_mode", False)
+                ),
+                emit_alerts=True,
+                paper_engine=paper,
+            )
+            try:
+                seeded = v1_watcher.seed_from_store()
+                logger.info(
+                    "v1_paper_watcher_seeded",
+                    books=len(v1_watcher.books),
+                    seeded=seeded,
+                    replay=v1_watcher.replay_mode,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("v1_paper_watcher_seed_failed", error=str(exc))
         try:
             rows = await persistence.load_paper_trades(closed_limit=paper.max_closed)
             paper.hydrate_from_rows(rows)
@@ -191,11 +234,14 @@ class CalculationOrchestrator:
             self.market.hydrate_funding_from_rows(fund_rows)
         except Exception as exc:  # noqa: BLE001
             logger.warning("funding_hydrate_failed", error=str(exc))
-        # Open any Path A setups already in cache after boot (dedupe keys restored)
-        try:
-            paper.scan_cached_setups()
-        except Exception:  # noqa: BLE001
-            pass
+        # Open any legacy Path A/B setups already in cache after boot.
+        # Default: legacy auto-entry OFF — screener/BOS continue without paper fills.
+        # When v1 watcher owns entries, skip Path A as well.
+        if paper.legacy_auto_entry_enabled and not paper.v1_watcher_owns_entries:
+            try:
+                paper.scan_cached_setups()
+            except Exception:  # noqa: BLE001
+                pass
         # Background hydrate/enqueue so FastAPI lifespan can yield and bind :8000
         # immediately. Blocking here previously left the API unreachable for minutes
         # while ~symbols×TFs sequential DB loads ran (ERR_CONNECTION_REFUSED / timeouts).
@@ -215,6 +261,12 @@ class CalculationOrchestrator:
         self._tasks.append(
             asyncio.create_task(self._paper_trade_loop(), name="paper_trade_loop")
         )
+        if bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
+            self._tasks.append(
+                asyncio.create_task(
+                    self._v1_paper_watcher_loop(), name="v1_paper_watcher_loop"
+                )
+            )
         self._tasks.append(
             asyncio.create_task(self._kline_live_rebalance_loop(), name="kline_live_rebalance")
         )
@@ -228,6 +280,9 @@ class CalculationOrchestrator:
             kline_plan=self.kline_ws.plan_for_symbols(live_syms),
             oi=self.oi.status(),
             backfill=self.backfill.status(),
+            v1_watcher=bool(
+                getattr(self.settings, "paper_v1_watcher_enabled", True)
+            ),
         )
 
     def _select_kline_live_symbols(self, universe: list[str] | None = None) -> list[str]:
@@ -462,6 +517,48 @@ class CalculationOrchestrator:
 
         # Structure setup signal engine — candle-close / series-ready only (not tick)
         await self._recompute_setup(symbol, timeframe)
+        # COMBO_02 v1 1h watcher — independent of 15m screener Path A
+        await self._maybe_run_v1_watcher(symbol, timeframe)
+
+    async def _maybe_run_v1_watcher(self, symbol: str, timeframe: str) -> None:
+        if not bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
+            return
+        want = str(getattr(self.settings, "paper_v1_timeframe", "1h") or "1h").lower()
+        if normalize_timeframe(timeframe).lower() != want:
+            return
+        try:
+            from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
+            from app.services.v1_paper_watcher import get_v1_paper_watcher
+
+            watcher = get_v1_paper_watcher()
+            pos = watcher.on_closed_1h(symbol)
+            if pos is not None:
+                await flush_paper_trade_persists(get_paper_trade_engine())
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "v1_paper_watcher_failed",
+                symbol=symbol,
+                timeframe=timeframe,
+                error=str(exc),
+            )
+
+    async def _v1_paper_watcher_loop(self) -> None:
+        """Periodic tip check for v1 books (covers missed 1h close events)."""
+        from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
+        from app.services.v1_paper_watcher import get_v1_paper_watcher
+
+        while self._running:
+            await asyncio.sleep(30.0)
+            if not bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
+                continue
+            try:
+                watcher = get_v1_paper_watcher()
+                paper = get_paper_trade_engine()
+                for book in watcher.books:
+                    watcher.on_closed_1h(book.symbol)
+                await flush_paper_trade_persists(paper)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("v1_paper_watcher_loop_failed", error=str(exc))
 
     async def _hydrate_setup_signals(self) -> None:
         """Load persisted setups into cache; mark stale vs current OHLCV for recompute."""

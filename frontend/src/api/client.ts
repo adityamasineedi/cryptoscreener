@@ -424,6 +424,41 @@ export function fetchResearchOhlcvRange(params?: {
   );
 }
 
+export type ResearchOhlcvCandle = {
+  open_time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+/** Postgres OHLCV slice around a blotter trade window (backtest chart overlay). */
+export function fetchResearchOhlcvCandles(params: {
+  symbol: string;
+  timeframe: string;
+  start: string;
+  end?: string | null;
+  pad_bars?: number;
+}) {
+  const q = new URLSearchParams({
+    symbol: params.symbol,
+    timeframe: params.timeframe,
+    start: params.start,
+  });
+  if (params.end) q.set("end", params.end);
+  if (params.pad_bars != null) q.set("pad_bars", String(params.pad_bars));
+  return getJson<{
+    status: string;
+    reason?: string;
+    symbol: string;
+    timeframe: string;
+    candles: ResearchOhlcvCandle[];
+    window_start?: string;
+    window_end_exclusive?: string;
+  }>(`/api/research/ohlcv-candles?${q.toString()}`);
+}
+
 export type OhlcvExpandResultRow = {
   symbol: string;
   timeframe: string;
@@ -531,6 +566,33 @@ export function fetchLongStrategyBacktest(params: {
   );
 }
 
+export type Combo02CandidateResultsResponse = {
+  status: string;
+  source_file?: string;
+  generated_at_utc?: string;
+  fingerprint?: Record<string, unknown>;
+  final_lists?: Record<string, string[]>;
+  portfolio?: Array<Record<string, unknown>>;
+  oos?: Array<Record<string, unknown>>;
+  results?: Array<Record<string, unknown>>;
+  disclaimer?: string;
+  note?: string;
+  v1_unchanged?: boolean;
+  read_only?: boolean;
+  execution_rights?: boolean;
+  timestamp?: string;
+};
+
+/** Read-only candidate research report (no promote / Telegram / paper actions). */
+export function fetchCombo02CandidateResults(stamp?: string) {
+  const q = new URLSearchParams();
+  if (stamp) q.set("stamp", stamp);
+  const qs = q.toString();
+  return getJson<Combo02CandidateResultsResponse>(
+    `/api/research/combo02-candidate-results${qs ? `?${qs}` : ""}`
+  );
+}
+
 export type BacktestJob = {
   job_id?: string | null;
   status: string;
@@ -573,6 +635,7 @@ export async function startBacktestJob(body: {
   combination_id?: string;
   limit?: number;
   risk_usd?: number;
+  principal_usd?: number;
   taker_fee_pct?: number;
   maker_fee_pct?: number;
   include_trades?: boolean;
@@ -624,6 +687,67 @@ export function formatFresh(
   return formatter(fv.value);
 }
 
+export type PaperTelegramStatus = {
+  enabled?: boolean;
+  configured?: boolean;
+  subscribed?: boolean;
+  ready?: boolean;
+  chat_id_set?: boolean;
+  monitors?: string[];
+  timeframe?: string;
+  alert_types?: string[];
+  source?: string;
+  combo_version?: string;
+  path?: string;
+  reason?: string | null;
+  label?: string;
+};
+
+export type PaperWatcherBookLive = {
+  symbol: string;
+  timeframe?: string;
+  tier?: string;
+  risk_percent?: number;
+  seeded?: boolean;
+  watermark?: string | null;
+  tip_bar?: string | null;
+  waiting_next_closed_bar?: boolean;
+  tip_status?: string;
+  tip_reason?: string;
+  gates?: { trend?: boolean; bos?: boolean; htf?: boolean };
+  htf_alignment?: string | null;
+  trend_1h?: string | null;
+  trend_4h?: string | null;
+  would_open_on_new_bar?: boolean;
+  bars_1h?: number;
+  bars_4h?: number;
+};
+
+export type PaperWatcherStatus = {
+  enabled?: boolean;
+  timeframe?: string;
+  replay_mode?: boolean;
+  secondary_enabled?: boolean;
+  books?: Array<{
+    symbol: string;
+    timeframe?: string;
+    tier?: string;
+    risk_percent?: number;
+  }>;
+  seeded?: string[];
+  watermarks?: Record<string, string>;
+  processed_bars?: number;
+  last_skip?: string | null;
+  combo_id?: string;
+  combo_version?: string;
+  path?: string;
+  label?: string;
+  auto_executes_from?: string;
+  live?: PaperWatcherBookLive[];
+  live_error?: string;
+  error?: string;
+};
+
 export type PaperStatus = {
   enabled: boolean;
   paper_only: boolean;
@@ -637,6 +761,23 @@ export type PaperStatus = {
   risk_percent: number;
   entry_mode?: string;
   entry_mode_label?: string;
+  legacy_auto_entry_enabled?: boolean;
+  v1_watcher_owns_entries?: boolean;
+  last_skip_reason?: string | null;
+  v1_profile?: {
+    enabled?: boolean;
+    universe_only?: boolean;
+    secondary_enabled?: boolean;
+    combo_version?: string;
+  };
+  monitor?: {
+    auto_source?: string;
+    v1_watcher_enabled?: boolean;
+    legacy_auto_entry_enabled?: boolean;
+    explanation?: string;
+  };
+  v1_watcher?: PaperWatcherStatus;
+  telegram?: PaperTelegramStatus;
   timestamp: string;
 };
 
@@ -661,6 +802,9 @@ export type PaperPosition = {
   unrealized_r: number | null;
   source_candle_ts: string | null;
   timeframe: string;
+  signal_snippet?: Record<string, unknown>;
+  strategy_id?: string;
+  source?: string;
 };
 
 export type PaperOpportunity = {
@@ -711,6 +855,9 @@ export function fetchPaperOpportunities(limit = 120, warm = 8) {
     warmed?: number;
     auto_enabled: boolean;
     note: string;
+    entry_mode?: string;
+    v1_watcher_owns_entries?: boolean;
+    legacy_auto_entry_enabled?: boolean;
   }>(`/api/paper/opportunities?limit=${limit}&warm=${warm}`);
 }
 
@@ -732,6 +879,19 @@ export function resetPaperTrade() {
   return postJson<PaperStatus>("/api/paper/reset");
 }
 
+export function closeLegacyPaperPositions(confirm = false) {
+  return postJson<{
+    ok: boolean;
+    error?: string;
+    reason?: string;
+    closed_count?: number;
+    closed?: PaperPosition[];
+    skipped_v1?: string[];
+    message?: string;
+    status: PaperStatus;
+  }>(`/api/paper/close-legacy?confirm=${confirm ? "true" : "false"}`);
+}
+
 export type AlertType =
   | "BOS"
   | "SETUP_STATUS"
@@ -742,6 +902,14 @@ export type AlertType =
   | string;
 
 export type AlertSeverity = "info" | "watch" | "action" | string;
+
+export type AlertBadge =
+  | "V1_VERIFIED"
+  | "RESEARCH_15M"
+  | "STRUCTURE"
+  | "LIQUIDATIONS"
+  | "EXPERIMENTAL"
+  | string;
 
 export type LiveAlert = {
   id: string;
@@ -754,6 +922,13 @@ export type LiveAlert = {
   title: string;
   detail: string;
   payload?: Record<string, unknown>;
+  strategy_id?: string | null;
+  source?: string | null;
+  combo_id?: string | null;
+  combo_version?: string | null;
+  path?: string | null;
+  telegram_eligible?: boolean | null;
+  badge?: AlertBadge | null;
 };
 
 export function fetchAlerts(params?: {

@@ -56,6 +56,123 @@ def _attach_market_signal(analysis: SetupAnalysis, config: SignalConfig) -> Setu
     return analysis
 
 
+def trade_plan_entry_annotation(
+    *,
+    entry: dict[str, Any] | None,
+    stop: dict[str, Any] | None,
+    bos: dict[str, Any] | None,
+    targets: Sequence[Mapping[str, Any]] | None = None,
+    plan_time: str | None = None,
+    direction: str | None = None,
+) -> dict[str, Any] | None:
+    """Build BUY/SELL/ENTRY chart annotation when a tradeable level exists.
+
+    Confirmed ``entry.entry_price`` wins; otherwise provisional stop/BOS level
+    so charts never show SL/TP without a matching entry line.
+    """
+    side = str(direction or (entry or {}).get("direction") or "").upper()
+    chart_entry = None
+    if entry and entry.get("entry_price") is not None:
+        chart_entry = entry.get("entry_price")
+    elif stop and stop.get("entry_price") is not None:
+        chart_entry = stop.get("entry_price")
+    elif bos and bos.get("broken_level") is not None and (
+        (stop and stop.get("final_stop") is not None) or bool(targets)
+    ):
+        chart_entry = bos.get("broken_level")
+    if chart_entry is None:
+        return None
+
+    if not side and bos:
+        bos_dir = str(bos.get("direction") or "").upper()
+        if "BULLISH" in bos_dir:
+            side = "LONG"
+        elif "BEARISH" in bos_dir:
+            side = "SHORT"
+
+    if side == "SHORT":
+        buy_sell_kind = "SELL"
+    elif side == "LONG":
+        buy_sell_kind = "BUY"
+    else:
+        buy_sell_kind = "ENTRY"
+
+    provisional = bool(stop and stop.get("provisional")) and not (
+        entry and entry.get("entry_price") is not None
+    )
+    raw_type = str((entry or {}).get("entry_type") or "").upper()
+    if raw_type and raw_type not in {"WAITING", "NO_SETUP", "NONE", "NULL"}:
+        label = raw_type
+    elif provisional:
+        label = f"{buy_sell_kind}_PROV"
+    else:
+        label = buy_sell_kind
+
+    if plan_time is None:
+        if bos and bos.get("break_timestamp"):
+            plan_time = bos.get("break_timestamp")
+        elif entry and entry.get("timestamp"):
+            plan_time = entry.get("timestamp")
+
+    return {
+        "kind": buy_sell_kind,
+        "group": "trade_plan",
+        "price": chart_entry,
+        "time": plan_time,
+        "label": label,
+        "direction": side or None,
+    }
+
+
+def ensure_trade_plan_entry_annotation(
+    payload: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return annotations with an ENTRY/BUY/SELL line if SL/TP exist without one.
+
+    Safe for cached setup payloads that were computed before entry was emitted.
+    """
+    anns = [dict(a) for a in (payload.get("annotations") or []) if isinstance(a, Mapping)]
+    if any(str(a.get("kind") or "").upper() in {"BUY", "SELL", "ENTRY"} for a in anns):
+        return anns
+    has_plan = any(str(a.get("group") or "") == "trade_plan" for a in anns)
+    if not has_plan:
+        return anns
+
+    entry = payload.get("entry") if isinstance(payload.get("entry"), Mapping) else None
+    stop = payload.get("stop") if isinstance(payload.get("stop"), Mapping) else None
+    bos = payload.get("bos") if isinstance(payload.get("bos"), Mapping) else None
+    targets = payload.get("targets") if isinstance(payload.get("targets"), list) else []
+    direction = payload.get("direction")
+    if isinstance(direction, str):
+        direction_s = direction
+    else:
+        direction_s = None
+
+    plan_time = None
+    for a in anns:
+        if a.get("group") == "trade_plan" and a.get("time"):
+            plan_time = a.get("time")
+            break
+
+    entry_ann = trade_plan_entry_annotation(
+        entry=dict(entry) if entry else None,
+        stop=dict(stop) if stop else None,
+        bos=dict(bos) if bos else None,
+        targets=targets,
+        plan_time=str(plan_time) if plan_time else None,
+        direction=direction_s,
+    )
+    if entry_ann is None:
+        return anns
+    # Insert before other trade_plan lines so ENTRY precedes SL/TP in the legend
+    insert_at = next(
+        (i for i, a in enumerate(anns) if a.get("group") == "trade_plan"),
+        len(anns),
+    )
+    anns.insert(insert_at, entry_ann)
+    return anns
+
+
 def _source_candle_timestamps(
     candles_by_tf: Mapping[str, Sequence[Mapping[str, Any]]],
     as_of_index_by_tf: Mapping[str, int] | None = None,
@@ -753,24 +870,17 @@ class SignalEngine:
         elif entry and entry.get("timestamp"):
             plan_time = entry.get("timestamp")
 
-        if entry and entry.get("entry_price") is not None:
-            # Chart-facing side labels (BUY / SELL) from setup direction
-            if side == "SHORT":
-                buy_sell_kind = "SELL"
-            elif side == "LONG":
-                buy_sell_kind = "BUY"
-            else:
-                buy_sell_kind = "ENTRY"
-            ann.append(
-                {
-                    "kind": buy_sell_kind,
-                    "group": "trade_plan",
-                    "price": entry.get("entry_price"),
-                    "time": plan_time,
-                    "label": entry.get("entry_type") or buy_sell_kind,
-                    "direction": side or None,
-                }
-            )
+        entry_ann = trade_plan_entry_annotation(
+            entry=entry,
+            stop=stop,
+            bos=bos,
+            targets=targets,
+            plan_time=plan_time,
+            direction=side or None,
+        )
+        chart_side = str((entry_ann or {}).get("direction") or side or "").upper() or None
+        if entry_ann is not None:
+            ann.append(entry_ann)
         if stop and stop.get("final_stop") is not None:
             ann.append(
                 {
@@ -779,7 +889,7 @@ class SignalEngine:
                     "price": stop.get("final_stop"),
                     "time": plan_time,
                     "label": "STOP",
-                    "direction": side or None,
+                    "direction": chart_side,
                 }
             )
         for t in targets:
@@ -791,7 +901,7 @@ class SignalEngine:
                     "price": t.get("target_price"),
                     "time": plan_time,
                     "label": tp_name,
-                    "direction": side or None,
+                    "direction": chart_side,
                 }
             )
         return ann

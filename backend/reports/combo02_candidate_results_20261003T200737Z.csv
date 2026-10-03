@@ -1,0 +1,6 @@
+symbol,run_status,eligibility_tier,oos_label,trade_count,trades_per_year,win_rate,gross_avg_r,net_avg_r,profit_factor,gross_pnl,net_pnl,total_fees,fees_over_gross_pnl,max_drawdown_r,max_losing_streak,max_winning_streak,largest_single_winner_r,largest_single_loser_r,median_holding_bars,maximum_holding_bars,peak_concurrent_with_v1_book,overlap_pct_BTCUSDT,overlap_pct_ETHUSDT,overlap_pct_SOLUSDT,corr_daily_net_r_vs_btc,data_coverage_start,data_coverage_end,ohlcv_completeness,eligibility_reasons
+XRPUSDT,NO_TRADES,INSUFFICIENT_DATA,,0,0.0,0.0,,,,0.0,0.0,0.0,,0.0,0,0,,,,,3,,,,,2025-05-10T21:00:00+00:00,2026-01-31T23:00:00+00:00,1.0001,run_status=NO_TRADES
+SUIUSDT,NO_TRADES,INSUFFICIENT_DATA,,0,0.0,0.0,,,,0.0,0.0,0.0,,0.0,0,0,,,,,3,,,,,2025-05-10T21:00:00+00:00,2026-01-31T23:00:00+00:00,1.0001,run_status=NO_TRADES
+BNBUSDT,NO_TRADES,INSUFFICIENT_DATA,,0,0.0,0.0,,,,0.0,0.0,0.0,,0.0,0,0,,,,,3,,,,,2025-05-10T21:00:00+00:00,2026-01-31T23:00:00+00:00,1.0001,run_status=NO_TRADES
+DOGEUSDT,NO_TRADES,INSUFFICIENT_DATA,,0,0.0,0.0,,,,0.0,0.0,0.0,,0.0,0,0,,,,,3,,,,,2025-05-10T21:00:00+00:00,2026-01-31T23:00:00+00:00,1.0001,run_status=NO_TRADES
+LINKUSDT,NO_TRADES,INSUFFICIENT_DATA,,0,0.0,0.0,,,,0.0,0.0,0.0,,0.0,0,0,,,,,3,,,,,2025-05-10T21:00:00+00:00,2026-01-31T23:00:00+00:00,1.0001,run_status=NO_TRADES

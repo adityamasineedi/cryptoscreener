@@ -1,0 +1,782 @@
+{
+  "generated_at_utc": "2026-10-03T20:15:51.401261+00:00",
+  "fingerprint": {
+    "text": "COMBO_02 LONG, 1h setup, 1h+4h HTF_ALIGNED, Path A-equivalent, same fee/risk/SL/TP/swing/BOS logic as v1.",
+    "combination_id": "COMBO_02",
+    "combo_require_htf": true,
+    "direction": "LONG",
+    "setup_timeframe": "1h",
+    "window_start": "2025-01-01",
+    "window_end": "2026-01-31",
+    "oos_dev_end": "2025-06-30",
+    "oos_val_start": "2025-07-01",
+    "oos_val_end": "2026-01-31",
+    "risk_usd_per_r": 20.0,
+    "principal_usd": 1000.0,
+    "taker_fee": 0.0004,
+    "maker_fee": 0.0002,
+    "research_engine_version": "bos_research_v2_tp1_min_rr",
+    "path": "A",
+    "no_path_b": true,
+    "no_combo_02_local": true,
+    "no_15m": true,
+    "settings_identical_across_candidates": true
+  },
+  "thresholds": {
+    "promising_min_trades": 20,
+    "promising_min_net_avg_r": 0.25,
+    "promising_min_profit_factor": 1.25,
+    "promising_max_dd_r": 6.0,
+    "promising_max_losing_streak": 6,
+    "promising_max_fee_pct_of_gross": 0.7,
+    "watchlist_min_trades": 10,
+    "reject_max_dd_r": 10.0,
+    "reject_max_losing_streak": 10,
+    "reject_fee_pct_of_gross": 0.7,
+    "insufficient_max_trades": 9,
+    "oos_min_trades": 10,
+    "oos_min_net_avg_r": 0.0,
+    "oos_min_profit_factor": 1.0,
+    "oos_severe_max_dd_r": 10.0,
+    "oos_severe_max_losing_streak": 10
+  },
+  "window": {
+    "base_start": "2025-01-01",
+    "base_end": "2026-01-31",
+    "oos_dev_end": "2025-06-30",
+    "oos_val_start": "2025-07-01",
+    "oos_val_end": "2026-01-31",
+    "risk_usd": 20.0,
+    "principal_usd": 1000.0,
+    "combination_id": "COMBO_02",
+    "direction": "LONG",
+    "setup_timeframe": "1h",
+    "require_htf_alignment": true
+  },
+  "manifest_ref": {
+    "generated_at_utc": "2026-10-03T20:07:37.331342+00:00",
+    "selector_version": "v1",
+    "criteria": {
+      "quote_asset": "USDT",
+      "market_type": "perpetual",
+      "top_n": 10,
+      "min_history_days": 500.0,
+      "min_ohlcv_completeness": 0.99,
+      "min_avg_24h_quote_volume_usd": 5000000.0,
+      "exclude_stablecoins": true,
+      "exclude_leveraged_tokens": true,
+      "exclude_inactive_or_delisted": true,
+      "exclude_nonstandard_symbols": true,
+      "exclude_v1_universe": true,
+      "setup_timeframe": "1h",
+      "selector_version": "v1"
+    },
+    "symbols": [
+      "XRPUSDT",
+      "SUIUSDT",
+      "BNBUSDT",
+      "DOGEUSDT",
+      "LINKUSDT"
+    ]
+  },
+  "v1_reference": {
+    "BTCUSDT": {
+      "symbol": "BTCUSDT",
+      "run_status": "COMPLETED",
+      "window_start": "2025-01-01",
+      "window_end": "2026-01-31",
+      "engine_status": "OK",
+      "sample_size_engine": 27,
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": null,
+      "trade_count": 27,
+      "trades_per_year": 24.9231,
+      "win_rate": 0.5556,
+      "gross_avg_r": 0.7607,
+      "net_avg_r": 0.6555,
+      "profit_factor": 2.3203,
+      "gross_pnl": 410.7774,
+      "net_pnl": 353.9675,
+      "total_fees": 56.8099,
+      "fees_over_gross_pnl": 0.1383,
+      "max_drawdown_r": 2.5398,
+      "max_losing_streak": 2,
+      "max_winning_streak": 3,
+      "largest_single_winner_r": 2.7069,
+      "largest_single_loser_r": -1.4549,
+      "median_holding_bars": 9.0,
+      "maximum_holding_bars": 363.0
+    },
+    "ETHUSDT": {
+      "symbol": "ETHUSDT",
+      "run_status": "COMPLETED",
+      "window_start": "2025-01-01",
+      "window_end": "2026-01-31",
+      "engine_status": "OK",
+      "sample_size_engine": 41,
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": null,
+      "trade_count": 41,
+      "trades_per_year": 37.8462,
+      "win_rate": 0.3659,
+      "gross_avg_r": 0.1534,
+      "net_avg_r": 0.0872,
+      "profit_factor": 1.1286,
+      "gross_pnl": 125.8163,
+      "net_pnl": 71.4681,
+      "total_fees": 54.3481,
+      "fees_over_gross_pnl": 0.432,
+      "max_drawdown_r": 10.7611,
+      "max_losing_streak": 10,
+      "max_winning_streak": 3,
+      "largest_single_winner_r": 2.8463,
+      "largest_single_loser_r": -1.1548,
+      "median_holding_bars": 7.0,
+      "maximum_holding_bars": 147.0
+    },
+    "SOLUSDT": {
+      "symbol": "SOLUSDT",
+      "run_status": "COMPLETED",
+      "window_start": "2025-01-01",
+      "window_end": "2026-01-31",
+      "engine_status": "OK",
+      "sample_size_engine": 40,
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": null,
+      "trade_count": 40,
+      "trades_per_year": 36.9231,
+      "win_rate": 0.45,
+      "gross_avg_r": 0.462,
+      "net_avg_r": 0.404,
+      "profit_factor": 1.6923,
+      "gross_pnl": 369.637,
+      "net_pnl": 323.1987,
+      "total_fees": 46.4383,
+      "fees_over_gross_pnl": 0.1256,
+      "max_drawdown_r": 6.5047,
+      "max_losing_streak": 6,
+      "max_winning_streak": 3,
+      "largest_single_winner_r": 2.8792,
+      "largest_single_loser_r": -1.1721,
+      "median_holding_bars": 6.5,
+      "maximum_holding_bars": 235.0
+    }
+  },
+  "results": [
+    {
+      "symbol": "XRPUSDT",
+      "run_status": "COMPLETED",
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": 1.0001,
+      "trade_count": 28,
+      "trades_per_year": 25.8462,
+      "win_rate": 0.3214,
+      "gross_avg_r": -0.0088,
+      "net_avg_r": -0.0706,
+      "profit_factor": 0.902,
+      "gross_pnl": -4.9429,
+      "net_pnl": -39.5583,
+      "total_fees": 34.6154,
+      "fees_over_gross_pnl": 7.0031,
+      "max_drawdown_r": 7.3721,
+      "max_losing_streak": 7,
+      "max_winning_streak": 3,
+      "largest_single_winner_r": 2.0961,
+      "largest_single_loser_r": -1.1772,
+      "median_holding_bars": 8.0,
+      "maximum_holding_bars": 322.0,
+      "concurrent_vs_btc": 2,
+      "concurrent_vs_eth": 2,
+      "concurrent_vs_sol": 2,
+      "peak_concurrent_with_v1_book": 4,
+      "overlap_pct_BTCUSDT": 0.0714,
+      "overlap_pct_ETHUSDT": 0.0357,
+      "overlap_pct_SOLUSDT": 0.0357,
+      "corr_daily_net_r_vs_btc": 0.5789,
+      "corr_weekly_net_r_vs_btc": 0.1845,
+      "eligibility_tier": "REJECT",
+      "eligibility_reasons": [
+        "non_positive_net_expectancy_or_pnl",
+        "profit_factor_le_1",
+        "fees_consume>=70%_gross"
+      ],
+      "eligibility_conditions": [
+        {
+          "name": "trades_ge_20",
+          "passed": true,
+          "detail": "trades=28 (need >=20)"
+        },
+        {
+          "name": "net_avg_r_gt_0_25",
+          "passed": false,
+          "detail": "net_avg_r=-0.0706 (need >0.25)"
+        },
+        {
+          "name": "net_pnl_gt_0",
+          "passed": false,
+          "detail": "net_pnl=-39.5583"
+        },
+        {
+          "name": "profit_factor_gt_1_25",
+          "passed": false,
+          "detail": "pf=0.9020 (need >1.25)"
+        },
+        {
+          "name": "max_dd_le_6r",
+          "passed": false,
+          "detail": "max_dd=7.3721R (need <=6.0R)"
+        },
+        {
+          "name": "max_losing_streak_le_6",
+          "passed": false,
+          "detail": "streak=7 (need <=6)"
+        },
+        {
+          "name": "fees_lt_70pct_gross",
+          "passed": false,
+          "detail": "fee_share=7.0031 (need <0.7)"
+        }
+      ],
+      "incremental_portfolio": {
+        "v1_net_r": 37.4317,
+        "combined_net_r": 35.4538,
+        "incremental_net_r": -1.9779,
+        "v1_max_dd_r": 11.2704,
+        "combined_max_dd_r": 9.1698,
+        "incremental_max_dd_r": -2.1006,
+        "v1_max_losing_streak": 8,
+        "combined_max_losing_streak": 8,
+        "v1_return_per_dd": 3.3212,
+        "combined_return_per_dd": 3.8664,
+        "improves_return_per_dd": true,
+        "peak_concurrent_with_v1": 4
+      }
+    },
+    {
+      "symbol": "SUIUSDT",
+      "run_status": "COMPLETED",
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": 1.0001,
+      "trade_count": 22,
+      "trades_per_year": 20.3077,
+      "win_rate": 0.4545,
+      "gross_avg_r": 0.4606,
+      "net_avg_r": 0.4203,
+      "profit_factor": 1.743,
+      "gross_pnl": 202.6799,
+      "net_pnl": 184.9151,
+      "total_fees": 17.7648,
+      "fees_over_gross_pnl": 0.0876,
+      "max_drawdown_r": 3.3391,
+      "max_losing_streak": 3,
+      "max_winning_streak": 4,
+      "largest_single_winner_r": 3.4062,
+      "largest_single_loser_r": -1.0651,
+      "median_holding_bars": 9.0,
+      "maximum_holding_bars": 2287.0,
+      "concurrent_vs_btc": 2,
+      "concurrent_vs_eth": 2,
+      "concurrent_vs_sol": 2,
+      "peak_concurrent_with_v1_book": 4,
+      "overlap_pct_BTCUSDT": 0.0,
+      "overlap_pct_ETHUSDT": 0.0909,
+      "overlap_pct_SOLUSDT": 0.0,
+      "corr_daily_net_r_vs_btc": null,
+      "corr_weekly_net_r_vs_btc": 0.2775,
+      "eligibility_tier": "PROMISING",
+      "eligibility_reasons": [
+        "meets_promising_thresholds"
+      ],
+      "eligibility_conditions": [
+        {
+          "name": "trades_ge_20",
+          "passed": true,
+          "detail": "trades=22 (need >=20)"
+        },
+        {
+          "name": "net_avg_r_gt_0_25",
+          "passed": true,
+          "detail": "net_avg_r=0.4203 (need >0.25)"
+        },
+        {
+          "name": "net_pnl_gt_0",
+          "passed": true,
+          "detail": "net_pnl=184.9151"
+        },
+        {
+          "name": "profit_factor_gt_1_25",
+          "passed": true,
+          "detail": "pf=1.7430 (need >1.25)"
+        },
+        {
+          "name": "max_dd_le_6r",
+          "passed": true,
+          "detail": "max_dd=3.3391R (need <=6.0R)"
+        },
+        {
+          "name": "max_losing_streak_le_6",
+          "passed": true,
+          "detail": "streak=3 (need <=6)"
+        },
+        {
+          "name": "fees_lt_70pct_gross",
+          "passed": true,
+          "detail": "fee_share=0.0876 (need <0.7)"
+        }
+      ],
+      "incremental_portfolio": {
+        "v1_net_r": 37.4317,
+        "combined_net_r": 46.6775,
+        "incremental_net_r": 9.2458,
+        "v1_max_dd_r": 11.2704,
+        "combined_max_dd_r": 8.6226,
+        "incremental_max_dd_r": -2.6478,
+        "v1_max_losing_streak": 8,
+        "combined_max_losing_streak": 8,
+        "v1_return_per_dd": 3.3212,
+        "combined_return_per_dd": 5.4134,
+        "improves_return_per_dd": true,
+        "peak_concurrent_with_v1": 4
+      },
+      "oos_label": "PROMISING_NEEDS_MORE_EVIDENCE",
+      "oos_pass": false
+    },
+    {
+      "symbol": "BNBUSDT",
+      "run_status": "COMPLETED",
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": 1.0001,
+      "trade_count": 36,
+      "trades_per_year": 33.2308,
+      "win_rate": 0.4444,
+      "gross_avg_r": 0.4621,
+      "net_avg_r": 0.3376,
+      "profit_factor": 1.5503,
+      "gross_pnl": 332.74,
+      "net_pnl": 243.0943,
+      "total_fees": 89.6457,
+      "fees_over_gross_pnl": 0.2694,
+      "max_drawdown_r": 3.9113,
+      "max_losing_streak": 3,
+      "max_winning_streak": 3,
+      "largest_single_winner_r": 3.3837,
+      "largest_single_loser_r": -1.2352,
+      "median_holding_bars": 5.0,
+      "maximum_holding_bars": 78.0,
+      "concurrent_vs_btc": 2,
+      "concurrent_vs_eth": 2,
+      "concurrent_vs_sol": 2,
+      "peak_concurrent_with_v1_book": 4,
+      "overlap_pct_BTCUSDT": 0.0278,
+      "overlap_pct_ETHUSDT": 0.0833,
+      "overlap_pct_SOLUSDT": 0.1111,
+      "corr_daily_net_r_vs_btc": 0.9997,
+      "corr_weekly_net_r_vs_btc": -0.1009,
+      "eligibility_tier": "PROMISING",
+      "eligibility_reasons": [
+        "meets_promising_thresholds"
+      ],
+      "eligibility_conditions": [
+        {
+          "name": "trades_ge_20",
+          "passed": true,
+          "detail": "trades=36 (need >=20)"
+        },
+        {
+          "name": "net_avg_r_gt_0_25",
+          "passed": true,
+          "detail": "net_avg_r=0.3376 (need >0.25)"
+        },
+        {
+          "name": "net_pnl_gt_0",
+          "passed": true,
+          "detail": "net_pnl=243.0943"
+        },
+        {
+          "name": "profit_factor_gt_1_25",
+          "passed": true,
+          "detail": "pf=1.5503 (need >1.25)"
+        },
+        {
+          "name": "max_dd_le_6r",
+          "passed": true,
+          "detail": "max_dd=3.9113R (need <=6.0R)"
+        },
+        {
+          "name": "max_losing_streak_le_6",
+          "passed": true,
+          "detail": "streak=3 (need <=6)"
+        },
+        {
+          "name": "fees_lt_70pct_gross",
+          "passed": true,
+          "detail": "fee_share=0.2694 (need <0.7)"
+        }
+      ],
+      "incremental_portfolio": {
+        "v1_net_r": 37.4317,
+        "combined_net_r": 49.5864,
+        "incremental_net_r": 12.1547,
+        "v1_max_dd_r": 11.2704,
+        "combined_max_dd_r": 8.7284,
+        "incremental_max_dd_r": -2.542,
+        "v1_max_losing_streak": 8,
+        "combined_max_losing_streak": 7,
+        "v1_return_per_dd": 3.3212,
+        "combined_return_per_dd": 5.6811,
+        "improves_return_per_dd": true,
+        "peak_concurrent_with_v1": 4
+      },
+      "oos_label": "V2_PAPER_CANDIDATE",
+      "oos_pass": true
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "run_status": "COMPLETED",
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": 1.0001,
+      "trade_count": 27,
+      "trades_per_year": 24.9231,
+      "win_rate": 0.2593,
+      "gross_avg_r": -0.1282,
+      "net_avg_r": -0.1674,
+      "profit_factor": 0.7818,
+      "gross_pnl": -69.2415,
+      "net_pnl": -90.3874,
+      "total_fees": 21.146,
+      "fees_over_gross_pnl": 0.3054,
+      "max_drawdown_r": 9.417,
+      "max_losing_streak": 8,
+      "max_winning_streak": 3,
+      "largest_single_winner_r": 3.9928,
+      "largest_single_loser_r": -1.0988,
+      "median_holding_bars": 7.0,
+      "maximum_holding_bars": 455.0,
+      "concurrent_vs_btc": 2,
+      "concurrent_vs_eth": 2,
+      "concurrent_vs_sol": 2,
+      "peak_concurrent_with_v1_book": 4,
+      "overlap_pct_BTCUSDT": 0.0,
+      "overlap_pct_ETHUSDT": 0.1481,
+      "overlap_pct_SOLUSDT": 0.0741,
+      "corr_daily_net_r_vs_btc": -0.6916,
+      "corr_weekly_net_r_vs_btc": 0.4258,
+      "eligibility_tier": "REJECT",
+      "eligibility_reasons": [
+        "non_positive_net_expectancy_or_pnl",
+        "profit_factor_le_1"
+      ],
+      "eligibility_conditions": [
+        {
+          "name": "trades_ge_20",
+          "passed": true,
+          "detail": "trades=27 (need >=20)"
+        },
+        {
+          "name": "net_avg_r_gt_0_25",
+          "passed": false,
+          "detail": "net_avg_r=-0.1674 (need >0.25)"
+        },
+        {
+          "name": "net_pnl_gt_0",
+          "passed": false,
+          "detail": "net_pnl=-90.3874"
+        },
+        {
+          "name": "profit_factor_gt_1_25",
+          "passed": false,
+          "detail": "pf=0.7818 (need >1.25)"
+        },
+        {
+          "name": "max_dd_le_6r",
+          "passed": false,
+          "detail": "max_dd=9.4170R (need <=6.0R)"
+        },
+        {
+          "name": "max_losing_streak_le_6",
+          "passed": false,
+          "detail": "streak=8 (need <=6)"
+        },
+        {
+          "name": "fees_lt_70pct_gross",
+          "passed": true,
+          "detail": "fee_share=0.3054 (need <0.7)"
+        }
+      ],
+      "incremental_portfolio": {
+        "v1_net_r": 37.4317,
+        "combined_net_r": 32.9123,
+        "incremental_net_r": -4.5194,
+        "v1_max_dd_r": 11.2704,
+        "combined_max_dd_r": 17.5947,
+        "incremental_max_dd_r": 6.3242,
+        "v1_max_losing_streak": 8,
+        "combined_max_losing_streak": 11,
+        "v1_return_per_dd": 3.3212,
+        "combined_return_per_dd": 1.8706,
+        "improves_return_per_dd": false,
+        "peak_concurrent_with_v1": 4
+      }
+    },
+    {
+      "symbol": "LINKUSDT",
+      "run_status": "COMPLETED",
+      "data_coverage_start": "2025-01-01T00:00:00+00:00",
+      "data_coverage_end": "2026-01-31T23:00:00+00:00",
+      "ohlcv_completeness": 1.0001,
+      "trade_count": 38,
+      "trades_per_year": 35.0769,
+      "win_rate": 0.2632,
+      "gross_avg_r": -0.1514,
+      "net_avg_r": -0.2116,
+      "profit_factor": 0.7296,
+      "gross_pnl": -115.0665,
+      "net_pnl": -160.7988,
+      "total_fees": 45.7323,
+      "fees_over_gross_pnl": 0.3974,
+      "max_drawdown_r": 13.6919,
+      "max_losing_streak": 11,
+      "max_winning_streak": 4,
+      "largest_single_winner_r": 2.6643,
+      "largest_single_loser_r": -1.1602,
+      "median_holding_bars": 5.5,
+      "maximum_holding_bars": 458.0,
+      "concurrent_vs_btc": 2,
+      "concurrent_vs_eth": 2,
+      "concurrent_vs_sol": 2,
+      "peak_concurrent_with_v1_book": 4,
+      "overlap_pct_BTCUSDT": 0.0263,
+      "overlap_pct_ETHUSDT": 0.1579,
+      "overlap_pct_SOLUSDT": 0.0789,
+      "corr_daily_net_r_vs_btc": 0.5887,
+      "corr_weekly_net_r_vs_btc": -0.0609,
+      "eligibility_tier": "REJECT",
+      "eligibility_reasons": [
+        "non_positive_net_expectancy_or_pnl",
+        "profit_factor_le_1",
+        "max_dd=13.69R > 10.0R",
+        "lose_streak=11 > 10"
+      ],
+      "eligibility_conditions": [
+        {
+          "name": "trades_ge_20",
+          "passed": true,
+          "detail": "trades=38 (need >=20)"
+        },
+        {
+          "name": "net_avg_r_gt_0_25",
+          "passed": false,
+          "detail": "net_avg_r=-0.2116 (need >0.25)"
+        },
+        {
+          "name": "net_pnl_gt_0",
+          "passed": false,
+          "detail": "net_pnl=-160.7988"
+        },
+        {
+          "name": "profit_factor_gt_1_25",
+          "passed": false,
+          "detail": "pf=0.7296 (need >1.25)"
+        },
+        {
+          "name": "max_dd_le_6r",
+          "passed": false,
+          "detail": "max_dd=13.6919R (need <=6.0R)"
+        },
+        {
+          "name": "max_losing_streak_le_6",
+          "passed": false,
+          "detail": "streak=11 (need <=6)"
+        },
+        {
+          "name": "fees_lt_70pct_gross",
+          "passed": true,
+          "detail": "fee_share=0.3974 (need <0.7)"
+        }
+      ],
+      "incremental_portfolio": {
+        "v1_net_r": 37.4317,
+        "combined_net_r": 29.3918,
+        "incremental_net_r": -8.0399,
+        "v1_max_dd_r": 11.2704,
+        "combined_max_dd_r": 9.9717,
+        "incremental_max_dd_r": -1.2987,
+        "v1_max_losing_streak": 8,
+        "combined_max_losing_streak": 9,
+        "v1_return_per_dd": 3.3212,
+        "combined_return_per_dd": 2.9475,
+        "improves_return_per_dd": false,
+        "peak_concurrent_with_v1": 4
+      }
+    }
+  ],
+  "oos": [
+    {
+      "symbol": "SUIUSDT",
+      "dev_window": "2025-05-10\u21922025-06-30",
+      "oos_window": "2025-07-01\u21922026-01-31",
+      "dev_trade_count": 4,
+      "dev_net_avg_r": -1.0299,
+      "dev_net_pnl": -82.3939,
+      "dev_profit_factor": 0.0,
+      "dev_max_drawdown_r": 4.1197,
+      "dev_max_losing_streak": 4,
+      "oos_trade_count": 13,
+      "oos_net_avg_r": -0.0919,
+      "oos_net_pnl": -23.8881,
+      "oos_profit_factor": 0.8724,
+      "oos_max_drawdown_r": 3.288,
+      "oos_max_losing_streak": 3,
+      "oos_label": "PROMISING_NEEDS_MORE_EVIDENCE",
+      "oos_reasons": [
+        "oos_net_avg_r_gt_0",
+        "oos_net_pnl_gt_0",
+        "oos_pf_gt_1"
+      ],
+      "oos_conditions": [
+        {
+          "name": "oos_trades_ge_10",
+          "passed": true,
+          "detail": "trades=13 (need >=10)"
+        },
+        {
+          "name": "oos_net_avg_r_gt_0",
+          "passed": false,
+          "detail": "net_avg_r=-0.0919"
+        },
+        {
+          "name": "oos_net_pnl_gt_0",
+          "passed": false,
+          "detail": "net_pnl=-23.8881"
+        },
+        {
+          "name": "oos_pf_gt_1",
+          "passed": false,
+          "detail": "pf=0.8724"
+        },
+        {
+          "name": "oos_no_severe_dd",
+          "passed": true,
+          "detail": "max_dd=3.2880R (severe >10.0R)"
+        },
+        {
+          "name": "oos_no_severe_streak",
+          "passed": true,
+          "detail": "streak=3 (severe >10)"
+        }
+      ],
+      "oos_pass": false
+    },
+    {
+      "symbol": "BNBUSDT",
+      "dev_window": "2025-05-10\u21922025-06-30",
+      "oos_window": "2025-07-01\u21922026-01-31",
+      "dev_trade_count": 4,
+      "dev_net_avg_r": -0.4104,
+      "dev_net_pnl": -32.8285,
+      "dev_profit_factor": 0.5244,
+      "dev_max_drawdown_r": 2.35,
+      "dev_max_losing_streak": 2,
+      "oos_trade_count": 19,
+      "oos_net_avg_r": 0.3712,
+      "oos_net_pnl": 141.0632,
+      "oos_profit_factor": 1.6317,
+      "oos_max_drawdown_r": 3.3348,
+      "oos_max_losing_streak": 3,
+      "oos_label": "V2_PAPER_CANDIDATE",
+      "oos_reasons": [
+        "oos_gates_passed"
+      ],
+      "oos_conditions": [
+        {
+          "name": "oos_trades_ge_10",
+          "passed": true,
+          "detail": "trades=19 (need >=10)"
+        },
+        {
+          "name": "oos_net_avg_r_gt_0",
+          "passed": true,
+          "detail": "net_avg_r=0.3712"
+        },
+        {
+          "name": "oos_net_pnl_gt_0",
+          "passed": true,
+          "detail": "net_pnl=141.0632"
+        },
+        {
+          "name": "oos_pf_gt_1",
+          "passed": true,
+          "detail": "pf=1.6317"
+        },
+        {
+          "name": "oos_no_severe_dd",
+          "passed": true,
+          "detail": "max_dd=3.3348R (severe >10.0R)"
+        },
+        {
+          "name": "oos_no_severe_streak",
+          "passed": true,
+          "detail": "streak=3 (severe >10)"
+        }
+      ],
+      "oos_pass": true
+    }
+  ],
+  "portfolio": [
+    {
+      "symbol": "SUIUSDT",
+      "base_tier": "PROMISING",
+      "oos_label": "PROMISING_NEEDS_MORE_EVIDENCE",
+      "btc_overlap_pct": 0.0,
+      "eth_overlap_pct": 0.0909,
+      "sol_overlap_pct": 0.0,
+      "high_overlap_refs": {},
+      "corr_daily_vs_btc": null,
+      "peak_concurrent_positions": 4,
+      "incremental_portfolio_dd_r": -2.6478,
+      "recommendation": "NEEDS_MORE_EVIDENCE",
+      "recommendation_note": "Promising in-sample; OOS/portfolio evidence incomplete."
+    },
+    {
+      "symbol": "BNBUSDT",
+      "base_tier": "PROMISING",
+      "oos_label": "V2_PAPER_CANDIDATE",
+      "btc_overlap_pct": 0.0278,
+      "eth_overlap_pct": 0.0833,
+      "sol_overlap_pct": 0.1111,
+      "high_overlap_refs": {},
+      "corr_daily_vs_btc": 0.9997,
+      "peak_concurrent_positions": 4,
+      "incremental_portfolio_dd_r": -2.542,
+      "recommendation": "CORRELATED",
+      "recommendation_note": "Do not add without a portfolio exposure cap \u2014 entries largely duplicate BTC/ETH/SOL risk."
+    }
+  ],
+  "final_lists": {
+    "V2_PAPER_CANDIDATE": [
+      "BNBUSDT"
+    ],
+    "PROMISING_NEEDS_MORE_EVIDENCE": [
+      "SUIUSDT"
+    ],
+    "WATCHLIST": [],
+    "REJECT": [
+      "XRPUSDT",
+      "DOGEUSDT",
+      "LINKUSDT"
+    ],
+    "INSUFFICIENT_DATA": [],
+    "PROMISING": []
+  },
+  "disclaimer": "Research only. No symbol from this report was added to the frozen COMBO_02 v1 paper/live universe or Telegram eligibility list.",
+  "v1_unchanged": true,
+  "telegram_eligible_changed": false,
+  "paper_universe_changed": false
+}

@@ -1,0 +1,2671 @@
+{
+  "generated_at_utc": "2026-10-03T20:02:47.003837+00:00",
+  "selector_version": "v1",
+  "criteria": {
+    "quote_asset": "USDT",
+    "market_type": "perpetual",
+    "top_n": 30,
+    "min_history_days": 540.0,
+    "min_ohlcv_completeness": 0.99,
+    "min_avg_24h_quote_volume_usd": 5000000.0,
+    "exclude_stablecoins": true,
+    "exclude_leveraged_tokens": true,
+    "exclude_inactive_or_delisted": true,
+    "exclude_nonstandard_symbols": true,
+    "exclude_v1_universe": true,
+    "setup_timeframe": "1h",
+    "selector_version": "v1"
+  },
+  "screen_timestamp_utc": "2026-10-03T20:02:47.003837+00:00",
+  "symbols": [],
+  "excluded": [
+    {
+      "symbol": "BTCUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "ETHUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "SANDUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ZECUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "SOLUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "\u9f99\u867eUSDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "WLDUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "XRPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 510.88
+    },
+    {
+      "symbol": "QNTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 510.83
+    },
+    {
+      "symbol": "PUMPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "SUIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 510.88
+    },
+    {
+      "symbol": "BNBUSDT",
+      "reason": "insufficient_history",
+      "history_days": 510.88
+    },
+    {
+      "symbol": "NEARUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "UNIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "MAGMAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "AINUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "MOVRUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "TAOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "LINKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 510.83
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "ENAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.92
+    },
+    {
+      "symbol": "ONEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ADAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "VELVETUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "1000PEPEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.92
+    },
+    {
+      "symbol": "LTCUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ZROUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "NIGHTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "GTCUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "CTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 2.21
+    },
+    {
+      "symbol": "MANAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "FILUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "TRUMPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "PONSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "LITUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "ARBUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "BCHUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "DOTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "GALAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "BTWUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "PENGUUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "XLMUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "ENJUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "INJUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "XPLUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "TIAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "STRKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "LYNUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "MARSCOINUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "SUPERUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "APTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "ASTERUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "USUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "HBARUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "CAPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "ATHUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "FETUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "BRUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "RESOLVUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "\u725b\u6765USDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "ARKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "AKEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "MONUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "OPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "2ZUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "USELESSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "TRXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "RAYSOLUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "PUMPBTCUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.67
+    },
+    {
+      "symbol": "SOONUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.71
+    },
+    {
+      "symbol": "AXSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "FARTCOINUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "VIRTUALUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "DASHUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ICPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "ALICEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "GRASSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "ETCUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "ARUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "CRVUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "EVAAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "VVVUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "CHZUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "XMRUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "JTOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "1000SHIBUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "1000BONKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "RENDERUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "AEROUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "WIFUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "APEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "GRAMUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "LSKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "SKYUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "XAUTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "SPKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "SOMIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 8.29
+    },
+    {
+      "symbol": "LDOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ETHFIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "NMRUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "MUBARAKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "JUPUSDT",
+      "reason": "leveraged_token"
+    },
+    {
+      "symbol": "ALGOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "SEIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "WLFIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "KAITOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "STXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "PAXGUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ZAMAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.67
+    },
+    {
+      "symbol": "IMXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "SCRUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "ESPORTSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 8.29
+    },
+    {
+      "symbol": "QUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "SYNUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "SPORTFUNUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "AGTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "PYTHUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "MORPHOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "COTIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "POWERUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "DYDXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "BIGTIMEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "ZENUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "BOMEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "MINAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "RIVERUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "OPGUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.5
+    },
+    {
+      "symbol": "SAGAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "NOMUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "0GUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "NILUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ORDIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "GIGGLEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "ATUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "OPENUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.67
+    },
+    {
+      "symbol": "UAIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "POLUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "PHAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "BMTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "1000000BOBUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "MAGICUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "METUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "LABUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.62
+    },
+    {
+      "symbol": "ARXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "TRBUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "BANKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "CAKEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "YGGUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "BERAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 9.88
+    },
+    {
+      "symbol": "MOVEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "FLOCKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.62
+    },
+    {
+      "symbol": "CHIPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "BIOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "4USDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "BATUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "INITUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.62
+    },
+    {
+      "symbol": "YFIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "RUNEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "BILLUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.29
+    },
+    {
+      "symbol": "ZKUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.62
+    },
+    {
+      "symbol": "ACEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "CCUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "PLUMEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "SYRUPUSDT",
+      "reason": "leveraged_token"
+    },
+    {
+      "symbol": "TUTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 8.29
+    },
+    {
+      "symbol": "LPTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "THETAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "TAKEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "FOLKSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 8.29
+    },
+    {
+      "symbol": "REUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "HEMIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "PROMUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "JASMYUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "NEIROUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.67
+    },
+    {
+      "symbol": "DATAIPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "OPNUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.62
+    },
+    {
+      "symbol": "MERLUSDT",
+      "reason": "insufficient_history",
+      "history_days": 8.29
+    },
+    {
+      "symbol": "SPXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "IOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "WUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "BLUAIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 9.58
+    },
+    {
+      "symbol": "HUMAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "KITEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "JCTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 8.29
+    },
+    {
+      "symbol": "KNCUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "CLOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.5
+    },
+    {
+      "symbol": "GPSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 8.29
+    },
+    {
+      "symbol": "ALLOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "COMPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ENSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "DEXEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "ROBOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "GUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "CVXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "COOKIEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 9.42
+    },
+    {
+      "symbol": "GMTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "CYSUSDT",
+      "reason": "insufficient_history",
+      "history_days": 9.46
+    },
+    {
+      "symbol": "VETUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "PIXELUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.5
+    },
+    {
+      "symbol": "REZUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.71
+    },
+    {
+      "symbol": "PEOPLEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.83
+    },
+    {
+      "symbol": "CFXUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.5
+    },
+    {
+      "symbol": "MEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "\u5e01\u5b89\u4eba\u751fUSDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "ORCAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.54
+    },
+    {
+      "symbol": "1INCHUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.75
+    },
+    {
+      "symbol": "LAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "RAREUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "GRTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "GENIUSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4972875.9791
+    },
+    {
+      "symbol": "TUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4965878.918526
+    },
+    {
+      "symbol": "SAFEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4950393.88441
+    },
+    {
+      "symbol": "FORMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4947345.80798
+    },
+    {
+      "symbol": "SUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4920559.299379999
+    },
+    {
+      "symbol": "BBUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4826318.024242001
+    },
+    {
+      "symbol": "EGLDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4797212.667900001
+    },
+    {
+      "symbol": "KSMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4725158.4994
+    },
+    {
+      "symbol": "ACTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4678618.505505998
+    },
+    {
+      "symbol": "CROSSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4529154.02026
+    },
+    {
+      "symbol": "SOPHUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4527701.737089999
+    },
+    {
+      "symbol": "SUSHIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4521641.3481
+    },
+    {
+      "symbol": "RONINUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4501603.991667001
+    },
+    {
+      "symbol": "JSTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4480020.203709999
+    },
+    {
+      "symbol": "ILVUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4422549.698000001
+    },
+    {
+      "symbol": "API3USDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4399273.29108
+    },
+    {
+      "symbol": "LIGHTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4391296.3327
+    },
+    {
+      "symbol": "SKYAIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4371549.80994
+    },
+    {
+      "symbol": "CFGUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4370172.6026
+    },
+    {
+      "symbol": "PUNDIXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4357948.593940001
+    },
+    {
+      "symbol": "TURBOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4332413.525960501
+    },
+    {
+      "symbol": "COWUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4303998.546200002
+    },
+    {
+      "symbol": "EDGEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4286789.322600001
+    },
+    {
+      "symbol": "IOTAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4265224.401834
+    },
+    {
+      "symbol": "CGPTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4258287.91855
+    },
+    {
+      "symbol": "ZKCUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4209776.65767
+    },
+    {
+      "symbol": "FLOWUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4196507.5179860005
+    },
+    {
+      "symbol": "HUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4180324.0423800005
+    },
+    {
+      "symbol": "PARTIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4149096.3746399996
+    },
+    {
+      "symbol": "SNXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4136848.7126900004
+    },
+    {
+      "symbol": "KASUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4133409.23065
+    },
+    {
+      "symbol": "KERNELUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4113064.9324399997
+    },
+    {
+      "symbol": "IOSTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4100702.5745132994
+    },
+    {
+      "symbol": "VTHOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4093707.3368907
+    },
+    {
+      "symbol": "SENTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4092009.9956199997
+    },
+    {
+      "symbol": "VELODROMEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4091760.55419
+    },
+    {
+      "symbol": "MEWUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4034312.9426057
+    },
+    {
+      "symbol": "FFUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 4004402.8187900004
+    },
+    {
+      "symbol": "REDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3969529.4613999994
+    },
+    {
+      "symbol": "TNSRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3953698.5445640003
+    },
+    {
+      "symbol": "MITOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3941088.9600399993
+    },
+    {
+      "symbol": "MYXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3935748.1070899996
+    },
+    {
+      "symbol": "FOGOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3902635.7522599995
+    },
+    {
+      "symbol": "AVAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3849356.9193700003
+    },
+    {
+      "symbol": "XAIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3816636.5908249994
+    },
+    {
+      "symbol": "PIPPINUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3814485.51595
+    },
+    {
+      "symbol": "BLURUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3797970.54896
+    },
+    {
+      "symbol": "NOTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3736087.3923583003
+    },
+    {
+      "symbol": "BEATUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3710033.3903000006
+    },
+    {
+      "symbol": "ONTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3702008.037536
+    },
+    {
+      "symbol": "EDENUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3634221.9710100004
+    },
+    {
+      "symbol": "GUNUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3606337.8045379994
+    },
+    {
+      "symbol": "1000FLOKIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3605075.5954899993
+    },
+    {
+      "symbol": "BROCCOLI714USDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3593381.8795
+    },
+    {
+      "symbol": "MEMEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3585447.7793246997
+    },
+    {
+      "symbol": "ENSOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3563456.26504
+    },
+    {
+      "symbol": "\u54c8\u57fa\u7c73USDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "CTSIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3549948.18817
+    },
+    {
+      "symbol": "PNUTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3548374.64288
+    },
+    {
+      "symbol": "ONUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3538187.4494000007
+    },
+    {
+      "symbol": "ZETAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3528608.99658
+    },
+    {
+      "symbol": "BEAMXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3526466.7243460002
+    },
+    {
+      "symbol": "RAVEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3510761.7467
+    },
+    {
+      "symbol": "KMNOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3501449.6249399995
+    },
+    {
+      "symbol": "OUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3491866.8334999997
+    },
+    {
+      "symbol": "ONGUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3479436.1085000006
+    },
+    {
+      "symbol": "APRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3477574.9801
+    },
+    {
+      "symbol": "MOODENGUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3472127.2928599995
+    },
+    {
+      "symbol": "AZTECUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3436641.9525600006
+    },
+    {
+      "symbol": "EPICUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3435837.01495
+    },
+    {
+      "symbol": "MMTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3433168.0791000007
+    },
+    {
+      "symbol": "EDUUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3425772.9708400005
+    },
+    {
+      "symbol": "ALTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3421052.480323
+    },
+    {
+      "symbol": "TRIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3416362.9065699996
+    },
+    {
+      "symbol": "UBUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3405346.81334
+    },
+    {
+      "symbol": "HOMEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3376290.7202350004
+    },
+    {
+      "symbol": "ERAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3354913.5703300005
+    },
+    {
+      "symbol": "AUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3320843.8081900002
+    },
+    {
+      "symbol": "IDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3320677.2343699997
+    },
+    {
+      "symbol": "PIEVERSEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3317737.7331999997
+    },
+    {
+      "symbol": "SIRENUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3316595.9491400006
+    },
+    {
+      "symbol": "NEOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3305350.89526
+    },
+    {
+      "symbol": "TOSHIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3288888.55223
+    },
+    {
+      "symbol": "MANTRAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3257901.6138150003
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3252893.4121299996
+    },
+    {
+      "symbol": "MELANIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3232192.2476175004
+    },
+    {
+      "symbol": "FIGHTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3204490.181507
+    },
+    {
+      "symbol": "STABLEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3195779.904785
+    },
+    {
+      "symbol": "XTZUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3187421.7960300003
+    },
+    {
+      "symbol": "BULLAUSDT",
+      "reason": "leveraged_token"
+    },
+    {
+      "symbol": "AIGENSYNUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3095825.42015
+    },
+    {
+      "symbol": "STARUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3063273.05266
+    },
+    {
+      "symbol": "BSBUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3058495.892690001
+    },
+    {
+      "symbol": "BSVUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3049381.6489999993
+    },
+    {
+      "symbol": "GRVTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3038972.9056
+    },
+    {
+      "symbol": "KOMAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3025659.498976999
+    },
+    {
+      "symbol": "BLESSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3024382.6148049994
+    },
+    {
+      "symbol": "METISUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3010886.6256099995
+    },
+    {
+      "symbol": "MASKUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 3002094.6776
+    },
+    {
+      "symbol": "SAHARAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2974952.7879149993
+    },
+    {
+      "symbol": "KAIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2945803.8718100004
+    },
+    {
+      "symbol": "BICOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2923657.4996599997
+    },
+    {
+      "symbol": "SLXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2909429.28303
+    },
+    {
+      "symbol": "DUSKUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2871332.9984599994
+    },
+    {
+      "symbol": "AKTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2847679.61248
+    },
+    {
+      "symbol": "XVGUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2825176.6570179993
+    },
+    {
+      "symbol": "ETHWUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2824077.6556999995
+    },
+    {
+      "symbol": "TWTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2822726.8157000006
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2822378.7498099995
+    },
+    {
+      "symbol": "POPCATUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2811756.39634
+    },
+    {
+      "symbol": "AVNTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2752772.2000700003
+    },
+    {
+      "symbol": "HMSTRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2743910.9343096
+    },
+    {
+      "symbol": "HEIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2743159.1389440005
+    },
+    {
+      "symbol": "MUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2738760.5199
+    },
+    {
+      "symbol": "ZESTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2738513.3264300004
+    },
+    {
+      "symbol": "PTBUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2721385.3196962997
+    },
+    {
+      "symbol": "HANAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2707867.43078
+    },
+    {
+      "symbol": "CUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2702705.3850300005
+    },
+    {
+      "symbol": "ROSEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2679378.9549280005
+    },
+    {
+      "symbol": "WALUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2670886.23583
+    },
+    {
+      "symbol": "KAVAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2670020.2526089996
+    },
+    {
+      "symbol": "COAIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2668570.0349
+    },
+    {
+      "symbol": "MANTAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2663684.9713789993
+    },
+    {
+      "symbol": "LINEAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2661630.381505
+    },
+    {
+      "symbol": "PLAYUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2659800.2164600003
+    },
+    {
+      "symbol": "DRIFTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2645880.0055899997
+    },
+    {
+      "symbol": "PROVEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2621945.1896200003
+    },
+    {
+      "symbol": "TLMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2609072.4736590004
+    },
+    {
+      "symbol": "CELOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2595627.899086
+    },
+    {
+      "symbol": "AWEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2522917.6167399995
+    },
+    {
+      "symbol": "XPINUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2514274.465931
+    },
+    {
+      "symbol": "SLPUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2510123.4025117
+    },
+    {
+      "symbol": "BABYUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2508313.45893
+    },
+    {
+      "symbol": "ZBTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2500186.95763
+    },
+    {
+      "symbol": "CVCUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2497710.9956799997
+    },
+    {
+      "symbol": "AVAAIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2497400.8985220003
+    },
+    {
+      "symbol": "TOWNSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2467804.29167
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2457097.1644699997
+    },
+    {
+      "symbol": "DOODUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2436368.331583
+    },
+    {
+      "symbol": "EULUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2434314.14772
+    },
+    {
+      "symbol": "PHAROSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2416927.9006
+    },
+    {
+      "symbol": "ESPUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2412866.6429999997
+    },
+    {
+      "symbol": "BRETTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2405358.2177680004
+    },
+    {
+      "symbol": "TRADOORUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2399387.7225
+    },
+    {
+      "symbol": "DEEPUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2395874.5141399996
+    },
+    {
+      "symbol": "PORTALUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2388010.210547
+    },
+    {
+      "symbol": "SKRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2382673.935429
+    },
+    {
+      "symbol": "ZORAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2331890.438455
+    },
+    {
+      "symbol": "DODOXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2331879.2696659993
+    },
+    {
+      "symbol": "CYBERUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2326683.29481
+    },
+    {
+      "symbol": "POLYXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2312066.65036
+    },
+    {
+      "symbol": "AGLDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2310844.2959000003
+    },
+    {
+      "symbol": "USDCUSDT",
+      "reason": "stablecoin"
+    },
+    {
+      "symbol": "AIXBTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2290098.53533
+    },
+    {
+      "symbol": "DIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2279442.5712000006
+    },
+    {
+      "symbol": "MIRAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2272980.2111799996
+    },
+    {
+      "symbol": "RIFUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2242013.1636699997
+    },
+    {
+      "symbol": "CELRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2213903.063873
+    },
+    {
+      "symbol": "KATUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2164780.346304
+    },
+    {
+      "symbol": "IRYSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2135632.35152
+    },
+    {
+      "symbol": "STEEMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2128237.8307
+    },
+    {
+      "symbol": "CHRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2119914.89991
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2104785.0774000003
+    },
+    {
+      "symbol": "BTCDOMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2098411.1725
+    },
+    {
+      "symbol": "ACHUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2091778.168087
+    },
+    {
+      "symbol": "TSTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2087029.156926
+    },
+    {
+      "symbol": "ARPAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2069035.9405659996
+    },
+    {
+      "symbol": "TACUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 2046376.0855190002
+    },
+    {
+      "symbol": "WOOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1981365.3815999997
+    },
+    {
+      "symbol": "RSRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1971411.126708
+    },
+    {
+      "symbol": "INXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1961844.240465
+    },
+    {
+      "symbol": "RVNUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1951255.992236
+    },
+    {
+      "symbol": "SKLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1942483.644552
+    },
+    {
+      "symbol": "CKBUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1942051.9488705
+    },
+    {
+      "symbol": "FUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1892397.8656790003
+    },
+    {
+      "symbol": "LUNA2USDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1881642.1303400001
+    },
+    {
+      "symbol": "\u6211\u8e0f\u9a6c\u6765\u4e86USDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "BUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1866099.0974
+    },
+    {
+      "symbol": "SOLVUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1859331.5254880001
+    },
+    {
+      "symbol": "XANUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1857123.358536
+    },
+    {
+      "symbol": "BTRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1855084.81125
+    },
+    {
+      "symbol": "WCTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1850324.5520900001
+    },
+    {
+      "symbol": "C98USDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1845636.46125
+    },
+    {
+      "symbol": "STOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1802900.3978700002
+    },
+    {
+      "symbol": "VANAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1797066.84777
+    },
+    {
+      "symbol": "CHILLGUYUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1776258.5340380005
+    },
+    {
+      "symbol": "ZKPUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1761904.41824
+    },
+    {
+      "symbol": "DOSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1707620.2955999998
+    },
+    {
+      "symbol": "QTUMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1689615.4261
+    },
+    {
+      "symbol": "TREEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1682310.08685
+    },
+    {
+      "symbol": "GMXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1639828.3671299997
+    },
+    {
+      "symbol": "ZRXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1618790.3102699998
+    },
+    {
+      "symbol": "HYPERUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1616623.5727000001
+    },
+    {
+      "symbol": "SSVUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1616077.0322699999
+    },
+    {
+      "symbol": "HOTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1614723.8293559002
+    },
+    {
+      "symbol": "ZILUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1598702.386196
+    },
+    {
+      "symbol": "B2USDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1588983.5717
+    },
+    {
+      "symbol": "BROCCOLIF3BUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1584617.525024
+    },
+    {
+      "symbol": "YBUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1577178.4666799998
+    },
+    {
+      "symbol": "LAYERUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1573615.0991270002
+    },
+    {
+      "symbol": "AXLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1572030.1258290003
+    },
+    {
+      "symbol": "HIVEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1555136.62671
+    },
+    {
+      "symbol": "SPELLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1548926.4051529998
+    },
+    {
+      "symbol": "1000RATSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1547246.2008800001
+    },
+    {
+      "symbol": "CATIUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1540228.3785500003
+    },
+    {
+      "symbol": "1000XECUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1539618.897107
+    },
+    {
+      "symbol": "ANKRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1530035.5303690005
+    },
+    {
+      "symbol": "SXTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1517263.942317
+    },
+    {
+      "symbol": "PROMPTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1509467.87821
+    },
+    {
+      "symbol": "POWRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1491822.4455
+    },
+    {
+      "symbol": "USUALUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1470060.5899640003
+    },
+    {
+      "symbol": "AUCTIONUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1444669.51389
+    },
+    {
+      "symbol": "FIDAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1440270.4289700002
+    },
+    {
+      "symbol": "DYMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1433828.6417989999
+    },
+    {
+      "symbol": "MOCAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1429911.235961
+    },
+    {
+      "symbol": "COLLECTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1427842.64738
+    },
+    {
+      "symbol": "ARCUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1427188.1805899998
+    },
+    {
+      "symbol": "GOATUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1419574.7370499999
+    },
+    {
+      "symbol": "1000SATSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1348202.14402433
+    },
+    {
+      "symbol": "TRUSTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1343542.9266800003
+    },
+    {
+      "symbol": "TAGUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1340634.2680640002
+    },
+    {
+      "symbol": "PRLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1334677.2456999999
+    },
+    {
+      "symbol": "GASUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1318559.1755000001
+    },
+    {
+      "symbol": "DOGSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1302598.1410737198
+    },
+    {
+      "symbol": "ACUUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1299166.81775
+    },
+    {
+      "symbol": "HOLOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1284315.8291999998
+    },
+    {
+      "symbol": "HAEDALUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1282077.2534100004
+    },
+    {
+      "symbol": "JELLYJELLYUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1277105.7728
+    },
+    {
+      "symbol": "SPACEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1270941.9655610004
+    },
+    {
+      "symbol": "BASUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1266250.187475
+    },
+    {
+      "symbol": "INUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1255518.10765
+    },
+    {
+      "symbol": "RECALLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1254795.2944800004
+    },
+    {
+      "symbol": "MTLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1250840.5071
+    },
+    {
+      "symbol": "UMAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1250150.5905
+    },
+    {
+      "symbol": "KGENUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1214915.7052000002
+    },
+    {
+      "symbol": "SIGNUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1212622.8042050002
+    },
+    {
+      "symbol": "RLCUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1210578.8967300002
+    },
+    {
+      "symbol": "SFPUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1203659.8745
+    },
+    {
+      "symbol": "ICNTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1194395.2300999998
+    },
+    {
+      "symbol": "IOTXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1193898.3162359998
+    },
+    {
+      "symbol": "SONICUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1187084.8670960001
+    },
+    {
+      "symbol": "ARIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1186335.72412
+    },
+    {
+      "symbol": "AEVOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1179387.2709189998
+    },
+    {
+      "symbol": "1000000MOGUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1174931.5840399999
+    },
+    {
+      "symbol": "ASTRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1171359.728378
+    },
+    {
+      "symbol": "BANANAS31USDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1162092.1055859998
+    },
+    {
+      "symbol": "BANDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1158986.32839
+    },
+    {
+      "symbol": "AIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1155527.74401
+    },
+    {
+      "symbol": "BARDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1155265.4625999997
+    },
+    {
+      "symbol": "AIOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1149479.5640399999
+    },
+    {
+      "symbol": "CTRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1148168.716498
+    },
+    {
+      "symbol": "BIRBUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1118874.4453399999
+    },
+    {
+      "symbol": "LUMIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1100089.77373
+    },
+    {
+      "symbol": "THEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1090367.343799
+    },
+    {
+      "symbol": "LQTYUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1090223.9652200001
+    },
+    {
+      "symbol": "SQDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1086640.69338
+    },
+    {
+      "symbol": "1MBABYDOGEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1076392.9541785999
+    },
+    {
+      "symbol": "SWARMSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1074015.6646959998
+    },
+    {
+      "symbol": "BREVUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1064310.79902
+    },
+    {
+      "symbol": "STBLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1061505.05499
+    },
+    {
+      "symbol": "GRIFFAINUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1047944.579538
+    },
+    {
+      "symbol": "WAXPUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1039173.9986429999
+    },
+    {
+      "symbol": "SHELLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1033801.6748400002
+    },
+    {
+      "symbol": "RPLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1032255.5875000001
+    },
+    {
+      "symbol": "BELUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 1015624.8536700001
+    },
+    {
+      "symbol": "BANUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 999581.7041100002
+    },
+    {
+      "symbol": "AIOTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 994672.7329699999
+    },
+    {
+      "symbol": "NEWTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 993401.8734500001
+    },
+    {
+      "symbol": "CETUSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 949231.59424
+    },
+    {
+      "symbol": "BNTUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 944988.3232
+    },
+    {
+      "symbol": "TAIKOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 935968.4691899997
+    },
+    {
+      "symbol": "NXPCUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 933184.2585000001
+    },
+    {
+      "symbol": "GLMUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 931986.10095
+    },
+    {
+      "symbol": "MAVUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 929433.5645989999
+    },
+    {
+      "symbol": "LISTAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 920461.093
+    },
+    {
+      "symbol": "ALLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 912201.7834
+    },
+    {
+      "symbol": "FLUXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 903218.8802099999
+    },
+    {
+      "symbol": "JOEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 898640.6529799999
+    },
+    {
+      "symbol": "ELSAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 893596.80671
+    },
+    {
+      "symbol": "ANIMEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 889891.7215409998
+    },
+    {
+      "symbol": "WETUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 887083.42782
+    },
+    {
+      "symbol": "CLANKERUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 855429.3113000001
+    },
+    {
+      "symbol": "ASRUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 853571.51536
+    },
+    {
+      "symbol": "FLUIDUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 831820.1575
+    },
+    {
+      "symbol": "OGUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 825555.9140999999
+    },
+    {
+      "symbol": "ZEREBROUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 820051.8943999998
+    },
+    {
+      "symbol": "TAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 817525.7378499999
+    },
+    {
+      "symbol": "XVSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 815840.7165000001
+    },
+    {
+      "symbol": "SUNUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 810311.655073
+    },
+    {
+      "symbol": "1000CATUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 806235.4347920002
+    },
+    {
+      "symbol": "USTCUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 800248.0990190001
+    },
+    {
+      "symbol": "TURTLEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 773232.82294
+    },
+    {
+      "symbol": "XNYUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 767776.25037
+    },
+    {
+      "symbol": "MAVIAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 763634.03499
+    },
+    {
+      "symbol": "ORDERUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 763084.0084399999
+    },
+    {
+      "symbol": "SAPIENUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 761922.12658
+    },
+    {
+      "symbol": "TRUTHUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 754852.0267800002
+    },
+    {
+      "symbol": "NAORISUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 734356.4582499999
+    },
+    {
+      "symbol": "IDOLUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 733881.3648900001
+    },
+    {
+      "symbol": "BANANAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 728580.2479999998
+    },
+    {
+      "symbol": "1000CHEEMSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 697368.44716
+    },
+    {
+      "symbol": "FHEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 676167.3150299999
+    },
+    {
+      "symbol": "SANTOSUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 664086.1902899999
+    },
+    {
+      "symbol": "OGNUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 646211.74411
+    },
+    {
+      "symbol": "FRAXUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 625687.3446
+    },
+    {
+      "symbol": "ALCHUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 592438.4364799999
+    },
+    {
+      "symbol": "GUAUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 591412.53789
+    },
+    {
+      "symbol": "CARVUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 552947.98496
+    },
+    {
+      "symbol": "ALPINEUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 515194.10744999995
+    },
+    {
+      "symbol": "CTKUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 473645.72949999996
+    },
+    {
+      "symbol": "DOLOUSDT",
+      "reason": "low_liquidity",
+      "avg_24h_quote_volume_usd": 471937.81853999995
+    }
+  ],
+  "disclaimer": "Research only. No symbol from this report was added to the frozen COMBO_02 v1 paper/live universe or Telegram eligibility list.",
+  "selected_at_utc": "2026-10-03T20:02:47.003837+00:00",
+  "selection_rules": {
+    "quote_asset": "USDT",
+    "market_type": "perpetual",
+    "top_n": 30,
+    "min_history_days": 540.0,
+    "min_ohlcv_completeness": 0.99,
+    "min_avg_24h_quote_volume_usd": 5000000.0,
+    "exclude_stablecoins": true,
+    "exclude_leveraged_tokens": true,
+    "exclude_inactive_or_delisted": true,
+    "exclude_nonstandard_symbols": true,
+    "exclude_v1_universe": true,
+    "setup_timeframe": "1h",
+    "selector_version": "v1"
+  },
+  "candidates": [],
+  "candidate_count": 0,
+  "excluded_count": 528
+}

@@ -62,16 +62,24 @@ async def lifespan(app: FastAPI):
     ingestion = MarketDataIngestionService(settings, market_store)
     ingestion_mod.ingestion_service = ingestion
     await ingestion.start()
+
+    # Optional Telegram delivery for v1 paper PAPER_ENTRY / PAPER_EXIT (AlertFeed)
+    from app.services.telegram_alerts import start_telegram_alerts, stop_telegram_alerts
+
+    telegram_alerts = start_telegram_alerts(settings)
+
     logger.info(
         "startup_stage",
         startup_stage="APPLICATION_STARTUP",
         status="OK",
         duration_ms=round((time.perf_counter() - t_app) * 1000.0, 1),
         schema_ready=db_manager.schema_ready,
+        telegram_alerts=bool(telegram_alerts),
     )
 
     yield
 
+    stop_telegram_alerts()
     await ingestion.stop()
     await ws_forensics.event_loop.stop()
     await db_manager.close()

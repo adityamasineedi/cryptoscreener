@@ -27,13 +27,15 @@ def _live_near_entry(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _disable_risk_gates(monkeypatch):
-    """Isolate Path A/B tests from mcap/volume risk policy."""
+def _disable_risk_gates_and_enable_legacy(monkeypatch):
+    """Isolate Path A/B tests; enable legacy auto-entry (prod default is OFF)."""
     orig = PaperTradeEngine.__init__
 
     def _init(self, *args, **kwargs):
         kwargs.setdefault("risk_policy", _NO_GATES)
-        return orig(self, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
+        self.legacy_auto_entry_enabled = True
+        return result
 
     monkeypatch.setattr(PaperTradeEngine, "__init__", _init)
 
@@ -144,8 +146,11 @@ def test_opens_on_long_entry_candidate(monkeypatch):
     assert pos.stop_price == 98.0
     assert pos.tp1_price == 104.0
     assert pos.quantity == 10.0
-    assert pos.signal_snippet.get("path") == "PATH_A"
-    assert pos.signal_snippet.get("combo_version") == "v1-combo02-long-htf"
+    assert pos.signal_snippet.get("path") == "LEGACY"
+    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
+    assert pos.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
+    assert pos.signal_snippet.get("combo_id") is None
+    assert pos.signal_snippet.get("telegram_eligible") is False
     assert eng.status()["open_count"] == 1
 
 
@@ -182,8 +187,9 @@ def test_path_b_opens_entry_candidate_without_path_a_structure(monkeypatch):
         _candidate(include_path_a_structure=False),
     )
     assert pos is not None
-    assert pos.signal_snippet.get("path") == "PATH_B"
-    assert pos.signal_snippet.get("combo_version") == "experimental-path-b"
+    assert pos.signal_snippet.get("path") == "B"
+    assert pos.signal_snippet.get("strategy_id") == "EXPERIMENTAL_PATH_B"
+    assert pos.signal_snippet.get("telegram_eligible") is False
 
 
 def test_dedupe_same_source_candle(monkeypatch):
@@ -215,7 +221,8 @@ def test_opens_on_path_a_trend_bos(monkeypatch):
     assert pos.entry_price == 100.0
     assert pos.stop_price == 98.0
     assert pos.tp1_price == 104.0
-    assert pos.signal_snippet.get("path") == "PATH_A"
+    assert pos.signal_snippet.get("path") == "LEGACY"
+    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
     assert eng.status()["entry_mode"] == "path_a"
 
 

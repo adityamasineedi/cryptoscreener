@@ -1,0 +1,221 @@
+{
+  "generated_at_utc": "2026-10-03T19:57:19.650884+00:00",
+  "selector_version": "v1",
+  "criteria": {
+    "quote_asset": "USDT",
+    "market_type": "perpetual",
+    "top_n": 5,
+    "min_history_days": 500.0,
+    "min_ohlcv_completeness": 0.99,
+    "min_avg_24h_quote_volume_usd": 5000000.0,
+    "exclude_stablecoins": true,
+    "exclude_leveraged_tokens": true,
+    "exclude_inactive_or_delisted": true,
+    "exclude_nonstandard_symbols": true,
+    "exclude_v1_universe": true,
+    "setup_timeframe": "1h",
+    "selector_version": "v1"
+  },
+  "screen_timestamp_utc": "2026-10-03T19:57:19.650884+00:00",
+  "symbols": [
+    {
+      "symbol": "XRPUSDT",
+      "rank": 1,
+      "avg_24h_quote_volume_usd": 474012356.7435799,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T18:00:00+00:00",
+      "history_days": 510.88,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "rank": 2,
+      "avg_24h_quote_volume_usd": 342393230.24782,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T17:00:00+00:00",
+      "history_days": 510.83,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "SUIUSDT",
+      "rank": 3,
+      "avg_24h_quote_volume_usd": 312327291.54463005,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T18:00:00+00:00",
+      "history_days": 510.88,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "BNBUSDT",
+      "rank": 4,
+      "avg_24h_quote_volume_usd": 305073572.6819,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T18:00:00+00:00",
+      "history_days": 510.88,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "LINKUSDT",
+      "rank": 5,
+      "avg_24h_quote_volume_usd": 169599133.42262,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T17:00:00+00:00",
+      "history_days": 510.83,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    }
+  ],
+  "excluded": [
+    {
+      "symbol": "BTCUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "ETHUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "SANDUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "ZECUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "SOLUSDT",
+      "reason": "v1_universe_reserved"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "\u9f99\u867eUSDT",
+      "reason": "nonstandard_symbol"
+    },
+    {
+      "symbol": "WLDUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "QNTUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "PUMPUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "NEARUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "UNIUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.88
+    },
+    {
+      "symbol": "MAGMAUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "AINUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    },
+    {
+      "symbol": "MOVRUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.58
+    },
+    {
+      "symbol": "TAOUSDT",
+      "reason": "insufficient_history",
+      "history_days": 10.79
+    }
+  ],
+  "disclaimer": "Research only. No symbol from this report was added to the frozen COMBO_02 v1 paper/live universe or Telegram eligibility list.",
+  "selected_at_utc": "2026-10-03T19:57:19.650884+00:00",
+  "selection_rules": {
+    "quote_asset": "USDT",
+    "market_type": "perpetual",
+    "top_n": 5,
+    "min_history_days": 500.0,
+    "min_ohlcv_completeness": 0.99,
+    "min_avg_24h_quote_volume_usd": 5000000.0,
+    "exclude_stablecoins": true,
+    "exclude_leveraged_tokens": true,
+    "exclude_inactive_or_delisted": true,
+    "exclude_nonstandard_symbols": true,
+    "exclude_v1_universe": true,
+    "setup_timeframe": "1h",
+    "selector_version": "v1"
+  },
+  "candidates": [
+    {
+      "symbol": "XRPUSDT",
+      "rank": 1,
+      "avg_24h_quote_volume_usd": 474012356.7435799,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T18:00:00+00:00",
+      "history_days": 510.88,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "rank": 2,
+      "avg_24h_quote_volume_usd": 342393230.24782,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T17:00:00+00:00",
+      "history_days": 510.83,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "SUIUSDT",
+      "rank": 3,
+      "avg_24h_quote_volume_usd": 312327291.54463005,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T18:00:00+00:00",
+      "history_days": 510.88,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "BNBUSDT",
+      "rank": 4,
+      "avg_24h_quote_volume_usd": 305073572.6819,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T18:00:00+00:00",
+      "history_days": 510.88,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    },
+    {
+      "symbol": "LINKUSDT",
+      "rank": 5,
+      "avg_24h_quote_volume_usd": 169599133.42262,
+      "ohlcv_start_utc": "2025-05-10T21:00:00+00:00",
+      "ohlcv_end_utc": "2026-10-03T17:00:00+00:00",
+      "history_days": 510.83,
+      "ohlcv_completeness": 1.0001,
+      "inclusion_reason": "top_liquidity_rank_with_history>=500.0d_completeness>=0.99"
+    }
+  ],
+  "candidate_count": 5,
+  "excluded_count": 16
+}

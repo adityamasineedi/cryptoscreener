@@ -688,14 +688,15 @@ async def signal_annotations(symbol: str) -> dict[str, Any]:
     """Chart annotation payload for Lightweight Charts toggles."""
     from app.services.setup_signals import get_setup_signal_service
     from app.services.engine_store import engine_store as es
+    from app.signals.signal_engine import ensure_trade_plan_entry_annotation
 
     payload = es.get_setup_signal(symbol) or get_setup_signal_service().analyze_symbol(
         symbol
     )
     return {
         "symbol": symbol.upper(),
-        "annotations": payload.get("annotations") or [],
-        "status": payload.get("status"),
+        "annotations": ensure_trade_plan_entry_annotation(payload or {}),
+        "status": payload.get("status") if payload else None,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -797,6 +798,126 @@ async def research_ohlcv_range(
     return {
         "status": "OK",
         "rows": rows,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _parse_research_chart_ts(raw: str) -> datetime:
+    """Parse ISO / YYYY-MM-DD timestamps for blotter chart window loads."""
+    s = str(raw or "").strip()
+    if not s:
+        raise ValueError("empty timestamp")
+    if len(s) == 10 and s[4] == "-" and s[7] == "-":
+        return datetime(int(s[0:4]), int(s[5:7]), int(s[8:10]), tzinfo=timezone.utc)
+    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+@router.get("/research/ohlcv-candles")
+async def research_ohlcv_candles(
+    symbol: str = Query(...),
+    timeframe: str = Query(...),
+    start: str = Query(..., description="Window start (ISO or YYYY-MM-DD)"),
+    end: str | None = Query(
+        default=None, description="Window end (ISO or YYYY-MM-DD); defaults to start"
+    ),
+    pad_bars: int = Query(default=64, ge=0, le=500),
+) -> dict[str, Any]:
+    """Load Postgres OHLCV around a blotter trade window for backtest chart overlay.
+
+    Presentation-only — does not alter research entry logic.
+    """
+    from datetime import timedelta
+
+    from app.ingestion.klines import TIMEFRAME_MS
+    from app.research.postgres_ohlcv import load_ohlcv_series_range
+    from app.research.query_utils import (
+        normalize_research_symbol,
+        normalize_research_timeframe,
+    )
+    from app.services.database import db_manager
+
+    sym = normalize_research_symbol(symbol)
+    tf = normalize_research_timeframe(timeframe)
+    try:
+        start_dt = _parse_research_chart_ts(start)
+        end_dt = _parse_research_chart_ts(end) if end else start_dt
+    except ValueError as exc:
+        return {
+            "status": "ERROR",
+            "reason": f"invalid_timestamp: {exc}",
+            "symbol": sym,
+            "timeframe": tf,
+            "candles": [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    if end_dt < start_dt:
+        start_dt, end_dt = end_dt, start_dt
+
+    step_ms = int(TIMEFRAME_MS.get(tf) or 60_000)
+    pad = timedelta(milliseconds=step_ms * int(pad_bars))
+    # end_exclusive: one bar past padded exit so the exit candle is included
+    range_start = start_dt - pad
+    range_end_excl = end_dt + pad + timedelta(milliseconds=step_ms)
+
+    if db_manager.engine is None:
+        return {
+            "status": "UNAVAILABLE",
+            "reason": "database_unavailable",
+            "symbol": sym,
+            "timeframe": tf,
+            "candles": [],
+            "window_start": range_start.isoformat(),
+            "window_end_exclusive": range_end_excl.isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    try:
+        raw = await load_ohlcv_series_range(
+            sym,
+            tf,
+            start=range_start,
+            end_exclusive=range_end_excl,
+            warmup_bars=0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "ERROR",
+            "reason": str(exc),
+            "symbol": sym,
+            "timeframe": tf,
+            "candles": [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    candles: list[dict[str, Any]] = []
+    for c in raw:
+        t = c.get("time")
+        if isinstance(t, datetime):
+            open_time = t.astimezone(timezone.utc).isoformat()
+        else:
+            open_time = str(t)
+        candles.append(
+            {
+                "open_time": open_time,
+                "open": float(c["open"]),
+                "high": float(c["high"]),
+                "low": float(c["low"]),
+                "close": float(c["close"]),
+                "volume": float(c.get("volume") or 0),
+            }
+        )
+
+    return {
+        "status": "OK" if candles else "EMPTY",
+        "symbol": sym,
+        "timeframe": tf,
+        "pad_bars": int(pad_bars),
+        "window_start": range_start.isoformat(),
+        "window_end_exclusive": range_end_excl.isoformat(),
+        "candles": candles,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -914,6 +1035,7 @@ async def research_long_strategy_backtest_start(
             combination_id=str(body.get("combination_id") or "COMBO_02"),
             limit=int(body.get("limit") or 1200),
             risk_usd=float(body.get("risk_usd") or 20.0),
+            principal_usd=float(body.get("principal_usd") or 1000.0),
             taker_fee_pct=float(body.get("taker_fee_pct") or 0.04),
             maker_fee_pct=float(body.get("maker_fee_pct") or 0.02),
             include_trades=bool(body.get("include_trades", True)),
@@ -957,6 +1079,84 @@ async def research_long_strategy_backtest_cancel() -> dict[str, Any]:
     return {
         "status": job.get("status", "idle"),
         "job": job,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/research/combo02-candidate-results")
+async def research_combo02_candidate_results(
+    stamp: str | None = Query(
+        default=None,
+        description="Optional results timestamp suffix (YYYYMMDDTHHMMSSZ)",
+    ),
+) -> dict[str, Any]:
+    """Read-only latest COMBO_02 candidate research report (no execution rights).
+
+    Does not start backtests, promote symbols, or alter v1/Telegram eligibility.
+    """
+    from pathlib import Path
+
+    reports = Path(__file__).resolve().parents[1] / "reports"
+    pattern = "combo02_candidate_results_*.json"
+    files = sorted(reports.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    if stamp:
+        target = reports / f"combo02_candidate_results_{stamp}.json"
+        if not target.is_file():
+            return {
+                "status": "NOT_FOUND",
+                "error": f"No results for stamp={stamp}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        chosen = target
+    elif files:
+        chosen = files[0]
+    else:
+        return {
+            "status": "EMPTY",
+            "results": [],
+            "disclaimer": (
+                "Research only. No symbol from this report was added to the frozen "
+                "COMBO_02 v1 paper/live universe or Telegram eligibility list."
+            ),
+            "note": "No candidate research artifacts yet. Run scripts/run_combo02_candidate_research.py",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    import json
+
+    payload = json.loads(chosen.read_text(encoding="utf-8"))
+    # Slim UI payload — drop bulky condition matrices if huge
+    slim_results = []
+    for r in payload.get("results") or []:
+        slim_results.append(
+            {
+                "symbol": r.get("symbol"),
+                "eligibility_tier": r.get("eligibility_tier"),
+                "oos_label": r.get("oos_label"),
+                "net_avg_r": r.get("net_avg_r"),
+                "net_pnl": r.get("net_pnl"),
+                "profit_factor": r.get("profit_factor"),
+                "max_drawdown_r": r.get("max_drawdown_r"),
+                "trade_count": r.get("trade_count"),
+                "overlap_pct_BTCUSDT": r.get("overlap_pct_BTCUSDT"),
+                "corr_daily_net_r_vs_btc": r.get("corr_daily_net_r_vs_btc"),
+                "peak_concurrent_with_v1_book": r.get("peak_concurrent_with_v1_book"),
+                "run_status": r.get("run_status"),
+            }
+        )
+    return {
+        "status": "OK",
+        "source_file": chosen.name,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "fingerprint": payload.get("fingerprint"),
+        "final_lists": payload.get("final_lists"),
+        "portfolio": payload.get("portfolio") or [],
+        "oos": payload.get("oos") or [],
+        "results": slim_results,
+        "disclaimer": payload.get("disclaimer"),
+        "v1_unchanged": True,
+        "read_only": True,
+        "execution_rights": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1613,18 +1813,87 @@ async def signal_for_symbol(
     }
 
 
+_WATCHER_LIVE_CACHE: dict[str, Any] = {"at": 0.0, "rows": None}
+_WATCHER_LIVE_TTL_SEC = 20.0
+
+
+def _enrich_paper_status(status: dict[str, Any]) -> dict[str, Any]:
+    """Attach v1 watcher + Telegram monitor metadata (no secrets)."""
+    import time
+
+    from app.config import get_settings
+    from app.services.telegram_alerts import telegram_delivery_status
+    from app.services.v1_paper_watcher import get_v1_paper_watcher
+
+    settings = get_settings()
+    out = dict(status)
+    watcher_enabled = bool(getattr(settings, "paper_v1_watcher_enabled", True))
+    out["monitor"] = {
+        "auto_source": (
+            "V1_PAPER_WATCHER"
+            if watcher_enabled and bool(out.get("v1_watcher_owns_entries"))
+            else "LEGACY_15M_SETUP"
+            if bool(out.get("legacy_auto_entry_enabled"))
+            else "NONE"
+        ),
+        "v1_watcher_enabled": watcher_enabled,
+        "legacy_auto_entry_enabled": bool(out.get("legacy_auto_entry_enabled")),
+        "explanation": (
+            "Auto paper opens only from the COMBO_02 v1 1h watcher "
+            "(BTC/ETH/SOL closed bars). The Trade chances table is 15m screener "
+            "research and does not auto-execute while the v1 watcher owns entries."
+            if watcher_enabled and bool(out.get("v1_watcher_owns_entries"))
+            else "Legacy 15m Path A/B setup→paper auto-entry is active."
+            if bool(out.get("legacy_auto_entry_enabled"))
+            else "Paper auto-entry is paused — no watcher and legacy auto-entry OFF."
+        ),
+    }
+    try:
+        if watcher_enabled:
+            watcher = get_v1_paper_watcher()
+            wstatus = watcher.status(include_live=False)
+            now = time.monotonic()
+            cached = _WATCHER_LIVE_CACHE
+            if (
+                cached["rows"] is not None
+                and (now - float(cached["at"])) < _WATCHER_LIVE_TTL_SEC
+            ):
+                wstatus["live"] = cached["rows"]
+            else:
+                try:
+                    live = watcher.peek_books()
+                    _WATCHER_LIVE_CACHE["at"] = now
+                    _WATCHER_LIVE_CACHE["rows"] = live
+                    wstatus["live"] = live
+                except Exception as exc:  # noqa: BLE001
+                    wstatus["live"] = []
+                    wstatus["live_error"] = str(exc)
+            out["v1_watcher"] = wstatus
+        else:
+            out["v1_watcher"] = {"enabled": False}
+    except Exception as exc:  # noqa: BLE001
+        out["v1_watcher"] = {"enabled": watcher_enabled, "error": str(exc)}
+    try:
+        out["telegram"] = telegram_delivery_status(settings)
+    except Exception as exc:  # noqa: BLE001
+        out["telegram"] = {"ready": False, "reason": str(exc)}
+    return out
+
+
 @router.get("/paper/status")
 async def paper_status() -> dict[str, Any]:
     from app.services.paper_trade import get_paper_trade_engine
 
-    return get_paper_trade_engine().status()
+    return _enrich_paper_status(get_paper_trade_engine().status())
 
 
 @router.get("/paper/positions")
 async def paper_positions(closed_limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
     from app.services.paper_trade import get_paper_trade_engine
 
-    return get_paper_trade_engine().positions(closed_limit=closed_limit)
+    data = get_paper_trade_engine().positions(closed_limit=closed_limit)
+    data["status"] = _enrich_paper_status(data.get("status") or {})
+    return data
 
 
 @router.get("/paper/opportunities")
@@ -1680,6 +1949,17 @@ async def paper_opportunities(
     for r in rows:
         t = str(r.get("tier") or "?")
         by_tier[t] = by_tier.get(t, 0) + 1
+    watcher_owns = bool(getattr(eng, "v1_watcher_owns_entries", False))
+    legacy_on = bool(getattr(eng, "legacy_auto_entry_enabled", False))
+    if watcher_owns and not legacy_on:
+        note = (
+            "15m screener research only — auto paper opens come from the "
+            "COMBO_02 v1 1h watcher (BTC/ETH/SOL), not these READY rows."
+        )
+    elif eng.entry_mode == "path_a":
+        note = f"Auto mode={eng.entry_mode}. READY = Path A Trend+BOS opens when Auto ON"
+    else:
+        note = "READY = LONG_ENTRY_CANDIDATE. WAITING = OHLCV/setup not ready."
     return {
         "rows": rows,
         "count": len(rows),
@@ -1692,12 +1972,10 @@ async def paper_opportunities(
         "by_tier": by_tier,
         "warmed": warmed,
         "auto_enabled": eng.enabled,
-        "note": (
-            f"Auto mode={eng.entry_mode}. READY = Path A Trend+BOS opens when Auto ON"
-            if eng.entry_mode == "path_a"
-            else "READY = LONG_ENTRY_CANDIDATE. WAITING = OHLCV/setup not ready."
-        ),
+        "note": note,
         "entry_mode": eng.entry_mode,
+        "v1_watcher_owns_entries": watcher_owns,
+        "legacy_auto_entry_enabled": legacy_on,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1708,7 +1986,7 @@ async def paper_enable() -> dict[str, Any]:
 
     eng = get_paper_trade_engine()
     eng.enable()
-    return eng.status()
+    return _enrich_paper_status(eng.status())
 
 
 @router.post("/paper/disable")
@@ -1717,7 +1995,7 @@ async def paper_disable() -> dict[str, Any]:
 
     eng = get_paper_trade_engine()
     eng.disable()
-    return eng.status()
+    return _enrich_paper_status(eng.status())
 
 
 @router.post("/paper/reset")
@@ -1732,7 +2010,34 @@ async def paper_reset() -> dict[str, Any]:
         await persistence.clear_paper_trades()
     except Exception:  # noqa: BLE001
         pass
-    return eng.status()
+    return _enrich_paper_status(eng.status())
+
+
+@router.post("/paper/close-legacy")
+async def paper_close_legacy(
+    confirm: bool = Query(
+        default=False,
+        description="Must be true — closes/archives open RESEARCH_15M / experimental paper positions only.",
+    ),
+) -> dict[str, Any]:
+    """Operator action: close/archive open legacy paper positions (not v1 watcher).
+
+    Requires explicit confirm=true. Reason recorded as ``legacy_cleanup``.
+    Does not auto-run and never reclassifies legacy rows as v1.
+    """
+    from app.services.paper_trade import (
+        flush_paper_trade_persists,
+        get_paper_trade_engine,
+    )
+
+    eng = get_paper_trade_engine()
+    result = eng.close_legacy_paper_positions(confirm=confirm, reason="legacy_cleanup")
+    if result.get("ok"):
+        try:
+            await flush_paper_trade_persists(eng)
+        except Exception:  # noqa: BLE001
+            pass
+    return {**result, "status": _enrich_paper_status(eng.status())}
 
 
 @router.get("/alerts")

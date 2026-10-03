@@ -30,6 +30,7 @@ class BacktestJob:
     combination_id: str = "COMBO_02"
     limit: int = 1200
     risk_usd: float = 20.0
+    principal_usd: float = 1000.0
     taker_fee_pct: float = 0.04
     maker_fee_pct: float = 0.02
     include_trades: bool = True
@@ -70,6 +71,7 @@ class BacktestJob:
             "label": self.label,
             "limit": self.limit,
             "risk_usd": self.risk_usd,
+            "principal_usd": self.principal_usd,
             "taker_fee_pct": self.taker_fee_pct,
             "maker_fee_pct": self.maker_fee_pct,
             "include_trades": self.include_trades,
@@ -110,6 +112,7 @@ class BacktestJobService:
         combination_id: str = "COMBO_02",
         limit: int = 1200,
         risk_usd: float = 20.0,
+        principal_usd: float = 1000.0,
         taker_fee_pct: float = 0.04,
         maker_fee_pct: float = 0.02,
         include_trades: bool = True,
@@ -134,6 +137,7 @@ class BacktestJobService:
         combo_id = (combination_id or "COMBO_02").upper().strip()
         lim = max(50, min(int(limit), 20000))
         risk = max(1.0, min(float(risk_usd), 10_000.0))
+        principal = max(100.0, min(float(principal_usd), 10_000_000.0))
         taker = max(0.0, min(float(taker_fee_pct), 1.0))
         maker = max(0.0, min(float(maker_fee_pct), 1.0))
         start_s = str(start_date).strip()[:10] if start_date else None
@@ -153,6 +157,7 @@ class BacktestJobService:
                 combination_id=combo_id,
                 limit=lim,
                 risk_usd=risk,
+                principal_usd=principal,
                 taker_fee_pct=taker,
                 maker_fee_pct=maker,
                 include_trades=bool(include_trades),
@@ -196,13 +201,32 @@ class BacktestJobService:
                 # Publish current cell before the long await so UI polls show
                 # which cell is running (pct stays at done/total until finish).
                 job.current = f"{sym} {tf}"
+                # COMBO_02 v1: size each core/secondary cell from the production profile
+                cell_risk = float(job.risk_usd)
+                if str(job.combination_id).upper() == "COMBO_02":
+                    try:
+                        from app.research.v1_production import (
+                            classify_tier,
+                            recommended_risk_usd,
+                        )
+
+                        tier = classify_tier(sym, tf)
+                        if tier in ("core", "secondary"):
+                            cell_risk = recommended_risk_usd(
+                                sym,
+                                tf,
+                                principal_usd=float(job.principal_usd),
+                                fallback_risk_usd=float(job.risk_usd),
+                            )
+                    except Exception:  # noqa: BLE001
+                        cell_risk = float(job.risk_usd)
                 payload = await svc.strategy_matrix(
                     combination_id=job.combination_id,
                     symbols=[sym],
                     timeframes=[tf],
                     direction=job.direction,
                     limit=job.limit,
-                    risk_usd=job.risk_usd,
+                    risk_usd=cell_risk,
                     start_date=job.start_date,
                     end_date=job.end_date,
                     taker_fee=job.taker_fee_pct / 100.0,
