@@ -49,6 +49,11 @@ class StrategyTrade:
     period_label: str | None = None
     ambiguous: bool = False
     condition_snapshot: dict[str, Any] = field(default_factory=dict)
+    # Research lifecycle metadata (optional; absent for BOS-only controls)
+    lifecycle_id: str | None = None
+    impulse_timestamp: str | None = None
+    pullback_timestamp: str | None = None
+    retest_timestamp: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

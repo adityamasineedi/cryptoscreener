@@ -22,6 +22,16 @@ from app.research.bos_strategy_comparison.engine import (
     _clone_signal_config,
     evaluate_strategy_at_bar,
 )
+from app.research.bos_strategy_comparison.lifecycle import (
+    LifecycleResult,
+    discover_impulse_events,
+    eligibility_index_for_strategy,
+    eval_at_index,
+    first_pullback_pass_eval,
+    first_retest_pass_eval,
+    run_lifecycle,
+    strategy_needs_lifecycle,
+)
 from app.research.bos_strategy_comparison.metrics import (
     apply_net_r,
     by_htf_breakdown,
@@ -143,6 +153,14 @@ def _trade_from_setup(
     entry_index: int,
     period_label: str,
 ) -> StrategyTrade:
+    gates = dict(setup.get("gates") or {})
+    snap = {
+        **gates,
+        "lifecycle_id": setup.get("lifecycle_id"),
+        "impulse_timestamp": setup.get("impulse_timestamp"),
+        "pullback_timestamp": setup.get("pullback_timestamp"),
+        "retest_timestamp": setup.get("retest_timestamp"),
+    }
     return StrategyTrade(
         strategy_id=strategy_id,
         symbol=symbol.upper(),
@@ -174,8 +192,92 @@ def _trade_from_setup(
         else None,
         entry_type=setup.get("entry_type"),
         period_label=period_label,
-        condition_snapshot=dict(setup.get("gates") or {}),
+        condition_snapshot=snap,
+        lifecycle_id=setup.get("lifecycle_id"),
+        impulse_timestamp=setup.get("impulse_timestamp"),
+        pullback_timestamp=setup.get("pullback_timestamp"),
+        retest_timestamp=setup.get("retest_timestamp"),
     )
+
+
+def _precompute_lifecycles(
+    *,
+    symbol: str,
+    timeframe: str,
+    series: Sequence[Mapping[str, Any]],
+    index_start: int,
+    local_cfg: SignalConfig,
+    research_config: StrategyResearchConfig,
+    signal_config: SignalConfig,
+) -> tuple[list[LifecycleResult], dict[str, Any]]:
+    """Build research lifecycles once (canonical lifecycle.py)."""
+    events, bos_count = discover_impulse_events(
+        symbol=symbol,
+        timeframe=timeframe,
+        candles=series,
+        index_start=index_start,
+        signal_config=signal_config,
+        research_config=research_config,
+    )
+    follow = int(getattr(research_config, "research_max_lifecycle_bars", 40) or 40)
+    results: list[LifecycleResult] = []
+    pb_evals = 0
+    rt_evals = 0
+    for ev in events:
+        lc = run_lifecycle(
+            candles=series,
+            event=ev,
+            signal_config=local_cfg,
+            max_follow_bars=follow,
+        )
+        results.append(lc)
+        pb_evals += lc.pullback_eval_count
+        rt_evals += lc.retest_eval_count
+    stats = {
+        "bos_candidates_in_window": bos_count,
+        "lifecycles": len(results),
+        "pullback_pass": sum(1 for r in results if r.pullback_pass),
+        "retest_pass": sum(1 for r in results if r.retest_pass),
+        "pullback_evaluations": pb_evals,
+        "retest_evaluations": rt_evals,
+        "research_max_lifecycle_bars": follow,
+    }
+    return results, stats
+
+
+def _lifecycle_structure_override(
+    lc: LifecycleResult,
+    *,
+    entry_index: int,
+    candles: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Frozen BOS/impulse + pullback/retest at eligibility bar."""
+    ev = eval_at_index(lc, entry_index)
+    if ev is None:
+        # Fallback: last eval at or before entry_index
+        prior = [e for e in lc.evaluations if e.as_of_index <= entry_index]
+        ev = prior[-1] if prior else None
+    pb_first = first_pullback_pass_eval(lc)
+    rt_first = first_retest_pass_eval(lc)
+    pb_ts = None
+    rt_ts = None
+    if pb_first is not None and 0 <= pb_first.as_of_index < len(candles):
+        t = candle_time(candles[pb_first.as_of_index])
+        pb_ts = t.isoformat() if t else None
+    if rt_first is not None and 0 <= rt_first.as_of_index < len(candles):
+        t = candle_time(candles[rt_first.as_of_index])
+        rt_ts = t.isoformat() if t else None
+    return {
+        "bos": lc.event.frozen_bos,
+        "impulse": lc.event.frozen_impulse,
+        "pullback": (ev.pullback if ev else {}),
+        "retest": (ev.retest if ev else {}),
+        "lifecycle_id": lc.event.lifecycle_id,
+        "bos_timestamp": lc.event.bos_timestamp,
+        "impulse_timestamp": lc.event.impulse_timestamp,
+        "pullback_timestamp": pb_ts,
+        "retest_timestamp": rt_ts,
+    }
 
 
 def _finalize_strategy_run(
@@ -254,8 +356,14 @@ def run_multi_strategy_backtest(
     index_start: int | None = None,
     index_end: int | None = None,
     direction_filter: str | None = None,
+    use_lifecycle: bool = True,
 ) -> dict[str, Any]:
-    """Walk the series once; evaluate all strategies independently (shared structure)."""
+    """Walk the series; evaluate strategies with research multi-bar lifecycle.
+
+    CONTROL_A / CONTROL_B (no pullback/retest): same-bar BOS path (unchanged).
+    Strategies requiring pullback/retest: consume frozen-impulse lifecycle;
+    entry only when required gates first become true (never before).
+    """
     t0 = time.perf_counter()
     rcfg = research_config or StrategyResearchConfig()
     scfg = signal_config or SignalConfig()
@@ -300,11 +408,65 @@ def run_multi_strategy_backtest(
     end = min(len(series), index_end if index_end is not None else len(series))
     loop_start = max(rcfg.min_bars, start)
 
+    immediate_strats = [
+        st for st in strat_list if not strategy_needs_lifecycle(st) or not use_lifecycle
+    ]
+    lifecycle_strats = [
+        st for st in strat_list if strategy_needs_lifecycle(st) and use_lifecycle
+    ]
+    # When use_lifecycle=False, all strategies use same-bar immediate path
+    if not use_lifecycle:
+        immediate_strats = list(strat_list)
+        lifecycle_strats = []
+
     trades_by: dict[str, list[StrategyTrade]] = {st.strategy_id: [] for st in strat_list}
     open_by: dict[str, StrategyTrade | None] = {st.strategy_id: None for st in strat_list}
     setups_by: dict[str, int] = {st.strategy_id: 0 for st in strat_list}
     candles_processed = 0
-    needs_sd = any(st.require_sd for st in strat_list)
+    needs_sd_immediate = any(st.require_sd for st in immediate_strats)
+
+    # Precompute lifecycles for pullback/retest strategies
+    lifecycle_results: list[LifecycleResult] = []
+    lifecycle_stats: dict[str, Any] = {
+        "enabled": bool(lifecycle_strats),
+        "lifecycles": 0,
+        "pullback_pass": 0,
+        "retest_pass": 0,
+    }
+    # (entry_index, strategy_id, lifecycle_result) — one opportunity per lifecycle×strategy
+    lifecycle_schedule: list[tuple[int, str, LifecycleResult]] = []
+    if lifecycle_strats:
+        lifecycle_results, lifecycle_stats = _precompute_lifecycles(
+            symbol=symbol,
+            timeframe=timeframe,
+            series=series,
+            index_start=loop_start,
+            local_cfg=local_cfg,
+            research_config=rcfg,
+            signal_config=scfg,
+        )
+        lifecycle_stats["enabled"] = True
+        for lc in lifecycle_results:
+            if lc.event.bos_index < loop_start or lc.event.bos_index >= end:
+                continue
+            for st in lifecycle_strats:
+                if st.require_impulse and not lc.event.frozen_impulse.get("is_impulse"):
+                    continue
+                eidx = eligibility_index_for_strategy(
+                    lc,
+                    require_pullback=st.require_pullback,
+                    require_retest=st.require_retest,
+                )
+                if eidx is None or eidx < loop_start or eidx >= end:
+                    continue
+                lifecycle_schedule.append((eidx, st.strategy_id, lc))
+        lifecycle_schedule.sort(key=lambda x: (x[0], x[1], x[2].event.lifecycle_id))
+
+    schedule_i = 0
+    consumed: set[tuple[str, str]] = set()  # (strategy_id, lifecycle_id)
+
+    from app.research.bos_strategy_comparison.htf import htf_trends_for_setup_bar
+    from app.research.combination_engine import detect_zones_as_of
 
     for i in range(loop_start, end):
         candles_processed += 1
@@ -325,9 +487,94 @@ def run_multi_strategy_backtest(
                     trades_by[sid].append(closed)
                 open_by[sid] = None
 
-        # Shared structure once per bar for all flat strategies
-        flat = [st for st in strat_list if open_by[st.strategy_id] is None]
-        if not flat:
+        # --- Lifecycle-gated strategies: eligibility bar only ---
+        while schedule_i < len(lifecycle_schedule) and lifecycle_schedule[schedule_i][0] == i:
+            eidx, sid, lc = lifecycle_schedule[schedule_i]
+            schedule_i += 1
+            key = (sid, lc.event.lifecycle_id)
+            if key in consumed:
+                continue
+            if open_by.get(sid) is not None:
+                continue
+            st = next((s for s in lifecycle_strats if s.strategy_id == sid), None)
+            if st is None:
+                continue
+
+            override = _lifecycle_structure_override(
+                lc, entry_index=i, candles=series
+            )
+            demand_zone = supply_zone = None
+            if st.require_sd:
+                demand_zone, supply_zone = detect_zones_as_of(
+                    symbol, timeframe, series, i, sd_engine=sd_engine
+                )
+
+            htf = htf_trends_for_setup_bar(
+                symbol=symbol,
+                setup_candles=series,
+                as_of_index=i,
+                candles_4h=candles_4h,
+                candles_1h=candles_1h,
+                candles_5m=candles_5m,
+                config=local_cfg,
+                trend_cache=trend_cache,
+                include_5m=False,
+            )
+            setup = evaluate_strategy_at_bar(
+                symbol=symbol,
+                timeframe=timeframe,
+                candles=series,
+                as_of_index=i,
+                strategy=st,
+                signal_config=scfg,
+                research_config=rcfg,
+                candles_4h=candles_4h,
+                candles_1h=candles_1h,
+                candles_5m=candles_5m,
+                signal_engine=engine,
+                sd_engine=sd_engine,
+                compute_sd=False,
+                trend_cache=trend_cache,
+                local_cfg=local_cfg,
+                htf=htf,
+                demand_zone=demand_zone if st.require_sd else None,
+                supply_zone=supply_zone if st.require_sd else None,
+                structure_override=override,
+            )
+            consumed.add(key)
+            if setup.get("status") not in (
+                "LONG_ENTRY_CANDIDATE",
+                "SHORT_ENTRY_CANDIDATE",
+            ):
+                continue
+            direction = str(setup["direction"])
+            if direction_filter and direction_filter.upper() in ("LONG", "SHORT"):
+                if direction != direction_filter.upper():
+                    continue
+            # Sanity: entry must not precede BOS/impulse confirmation
+            if i < lc.event.bos_index or i < lc.event.impulse_index:
+                continue
+            if st.require_retest:
+                rt_ev = first_retest_pass_eval(lc)
+                if rt_ev is None or i < rt_ev.as_of_index:
+                    continue
+            elif st.require_pullback:
+                pb_ev = first_pullback_pass_eval(lc)
+                if pb_ev is None or i < pb_ev.as_of_index:
+                    continue
+            setups_by[sid] += 1
+            open_by[sid] = _trade_from_setup(
+                setup,
+                strategy_id=sid,
+                symbol=symbol,
+                timeframe=timeframe,
+                entry_index=i,
+                period_label=period_label,
+            )
+
+        # --- Immediate strategies (C1/C2 or legacy same-bar): BOS bar only ---
+        flat_imm = [st for st in immediate_strats if open_by[st.strategy_id] is None]
+        if not flat_imm:
             continue
 
         tf_analysis = engine.analyze_timeframe(
@@ -336,8 +583,6 @@ def run_multi_strategy_backtest(
         bos = tf_analysis.get("bos")
         if not (bos and bos.get("state") == "CONFIRMED" and bos.get("direction")):
             continue
-
-        from app.research.bos_strategy_comparison.htf import htf_trends_for_setup_bar
 
         htf = htf_trends_for_setup_bar(
             symbol=symbol,
@@ -354,9 +599,7 @@ def run_multi_strategy_backtest(
 
         demand_zone = supply_zone = None
         tf_sd = None
-        if needs_sd and any(st.require_sd for st in flat):
-            from app.research.combination_engine import detect_zones_as_of
-
+        if needs_sd_immediate and any(st.require_sd for st in flat_imm):
             demand_zone, supply_zone = detect_zones_as_of(
                 symbol, timeframe, series, i, sd_engine=sd_engine
             )
@@ -369,7 +612,7 @@ def run_multi_strategy_backtest(
                 as_of_index=i,
             )
 
-        for st in flat:
+        for st in flat_imm:
             setup = evaluate_strategy_at_bar(
                 symbol=symbol,
                 timeframe=timeframe,
@@ -446,6 +689,8 @@ def run_multi_strategy_backtest(
         "strategies": out_strategies,
         "elapsed_seconds": elapsed,
         "candles_processed": candles_processed,
+        "lifecycle": lifecycle_stats,
+        "use_lifecycle": use_lifecycle,
         "disclaimer": DISCLAIMER,
     }
 

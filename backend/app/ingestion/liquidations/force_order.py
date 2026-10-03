@@ -217,6 +217,26 @@ class LiquidationIngestion:
         st.summary = FreshValue.live(self._describe(st), "binance_force_order")
 
         try:
+            aggs = aggregate_windows(st.events)
+            w5 = aggs.get("5m", {})
+            w15 = aggs.get("15m", {})
+            spike = liquidation_spike(
+                w5.get("total_notional", 0),
+                (w15.get("total_notional", 0) or 0) / 3.0 if w15 else 0,
+            )
+            from app.services.alerts import get_alert_feed
+
+            get_alert_feed().observe_liquidation_spike(
+                ev.symbol,
+                is_spike=bool(spike),
+                side=ev.side,
+                notional_5m=float(w5.get("total_notional") or 0) or None,
+                price=ev.price,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        try:
             from app.services.persistence import persistence
 
             before = getattr(persistence, "_writes", 0)

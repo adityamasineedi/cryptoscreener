@@ -95,7 +95,10 @@ async def _load_research_candles(
     Warmup bars precede start so structure/gates can form before evaluation.
     """
     from app.services.database import db_manager
-    from app.research.postgres_ohlcv import load_ohlcv_series, load_ohlcv_series_tail
+    from app.research.postgres_ohlcv import (
+        load_ohlcv_series_range,
+        load_ohlcv_series_tail,
+    )
 
     sym = normalize_research_symbol(symbol)
     tf = normalize_research_timeframe(timeframe)
@@ -104,8 +107,14 @@ async def _load_research_candles(
     try:
         if db_manager.enabled and db_manager.engine is not None:
             if bounds["start"] is not None or bounds["end_exclusive"] is not None:
-                # Need history before start for warmup — load full series then slice.
-                raw = await load_ohlcv_series(sym, tf)
+                # Bounded SQL load (+ warmup) — never pull the entire multi-year series.
+                raw = await load_ohlcv_series_range(
+                    sym,
+                    tf,
+                    start=bounds["start"],
+                    end_exclusive=bounds["end_exclusive"],
+                    warmup_bars=warmup_bars,
+                )
             else:
                 raw = await load_ohlcv_series_tail(sym, tf, limit=max(limit, 1))
         else:
@@ -300,17 +309,26 @@ class BosResearchService:
         )
         sym = load_meta["symbol"]
         tf = load_meta["timeframe"]
-        cmp = compare_combinations(
-            sym,
-            tf,
-            candles,
-            combination_ids,
-            signal_config=_signal_config(),
-            research_config=rcfg,
-            market_cap=_market_cap(sym),
-            direction_filter=direction,
-            index_start=eval_start if eval_start > 0 else None,
-        )
+        # CPU-heavy sync path — must not block the asyncio event loop (health /
+        # other API routes hang for minutes if compare runs inline).
+        scfg = _signal_config()
+        mcap = _market_cap(sym)
+        idx0 = eval_start if eval_start > 0 else None
+
+        def _run_cmp() -> dict[str, Any]:
+            return compare_combinations(
+                sym,
+                tf,
+                candles,
+                combination_ids,
+                signal_config=scfg,
+                research_config=rcfg,
+                market_cap=mcap,
+                direction_filter=direction,
+                index_start=idx0,
+            )
+
+        cmp = await asyncio.to_thread(_run_cmp)
         tested_rows = list(cmp.get("rows") or [])
         combinations_tested = int(cmp.get("combinations_tested") or len(tested_rows))
         # parameters_tested = size of explicit parameter_grid product (1 if none).
@@ -558,27 +576,9 @@ class BosResearchService:
         )
         sym = load_meta["symbol"]
         tf = load_meta["timeframe"]
-        run = run_combination_backtest(
-            sym,
-            tf,
-            candles,
-            combination_id,
-            signal_config=_signal_config(),
-            research_config=rcfg,
-            market_cap=_market_cap(sym),
-            direction_filter=direction,
-            index_start=eval_start if eval_start > 0 else None,
-        )
-        oos = run_oos_split_backtest(
-            sym,
-            tf,
-            candles,
-            combination_id,
-            signal_config=_signal_config(),
-            research_config=rcfg,
-            market_cap=_market_cap(sym),
-            direction_filter=direction,
-        )
+        scfg = _signal_config()
+        mcap = _market_cap(sym)
+        idx0 = eval_start if eval_start > 0 else None
         n = len(candles)
         wf_cfg = rcfg
         if n < rcfg.walk_forward_train_bars + rcfg.walk_forward_test_bars:
@@ -586,16 +586,42 @@ class BosResearchService:
                 walk_forward_train_bars=max(80, n // 3),
                 walk_forward_test_bars=max(40, n // 6),
             )
-        wf = run_walk_forward(
-            sym,
-            tf,
-            candles,
-            combination_id,
-            signal_config=_signal_config(),
-            research_config=wf_cfg,
-            market_cap=_market_cap(sym),
-            direction_filter=direction,
-        )
+
+        def _run_detail() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+            run_local = run_combination_backtest(
+                sym,
+                tf,
+                candles,
+                combination_id,
+                signal_config=scfg,
+                research_config=rcfg,
+                market_cap=mcap,
+                direction_filter=direction,
+                index_start=idx0,
+            )
+            oos_local = run_oos_split_backtest(
+                sym,
+                tf,
+                candles,
+                combination_id,
+                signal_config=scfg,
+                research_config=rcfg,
+                market_cap=mcap,
+                direction_filter=direction,
+            )
+            wf_local = run_walk_forward(
+                sym,
+                tf,
+                candles,
+                combination_id,
+                signal_config=scfg,
+                research_config=wf_cfg,
+                market_cap=mcap,
+                direction_filter=direction,
+            )
+            return run_local, oos_local, wf_local
+
+        run, oos, wf = await asyncio.to_thread(_run_detail)
         trades_raw = run.get("trades") or []
         trade_objs = []
         for t in trades_raw:

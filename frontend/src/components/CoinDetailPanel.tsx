@@ -326,11 +326,7 @@ export function CoinDetailPanel({
           />
         )}
         {tab === "Sentiment" && (
-          <MetricMap
-            data={(tabs.sentiment as Record<string, unknown>) || {}}
-            empty="WAITING — sentiment provider not configured"
-            note="Never fabricated. Configure Santiment/LunarCrush-style API to populate."
-          />
+          <SentimentTab data={(tabs.sentiment as Record<string, unknown>) || {}} />
         )}
       </div>
     </aside>
@@ -726,17 +722,51 @@ function RatingBlock({ payload }: { payload?: Record<string, unknown> }) {
   );
 }
 
+function SentimentTab({ data }: { data: Record<string, unknown> }) {
+  const provider = (data.provider as Record<string, unknown> | undefined) || {};
+  const vendor = String(provider.provider || provider.name || "sentiment");
+  const vendorLabel =
+    vendor === "lunarcrush"
+      ? "LunarCrush"
+      : vendor === "free_social" || vendor === "socialtickers" || vendor === "xoomar"
+        ? "socialtickers + XOOMAR (free)"
+        : vendor;
+  const status = String(provider.status || "").toUpperCase();
+  const noteParts: string[] = ["Never fabricated."];
+  if (!provider.configured) {
+    noteParts.push("Enable free_social in providers.yaml (no API key required).");
+  } else if (status === "PLAN_FORBIDDEN") {
+    noteParts.push("Provider plan forbids this endpoint (PLAN_FORBIDDEN).");
+  } else if (status === "AUTH_FAILED") {
+    noteParts.push("Provider authentication failed.");
+  } else if (provider.configured) {
+    noteParts.push(
+      `Source: ${vendorLabel}. Social share/mentions from socialtickers; sentiment from XOOMAR (majors only).`,
+    );
+  }
+  return (
+    <MetricMap
+      data={data}
+      empty="WAITING — sentiment provider not configured"
+      note={noteParts.join(" ")}
+      percentKeys={/^(social_dominance|sentiment|sentiment_change)$/i}
+    />
+  );
+}
+
 function MetricMap({
   data,
   empty,
   note,
   percentKeys,
+  sourceLabelOverride,
 }: {
   data: Record<string, unknown>;
   empty: string;
   note?: string;
   /** Keys matching this regex format numeric values as signed percents */
   percentKeys?: RegExp;
+  sourceLabelOverride?: string;
 }) {
   const entries = Object.entries(data).filter(
     ([k]) => k !== "provider" && k !== "note" && k !== "methodology" && k !== "asset_metadata"
@@ -751,17 +781,25 @@ function MetricMap({
         const fv = asFresh(v);
         if (fv) {
           const asPct = percentKeys?.test(k);
+          const displayFv =
+            sourceLabelOverride && fv.source
+              ? { ...fv, source: sourceLabelOverride }
+              : fv;
           return (
             <Field
               key={k}
               label={k.replace(/_/g, " ")}
-              fv={fv}
+              fv={displayFv}
               format={
                 asPct
                   ? (val) => {
                       const n = Number(val);
                       if (!Number.isFinite(n)) return "—";
-                      return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+                      // sentiment_change is a point delta; social_dominance/sentiment are %
+                      if (/sentiment_change/i.test(k)) {
+                        return `${n >= 0 ? "+" : ""}${n.toFixed(2)}`;
+                      }
+                      return `${n.toFixed(2)}%`;
                     }
                   : /mcap|ratio|proxy|velocity/i.test(k)
                     ? (val) => formatRatio(val, /velocity|mcap|ratio/i.test(k))

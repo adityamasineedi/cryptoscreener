@@ -23,10 +23,14 @@ frontend/tsconfig.tsbuildinfo
 *.sqlite3
 data/postgres/
 data/redis/
+data/diagnostics/
 .cache/
 
 # Local research run outputs (regenerable)
 backend/scripts/_*.json
+backend/scripts/_*.err
+backend/scripts/_*.out
 backend/scripts/*_research_result*.json
 backend/scripts/*_research_summary*.txt
 backend/scripts/*_analysis_report.json
+backend/scripts/diagnose_*_result.json

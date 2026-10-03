@@ -130,14 +130,19 @@ async def build_data_coverage(settings) -> dict[str, Any]:
         perf_1d.append(perf.get("performance_1d"))
         vchg = compute_volume_changes(sym)
         vol_24h_chg.append(vchg.get("volume_change_24h"))
-        # On-chain / sentiment default WAITING without provider — count honestly
+        # On-chain / sentiment — use cached engine values when present; else WAITING
         holder_fvs.append(
             FreshValue.waiting("onchain")
             if asset_registry.get_for_symbol(sym) is None
             else FreshValue.waiting("onchain")
         )
         tx_fvs.append(FreshValue.waiting("onchain"))
-        sent_fvs.append(FreshValue.waiting("sentiment"))
+        sent = engine_store.sentiment.get(sym) or {}
+        sent_fvs.append(
+            sent.get("sentiment")
+            or sent.get("social_dominance")
+            or FreshValue.waiting("sentiment")
+        )
     tfs = settings.market_config.get("timeframes") or ["1m", "5m", "15m", "1h", "4h", "1d"]
     ohlcv = {
         str(tf).lower() if str(tf) != "1D" else "1d": _ohlcv_tf_coverage(

@@ -685,6 +685,328 @@ class PersistenceService:
             self._errors += 1
             logger.warning("persist_paper_trade_failed", error=str(exc))
 
+    async def load_paper_trades(self, *, closed_limit: int = 200) -> list[dict[str, Any]]:
+        """Load all OPEN paper trades + recent CLOSED/CANCELLED for restart hydrate."""
+        if not self.active:
+            return []
+        # OPEN first (all), then newest closed up to limit
+        sql = text(
+            """
+            (
+                SELECT id, symbol, side, status, entry_price, stop_price, tp1_price,
+                       quantity, risk_usd, opened_at, closed_at, exit_price, exit_reason,
+                       pnl_usd, r_multiple, source_candle_ts, timeframe, signal_snippet
+                FROM paper_trades
+                WHERE status = 'OPEN'
+                ORDER BY opened_at DESC
+            )
+            UNION ALL
+            (
+                SELECT id, symbol, side, status, entry_price, stop_price, tp1_price,
+                       quantity, risk_usd, opened_at, closed_at, exit_price, exit_reason,
+                       pnl_usd, r_multiple, source_candle_ts, timeframe, signal_snippet
+                FROM (
+                    SELECT id, symbol, side, status, entry_price, stop_price, tp1_price,
+                           quantity, risk_usd, opened_at, closed_at, exit_price, exit_reason,
+                           pnl_usd, r_multiple, source_candle_ts, timeframe, signal_snippet
+                    FROM paper_trades
+                    WHERE status IN ('CLOSED', 'CANCELLED')
+                    ORDER BY COALESCE(closed_at, opened_at) DESC
+                    LIMIT :closed_limit
+                ) closed_recent
+            )
+            """
+        )
+        try:
+            async with db_manager.engine.begin() as conn:
+                result = await conn.execute(sql, {"closed_limit": int(closed_limit)})
+                rows = result.mappings().all()
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                d = dict(r)
+                snip = d.get("signal_snippet")
+                if isinstance(snip, str):
+                    try:
+                        snip = json.loads(snip)
+                    except Exception:  # noqa: BLE001
+                        snip = {}
+                d["signal_snippet"] = snip if isinstance(snip, dict) else {}
+                out.append(d)
+            return out
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("load_paper_trades_failed", error=str(exc))
+            return []
+
+    async def clear_paper_trades(self) -> int:
+        """Delete all paper_trades rows (Reset book)."""
+        if not self.active:
+            return 0
+        try:
+            async with db_manager.engine.begin() as conn:
+                result = await conn.execute(text("DELETE FROM paper_trades"))
+                n = int(result.rowcount or 0)
+            self._writes += 1
+            return n
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("clear_paper_trades_failed", error=str(exc))
+            return 0
+
+    @staticmethod
+    def _as_utc_dt(value: datetime | str | None) -> datetime | None:
+        """asyncpg requires datetime objects for TIMESTAMPTZ binds."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value
+        s = str(value).strip()
+        if not s:
+            return None
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    async def persist_alert(self, alert: dict[str, Any]) -> None:
+        if not self.active or not alert:
+            return
+        sql = text(
+            """
+            INSERT INTO alerts (
+                id, seq, time, type, symbol, timeframe, severity, title, detail,
+                payload, dedupe_key, created_at
+            ) VALUES (
+                :id, :seq, :time, :type, :symbol, :timeframe, :severity, :title, :detail,
+                CAST(:payload AS JSONB), :dedupe_key, NOW()
+            )
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
+        ts = self._as_utc_dt(alert.get("time")) or datetime.now(timezone.utc)
+        try:
+            async with db_manager.engine.begin() as conn:
+                await conn.execute(
+                    sql,
+                    {
+                        "id": str(alert.get("id")),
+                        "seq": int(alert.get("seq") or 0),
+                        "time": ts,
+                        "type": str(alert.get("type") or ""),
+                        "symbol": str(alert.get("symbol") or "").upper(),
+                        "timeframe": alert.get("timeframe"),
+                        "severity": str(alert.get("severity") or "info"),
+                        "title": str(alert.get("title") or ""),
+                        "detail": str(alert.get("detail") or ""),
+                        "payload": json.dumps(alert.get("payload") or {}, default=str),
+                        "dedupe_key": alert.get("dedupe_key"),
+                    },
+                )
+            self._writes += 1
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("persist_alert_failed", error=str(exc))
+
+    async def load_alerts(self, *, limit: int = 400) -> list[dict[str, Any]]:
+        if not self.active:
+            return []
+        sql = text(
+            """
+            SELECT id, seq, time, type, symbol, timeframe, severity, title, detail,
+                   payload, dedupe_key
+            FROM alerts
+            ORDER BY seq DESC
+            LIMIT :lim
+            """
+        )
+        try:
+            async with db_manager.engine.begin() as conn:
+                result = await conn.execute(sql, {"lim": int(limit)})
+                rows = result.mappings().all()
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                d = dict(r)
+                payload = d.get("payload")
+                if isinstance(payload, str):
+                    try:
+                        payload = json.loads(payload)
+                    except Exception:  # noqa: BLE001
+                        payload = {}
+                d["payload"] = payload if isinstance(payload, dict) else {}
+                if isinstance(d.get("time"), datetime):
+                    d["time"] = d["time"].isoformat()
+                out.append(d)
+            return out
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("load_alerts_failed", error=str(exc))
+            return []
+
+    async def load_open_interest_history(
+        self,
+        symbols: list[str] | None = None,
+        *,
+        limit_per_symbol: int = 200,
+        max_symbols: int = 80,
+    ) -> dict[str, list[tuple[datetime, float]]]:
+        """Recent OI samples keyed by symbol for restart hydrate."""
+        if not self.active:
+            return {}
+        syms = [s.upper() for s in (symbols or [])][:max_symbols]
+        try:
+            async with db_manager.engine.begin() as conn:
+                if syms:
+                    sql = text(
+                        """
+                        SELECT time, symbol, open_interest
+                        FROM (
+                            SELECT time, symbol, open_interest,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY symbol ORDER BY time DESC
+                                   ) AS rn
+                            FROM open_interest
+                            WHERE symbol = ANY(:syms)
+                        ) t
+                        WHERE rn <= :lim
+                        ORDER BY symbol, time ASC
+                        """
+                    )
+                    result = await conn.execute(
+                        sql, {"syms": syms, "lim": int(limit_per_symbol)}
+                    )
+                else:
+                    sql = text(
+                        """
+                        SELECT time, symbol, open_interest
+                        FROM (
+                            SELECT time, symbol, open_interest,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY symbol ORDER BY time DESC
+                                   ) AS rn
+                            FROM open_interest
+                            WHERE symbol IN (
+                                SELECT symbol FROM (
+                                    SELECT symbol
+                                    FROM open_interest
+                                    GROUP BY symbol
+                                    ORDER BY MAX(time) DESC
+                                    LIMIT :max_symbols
+                                ) recent_syms
+                            )
+                        ) t
+                        WHERE rn <= :lim
+                        ORDER BY symbol, time ASC
+                        """
+                    )
+                    result = await conn.execute(
+                        sql,
+                        {
+                            "lim": int(limit_per_symbol),
+                            "max_symbols": int(max_symbols),
+                        },
+                    )
+                rows = result.fetchall()
+            out: dict[str, list[tuple[datetime, float]]] = {}
+            for time_v, symbol, oi in rows:
+                ts = time_v
+                if isinstance(ts, str):
+                    ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                if isinstance(ts, datetime) and ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                out.setdefault(str(symbol).upper(), []).append((ts, float(oi)))
+            return out
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("load_open_interest_history_failed", error=str(exc))
+            return {}
+
+    async def load_latest_funding_rates(
+        self, *, max_symbols: int = 600
+    ) -> list[dict[str, Any]]:
+        if not self.active:
+            return []
+        sql = text(
+            """
+            SELECT DISTINCT ON (symbol)
+                time, symbol, funding_rate, mark_price, source
+            FROM funding_rates
+            ORDER BY symbol, time DESC
+            LIMIT :lim
+            """
+        )
+        try:
+            async with db_manager.engine.begin() as conn:
+                result = await conn.execute(sql, {"lim": int(max_symbols)})
+                rows = result.mappings().all()
+            return [dict(r) for r in rows]
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("load_latest_funding_failed", error=str(exc))
+            return []
+
+    async def persist_sentiment_snapshot(
+        self,
+        *,
+        symbol: str,
+        provider: str,
+        provider_symbol: str | None,
+        observed_at: datetime | str | None,
+        provider_generated_at: datetime | str | None,
+        social_dominance: float | None,
+        social_volume: float | None,
+        mentions: float | None,
+        engagement: float | None,
+        sentiment: float | None,
+        sentiment_change: float | None,
+        raw_payload_hash: str | None,
+    ) -> None:
+        """Optional persistence for social metrics / sentiment_change history."""
+        if not self.active or db_manager.engine is None:
+            return
+        obs = self._as_utc_dt(observed_at) or datetime.now(timezone.utc)
+        gen = self._as_utc_dt(provider_generated_at)
+        sql = text(
+            """
+            INSERT INTO sentiment_snapshots (
+                symbol, provider, provider_symbol, observed_at, provider_generated_at,
+                social_dominance, social_volume, mentions, engagement,
+                sentiment, sentiment_change, raw_payload_hash, created_at
+            ) VALUES (
+                :symbol, :provider, :provider_symbol, :observed_at, :provider_generated_at,
+                :social_dominance, :social_volume, :mentions, :engagement,
+                :sentiment, :sentiment_change, :raw_payload_hash, NOW()
+            )
+            """
+        )
+        try:
+            async with db_manager.engine.begin() as conn:
+                await conn.execute(
+                    sql,
+                    {
+                        "symbol": symbol.upper(),
+                        "provider": provider,
+                        "provider_symbol": provider_symbol,
+                        "observed_at": obs,
+                        "provider_generated_at": gen,
+                        "social_dominance": social_dominance,
+                        "social_volume": social_volume,
+                        "mentions": mentions,
+                        "engagement": engagement,
+                        "sentiment": sentiment,
+                        "sentiment_change": sentiment_change,
+                        "raw_payload_hash": raw_payload_hash,
+                    },
+                )
+            self._writes += 1
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("persist_sentiment_snapshot_failed", error=str(exc))
+
     def stats(self) -> dict[str, Any]:
         return {
             "active": self.active,

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
-  fetchLongStrategyBacktest,
   fetchResearchOhlcvRange,
   type OhlcvRangeRow,
   type StrategyMatrixResponse,
   type StrategyMatrixRow,
   type StrategyTradeRow,
 } from "../api/client";
+import { useBacktestJobStore } from "../store/backtestJobStore";
 
 type PeriodMode = "lookback" | "dates";
 
@@ -16,15 +17,6 @@ const YEAR_PRESETS = [
   { id: "2025", start: "2025-01-01", end: "2025-12-31", label: "2025" },
   { id: "2026ytd", start: "2026-01-01", end: "", label: "2026 YTD" },
 ] as const;
-
-type RunProgress = {
-  done: number;
-  total: number;
-  current: string;
-  startedAt: number;
-  /** Rolling average ms per completed cell */
-  avgMsPerCell: number | null;
-};
 
 const SYMBOL_OPTIONS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"] as const;
 const TF_OPTIONS = ["15m", "1h", "4h"] as const;
@@ -124,13 +116,18 @@ export function BacktestPanel() {
   const [riskUsd, setRiskUsd] = useState(20);
   const [takerFeePct, setTakerFeePct] = useState(0.04);
   const [makerFeePct, setMakerFeePct] = useState(0.02);
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState<RunProgress | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<StrategyMatrixResponse | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<OhlcvRangeRow[]>([]);
+
+  const job = useBacktestJobStore((s) => s.job);
+  const storeError = useBacktestJobStore((s) => s.error);
+  const active = useBacktestJobStore((s) => s.active);
+  const startJob = useBacktestJobStore((s) => s.start);
+  const cancelJob = useBacktestJobStore((s) => s.cancel);
+  const setStoreError = useBacktestJobStore((s) => s.setError);
+
+  const loading = active || job?.status === "running";
 
   const limit = useMemo(() => {
     // Date mode loads by calendar bounds from Postgres (full series slice).
@@ -193,133 +190,134 @@ export function BacktestPanel() {
     return () => window.clearInterval(id);
   }, [loading]);
 
+  const result: StrategyMatrixResponse | null = useMemo(() => {
+    if (!job || job.status === "idle") return null;
+    if (!job.rows?.length && job.status === "running") {
+      return {
+        status: "OK",
+        playbook: job.playbook || undefined,
+        combination_id: job.combination_id,
+        combination_name: job.combination_name || undefined,
+        direction: job.direction,
+        limit: job.limit,
+        risk_usd: job.risk_usd,
+        symbols: job.symbols,
+        timeframes: job.timeframes,
+        rows: [],
+        elapsed_seconds: job.elapsed_seconds ?? undefined,
+        disclaimer: job.disclaimer || undefined,
+      };
+    }
+    if (!job.rows?.length && job.status !== "done" && job.status !== "cancelled") {
+      return null;
+    }
+    if (!job.rows?.length && (job.status === "done" || job.status === "cancelled")) {
+      return {
+        status: job.status === "cancelled" ? "CANCELLED" : "OK",
+        playbook: job.playbook || undefined,
+        combination_id: job.combination_id,
+        combination_name: job.combination_name || undefined,
+        direction: job.direction,
+        limit: job.limit,
+        risk_usd: job.risk_usd,
+        symbols: job.symbols,
+        timeframes: job.timeframes,
+        rows: [],
+        elapsed_seconds: job.elapsed_seconds ?? undefined,
+        disclaimer: job.disclaimer || undefined,
+      };
+    }
+    return {
+      status: job.status === "error" ? "ERROR" : "OK",
+      playbook: job.playbook || undefined,
+      combination_id: job.combination_id,
+      combination_name: job.combination_name || undefined,
+      direction: job.direction,
+      limit: job.limit,
+      risk_usd: job.risk_usd,
+      symbols: job.symbols,
+      timeframes: job.timeframes,
+      rows: job.rows || [],
+      elapsed_seconds: job.elapsed_seconds ?? undefined,
+      disclaimer: job.disclaimer || undefined,
+      reason: job.error || undefined,
+    };
+  }, [job]);
+
+  const error = storeError || (job?.status === "error" ? job.error || null : null);
+
+  // Auto-select first non-empty row when results arrive.
+  useEffect(() => {
+    const rows = result?.rows ?? [];
+    if (!rows.length) return;
+    if (selectedKey && rows.some((r) => `${r.symbol}:${r.timeframe}` === selectedKey)) {
+      return;
+    }
+    const firstWithTrades = rows.find(
+      (r) => (r.trades?.length || 0) > 0 || r.sample_size > 0
+    );
+    const pick = firstWithTrades || rows[0];
+    if (pick) setSelectedKey(`${pick.symbol}:${pick.timeframe}`);
+  }, [result?.rows, selectedKey]);
+
   const progressView = useMemo(() => {
-    if (!progress || progress.total <= 0) return null;
-    const pct = Math.min(100, Math.round((progress.done / progress.total) * 100));
-    const elapsedMs = Math.max(0, nowMs - progress.startedAt);
-    const remaining = Math.max(0, progress.total - progress.done);
+    // Show as soon as a run is active (optimistic store job) — not only after
+    // the first successful poll, so % is never blank while "Running…".
+    if (!loading || !job?.total_cells) return null;
+    if (job.status !== "running" && !active) return null;
+    const done = job.done_cells ?? 0;
+    const total = job.total_cells;
+    const rawPct =
+      job.pct != null && Number.isFinite(job.pct)
+        ? Number(job.pct)
+        : (done / total) * 100;
+    const pctNum = Math.min(100, rawPct);
+    const pct =
+      pctNum > 0 && pctNum < 10
+        ? Number(pctNum.toFixed(1))
+        : Math.round(pctNum);
+    const startedMs = job.started_at ? Date.parse(job.started_at) : NaN;
+    const elapsedMs = Number.isFinite(startedMs)
+      ? Math.max(0, nowMs - startedMs)
+      : (job.elapsed_seconds ?? 0) * 1000;
+    const remaining = Math.max(0, total - done);
     let etaMs: number | null = null;
-    if (progress.done > 0 && progress.avgMsPerCell != null) {
-      etaMs = progress.avgMsPerCell * remaining;
-    } else if (progress.done > 0) {
-      etaMs = (elapsedMs / progress.done) * remaining;
+    if (done > 0 && elapsedMs > 0) {
+      etaMs = (elapsedMs / done) * remaining;
     }
     return {
       pct,
-      done: progress.done,
-      total: progress.total,
-      current: progress.current,
+      done,
+      total,
+      current: job.current || "",
       elapsedLabel: formatDuration(elapsedMs),
       etaLabel: etaMs == null ? "…" : formatDuration(etaMs),
     };
-  }, [progress, nowMs]);
+  }, [job, nowMs, loading, active]);
 
   const run = useCallback(async () => {
     if (!symbols.length || !timeframes.length) {
-      setError("Pick at least one symbol and timeframe");
+      setStoreError("Pick at least one symbol and timeframe");
       return;
     }
     if (periodMode === "dates" && !start && !end) {
-      setError("Custom dates mode needs a start and/or end day (UTC)");
+      setStoreError("Custom dates mode needs a start and/or end day (UTC)");
       return;
     }
-    const cells = symbols.flatMap((symbol) =>
-      timeframes.map((timeframe) => ({ symbol, timeframe }))
-    );
-    const startedAt = Date.now();
-    setLoading(true);
-    setError(null);
     setSelectedKey(null);
-    setResult(null);
-    setProgress({
-      done: 0,
-      total: cells.length,
-      current: `${cells[0].symbol} ${cells[0].timeframe}`,
-      startedAt,
-      avgMsPerCell: null,
+    await startJob({
+      symbols,
+      timeframes,
+      direction,
+      combination_id: "COMBO_02",
+      limit,
+      risk_usd: riskUsd,
+      taker_fee_pct: takerFeePct,
+      maker_fee_pct: makerFeePct,
+      include_trades: true,
+      start_date: effectiveStart,
+      end_date: effectiveEnd,
     });
-
-    const collected: StrategyMatrixRow[] = [];
-    let meta: StrategyMatrixResponse | null = null;
-    let cellDurations = 0;
-
-    try {
-      for (let i = 0; i < cells.length; i++) {
-        const { symbol, timeframe } = cells[i];
-        setProgress((p) =>
-          p
-            ? {
-                ...p,
-                current: `${symbol} ${timeframe}`,
-                done: i,
-              }
-            : p
-        );
-        const cellStarted = Date.now();
-        const payload = await fetchLongStrategyBacktest({
-          symbols: [symbol],
-          timeframes: [timeframe],
-          direction,
-          combination_id: "COMBO_02",
-          limit,
-          risk_usd: riskUsd,
-          taker_fee_pct: takerFeePct,
-          maker_fee_pct: makerFeePct,
-          include_trades: true,
-          start_date: effectiveStart,
-          end_date: effectiveEnd,
-        });
-        cellDurations += Date.now() - cellStarted;
-
-        if (payload.status === "NOT_FOUND" || payload.status === "ERROR") {
-          throw new Error(payload.reason || payload.status);
-        }
-        meta = payload;
-        for (const row of payload.rows || []) collected.push(row);
-
-        const done = i + 1;
-        setProgress({
-          done,
-          total: cells.length,
-          current:
-            done < cells.length
-              ? `${cells[done].symbol} ${cells[done].timeframe}`
-              : "Finishing",
-          startedAt,
-          avgMsPerCell: cellDurations / done,
-        });
-        // Show partial matrix as cells finish.
-        setResult({
-          ...payload,
-          rows: [...collected],
-          symbols,
-          timeframes,
-          elapsed_seconds: (Date.now() - startedAt) / 1000,
-        });
-      }
-
-      const firstWithTrades = collected.find(
-        (r) => (r.trades?.length || 0) > 0 || r.sample_size > 0
-      );
-      if (firstWithTrades) {
-        setSelectedKey(`${firstWithTrades.symbol}:${firstWithTrades.timeframe}`);
-      }
-      if (meta) {
-        setResult({
-          ...meta,
-          rows: collected,
-          symbols,
-          timeframes,
-          elapsed_seconds: (Date.now() - startedAt) / 1000,
-        });
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Backtest failed");
-      if (!collected.length) setResult(null);
-    } finally {
-      setLoading(false);
-      setProgress(null);
-    }
   }, [
     symbols,
     timeframes,
@@ -333,6 +331,8 @@ export function BacktestPanel() {
     end,
     effectiveStart,
     effectiveEnd,
+    startJob,
+    setStoreError,
   ]);
 
   const rows = result?.rows ?? [];
@@ -680,11 +680,20 @@ export function BacktestPanel() {
                   ? "Running…"
                   : "Run backtest"}
             </button>
+            {loading ? (
+              <button
+                type="button"
+                onClick={() => void cancelJob()}
+                className="rounded border border-rose-500/40 px-3 py-1.5 text-sm text-rose-200 hover:bg-rose-500/10"
+              >
+                Cancel
+              </button>
+            ) : null}
           </div>
           <div className="mt-1 font-mono text-[11px] text-terminal-muted">
             {periodMode === "dates"
-              ? `Date window ${effectiveStart || "…"} → ${effectiveEnd || "…"} · ${symbols.length}×${timeframes.length} cells`
-              : `Using limit=${limit} bars · ${symbols.length}×${timeframes.length} cells`}
+              ? `Date window ${effectiveStart || "…"} → ${effectiveEnd || "…"} · ${symbols.length}×${timeframes.length} cells · runs in background`
+              : `Using limit=${limit} bars · ${symbols.length}×${timeframes.length} cells · runs in background`}
           </div>
           {coverage.length ? (
             <div className="mt-1 font-mono text-[11px] text-terminal-muted">
@@ -710,10 +719,18 @@ export function BacktestPanel() {
                 ))}
               </ul>
               <div className="mt-1 text-amber-100/80">
-                Backfill first, e.g.{" "}
-                <code className="font-mono">
-                  python scripts/expand_ohlcv_history.py --until 2023-01-01 --symbols BTCUSDT,ETHUSDT,SOLUSDT --tfs 15m,1h
-                </code>
+                <Link
+                  to={`/ohlcv-history?symbols=${encodeURIComponent(
+                    symbols.join(",")
+                  )}&tfs=${encodeURIComponent(timeframes.join(","))}&until=${encodeURIComponent(
+                    start || "2023-01-01"
+                  )}`}
+                  className="font-semibold text-terminal-accent underline underline-offset-2 hover:text-terminal-text"
+                >
+                  Open OHLCV History tab
+                </Link>
+                {" "}to fetch missing range into DB
+                {start ? ` (until ${start})` : ""}.
               </div>
             </div>
           ) : null}
@@ -722,6 +739,7 @@ export function BacktestPanel() {
               <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
                 <span className="text-terminal-accent">
                   {progressView.pct}% · {progressView.done}/{progressView.total} cells
+                  <span className="text-terminal-muted"> · background</span>
                 </span>
                 <span className="text-terminal-muted">
                   elapsed {progressView.elapsedLabel} · ETA {progressView.etaLabel}
@@ -736,8 +754,8 @@ export function BacktestPanel() {
               <div className="mt-1.5 font-mono text-[11px] text-terminal-muted">
                 Running {progressView.current}
                 {progressView.done === 0
-                  ? " — first cell can take 1–3 min (structure scan); % updates when it finishes"
-                  : ""}
+                  ? " — first cell can take 1–3 min (structure scan); safe to leave this tab"
+                  : " — safe to leave this tab"}
               </div>
             </div>
           ) : null}

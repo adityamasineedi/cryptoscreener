@@ -1,9 +1,10 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useOhlcvExpandStore } from "../store/ohlcvExpandStore";
 
 const items = [
   { to: "/", label: "Screener", short: "Sc" },
   { to: "/health", label: "Data Health", short: "DH" },
+  { to: "/diagnostics", label: "System Diagnostics", short: "Sy" },
   { to: "/bos-research", label: "BOS Research", short: "BR" },
   { to: "/bos-strategy-research", label: "BOS Strategies", short: "BS" },
   { to: "/paper", label: "Paper Trade", short: "Pt" },
@@ -23,6 +24,7 @@ export function Sidebar({
   onToggle: () => void;
 }) {
   const expandActive = useOhlcvExpandStore((s) => s.active);
+  const location = useLocation();
 
   return (
     <aside
@@ -89,17 +91,22 @@ export function Sidebar({
             key={item.to}
             to={item.to}
             title={item.label}
-            className={({ isActive }) =>
-              `rounded-md text-sm transition ${
+            end={item.to === "/"}
+            className={({ isActive }) => {
+              const active =
+                isActive ||
+                (item.to === "/diagnostics" &&
+                  location.pathname.startsWith("/diagnostics"));
+              return `rounded-md text-sm transition ${
                 collapsed
                   ? "flex h-9 items-center justify-center px-1 font-medium"
                   : "px-3 py-2"
               } ${
-                isActive
+                active
                   ? "bg-terminal-accent/15 text-terminal-accent"
                   : "text-terminal-muted hover:bg-white/5 hover:text-terminal-text"
-              }`
-            }
+              }`;
+            }}
           >
             {collapsed ? (
               item.short

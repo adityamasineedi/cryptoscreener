@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from app.core.logging import get_logger
-from app.models.schemas import MarkPriceUpdate, SymbolInfo, TickerUpdate
+from app.models.schemas import DataStatus, MarkPriceUpdate, SymbolInfo, TickerUpdate
 
 logger = get_logger("market_store")
 
@@ -204,6 +204,45 @@ class MarketDataStore:
 
     def live_ticker_count(self) -> int:
         return len(self.tickers)
+
+    def hydrate_funding_from_rows(self, rows: list[dict[str, Any]]) -> int:
+        """Seed mark/funding from DB when WS has not filled the symbol yet."""
+        if not rows:
+            return 0
+        n = 0
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            sym = str(r.get("symbol") or "").upper()
+            if not sym or sym in self.mark_prices:
+                continue
+            fr = r.get("funding_rate")
+            mp = r.get("mark_price")
+            if fr is None and mp is None:
+                continue
+            ts = r.get("time") or datetime.now(timezone.utc)
+            if isinstance(ts, str):
+                try:
+                    ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                except ValueError:
+                    ts = datetime.now(timezone.utc)
+            if isinstance(ts, datetime) and ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            try:
+                self.mark_prices[sym] = MarkPriceUpdate(
+                    symbol=sym,
+                    mark_price=float(mp) if mp is not None else 0.0,
+                    funding_rate=float(fr) if fr is not None else None,
+                    timestamp=ts,
+                    source=str(r.get("source") or "postgresql"),
+                    status=DataStatus.CACHED,
+                )
+                n += 1
+            except Exception:  # noqa: BLE001
+                continue
+        if n:
+            logger.info("funding_hydrated_from_db", symbols=n)
+        return n
 
 
 market_store = MarketDataStore()

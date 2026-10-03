@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable
 
 from app.core.logging import get_logger
+from app.services.paper_risk import PaperRiskPolicy, evaluate_paper_entry_risk, policy_from_settings
 from app.signals.risk_engine import position_size
 from app.signals.schemas import SignalStatus
 
@@ -26,6 +27,12 @@ ENTRY_STATUSES = {
 # Research Path A — Trend + BOS (aligned with LONG_STRATEGY §4.1 / COMBO_02)
 PATH_A = "path_a"
 PATH_B = "path_b"
+
+# Do not open paper trades on stale / incomplete OHLCV tips
+_STALE_OHLCV = frozenset({"TRAILING_STALE", "STALE", "WAITING", "UNAVAILABLE"})
+
+# Long may open slightly below planned entry (spread), but not deep into stop risk
+_MAX_ADVERSE_ENTRY_FRAC = 0.10
 
 PersistFn = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -68,6 +75,7 @@ class PaperTradeEngine:
         max_closed: int = 200,
         entry_mode: str = PATH_A,
         min_rr: float = 2.0,
+        risk_policy: PaperRiskPolicy | None = None,
     ) -> None:
         self.starting_equity = float(starting_equity)
         self.risk_percent = float(risk_percent)
@@ -76,6 +84,7 @@ class PaperTradeEngine:
         mode = str(entry_mode or PATH_A).strip().lower()
         self.entry_mode = PATH_B if mode == PATH_B else PATH_A
         self.min_rr = float(min_rr)
+        self.risk_policy = risk_policy or PaperRiskPolicy()
         self.realized_pnl = 0.0
         self._open: dict[str, PaperPosition] = {}
         self._closed: list[PaperPosition] = []
@@ -83,6 +92,7 @@ class PaperTradeEngine:
         self._lock = threading.RLock()
         self._persist: PersistFn | None = None
         self._pending_persist: list[dict[str, Any]] = []
+        self._last_skip_reason: str | None = None
 
     def set_persist(self, fn: PersistFn | None) -> None:
         self._persist = fn
@@ -121,6 +131,116 @@ class PaperTradeEngine:
             self._opened_keys.clear()
             self.realized_pnl = 0.0
 
+    def hydrate_from_rows(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        """Restore open/closed book from DB rows after restart (no re-persist)."""
+        if not rows:
+            return {"open": 0, "closed": 0}
+
+        def _iso(v: Any) -> str | None:
+            if v is None:
+                return None
+            if isinstance(v, datetime):
+                if v.tzinfo is None:
+                    v = v.replace(tzinfo=timezone.utc)
+                return v.isoformat()
+            s = str(v).strip()
+            return s or None
+
+        def _f(v: Any) -> float | None:
+            if v is None or v == "":
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        closed_rows: list[PaperPosition] = []
+        realized = 0.0
+        keys: set[str] = set()
+
+        with self._lock:
+            # Only hydrate into an empty book — never clobber a live session
+            if self._open or self._closed:
+                return {
+                    "open": len(self._open),
+                    "closed": len(self._closed),
+                    "skipped": 1,
+                }
+
+            for raw in rows:
+                if not isinstance(raw, dict):
+                    continue
+                sym = str(raw.get("symbol") or "").upper()
+                pid = str(raw.get("id") or "").strip()
+                if not sym or not pid:
+                    continue
+                status = str(raw.get("status") or "").upper()
+                snippet = raw.get("signal_snippet") or {}
+                if isinstance(snippet, str):
+                    try:
+                        import json
+
+                        snippet = json.loads(snippet)
+                    except Exception:  # noqa: BLE001
+                        snippet = {}
+                if not isinstance(snippet, dict):
+                    snippet = {}
+
+                pos = PaperPosition(
+                    id=pid,
+                    symbol=sym,
+                    side=str(raw.get("side") or "LONG"),
+                    status=status or "CLOSED",
+                    entry_price=float(raw.get("entry_price") or 0),
+                    stop_price=float(raw.get("stop_price") or 0),
+                    tp1_price=_f(raw.get("tp1_price")),
+                    quantity=float(raw.get("quantity") or 0),
+                    risk_usd=float(raw.get("risk_usd") or 0),
+                    opened_at=_iso(raw.get("opened_at")) or "",
+                    closed_at=_iso(raw.get("closed_at")),
+                    exit_price=_f(raw.get("exit_price")),
+                    exit_reason=(
+                        str(raw.get("exit_reason")) if raw.get("exit_reason") else None
+                    ),
+                    pnl_usd=_f(raw.get("pnl_usd")),
+                    r_multiple=_f(raw.get("r_multiple")),
+                    source_candle_ts=(
+                        str(raw.get("source_candle_ts"))
+                        if raw.get("source_candle_ts")
+                        else None
+                    ),
+                    timeframe=str(raw.get("timeframe") or "15m"),
+                    signal_snippet=snippet,
+                )
+
+                path = str(snippet.get("path") or "PATH_A")
+                bos_level = snippet.get("bos_level")
+                src = pos.source_candle_ts or pos.opened_at or ""
+                keys.add(f"{sym}|{src}|{path}|{bos_level if bos_level is not None else ''}")
+
+                if status == "OPEN":
+                    # Newest first from SQL — keep first per symbol
+                    if sym not in self._open:
+                        self._open[sym] = pos
+                else:
+                    closed_rows.append(pos)
+                    if pos.pnl_usd is not None and status == "CLOSED":
+                        realized += float(pos.pnl_usd)
+
+            # Newest closed first
+            closed_rows.sort(key=lambda p: p.closed_at or p.opened_at or "", reverse=True)
+            self._closed = closed_rows[: self.max_closed]
+            self._opened_keys = keys
+            self.realized_pnl = realized
+
+        logger.info(
+            "paper_hydrated_from_db",
+            open=len(self._open),
+            closed=len(self._closed),
+            realized_pnl=round(realized, 4),
+        )
+        return {"open": len(self._open), "closed": len(self._closed)}
+
     def status(self) -> dict[str, Any]:
         with self._lock:
             open_risk = sum(p.risk_usd for p in self._open.values())
@@ -141,6 +261,8 @@ class PaperTradeEngine:
                     if self.entry_mode == PATH_A
                     else "Path B · full LONG_ENTRY_CANDIDATE"
                 ),
+                "risk_policy": self.risk_policy.to_dict(),
+                "last_skip_reason": self._last_skip_reason,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -218,7 +340,46 @@ class PaperTradeEngine:
             logger.info("paper_skip_bad_stop", symbol=sym, entry=entry_price, stop=stop_price)
             return None
 
+        freshness = str(payload.get("ohlcv_freshness") or "").upper()
+        if freshness in _STALE_OHLCV:
+            logger.info(
+                "paper_skip_stale_ohlcv",
+                symbol=sym,
+                path=path_label,
+                ohlcv_freshness=freshness,
+            )
+            return None
+
+        live = _live_price(sym)
+        if live is None or live <= 0:
+            # Cannot validate against market — avoid opening into a ghost fill
+            logger.info("paper_skip_no_live_price", symbol=sym, path=path_label)
+            return None
+        if live <= stop_price:
+            logger.info(
+                "paper_skip_already_stopped",
+                symbol=sym,
+                path=path_label,
+                live=live,
+                stop=stop_price,
+                entry=entry_price,
+            )
+            return None
         risk_dist = entry_price - stop_price
+        if risk_dist > 0 and live < entry_price:
+            adverse_frac = (entry_price - live) / risk_dist
+            if adverse_frac > _MAX_ADVERSE_ENTRY_FRAC:
+                logger.info(
+                    "paper_skip_missed_entry",
+                    symbol=sym,
+                    path=path_label,
+                    live=live,
+                    entry=entry_price,
+                    stop=stop_price,
+                    adverse_frac=round(adverse_frac, 3),
+                )
+                return None
+
         if tp1 is None:
             # Synthesize min_rr target when engine didn't attach TP1 yet
             tp1 = entry_price + self.min_rr * risk_dist
@@ -235,21 +396,77 @@ class PaperTradeEngine:
                 )
                 return None
 
-        qty = _f(risk.get("final_quantity")) or 0.0
-        if qty <= 0:
-            sized = position_size(
-                account_equity=self.equity,
-                risk_percent=self.risk_percent,
-                entry=entry_price,
-                stop=stop_price,
+        with self._lock:
+            open_count = len(self._open)
+            open_risk = sum(p.risk_usd for p in self._open.values())
+            if sym in self._open:
+                return None
+            if dedupe_key in self._opened_keys:
+                return None
+
+        gate = evaluate_paper_entry_risk(
+            sym,
+            policy=self.risk_policy,
+            open_count=open_count,
+            open_risk_usd=open_risk,
+            equity=self.equity,
+        )
+        if not gate.ok:
+            self._last_skip_reason = f"{sym}:{gate.reason}"
+            logger.info(
+                "paper_skip_risk_gate",
+                symbol=sym,
+                path=path_label,
+                reason=gate.reason,
+                group=gate.group,
+                mcap=gate.mcap,
+                quote_volume_24h=gate.quote_volume_24h,
             )
-            qty = float(sized.get("final_quantity") or 0.0)
-            risk_usd = float(sized.get("max_risk_amount") or 0.0)
-        else:
-            risk_usd = abs(entry_price - stop_price) * qty
+            return None
+
+        # Tiered risk % (gates on) — never trust meme-sized setup qty blindly
+        eff_risk_pct = (
+            float(gate.risk_percent)
+            if self.risk_policy.enabled
+            else float(self.risk_percent)
+        )
+        sized = position_size(
+            account_equity=self.equity,
+            risk_percent=eff_risk_pct,
+            entry=entry_price,
+            stop=stop_price,
+        )
+        qty = float(sized.get("final_quantity") or 0.0)
+        risk_usd = float(sized.get("max_risk_amount") or 0.0)
+        if not self.risk_policy.enabled:
+            # Legacy: allow setup-provided quantity when gates disabled
+            setup_qty = _f(risk.get("final_quantity")) or 0.0
+            if setup_qty > 0:
+                qty = setup_qty
+                risk_usd = abs(entry_price - stop_price) * qty
 
         if qty <= 0:
             logger.info("paper_skip_zero_qty", symbol=sym)
+            return None
+
+        # Re-check book headroom with planned risk
+        gate2 = evaluate_paper_entry_risk(
+            sym,
+            policy=self.risk_policy,
+            open_count=open_count,
+            open_risk_usd=open_risk,
+            equity=self.equity,
+            planned_risk_usd=risk_usd,
+        )
+        if not gate2.ok:
+            self._last_skip_reason = f"{sym}:{gate2.reason}"
+            logger.info(
+                "paper_skip_risk_gate",
+                symbol=sym,
+                path=path_label,
+                reason=gate2.reason,
+                group=gate2.group,
+            )
             return None
 
         with self._lock:
@@ -272,6 +489,10 @@ class PaperTradeEngine:
                 timeframe=setup_tf,
                 signal_snippet={
                     "status": status,
+                    "asset_group": gate.group,
+                    "risk_percent": eff_risk_pct,
+                    "mcap": gate.mcap,
+                    "quote_volume_24h": gate.quote_volume_24h,
                     "path": path_label,
                     "direction": direction or "LONG",
                     "calculated_at": payload.get("calculated_at"),
@@ -282,6 +503,7 @@ class PaperTradeEngine:
             self._open[sym] = pos
             self._opened_keys.add(dedupe_key)
             self._queue_persist(pos)
+            self._last_skip_reason = None
             logger.info(
                 "paper_opened",
                 symbol=sym,
@@ -290,7 +512,16 @@ class PaperTradeEngine:
                 stop=stop_price,
                 tp1=tp1,
                 qty=qty,
+                group=gate.group,
+                risk_percent=eff_risk_pct,
+                risk_usd=round(risk_usd, 4),
             )
+            try:
+                from app.services.alerts import get_alert_feed
+
+                get_alert_feed().observe_paper_open(pos)
+            except Exception:  # noqa: BLE001
+                pass
             return pos
 
     def tick(self, prices: dict[str, float]) -> list[PaperPosition]:
@@ -306,11 +537,11 @@ class PaperTradeEngine:
                 if risk_per > 0:
                     pos.unrealized_pnl_usd = (px - pos.entry_price) * pos.quantity
                     pos.unrealized_r = (px - pos.entry_price) / risk_per
-                # Long exits
+                # Long exits — paper stop/limit fills at the planned level (not gap mark)
                 if px <= pos.stop_price:
-                    closed.append(self._close_locked(pos, px, "STOP"))
+                    closed.append(self._close_locked(pos, float(pos.stop_price), "STOP"))
                 elif pos.tp1_price is not None and px >= pos.tp1_price:
-                    closed.append(self._close_locked(pos, px, "TP1"))
+                    closed.append(self._close_locked(pos, float(pos.tp1_price), "TP1"))
         return closed
 
     def _cancel_open(self, symbol: str, *, reason: str) -> PaperPosition | None:
@@ -328,6 +559,12 @@ class PaperTradeEngine:
             self._closed.insert(0, pos)
             self._trim_closed()
             self._queue_persist(pos)
+            try:
+                from app.services.alerts import get_alert_feed
+
+                get_alert_feed().observe_paper_close(pos)
+            except Exception:  # noqa: BLE001
+                pass
             return pos
 
     def _close_locked(self, pos: PaperPosition, exit_price: float, reason: str) -> PaperPosition:
@@ -358,6 +595,12 @@ class PaperTradeEngine:
             pnl=round(pnl, 4),
             r=round(r_mult, 4),
         )
+        try:
+            from app.services.alerts import get_alert_feed
+
+            get_alert_feed().observe_paper_close(pos)
+        except Exception:  # noqa: BLE001
+            pass
         return pos
 
     def _trim_closed(self) -> None:
@@ -439,6 +682,7 @@ def get_paper_trade_engine(
     risk_percent: float = 0.02,
     enabled: bool = True,
     entry_mode: str = PATH_A,
+    risk_policy: PaperRiskPolicy | None = None,
 ) -> PaperTradeEngine:
     global _engine
     if _engine is None:
@@ -447,10 +691,14 @@ def get_paper_trade_engine(
             risk_percent=risk_percent,
             enabled=enabled,
             entry_mode=entry_mode,
+            risk_policy=risk_policy or policy_from_settings(),
         )
-    elif entry_mode:
-        mode = str(entry_mode).strip().lower()
-        _engine.entry_mode = PATH_B if mode == PATH_B else PATH_A
+    else:
+        if entry_mode:
+            mode = str(entry_mode).strip().lower()
+            _engine.entry_mode = PATH_B if mode == PATH_B else PATH_A
+        if risk_policy is not None:
+            _engine.risk_policy = risk_policy
     return _engine
 
 

@@ -126,8 +126,14 @@ def evaluate_strategy_at_bar(
     htf: Mapping[str, Any] | None = None,
     demand_zone: tuple[float, float] | None = None,
     supply_zone: tuple[float, float] | None = None,
+    structure_override: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate one strategy at historical bar N with as_of_index = N only."""
+    """Evaluate one strategy at historical bar N with as_of_index = N only.
+
+    structure_override (research lifecycle): supply frozen bos/impulse and
+    lifecycle pullback/retest evaluated at as_of_index. Swings/trend still
+    come from production analyze_timeframe at as_of (no look-ahead).
+    """
     cfg = local_cfg or _clone_signal_config(signal_config, research_config)
     local_engine = signal_engine or SignalEngine(cfg)
 
@@ -145,6 +151,17 @@ def evaluate_strategy_at_bar(
     pullback = tf_analysis.get("pullback")
     retest = tf_analysis.get("retest")
     swings = tf_analysis.get("_swings_objs") or []
+
+    override = dict(structure_override or {})
+    if override:
+        if override.get("bos") is not None:
+            bos = override["bos"]
+        if override.get("impulse") is not None:
+            impulse = override["impulse"]
+        if override.get("pullback") is not None:
+            pullback = override["pullback"]
+        if override.get("retest") is not None:
+            retest = override["retest"]
 
     if not _bos_confirmed(bos):
         return {
@@ -182,21 +199,24 @@ def evaluate_strategy_at_bar(
             sd_engine=sd_engine
             or SupplyDemandEngine(get_settings().indicators_config),
         )
-        # Re-run pullback with zones for S/D confluence accuracy
-        tf_analysis = local_engine.analyze_timeframe(
-            symbol,
-            timeframe,
-            candles,
-            demand_zone=demand_zone,
-            supply_zone=supply_zone,
-            as_of_index=as_of_index,
-        )
-        trend = tf_analysis.get("trend") or {}
-        bos = tf_analysis.get("bos")
-        impulse = tf_analysis.get("impulse")
-        pullback = tf_analysis.get("pullback")
-        retest = tf_analysis.get("retest")
-        swings = tf_analysis.get("_swings_objs") or []
+        if not override:
+            # Same-bar path: re-run pullback with zones for S/D confluence
+            tf_analysis = local_engine.analyze_timeframe(
+                symbol,
+                timeframe,
+                candles,
+                demand_zone=demand_zone,
+                supply_zone=supply_zone,
+                as_of_index=as_of_index,
+            )
+            trend = tf_analysis.get("trend") or {}
+            bos = tf_analysis.get("bos")
+            impulse = tf_analysis.get("impulse")
+            pullback = tf_analysis.get("pullback")
+            retest = tf_analysis.get("retest")
+            swings = tf_analysis.get("_swings_objs") or []
+        # Lifecycle path: keep frozen bos/impulse/pullback/retest; zones
+        # only affect _sd_confluence below (as_of truncated).
 
     if htf is None:
         htf = htf_trends_for_setup_bar(
@@ -254,6 +274,11 @@ def evaluate_strategy_at_bar(
         required.append("htf_alignment")
 
     gates_pass = all(gates[k] for k in required)
+    bos_timestamp = (
+        override.get("bos_timestamp")
+        or (bos or {}).get("break_timestamp")
+        or signal_time
+    )
     base_payload = {
         "status": "NO_SETUP",
         "direction": direction,
@@ -268,7 +293,7 @@ def evaluate_strategy_at_bar(
         "trend_15m": htf.get("trend_15m"),
         "trend_5m": htf.get("trend_5m"),
         "bos_direction": (bos or {}).get("direction"),
-        "bos_timestamp": signal_time,
+        "bos_timestamp": bos_timestamp,
         "impulse_state": (impulse or {}).get("quality")
         or ("IMPULSE" if _impulse_confirmed(impulse) else "NONE"),
         "pullback_state": (pullback or {}).get("pullback_state"),
@@ -277,6 +302,10 @@ def evaluate_strategy_at_bar(
         else str((retest or {}).get("state") or "NONE"),
         "sd_state": sd_state,
         "regime": research_config.regime_mode,
+        "lifecycle_id": override.get("lifecycle_id"),
+        "impulse_timestamp": override.get("impulse_timestamp"),
+        "pullback_timestamp": override.get("pullback_timestamp"),
+        "retest_timestamp": override.get("retest_timestamp"),
         "note": "RESEARCH setup — not a live signal, not a trade command",
     }
 

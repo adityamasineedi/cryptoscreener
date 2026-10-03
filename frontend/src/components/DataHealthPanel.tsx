@@ -5,6 +5,7 @@ import {
   fetchProviderHealth,
   fetchSystemStats,
 } from "../api/client";
+import { WhyBrokenButton } from "./diagnostics/WhyBrokenButton";
 
 type Coverage = {
   symbols: number;
@@ -16,6 +17,7 @@ type Coverage = {
   open_interest: Record<string, number>;
   liquidations: Record<string, number>;
   fundamentals: Record<string, Record<string, number>>;
+  sentiment?: Record<string, number>;
   coverage_goals?: {
     targets?: Record<string, { pct?: number; goal_pct?: number; met?: boolean | null; goal?: string }>;
     all_measured_targets_met?: boolean;
@@ -135,14 +137,39 @@ export function DataHealthPanel() {
   const total = cov?.symbols ?? 0;
   const ohlcv = cov?.ohlcv || {};
   const goals = cov?.coverage_goals?.targets || {};
-  const provList = (providers?.providers as Array<{ name: string; status: string }>) || [];
+  const provList =
+    (providers?.providers as Array<{
+      name?: string;
+      provider?: string;
+      status: string;
+      assets_mapped?: number;
+      assets_received?: number;
+      assets_unmapped?: number;
+      last_success?: string;
+      last_success_at?: string;
+    }>) || [];
   const liq = (providers?.liquidations as { liquidation_status?: string }) || {};
   const fund = (providers?.fundamentals as { coingecko_cooldown?: boolean }) || {};
+  const lunar =
+    (providers?.free_social as Record<string, unknown> | undefined) ||
+    (providers?.sentiment as Record<string, unknown> | undefined) ||
+    (providers?.lunarcrush as Record<string, unknown> | undefined) ||
+    {};
   const reasons = cov?.fundamental_reasons || {};
+  const sentCov = (cov?.sentiment || {}) as {
+    live?: number;
+    cached?: number;
+    stale?: number;
+    waiting?: number;
+    unavailable?: number;
+  };
 
   const providerStatus = (name: string) => {
-    const hit = provList.find((p) => p.name === name);
+    const hit = provList.find((p) => p.name === name || p.provider === name);
     if (name === "coingecko" && fund.coingecko_cooldown) return "RATE LIMITED";
+    if (name === "lunarcrush" || name === "sentiment" || name === "free_social") {
+      return String(lunar.status || hit?.status || "WAITING");
+    }
     return hit?.status || "UNKNOWN";
   };
 
@@ -195,8 +222,11 @@ export function DataHealthPanel() {
 
       <section className="mt-5 grid max-w-4xl gap-6 md:grid-cols-2">
         <div className="rounded border border-terminal-border/80 p-3">
-          <div className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
-            OHLCV coverage
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-[11px] uppercase tracking-wide text-terminal-muted">
+              OHLCV coverage
+            </div>
+            <WhyBrokenButton dataset="ohlcv" />
           </div>
           <PctRow label="Symbols" pct={total ? 100 : 0} detail={`${total}`} />
           {(["1d", "4h", "1h", "15m", "5m"] as const).map((tf) => (
@@ -215,7 +245,12 @@ export function DataHealthPanel() {
           ))}
           <PctRow label="1M" pct={tfPct("1m")} rolling detail="top-vol + visible" />
           <div className="my-2 border-t border-terminal-border/50" />
-          <PctRow label="OI" pct={goals.oi?.pct ?? oiPct} detail={`${oiAvail}/${total}`} />
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <PctRow label="OI" pct={goals.oi?.pct ?? oiPct} detail={`${oiAvail}/${total}`} />
+            </div>
+            <WhyBrokenButton dataset="oi" />
+          </div>
           <PctRow
             label="Market Cap"
             pct={total ? (100 * mcapAvail) / total : 0}
@@ -228,8 +263,11 @@ export function DataHealthPanel() {
           />
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className="text-terminal-muted">Liquidations</span>
-            <span className="font-mono text-amber-300">
-              {liq.liquidation_status || "WAITING"}
+            <span className="flex items-center gap-2">
+              <span className="font-mono text-amber-300">
+                {liq.liquidation_status || "WAITING"}
+              </span>
+              <WhyBrokenButton dataset="liquidations" />
             </span>
           </div>
           <div className="mt-3 text-[10px] text-terminal-muted">
@@ -261,6 +299,7 @@ export function DataHealthPanel() {
           <ProviderPill name="Binance" status={providerStatus("binance_rest")} />
           <ProviderPill name="CoinGecko" status={providerStatus("coingecko")} />
           <ProviderPill name="DefiLlama" status={providerStatus("defillama")} />
+          <ProviderPill name="Free Social" status={providerStatus("free_social")} />
           <ProviderPill name="Liquidations" status={liq.liquidation_status || "WAITING"} />
           <ProviderPill
             name="Redis"
@@ -272,6 +311,28 @@ export function DataHealthPanel() {
               String(stats?.database || "disabled").toUpperCase() === "OK" ? "CONNECTED" : "DISABLED"
             }
           />
+          <div className="mt-3 border-t border-terminal-border/60 pt-2 font-mono text-[10px] text-terminal-muted">
+            Sentiment: socialtickers + XOOMAR (free) · {String(lunar.status || "WAITING")}
+            <br />
+            Coverage: {Number(lunar.assets_mapped ?? sentCov.live ?? 0)} /{" "}
+            {Number(lunar.assets_requested ?? total)} mapped
+            {lunar.assets_received != null
+              ? ` · received ${Number(lunar.assets_received)}`
+              : ""}
+            {lunar.socialtickers_received != null
+              ? ` · ST ${Number(lunar.socialtickers_received)}`
+              : ""}
+            {lunar.xoomar_received != null
+              ? ` · XO ${Number(lunar.xoomar_received)}`
+              : ""}
+            <br />
+            Last success:{" "}
+            {String(lunar.last_success_at || lunar.last_success || "—")}
+            <br />
+            Stale: {sentCov.stale ?? 0} · Unavailable:{" "}
+            {Number(lunar.assets_unmapped ?? sentCov.unavailable ?? 0)} · Waiting:{" "}
+            {sentCov.waiting ?? 0}
+          </div>
           {reasons.market_cap ? (
             <div className="mt-3 border-t border-terminal-border/60 pt-2 font-mono text-[10px] text-terminal-muted">
               mcap: covered {reasons.market_cap.covered ?? 0} · not covered{" "}

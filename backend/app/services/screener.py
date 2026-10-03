@@ -10,7 +10,7 @@ from app.engines.signals.entry_exit import EntryExitEngine
 from app.engines.signals.tech_rating import TechRatingEngine
 from app.engines.valuation.engine import ValuationEngine
 from app.ingestion.providers.onchain import OnChainProvider
-from app.ingestion.providers.sentiment import SentimentProvider
+from app.ingestion.providers.sentiment import SentimentProvider, get_sentiment_provider
 from app.models.schemas import DataStatus, FreshValue, ScreenerRow, SymbolInfo
 from app.services.asset_metadata import asset_registry
 from app.services.engine_store import engine_store
@@ -30,7 +30,12 @@ class ScreenerService:
         self.entry_exit = EntryExitEngine(settings.indicators_config)
         self.tech_rating = TechRatingEngine(settings.indicators_config)
         self.onchain = OnChainProvider(settings)
-        self.sentiment = SentimentProvider(settings)
+        orch = get_orchestrator()
+        self.sentiment = (
+            orch.sentiment
+            if orch is not None and getattr(orch, "sentiment", None) is not None
+            else get_sentiment_provider(settings)
+        )
 
     def build_row(self, symbol: SymbolInfo, rank: int | None = None) -> ScreenerRow:
         ticker = self.store.get_ticker(symbol.symbol)
@@ -362,9 +367,10 @@ class ScreenerService:
             or FreshValue.waiting("setup_signal_engine"),
             confirmation_strength=setup_fields.get("confirmation_strength")
             or FreshValue.waiting("setup_signal_engine"),
-            social_dominance=FreshValue.waiting(
-                "sentiment",
-                methodology="Requires configured sentiment provider",
+            social_dominance=(
+                engine_store.get_sentiment_field(symbol.symbol, "social_dominance")
+                if engine_store.sentiment.get(symbol.symbol.upper())
+                else self.sentiment.cached_social_dominance(symbol.symbol)
             ),
             data_status=data_status,
             updated_at=datetime.now(timezone.utc),

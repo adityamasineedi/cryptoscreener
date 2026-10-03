@@ -875,6 +875,87 @@ async def research_ohlcv_expand_cancel() -> dict[str, Any]:
     }
 
 
+@router.get("/research/long-strategy/backtest/job")
+async def research_long_strategy_backtest_job_status() -> dict[str, Any]:
+    """Status of the latest background long-strategy backtest job."""
+    from app.research.backtest_job import backtest_job_service
+
+    out = backtest_job_service.status()
+    out["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return out
+
+
+@router.post("/research/long-strategy/backtest/start")
+async def research_long_strategy_backtest_start(
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any]:
+    """Start a background HL/LH Trend+BOS matrix backtest (survives UI navigation)."""
+    from app.research.backtest_job import backtest_job_service
+
+    def _as_list(v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return [s for s in str(v).split(",") if s.strip()]
+
+    symbols = _as_list(body.get("symbols") or "BTCUSDT,ETHUSDT,SOLUSDT")
+    timeframes = _as_list(body.get("timeframes") or "15m,1h")
+    try:
+        job = await backtest_job_service.start(
+            symbols=symbols,
+            timeframes=timeframes,
+            direction=str(body.get("direction") or "LONG"),
+            combination_id=str(body.get("combination_id") or "COMBO_02"),
+            limit=int(body.get("limit") or 1200),
+            risk_usd=float(body.get("risk_usd") or 20.0),
+            taker_fee_pct=float(body.get("taker_fee_pct") or 0.04),
+            maker_fee_pct=float(body.get("maker_fee_pct") or 0.02),
+            include_trades=bool(body.get("include_trades", True)),
+            start_date=(
+                str(body.get("start_date")).strip()[:10]
+                if body.get("start_date")
+                else None
+            ),
+            end_date=(
+                str(body.get("end_date")).strip()[:10]
+                if body.get("end_date")
+                else None
+            ),
+        )
+    except ValueError as exc:
+        return {
+            "status": "ERROR",
+            "error": str(exc),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except RuntimeError as exc:
+        return {
+            "status": "BUSY",
+            "error": str(exc),
+            "job": backtest_job_service.status(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    return {
+        "status": "STARTED",
+        "job": job,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/research/long-strategy/backtest/cancel")
+async def research_long_strategy_backtest_cancel() -> dict[str, Any]:
+    """Request cancel of the running backtest job (stops between cells)."""
+    from app.research.backtest_job import backtest_job_service
+
+    job = await backtest_job_service.cancel()
+    return {
+        "status": job.get("status", "idle"),
+        "job": job,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/research/long-strategy/backtest")
 async def research_long_strategy_backtest(
     symbols: str = Query(
@@ -1193,6 +1274,161 @@ async def research_bos_strategies_coverage() -> dict[str, Any]:
     )
 
     payload = await get_bos_strategy_comparison_service().data_coverage()
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/bos-strategies/diagnostics")
+async def research_bos_strategies_diagnostics(
+    symbol: str = Query(..., description="Symbol, e.g. BTCUSDT"),
+    timeframe: str = Query(default="15m"),
+    start: str | None = Query(default=None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(default=None, description="End date YYYY-MM-DD"),
+    limit: int | None = Query(default=None, ge=50, le=200000),
+    strategies: str | None = Query(
+        default=None,
+        description="Comma-separated strategy ids (default: S1–S3, CONTROL_C/D)",
+    ),
+) -> dict[str, Any]:
+    """Stage-funnel + retest rejection diagnostic (production engines only).
+
+    Research only — does not change retest logic or run full optimization.
+    """
+    from app.research.bos_strategy_comparison.service import (
+        get_bos_strategy_comparison_service,
+    )
+
+    ids = None
+    if strategies:
+        ids = [s.strip().upper() for s in strategies.split(",") if s.strip()]
+    payload = await get_bos_strategy_comparison_service().diagnostics(
+        symbol=symbol,
+        timeframe=timeframe,
+        start_date=start,
+        end_date=end,
+        limit=limit,
+        strategy_ids=ids,
+    )
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/bos-strategies/pullback-diagnostics")
+async def research_bos_strategies_pullback_diagnostics(
+    symbol: str = Query(..., description="Symbol, e.g. BTCUSDT"),
+    timeframe: str = Query(default="15m"),
+    start: str | None = Query(default=None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(default=None, description="End date YYYY-MM-DD"),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=200000,
+        description="OHLCV load limit, or with lifecycle=true: max lifecycle traces",
+    ),
+    lifecycle: bool = Query(
+        default=False,
+        description="If true, run multi-bar frozen-impulse pullback/retest lifecycle",
+    ),
+) -> dict[str, Any]:
+    """Forensic pullback lifecycle diagnostic (production engines only).
+
+    Research only — does not change pullback rules or run optimization.
+    With lifecycle=true, freezes BOS+impulse and re-evaluates on later candles.
+    """
+    from app.research.bos_strategy_comparison.service import (
+        get_bos_strategy_comparison_service,
+    )
+
+    # When lifecycle=true, `limit` means max traces (OHLCV still date-bounded).
+    ohlcv_limit = None if lifecycle else limit
+    max_traces = int(limit) if lifecycle and limit is not None else (20 if lifecycle else 8)
+    payload = await get_bos_strategy_comparison_service().pullback_diagnostics(
+        symbol=symbol,
+        timeframe=timeframe,
+        start_date=start,
+        end_date=end,
+        limit=ohlcv_limit,
+        max_traces=max_traces,
+        lifecycle=lifecycle,
+    )
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/bos-strategies/s3-htf-sensitivity")
+async def research_bos_strategies_s3_htf_sensitivity(
+    symbols: str | None = Query(
+        default="BTCUSDT,ETHUSDT,SOLUSDT",
+        description="Comma-separated symbols",
+    ),
+    timeframe: str = Query(default="15m"),
+    start: str | None = Query(default=None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(default=None, description="End date YYYY-MM-DD"),
+    include_walk_forward: bool = Query(default=False),
+    reconcile_sep2024: bool = Query(
+        default=True,
+        description="Require Sep 2024 baseline SD/HTF reconciliation before full run",
+    ),
+) -> dict[str, Any]:
+    """Research-only S3 HTF gate sensitivity (variants share pre-HTF path).
+
+    Does not modify production S3 or HTF engines. Does not declare a winner.
+    """
+    from app.research.bos_strategy_comparison.service import (
+        get_bos_strategy_comparison_service,
+    )
+
+    syms = None
+    if symbols:
+        syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    payload = await get_bos_strategy_comparison_service().s3_htf_sensitivity(
+        symbols=syms,
+        timeframe=timeframe,
+        start_date=start,
+        end_date=end,
+        include_walk_forward=include_walk_forward,
+        reconcile_sep2024_window=reconcile_sep2024,
+    )
+    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/bos-strategies/s3-diagnostics")
+async def research_bos_strategies_s3_diagnostics(
+    symbol: str = Query(..., description="Symbol, e.g. BTCUSDT"),
+    timeframe: str = Query(default="15m"),
+    start: str | None = Query(default=None, description="Start date YYYY-MM-DD"),
+    end: str | None = Query(default=None, description="End date YYYY-MM-DD"),
+    direction: str = Query(default="ALL", description="ALL | LONG | SHORT"),
+    limit: int | None = Query(
+        default=100,
+        ge=1,
+        le=500,
+        description="Max lifecycle traces when trace=true",
+    ),
+    trace: bool = Query(
+        default=False,
+        description="If true, include per-lifecycle S/D/HTF/entry traces",
+    ),
+    htf_trace: bool = Query(
+        default=False,
+        description="If true, decompose HTF failure for every S/D PASS survivor",
+    ),
+) -> dict[str, Any]:
+    """Forensic S3 S/D (+ optional HTF) diagnostic (research only).
+
+    Does not change S/D or HTF logic, loosen thresholds, or run optimization.
+    """
+    from app.research.bos_strategy_comparison.service import (
+        get_bos_strategy_comparison_service,
+    )
+
+    payload = await get_bos_strategy_comparison_service().s3_diagnostics(
+        symbol=symbol,
+        timeframe=timeframe,
+        start_date=start,
+        end_date=end,
+        limit=limit,
+        direction=direction,
+        trace=trace,
+        htf_trace=htf_trace,
+    )
     return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 

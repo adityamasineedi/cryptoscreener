@@ -146,6 +146,47 @@ class OIScheduler:
     def get_state(self, symbol: str) -> OIState | None:
         return self._states.get(symbol)
 
+    async def hydrate_from_db(
+        self, history_by_symbol: dict[str, list[tuple[datetime, float]]]
+    ) -> int:
+        """Restore OI history from Postgres so % changes work before first REST poll."""
+        if not history_by_symbol:
+            return 0
+        hydrated = 0
+        for sym, rows in history_by_symbol.items():
+            symbol = str(sym).upper()
+            if not rows:
+                continue
+            st = self._states.setdefault(symbol, OIState(symbol=symbol))
+            if st.history:
+                continue
+            ordered = sorted(rows, key=lambda x: x[0])
+            # Fill all but last, then apply last via normal path (sets FreshValues)
+            for ts, oi in ordered[:-1]:
+                st.history.append(
+                    OISample(
+                        timestamp=ts,
+                        open_interest=float(oi),
+                        price=self.price_lookup(symbol),
+                    )
+                )
+            last_ts, last_oi = ordered[-1]
+            await self._apply_snapshot(
+                symbol,
+                {
+                    "oi": float(last_oi),
+                    "ts": last_ts.isoformat()
+                    if isinstance(last_ts, datetime)
+                    else str(last_ts),
+                    "price": self.price_lookup(symbol),
+                },
+                from_cache=True,
+            )
+            hydrated += 1
+        if hydrated:
+            logger.info("oi_hydrated_from_db", symbols=hydrated)
+        return hydrated
+
     async def start(self) -> None:
         if self._task and not self._task.done():
             return

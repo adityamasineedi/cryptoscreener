@@ -9,15 +9,18 @@ import { BosResearchPanel } from "./components/BosResearchPanel";
 import { BosStrategyResearchPanel } from "./components/BosStrategyResearchPanel";
 import { DataHealthPanel } from "./components/DataHealthPanel";
 import { AlertsPanel } from "./components/AlertsPanel";
+import { BacktestBanner } from "./components/BacktestBanner";
 import { OhlcvExpandBanner } from "./components/OhlcvExpandBanner";
 import { OhlcvHistoryPanel } from "./components/OhlcvHistoryPanel";
 import { PaperTradePanel } from "./components/PaperTradePanel";
 import { ScreenerTable } from "./components/ScreenerTable";
 import { Sidebar } from "./components/Sidebar";
 import { TopNav } from "./components/TopNav";
+import { DiagnosticsPanel } from "./components/diagnostics/DiagnosticsPanel";
 import { useMarketStream } from "./hooks/useMarketStream";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useMarketStore } from "./store/marketStore";
+import { startBacktestBackgroundPoller } from "./store/backtestJobStore";
 import { startOhlcvExpandBackgroundPoller } from "./store/ohlcvExpandStore";
 import type { HealthResponse } from "./types/market";
 
@@ -135,8 +138,9 @@ export default function App() {
     }
   }, [sidebarCollapsed]);
 
-  // OHLCV expand jobs run on the API; keep polling across route changes.
+  // Long-running research jobs run on the API; keep polling across route changes.
   useEffect(() => startOhlcvExpandBackgroundPoller(), []);
+  useEffect(() => startBacktestBackgroundPoller(), []);
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? "app-shell--collapsed" : ""}`}>
@@ -146,9 +150,13 @@ export default function App() {
       />
       <main className="app-main">
         <OhlcvExpandBanner />
+        <BacktestBanner />
         <Routes>
           <Route path="/" element={<ScreenerPage />} />
           <Route path="/health" element={<DataHealthPanel />} />
+          <Route path="/diagnostics" element={<DiagnosticsPanel />} />
+          <Route path="/diagnostics/issues" element={<DiagnosticsPanel />} />
+          <Route path="/diagnostics/issues/:issueId" element={<DiagnosticsPanel />} />
           <Route path="/bos-research" element={<BosResearchPanel />} />
           <Route path="/bos-strategy-research" element={<BosStrategyResearchPanel />} />
           <Route path="/paper" element={<PaperTradePanel />} />

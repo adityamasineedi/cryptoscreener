@@ -13,8 +13,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.config import get_settings
 from app.ingestion.binance_rest import BinanceRestClient
-from app.ingestion.klines import TIMEFRAME_MS, normalize_rest_kline
+from app.research.ohlcv_expand import expand_series_backward, parse_until_ms
 from app.services.database import db_manager
 from app.services.ohlcv_store import ohlcv_store
 
@@ -32,97 +30,6 @@ DEFAULT_SYMBOLS = [
     "SOLUSDT",
 ]
 DEFAULT_TFS = ["15m", "1h"]
-
-
-def _parse_until(s: str) -> int:
-    """Return UTC ms for the start of the given calendar day."""
-    dt = datetime.strptime(s.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    return int(dt.timestamp() * 1000)
-
-
-async def _db_earliest_ms(symbol: str, timeframe: str) -> int | None:
-    """True earliest open time in Postgres (memory store is capped at 500)."""
-    if db_manager.engine is None:
-        return None
-    from sqlalchemy import text
-
-    async with db_manager.engine.begin() as conn:
-        row = (
-            await conn.execute(
-                text(
-                    """
-                    SELECT MIN(time) FROM ohlcv
-                    WHERE symbol = :symbol AND timeframe = :tf
-                    """
-                ),
-                {"symbol": symbol.upper(), "tf": timeframe},
-            )
-        ).fetchone()
-    if not row or row[0] is None:
-        return None
-    ts = row[0]
-    if hasattr(ts, "timestamp"):
-        return int(ts.timestamp() * 1000)
-    return None
-
-
-async def expand_series(
-    rest: BinanceRestClient,
-    symbol: str,
-    timeframe: str,
-    *,
-    until_ms: int | None,
-    max_pages: int,
-) -> int:
-    step = TIMEFRAME_MS[timeframe]
-    existing = ohlcv_store.get_closed(symbol, timeframe)
-    known = {c.open_time for c in existing}
-    # Prefer DB earliest — in-memory deque is capped (default 500) and is not full history
-    db_earliest = await _db_earliest_ms(symbol, timeframe)
-    if db_earliest is not None:
-        cursor_end = db_earliest - 1
-    elif existing:
-        cursor_end = int(min(c.open_time for c in existing).timestamp() * 1000) - 1
-    else:
-        cursor_end = int(time.time() * 1000)
-
-    written = 0
-    pages = 0
-    while pages < max_pages:
-        if until_ms is not None and cursor_end < until_ms:
-            break
-        start_ms = cursor_end - step * 1500
-        if until_ms is not None:
-            start_ms = max(start_ms, until_ms)
-        raw = await rest.futures_klines(
-            symbol,
-            timeframe,
-            limit=1500,
-            start_time=start_ms,
-            end_time=cursor_end,
-        )
-        if not raw:
-            break
-        candles = []
-        for row in raw:
-            c = normalize_rest_kline(symbol, timeframe, row)
-            if c and c.is_closed and c.open_time not in known:
-                candles.append(c)
-                known.add(c.open_time)
-        if candles:
-            n = await ohlcv_store.ingest_history(candles)
-            written += n
-            while ohlcv_store._pending_db:  # noqa: SLF001
-                await ohlcv_store.flush_db()
-        oldest = min(int(r[0]) for r in raw)
-        if oldest >= cursor_end:
-            break
-        cursor_end = oldest - 1
-        pages += 1
-        if until_ms is not None and oldest <= until_ms:
-            break
-        await asyncio.sleep(0.15)
-    return written
 
 
 async def main() -> None:
@@ -143,7 +50,7 @@ async def main() -> None:
     args = p.parse_args()
     symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
     tfs = [t.strip() for t in args.tfs.split(",") if t.strip()]
-    until_ms = _parse_until(args.until) if args.until else None
+    until_ms = parse_until_ms(args.until) if args.until else None
 
     settings = get_settings()
     await db_manager.connect(settings)
@@ -161,7 +68,7 @@ async def main() -> None:
         for sym in symbols:
             for tf in tfs:
                 before = len(ohlcv_store.get_closed(sym, tf))
-                n = await expand_series(
+                n = await expand_series_backward(
                     rest,
                     sym,
                     tf,

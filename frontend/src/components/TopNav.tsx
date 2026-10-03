@@ -3,6 +3,7 @@ import { fetchPresets } from "../api/client";
 import { useMarketStore } from "../store/marketStore";
 import type { ScreenerPreset } from "../types/market";
 import { StatusBadge } from "./FreshCell";
+import { WhyBrokenButton } from "./diagnostics/WhyBrokenButton";
 
 const tabs = [
   "Fundamentals",
@@ -86,6 +87,7 @@ export function TopNav({
             </button>
           ) : null}
           <StatusBadge status={health?.connected ? "LIVE" : "STALE"} />
+          <WhyBrokenButton dataset="ticker" label="Why?" />
           <span className="hidden whitespace-nowrap term:inline">
             WS {health?.connected ? "connected" : "reconnecting"}
           </span>

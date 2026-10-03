@@ -66,6 +66,9 @@ class StrategyResearchConfig:
         "CONSERVATIVE: if SL and TP both touched in the same candle, assume SL first"
     )
     regime_mode: str = "REGIME_UNAVAILABLE"  # do not invent a regime detector
+    # Research execution bound for multi-bar pullback/retest lifecycle.
+    # NOT a trading rule — production pullback engine has no expiry.
+    research_max_lifecycle_bars: int = 40
 
     def to_research_config(self) -> ResearchConfig:
         """Bridge to shared ResearchConfig used by combination_backtest helpers."""

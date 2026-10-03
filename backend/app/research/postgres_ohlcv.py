@@ -11,10 +11,12 @@ Never fabricates, interpolates, or substitutes another timeframe.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import text
 
+from app.ingestion.klines import TIMEFRAME_MS
 from app.research.query_utils import normalize_research_symbol, normalize_research_timeframe
 from app.services.database import db_manager
 
@@ -114,6 +116,49 @@ async def load_ohlcv_series_tail(
             ),
             {"symbol": sym, "tf": tf, "lim": int(limit)},
         )
+        rows = result.fetchall()
+    return _rows_to_candles(rows)
+
+
+async def load_ohlcv_series_range(
+    symbol: str,
+    timeframe: str,
+    *,
+    start: datetime | None,
+    end_exclusive: datetime | None,
+    warmup_bars: int = 0,
+) -> list[dict[str, Any]]:
+    """Load a date-bounded slice (+ warmup) — avoids pulling multi-year full series."""
+    if db_manager.engine is None:
+        raise RuntimeError("DATABASE unavailable")
+    sym = normalize_research_symbol(symbol)
+    tf = normalize_research_timeframe(timeframe)
+    start_bound = start
+    if start is not None and warmup_bars > 0:
+        step_ms = TIMEFRAME_MS.get(tf) or 60_000
+        warm = timedelta(milliseconds=step_ms * int(warmup_bars))
+        start_bound = start - warm
+        if start_bound.tzinfo is None:
+            start_bound = start_bound.replace(tzinfo=timezone.utc)
+
+    # Build predicates explicitly — asyncpg cannot infer types for
+    # `(:ts IS NULL OR time >= :ts)` when the same bind is reused.
+    clauses = ["symbol = :symbol", "timeframe = :tf"]
+    params: dict[str, Any] = {"symbol": sym, "tf": tf}
+    if start_bound is not None:
+        clauses.append("time >= :start_ts")
+        params["start_ts"] = start_bound
+    if end_exclusive is not None:
+        clauses.append("time < :end_ts")
+        params["end_ts"] = end_exclusive
+    sql = f"""
+        SELECT time, open, high, low, close, volume
+        FROM ohlcv
+        WHERE {" AND ".join(clauses)}
+        ORDER BY time ASC
+    """
+    async with db_manager.engine.begin() as conn:
+        result = await conn.execute(text(sql), params)
         rows = result.fetchall()
     return _rows_to_candles(rows)
 

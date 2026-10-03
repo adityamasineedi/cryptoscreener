@@ -47,6 +47,17 @@ class RedisStateStore:
             payload,
             ttl=_ttl("screener_state_seconds", 30),
         )
+
+    async def store_alerts_state(self, payload: dict[str, Any]) -> None:
+        # Long TTL — alerts should survive multi-day restarts when Redis is up
+        await self.set_json(
+            "state:alerts:latest",
+            payload,
+            ttl=_ttl("alerts_state_seconds", 60 * 60 * 24 * 7),
+        )
+
+    async def get_alerts_state(self) -> Any | None:
+        return await self.get_json("state:alerts:latest")
     async def store_provider_cache(self, provider: str, cache_key: str, value: Any, ttl: int) -> None:
         await self.set_json(f"provider:{provider}:{cache_key}", value, ttl=ttl)
     async def store_oi_state(self, symbol: str, payload: dict[str, Any]) -> None:
@@ -74,6 +85,7 @@ class RedisStateStore:
             "keys": {
                 "market_state": "state:market:latest",
                 "screener_state": "state:screener:latest",
+                "alerts_state": "state:alerts:latest",
                 "provider_cache_prefix": "provider:",
                 "oi_prefix": "oi:",
                 "fundamental_prefix": "fund:",

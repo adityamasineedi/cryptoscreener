@@ -27,5 +27,23 @@ def test_sentiment_never_fabricated():
     p = SentimentProvider(settings)
     sent = asyncio.run(p.get_sentiment(["ETHUSDT"]))
     for _k, fv in sent["ETHUSDT"].items():
-        assert fv.value is None
-        assert fv.status == DataStatus.WAITING
+        # Honest statuses only — never invent a numeric social metric locally
+        if fv.value is None:
+            assert fv.status in (
+                DataStatus.WAITING,
+                DataStatus.UNAVAILABLE,
+                DataStatus.STALE,
+            )
+        else:
+            assert fv.source in (
+                "lunarcrush",
+                "sentiment",
+                "socialtickers",
+                "xoomar",
+                "free_social",
+            )
+            assert fv.status in (
+                DataStatus.LIVE,
+                DataStatus.CACHED,
+                DataStatus.STALE,
+            )

@@ -266,6 +266,26 @@ export function fetchBosStrategiesCoverage() {
   return getJson<Record<string, unknown>>("/api/research/bos-strategies/coverage");
 }
 
+export function fetchBosStrategiesDiagnostics(params: {
+  symbol: string;
+  timeframe?: string;
+  start?: string;
+  end?: string;
+  limit?: number;
+  strategies?: string;
+}) {
+  const q = new URLSearchParams();
+  q.set("symbol", params.symbol);
+  if (params.timeframe) q.set("timeframe", params.timeframe);
+  if (params.start) q.set("start", params.start);
+  if (params.end) q.set("end", params.end);
+  if (params.limit != null) q.set("limit", String(params.limit));
+  if (params.strategies) q.set("strategies", params.strategies);
+  return getJson<Record<string, unknown>>(
+    `/api/research/bos-strategies/diagnostics?${q.toString()}`
+  );
+}
+
 export function fetchBosStrategies(params?: {
   symbols?: string;
   timeframe?: string;
@@ -425,6 +445,8 @@ export type OhlcvExpandJob = {
   max_pages?: number;
   total_cells?: number;
   done_cells?: number;
+  /** 0..1 progress inside the current symbol/TF cell while REST pages pull */
+  cell_fraction?: number;
   pct?: number;
   current?: string;
   written_total?: number;
@@ -507,6 +529,88 @@ export function fetchLongStrategyBacktest(params: {
   return getJson<StrategyMatrixResponse>(
     `/api/research/long-strategy/backtest?${q.toString()}`
   );
+}
+
+export type BacktestJob = {
+  job_id?: string | null;
+  status: string;
+  symbols?: string[];
+  timeframes?: string[];
+  direction?: string;
+  combination_id?: string;
+  combination_name?: string;
+  playbook?: string | null;
+  label?: string | null;
+  limit?: number;
+  risk_usd?: number;
+  taker_fee_pct?: number;
+  maker_fee_pct?: number;
+  include_trades?: boolean;
+  start_date?: string | null;
+  end_date?: string | null;
+  total_cells?: number;
+  done_cells?: number;
+  pct?: number;
+  current?: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: string | null;
+  rows?: StrategyMatrixRow[];
+  elapsed_seconds?: number | null;
+  disclaimer?: string | null;
+};
+
+export function fetchBacktestJobStatus() {
+  return getJson<BacktestJob & { timestamp?: string }>(
+    "/api/research/long-strategy/backtest/job"
+  );
+}
+
+export async function startBacktestJob(body: {
+  symbols: string[];
+  timeframes: string[];
+  direction?: "LONG" | "SHORT";
+  combination_id?: string;
+  limit?: number;
+  risk_usd?: number;
+  taker_fee_pct?: number;
+  maker_fee_pct?: number;
+  include_trades?: boolean;
+  start_date?: string;
+  end_date?: string;
+}) {
+  const res = await fetch(`${API_BASE}/api/research/long-strategy/backtest/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `API /api/research/long-strategy/backtest/start failed: ${res.status}`
+    );
+  }
+  return res.json() as Promise<{
+    status: string;
+    error?: string;
+    job?: BacktestJob;
+    timestamp?: string;
+  }>;
+}
+
+export async function cancelBacktestJob() {
+  const res = await fetch(`${API_BASE}/api/research/long-strategy/backtest/cancel`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(
+      `API /api/research/long-strategy/backtest/cancel failed: ${res.status}`
+    );
+  }
+  return res.json() as Promise<{
+    status: string;
+    job?: BacktestJob;
+    timestamp?: string;
+  }>;
 }
 
 export function formatFresh(
@@ -678,4 +782,222 @@ export function wsUrl(path: string): string {
   if (env) return `${env.replace(/\/$/, "")}${path}`;
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${window.location.host}${path}`;
+}
+
+/* ---- System Diagnostics / Issue Center ---- */
+
+export function fetchDiagnosticsOverview() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/overview");
+}
+
+export function fetchDiagnosticsIssues(params?: {
+  status?: string;
+  severity?: string;
+  component?: string;
+  limit?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  if (params?.severity) q.set("severity", params.severity);
+  if (params?.component) q.set("component", params.component);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return getJson<{ count: number; issues: Array<Record<string, unknown>> }>(
+    `/api/diagnostics/issues${qs ? `?${qs}` : ""}`
+  );
+}
+
+export function fetchDiagnosticsIssue(id: string) {
+  return getJson<{
+    issue: Record<string, unknown>;
+    events: Array<Record<string, unknown>>;
+    timeline: Array<Record<string, unknown>>;
+  }>(`/api/diagnostics/issues/${encodeURIComponent(id)}`);
+}
+
+export function fetchDiagnosticsAiPackage(id: string) {
+  return getJson<{
+    diagnostic_id: string;
+    markdown: string;
+    json: Record<string, unknown>;
+  }>(`/api/diagnostics/issues/${encodeURIComponent(id)}/ai-package`);
+}
+
+export async function acknowledgeDiagnosticsIssue(id: string, owner?: string) {
+  const res = await fetch(
+    `${API_BASE}/api/diagnostics/issues/${encodeURIComponent(id)}/acknowledge`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner }),
+    }
+  );
+  if (!res.ok) throw new Error(`acknowledge failed: ${res.status}`);
+  return res.json() as Promise<{ issue: Record<string, unknown> }>;
+}
+
+export async function resolveDiagnosticsIssue(id: string, message?: string) {
+  const res = await fetch(
+    `${API_BASE}/api/diagnostics/issues/${encodeURIComponent(id)}/resolve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    }
+  );
+  if (!res.ok) throw new Error(`resolve failed: ${res.status}`);
+  return res.json() as Promise<{ issue: Record<string, unknown> }>;
+}
+
+export function fetchDiagnosticsResources() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/resources");
+}
+
+export function fetchDiagnosticsGit() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/git");
+}
+
+export function fetchDiagnosticsWhy(dataset: string) {
+  return getJson<Record<string, unknown>>(
+    `/api/diagnostics/why/${encodeURIComponent(dataset)}`
+  );
+}
+
+export async function postDiagnosticsEvent(body: Record<string, unknown>) {
+  const res = await fetch(`${API_BASE}/api/diagnostics/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`record event failed: ${res.status}`);
+  return res.json() as Promise<{
+    event: Record<string, unknown>;
+    issue: Record<string, unknown>;
+  }>;
+}
+
+export async function postDiagnosticsAiHandoff(body: {
+  issue_id?: string;
+  include?: Record<string, boolean>;
+}) {
+  const res = await fetch(`${API_BASE}/api/diagnostics/ai-handoff`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`ai-handoff failed: ${res.status}`);
+  return res.json() as Promise<{ markdown: string; [k: string]: unknown }>;
+}
+
+export function fetchDiagnosticsDatabase() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/database");
+}
+
+export function fetchDiagnosticsDatabaseDetail(opts?: { refresh?: boolean }) {
+  const q = opts?.refresh ? "?refresh=true" : "";
+  return getJson<Record<string, unknown>>(`/api/diagnostics/database/detail${q}`);
+}
+
+export function fetchDiagnosticsWebsocket() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/websocket");
+}
+
+export function fetchDiagnosticsRest() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/rest");
+}
+
+export function fetchDiagnosticsDataHealth() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/data-health");
+}
+
+export function fetchDiagnosticsDataHealthDrilldown(params: {
+  dataset: string;
+  symbol: string;
+  timeframe: string;
+}) {
+  const q = new URLSearchParams({
+    symbol: params.symbol,
+    timeframe: params.timeframe,
+  });
+  return getJson<Record<string, unknown>>(
+    `/api/diagnostics/data-health/${encodeURIComponent(params.dataset)}?${q}`
+  );
+}
+
+export function fetchDiagnosticsJobs() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/jobs");
+}
+
+export function fetchDiagnosticsLogs(params?: Record<string, string | number | undefined>) {
+  const q = new URLSearchParams();
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v != null && v !== "") q.set(k, String(v));
+    }
+  }
+  const qs = q.toString();
+  return getJson<Record<string, unknown>>(
+    `/api/diagnostics/logs${qs ? `?${qs}` : ""}`
+  );
+}
+
+export function fetchDiagnosticsBackups() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/backups");
+}
+
+export function createDiagnosticsBackup(type: string) {
+  return fetch("/api/diagnostics/backups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type }),
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`backup create failed: ${res.status}`);
+    return res.json() as Promise<Record<string, unknown>>;
+  });
+}
+
+export function verifyDiagnosticsBackup(backupId: string) {
+  return fetch(`/api/diagnostics/backups/${encodeURIComponent(backupId)}/verify`, {
+    method: "POST",
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`backup verify failed: ${res.status}`);
+    return res.json() as Promise<Record<string, unknown>>;
+  });
+}
+
+export function restoreTestDiagnosticsBackup(backupId: string) {
+  return fetch(
+    `/api/diagnostics/backups/${encodeURIComponent(backupId)}/restore-test`,
+    { method: "POST" }
+  ).then(async (res) => {
+    if (!res.ok) throw new Error(`restore-test failed: ${res.status}`);
+    return res.json() as Promise<Record<string, unknown>>;
+  });
+}
+
+export function fetchDiagnosticsSnapshots() {
+  return getJson<Record<string, unknown>>("/api/diagnostics/snapshot");
+}
+
+export function createDiagnosticsSnapshot(label?: string) {
+  return fetch("/api/diagnostics/snapshot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`snapshot create failed: ${res.status}`);
+    return res.json() as Promise<Record<string, unknown>>;
+  });
+}
+
+export function fetchDiagnosticsSnapshotAiPackage(snapshotId: string) {
+  return getJson<Record<string, unknown>>(
+    `/api/diagnostics/snapshot/${encodeURIComponent(snapshotId)}/ai-package`
+  );
+}
+
+export function exportDiagnosticsSnapshot(snapshotId: string) {
+  return getJson<Record<string, unknown>>(
+    `/api/diagnostics/snapshot/${encodeURIComponent(snapshotId)}/export`
+  );
 }

@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
     api_cors_origins: str = Field(
-        default="http://localhost:5173,http://localhost:3000",
+        default=(
+            "http://localhost:5173,http://127.0.0.1:5173,"
+            "http://localhost:4173,http://127.0.0.1:4173,"
+            "http://localhost:3000"
+        ),
         alias="API_CORS_ORIGINS",
     )
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
@@ -93,6 +97,28 @@ class Settings(BaseSettings):
     paper_risk_percent: float = Field(default=0.02, alias="PAPER_RISK_PERCENT")
     # path_a = Trend+BOS (research COMBO_02); path_b = full LONG_ENTRY_CANDIDATE
     paper_entry_mode: str = Field(default="path_a", alias="PAPER_ENTRY_MODE")
+    # Cap / liquidity / liq-spike gates (fail-closed for unknown mcap)
+    paper_risk_gates_enabled: bool = Field(default=True, alias="PAPER_RISK_GATES_ENABLED")
+    paper_allowed_groups: str = Field(
+        default="BTC,ETH,large-cap,mid-cap", alias="PAPER_ALLOWED_GROUPS"
+    )
+    paper_min_quote_volume_24h: float = Field(
+        default=5_000_000.0, alias="PAPER_MIN_QUOTE_VOLUME_24H"
+    )
+    paper_min_quote_volume_no_mcap: float = Field(
+        default=20_000_000.0, alias="PAPER_MIN_QUOTE_VOLUME_NO_MCAP"
+    )
+    paper_risk_pct_btc_eth: float = Field(default=0.02, alias="PAPER_RISK_PCT_BTC_ETH")
+    paper_risk_pct_large: float = Field(default=0.02, alias="PAPER_RISK_PCT_LARGE")
+    paper_risk_pct_mid: float = Field(default=0.01, alias="PAPER_RISK_PCT_MID")
+    paper_risk_pct_small: float = Field(default=0.005, alias="PAPER_RISK_PCT_SMALL")
+    paper_risk_pct_unknown: float = Field(default=0.005, alias="PAPER_RISK_PCT_UNKNOWN")
+    paper_max_open_positions: int = Field(default=5, alias="PAPER_MAX_OPEN_POSITIONS")
+    paper_max_open_risk_pct: float = Field(default=0.10, alias="PAPER_MAX_OPEN_RISK_PCT")
+    paper_liq_gate_enabled: bool = Field(default=True, alias="PAPER_LIQ_GATE_ENABLED")
+    paper_liq_min_long_notional_5m: float = Field(
+        default=25_000.0, alias="PAPER_LIQ_MIN_LONG_NOTIONAL_5M"
+    )
 
     # Research gates for live setup candidates — default OFF
     research_gate_enabled: bool = Field(default=False, alias="RESEARCH_GATE_ENABLED")
@@ -101,6 +127,61 @@ class Settings(BaseSettings):
     )
     research_gate_block_htf_conflict: bool = Field(
         default=False, alias="RESEARCH_GATE_BLOCK_HTF_CONFLICT"
+    )
+
+    # System diagnostics (Issue Center) — thresholds & polling
+    diag_ui_refresh_seconds: int = Field(default=5, alias="DIAG_UI_REFRESH_SECONDS")
+    diag_expensive_metrics_seconds: int = Field(
+        default=30, alias="DIAG_EXPENSIVE_METRICS_SECONDS"
+    )
+    diag_disk_warning_pct: float = Field(default=70.0, alias="DIAG_DISK_WARNING_PCT")
+    diag_disk_error_pct: float = Field(default=85.0, alias="DIAG_DISK_ERROR_PCT")
+    diag_disk_critical_pct: float = Field(default=95.0, alias="DIAG_DISK_CRITICAL_PCT")
+    diag_memory_warning_pct: float = Field(default=80.0, alias="DIAG_MEMORY_WARNING_PCT")
+    diag_memory_error_pct: float = Field(default=90.0, alias="DIAG_MEMORY_ERROR_PCT")
+    diag_memory_critical_pct: float = Field(
+        default=95.0, alias="DIAG_MEMORY_CRITICAL_PCT"
+    )
+    diag_cpu_warning_pct: float = Field(default=85.0, alias="DIAG_CPU_WARNING_PCT")
+    diag_cpu_error_pct: float = Field(default=95.0, alias="DIAG_CPU_ERROR_PCT")
+    diag_event_retention_days: int = Field(default=30, alias="DIAG_EVENT_RETENTION_DAYS")
+    diag_resolved_issue_retention_days: int = Field(
+        default=90, alias="DIAG_RESOLVED_ISSUE_RETENTION_DAYS"
+    )
+    diag_snapshot_retention_days: int = Field(
+        default=90, alias="DIAG_SNAPSHOT_RETENTION_DAYS"
+    )
+    diag_resource_sample_retention_days: int = Field(
+        default=7, alias="DIAG_RESOURCE_SAMPLE_RETENTION_DAYS"
+    )
+    # Phase 2 forensic thresholds
+    diag_ws_stale_seconds: float = Field(default=120.0, alias="DIAG_WS_STALE_SECONDS")
+    diag_db_long_query_seconds: float = Field(
+        default=30.0, alias="DIAG_DB_LONG_QUERY_SECONDS"
+    )
+    diag_db_pool_warning_pct: float = Field(
+        default=80.0, alias="DIAG_DB_POOL_WARNING_PCT"
+    )
+    diag_db_pool_error_pct: float = Field(default=95.0, alias="DIAG_DB_POOL_ERROR_PCT")
+    diagnostics_db_detail_cache_seconds: float = Field(
+        default=60.0, alias="DIAGNOSTICS_DB_DETAIL_CACHE_SECONDS"
+    )
+    diag_rest_429_warning: int = Field(default=5, alias="DIAG_REST_429_WARNING")
+    diag_job_stale_heartbeat_seconds: float = Field(
+        default=300.0, alias="DIAG_JOB_STALE_HEARTBEAT_SECONDS"
+    )
+    # Phase 3 — backups / snapshots (safe defaults; no auto-delete)
+    backup_destination: str = Field(
+        default="data/diagnostics/backups", alias="BACKUP_DESTINATION"
+    )
+    backup_min_free_space_gb: float = Field(
+        default=5.0, alias="BACKUP_MIN_FREE_SPACE_GB"
+    )
+    backup_retention_days: int = Field(default=90, alias="BACKUP_RETENTION_DAYS")
+    backup_pg_dump_path: str = Field(default="", alias="BACKUP_PG_DUMP_PATH")
+    backup_pg_restore_path: str = Field(default="", alias="BACKUP_PG_RESTORE_PATH")
+    snapshot_destination: str = Field(
+        default="data/diagnostics/snapshots", alias="SNAPSHOT_DESTINATION"
     )
 
     @property

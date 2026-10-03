@@ -1,130 +1,161 @@
-binance:
-  enabled: true
-  role: primary_market_data
-  spot_rest: https://api.binance.com
-  futures_rest: https://fapi.binance.com
-  spot_ws: wss://stream.binance.com:9443
-  futures_ws: wss://fstream.binance.com
-  rate_limit:
-    weight_per_minute: 1100
-    max_concurrency: 5
-    backoff_base_seconds: 0.5
-    backoff_max_seconds: 60
-  field_ttl_seconds:
-    price: 5
-    ticker: 5
-    funding: 30
-    open_interest: 90
-    liquidations: 15
-
-coingecko:
-  enabled: true
-  role: fundamentals
-  base_url: https://api.coingecko.com/api/v3
-  rate_limit:
-    requests_per_minute: 12
-    max_concurrency: 1
-    min_interval_seconds: 6.0
-    cooldown_on_429_seconds: 120
-  cache_ttl_seconds: 600
-  field_ttl_seconds:
-    market_cap: 600
-    fdv: 600
-    market_rank: 600
-    circulating_supply: 3600
-    total_supply: 3600
-    max_supply: 7200
-    category: 7200
-
-defillama:
-  enabled: true
-  role: tvl_fees
-  base_url: https://api.llama.fi
-  rate_limit:
-    requests_per_minute: 30
-    max_concurrency: 1
-    min_interval_seconds: 2.0
-    cooldown_on_429_seconds: 60
-  cache_ttl_seconds: 900
-  field_ttl_seconds:
-    tvl: 900
-    fees: 1800
-    revenue: 1800
-    category: 7200
-
-fundamentals:
-  # Do not refresh fundamentals on every screener tick
-  refresh_seconds: 600
-  stale_while_revalidate: true
-  provider_order:
-    - coingecko
-    - defillama
-  # Field-level TTL guidance (seconds) — providers honor field_ttl_seconds above
-  field_ttl_seconds:
-    price: 5
-    market_cap: 600
-    fdv: 600
-    supply: 3600
-    tvl: 900
-    holders: 3600
-    sentiment: 300
-    transactions: 900
-
-onchain:
-  enabled: false
-  role: holders_transactions
-  # Provider name is configuration — not hardcoded in UI
-  provider: ""  # e.g. covalent | bitquery | glassnode
-  base_url: ""
-  # API key from environment (ONCHAIN_API_KEY) preferred over yaml
-  api_key_env: ONCHAIN_API_KEY
-  api_key: ""
-  rate_limit:
-    requests_per_minute: 30
-    max_concurrency: 1
-    min_interval_seconds: 2.0
-    cooldown_on_429_seconds: 120
-  cache_ttl_seconds: 3600
-  field_ttl_seconds:
-    holders: 3600
-    holder_growth: 3600
-    transactions: 900
-    nvt: 900
-    velocity: 900
-  note: Configure indexer + assets.yaml mapping before enabling
-
-sentiment:
-  enabled: false
-  role: social_sentiment
-  provider: ""  # e.g. santiment | lunarcrush
-  base_url: ""
-  api_key_env: SENTIMENT_API_KEY
-  api_key: ""
-  rate_limit:
-    requests_per_minute: 30
-    max_concurrency: 1
-    min_interval_seconds: 2.0
-    cooldown_on_429_seconds: 120
-  cache_ttl_seconds: 300
-  field_ttl_seconds:
-    social_dominance: 300
-    social_volume: 300
-    mentions: 300
-    engagement: 300
-    sentiment: 300
-    sentiment_change: 300
-  note: Configure Santiment/LunarCrush-style API before enabling — never fabricate
-
-cache_ttl_defaults:
-  price_seconds: 5
-  market_cap_seconds: 600
-  fdv_seconds: 600
-  supply_seconds: 3600
-  tvl_seconds: 900
-  holders_seconds: 3600
-  sentiment_seconds: 300
-  transactions_seconds: 900
-  provider_cache_seconds: 600
-  screener_state_seconds: 30
-  oi_state_seconds: 90
-  symbol_metadata_seconds: 300
+binance:
+  enabled: true
+  role: primary_market_data
+  spot_rest: https://api.binance.com
+  futures_rest: https://fapi.binance.com
+  spot_ws: wss://stream.binance.com:9443
+  futures_ws: wss://fstream.binance.com
+  rate_limit:
+    weight_per_minute: 1100
+    max_concurrency: 5
+    backoff_base_seconds: 0.5
+    backoff_max_seconds: 60
+  field_ttl_seconds:
+    price: 5
+    ticker: 5
+    funding: 30
+    open_interest: 90
+    liquidations: 15
+
+coingecko:
+  enabled: true
+  role: fundamentals
+  base_url: https://api.coingecko.com/api/v3
+  rate_limit:
+    requests_per_minute: 12
+    max_concurrency: 1
+    min_interval_seconds: 6.0
+    cooldown_on_429_seconds: 120
+  cache_ttl_seconds: 600
+  field_ttl_seconds:
+    market_cap: 600
+    fdv: 600
+    market_rank: 600
+    circulating_supply: 3600
+    total_supply: 3600
+    max_supply: 7200
+    category: 7200
+
+defillama:
+  enabled: true
+  role: tvl_fees
+  base_url: https://api.llama.fi
+  rate_limit:
+    requests_per_minute: 30
+    max_concurrency: 1
+    min_interval_seconds: 2.0
+    cooldown_on_429_seconds: 60
+  cache_ttl_seconds: 900
+  field_ttl_seconds:
+    tvl: 900
+    fees: 1800
+    revenue: 1800
+    category: 7200
+
+fundamentals:
+  # Do not refresh fundamentals on every screener tick
+  refresh_seconds: 600
+  stale_while_revalidate: true
+  provider_order:
+    - coingecko
+    - defillama
+  # Field-level TTL guidance (seconds) — providers honor field_ttl_seconds above
+  field_ttl_seconds:
+    price: 5
+    market_cap: 600
+    fdv: 600
+    supply: 3600
+    tvl: 900
+    holders: 3600
+    sentiment: 300
+    transactions: 900
+
+onchain:
+  enabled: false
+  role: holders_transactions
+  # Provider name is configuration — not hardcoded in UI
+  provider: ""  # e.g. covalent | bitquery | glassnode
+  base_url: ""
+  # API key from environment (ONCHAIN_API_KEY) preferred over yaml
+  api_key_env: ONCHAIN_API_KEY
+  api_key: ""
+  rate_limit:
+    requests_per_minute: 30
+    max_concurrency: 1
+    min_interval_seconds: 2.0
+    cooldown_on_429_seconds: 120
+  cache_ttl_seconds: 3600
+  field_ttl_seconds:
+    holders: 3600
+    holder_growth: 3600
+    transactions: 900
+    nvt: 900
+    velocity: 900
+  note: Configure indexer + assets.yaml mapping before enabling
+
+sentiment:
+  enabled: true
+  role: social_sentiment
+  # free_social = socialtickers (share/mentions/upvotes) + XOOMAR (sentiment majors)
+  # lunarcrush = paid LunarCrush API v4 (optional; set provider: lunarcrush + LUNARCRUSH_API_KEY)
+  provider: free_social
+  base_url: ""
+  api_key_env: ""
+  api_key: ""
+  timeout_seconds: 15
+  cache_ttl_seconds: 300
+  stale_after_seconds: 900
+  refresh_seconds: 300
+  rate_limit:
+    requests_per_minute: 10
+    max_concurrency: 1
+    min_interval_seconds: 3.0
+    cooldown_on_429_seconds: 120
+  field_ttl_seconds:
+    social_dominance: 300
+    social_volume: 300
+    mentions: 300
+    engagement: 300
+    sentiment: 300
+    sentiment_change: 300
+  socialtickers:
+    enabled: true
+    base_url: https://socialtickers.com
+    leaderboard_path: /api/v1/leaderboard
+    timeout_seconds: 15
+    cache_ttl_seconds: 300
+    stale_after_seconds: 900
+  xoomar:
+    enabled: true
+    base_url: https://xoomar.com
+    sentiment_path: /api/markets/sentiment
+    timeout_seconds: 15
+  lunarcrush:
+    enabled: false
+    base_url: https://lunarcrush.com/api4
+    api_key_env: LUNARCRUSH_API_KEY
+    timeout_seconds: 10
+    cache_ttl_seconds: 300
+    stale_after_seconds: 900
+    max_requests_per_minute: 10
+    coins_list_path: /public/coins/list/v2
+    page_limit: 1000
+    max_pages: 10
+  note: >
+    Free path (default): socialtickers leaderboard + XOOMAR sentiment (9 crypto majors).
+    No API key required. Assets outside free coverage stay UNAVAILABLE — never fabricated.
+    Optional paid: set provider: lunarcrush and LUNARCRUSH_API_KEY.
+
+cache_ttl_defaults:
+  price_seconds: 5
+  market_cap_seconds: 600
+  fdv_seconds: 600
+  supply_seconds: 3600
+  tvl_seconds: 900
+  holders_seconds: 3600
+  sentiment_seconds: 300
+  transactions_seconds: 900
+  provider_cache_seconds: 600
+  screener_state_seconds: 30
+  oi_state_seconds: 90
+  symbol_metadata_seconds: 300

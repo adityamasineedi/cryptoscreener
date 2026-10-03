@@ -24,6 +24,7 @@ class EngineStore:
         self.zones: dict[str, list[dict[str, Any]]] = {}
         self.volume: dict[str, dict[str, Any]] = {}
         self.fundamentals: dict[str, dict[str, FreshValue]] = {}
+        self.sentiment: dict[str, dict[str, FreshValue]] = {}
         self.signals: dict[str, dict[str, Any]] = {}
         self.setup_signals: dict[str, dict[str, Any]] = {}
         self._dirty: set[str] = set()
@@ -63,6 +64,18 @@ class EngineStore:
         self.fundamentals[sym] = values
         self.mark_dirty(sym)
 
+    def set_sentiment(self, symbol: str, values: dict[str, FreshValue]) -> None:
+        sym = symbol.upper()
+        self.sentiment[sym] = values
+        self.mark_dirty(sym)
+
+    def get_sentiment_field(self, symbol: str, field: str) -> FreshValue:
+        vals = self.sentiment.get(symbol.upper()) or {}
+        fv = vals.get(field)
+        if fv is not None:
+            return fv
+        return FreshValue.waiting("sentiment")
+
     def set_signals(self, symbol: str, payload: dict[str, Any]) -> None:
         sym = symbol.upper()
         self.signals[sym] = payload
@@ -76,6 +89,13 @@ class EngineStore:
         existing["setup"] = payload
         self.signals[sym] = existing
         self.mark_dirty(sym)
+        # Live alerts: transition-only (hydrate seeds silently)
+        try:
+            from app.services.alerts import get_alert_feed
+
+            get_alert_feed().observe_setup_signal(sym, payload)
+        except Exception:  # noqa: BLE001
+            pass
 
     def get_setup_signal(self, symbol: str) -> dict[str, Any] | None:
         return self.setup_signals.get(symbol.upper())

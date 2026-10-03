@@ -32,6 +32,37 @@ describe("dependencyLabel / emptyFreshLabel", () => {
     expect(emptyFreshLabel(fv)).not.toMatch(/Waiting for live data/i);
   });
 
+  it("LunarCrush WAITING / STALE / UNAVAILABLE stay honest (no fake zeros)", () => {
+    const waiting: FreshValue = {
+      value: null,
+      timestamp: null,
+      source: "lunarcrush",
+      status: "WAITING",
+      methodology: "sentiment: waiting for LunarCrush bulk response — never fabricated",
+    };
+    const stale: FreshValue = {
+      value: 67,
+      timestamp: new Date(Date.now() - 2_000_000).toISOString(),
+      source: "lunarcrush",
+      status: "STALE",
+      methodology: "sentiment <- lunarcrush.sentiment",
+    };
+    const unavailable: FreshValue = {
+      value: null,
+      timestamp: null,
+      source: "lunarcrush",
+      status: "UNAVAILABLE",
+      methodology: "sentiment: Asset not covered by LunarCrush",
+    };
+    expect(emptyFreshLabel(waiting)).toMatch(/waiting|LunarCrush|never fabricated/i);
+    expect(emptyFreshLabel(waiting)).not.toBe("0");
+    expect(emptyFreshLabel(unavailable)).toMatch(/not covered|unavailable|LunarCrush/i);
+    expect(emptyFreshLabel(unavailable)).not.toBe("0");
+    // STALE with a real value should not use empty label path as fabricated zero
+    expect(stale.value).toBe(67);
+    expect(stale.status).toBe("STALE");
+  });
+
   it("keeps Requires OHLCV wording for non-compact / tooltip paths", () => {
     expect(dependencyLabel("Requires 15M OHLCV — RVOL not computed")).toBe("Requires 15M OHLCV");
   });

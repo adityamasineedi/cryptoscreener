@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { ScreenerRow } from "../types/market";
 import {
   buildTradePlan,
@@ -6,6 +6,27 @@ import {
   type TradePlanState,
   type TradePlanView,
 } from "../tradePlan/buildTradePlan";
+
+const TOOLTIPS = {
+  mtfConflict:
+    "Different timeframes currently have different directional states. This does not by itself create a trade.",
+  dataAvailable:
+    "Provider data is available. Availability is not a directional confirmation.",
+  missing: "Required engine condition has not been satisfied yet.",
+  na: "Not confirmed or not applicable with the currently available data.",
+  entryReady:
+    "Only shown when the existing entry engine returns a valid entry candidate and all required gates pass.",
+  marketSignal:
+    "Directional classification from the existing market-signal engine. It is not an entry order.",
+} as const;
+
+function Tip({ text, children }: { text: string; children: ReactNode }) {
+  return (
+    <span className="cursor-help border-b border-dotted border-terminal-muted/50" title={text}>
+      {children}
+    </span>
+  );
+}
 
 function stateColor(state: TradePlanState): string {
   switch (state) {
@@ -33,6 +54,18 @@ function marketColor(signal: string): string {
   return "text-terminal-muted";
 }
 
+function mtfToneClass(tone: TradePlanView["mtfAlignment"]["tone"]): string {
+  switch (tone) {
+    case "aligned":
+      return "text-terminal-up";
+    case "mixed":
+    case "conflict":
+      return "text-amber-300";
+    default:
+      return "text-terminal-muted";
+  }
+}
+
 function fmtMoney(n: number | null, currency: "USD" | "INR"): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const locale = currency === "INR" ? "en-IN" : "en-US";
@@ -48,7 +81,42 @@ function fmtMoney(n: number | null, currency: "USD" | "INR"): string {
   }
 }
 
-function Lifecycle({ active }: { active: TradePlanView["lifecycleStep"] }) {
+function Section({
+  title,
+  tip,
+  children,
+  defaultOpen = true,
+  tone,
+}: {
+  title: string;
+  tip?: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  tone?: "default" | "warn" | "muted";
+}) {
+  const border =
+    tone === "warn"
+      ? "border-amber-500/40"
+      : tone === "muted"
+        ? "border-terminal-border/40"
+        : "border-terminal-border/60";
+  return (
+    <details open={defaultOpen} className={`rounded border ${border} p-2`}>
+      <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-terminal-muted">
+        {tip ? <Tip text={tip}>{title}</Tip> : title}
+      </summary>
+      <div className="mt-2">{children}</div>
+    </details>
+  );
+}
+
+function Lifecycle({
+  active,
+  waitingNote,
+}: {
+  active: TradePlanView["lifecycleStep"];
+  waitingNote: string | null;
+}) {
   const steps: Array<{ key: TradePlanView["lifecycleStep"]; label: string }> = [
     { key: "SETUP", label: "SETUP" },
     { key: "CONFIRMATION", label: "CONFIRMATION" },
@@ -89,6 +157,9 @@ function Lifecycle({ active }: { active: TradePlanView["lifecycleStep"] }) {
           );
         })}
       </ol>
+      {waitingNote ? (
+        <p className="mt-2 font-mono text-[10px] text-amber-300">{waitingNote}</p>
+      ) : null}
     </div>
   );
 }
@@ -113,6 +184,98 @@ function SidePlan({ plan }: { plan: TradePlanView }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function MtfBlock({ plan }: { plan: TradePlanView }) {
+  const m = plan.mtfAlignment;
+  const icon =
+    m.tone === "aligned" ? "✓" : m.tone === "mixed" || m.tone === "conflict" ? "⚠" : "○";
+  return (
+    <Section
+      title="MTF Alignment"
+      tip={TOOLTIPS.mtfConflict}
+      tone={m.tone === "mixed" || m.tone === "conflict" ? "warn" : "default"}
+    >
+      <div className={`font-mono text-sm ${mtfToneClass(m.tone)}`}>
+        {icon} {m.display}
+      </div>
+      {m.htf.length > 0 ? (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase text-terminal-muted">HTF</div>
+          {m.htf.map((l) => (
+            <div key={l.tf} className="font-mono text-[11px]">
+              {l.tf}{" "}
+              <span
+                className={
+                  l.trend === "BULLISH"
+                    ? "text-terminal-up"
+                    : l.trend === "BEARISH"
+                      ? "text-terminal-down"
+                      : "text-terminal-muted"
+                }
+              >
+                {l.trend}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {m.setup ? (
+        <div className="mt-1">
+          <div className="text-[10px] uppercase text-terminal-muted">Setup TF</div>
+          <div className="font-mono text-[11px]">
+            {m.setup.tf}{" "}
+            <span
+              className={
+                m.setup.trend === "BULLISH"
+                  ? "text-terminal-up"
+                  : m.setup.trend === "BEARISH"
+                    ? "text-terminal-down"
+                    : "text-terminal-muted"
+              }
+            >
+              {m.setup.trend}
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {m.confirmation ? (
+        <div className="mt-1">
+          <div className="text-[10px] uppercase text-terminal-muted">Confirmation TF</div>
+          <div className="font-mono text-[11px]">
+            {m.confirmation.tf}{" "}
+            <span
+              className={
+                m.confirmation.trend === "BULLISH"
+                  ? "text-terminal-up"
+                  : m.confirmation.trend === "BEARISH"
+                    ? "text-terminal-down"
+                    : "text-terminal-muted"
+              }
+            >
+              {m.confirmation.trend}
+            </span>
+          </div>
+        </div>
+      ) : (
+        m.allLines.length > 0 && m.htf.length === 0 ? (
+          <div className="mt-2 space-y-0.5 font-mono text-[11px]">
+            {m.allLines.map((l) => (
+              <div key={l.tf}>
+                {l.tf} {l.trend}
+              </div>
+            ))}
+          </div>
+        ) : null
+      )}
+      {m.conflictNote ? (
+        <div className="mt-2 font-mono text-[11px] text-amber-300">
+          Conflict
+          <div className="text-amber-200/90">⚠ {m.conflictNote}</div>
+        </div>
+      ) : null}
+    </Section>
   );
 }
 
@@ -159,15 +322,15 @@ export function TradePlanTab({
     );
   }
 
-  const hideLevels = plan.entry.price == null || plan.stop.price == null;
+  const hideLevels = !plan.levelsActionable;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <p className="text-[10px] text-terminal-muted">
         Analysis / decision-support only. Does not place trades. Market Signal ≠ immediate entry.
       </p>
 
-      {/* Header card */}
+      {/* Header — immediate state */}
       <div className="rounded border border-terminal-border/70 bg-black/20 p-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="font-display text-lg font-semibold">{plan.symbol}</div>
@@ -177,7 +340,7 @@ export function TradePlanTab({
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <div>
             <div className="text-[10px] uppercase tracking-wide text-terminal-muted">
-              Market signal
+              <Tip text={TOOLTIPS.marketSignal}>Market signal</Tip>
             </div>
             <div className={`font-display text-xl font-bold ${marketColor(plan.marketSignal)}`}>
               {plan.marketSignalDisplay}
@@ -189,7 +352,7 @@ export function TradePlanTab({
           <div>
             <div className="text-[10px] uppercase tracking-wide text-terminal-muted">Setup</div>
             <div className={`font-display text-xl font-bold ${stateColor(plan.planState)}`}>
-              {plan.planState}
+              {plan.planState === "CONFLICT" ? "CONFLICT" : plan.planState}
             </div>
             <p className="mt-0.5 text-[10px] text-terminal-muted">
               Raw engine: {plan.setupStatusRaw}
@@ -200,68 +363,96 @@ export function TradePlanTab({
         <div className="mt-3 rounded border border-terminal-border/50 px-2 py-1.5">
           <div className="text-[10px] uppercase tracking-wide text-terminal-muted">Status</div>
           <div className={`font-mono text-sm ${stateColor(plan.planState)}`}>
-            {plan.statusMessage}
+            {plan.planState === "CONFLICT" ? "CONFLICT — WAIT" : plan.statusMessage}
           </div>
+          {plan.planState === "CONFLICT" ? (
+            <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-amber-200/80">
+              WAIT — NO ENTRY
+            </div>
+          ) : null}
+          {plan.statusWhy ? (
+            <div className="mt-1 text-[10px] text-terminal-muted">
+              Why? <span className="text-amber-200/90">{plan.statusWhy}</span>
+            </div>
+          ) : null}
+          {plan.planState === "ENTRY_READY" ? (
+            <div className="mt-1 text-[10px] text-terminal-muted">
+              <Tip text={TOOLTIPS.entryReady}>Entry ready</Tip> — analysis only
+            </div>
+          ) : null}
         </div>
 
-        {plan.conflictDetail ? (
-          <div className="mt-2 font-mono text-[11px] text-amber-300">
-            MTF: {plan.conflictDetail}
+        {plan.mtfAlignment.summaryLines.length > 0 ? (
+          <div className="mt-2 font-mono text-[11px]">
+            <div className="text-[10px] uppercase text-terminal-muted">MTF</div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              {plan.mtfAlignment.summaryLines.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>
 
-      {/* Levels */}
-      {!hideLevels ? (
-        <div className="rounded border border-terminal-border/60 p-3 font-mono text-xs">
-          <div className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
-            Levels (from setup engine)
-          </div>
-          <div className="space-y-1">
-            <div className="flex justify-between gap-2">
-              <span className="text-terminal-muted">ENTRY</span>
-              <span>{plan.entry.display}</span>
-            </div>
-            <div className="flex justify-between gap-2">
-              <span className="text-terminal-muted">STOP LOSS</span>
-              <span className="text-terminal-down">{plan.stop.display}</span>
-            </div>
-            {plan.targets.map((t) => (
-              <div key={t.label} className="flex justify-between gap-2">
-                <span className="text-terminal-muted">{t.label}</span>
-                <span style={{ color: "#6cb6ff" }}>{t.display}</span>
-              </div>
-            ))}
-            <div className="mt-2 border-t border-terminal-border/40 pt-2">
-              <div className="text-terminal-muted">R:R</div>
-              {plan.rrLines.map((line) => (
-                <div key={line}>{line}</div>
-              ))}
-            </div>
-            {plan.riskPerUnit != null ? (
-              <div className="pt-1 text-terminal-muted">
-                Risk / unit: {plan.riskPerUnit.toLocaleString(undefined, { maximumFractionDigits: 6 })}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : (
-        <div className="rounded border border-terminal-border/60 p-3 text-xs text-terminal-muted">
-          No entry / SL / TP while status is WAITING — levels appear when the setup engine provides them.
-        </div>
-      )}
+      <MtfBlock plan={plan} />
 
-      {/* Confirmations */}
-      <div className="rounded border border-terminal-border/60 p-3">
-        <div className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">Why</div>
-        <div className="mb-2 text-[10px] font-medium uppercase text-terminal-muted">
-          Confirmations
+      {/* Trade plan levels */}
+      <div className="rounded border border-terminal-border/60 p-3 font-mono text-xs">
+        <div className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
+          Trade Plan
         </div>
-        <ul className="mb-3 space-y-0.5 font-mono text-[11px]">
-          {plan.confirmations.length === 0 ? (
-            <li className="text-terminal-muted">No confirmations yet</li>
+        <div className="space-y-1">
+          <div className="flex justify-between gap-2">
+            <span className="text-terminal-muted">Entry</span>
+            <span>{hideLevels ? "—" : plan.entry.display}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-terminal-muted">SL</span>
+            <span className={hideLevels ? "" : "text-terminal-down"}>
+              {hideLevels ? "—" : plan.stop.display}
+            </span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-terminal-muted">TP</span>
+            <span style={hideLevels ? undefined : { color: "#6cb6ff" }}>
+              {hideLevels
+                ? "—"
+                : plan.targets
+                    .filter((t) => t.price != null)
+                    .map((t) => t.display)
+                    .join(" / ") || "—"}
+            </span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-terminal-muted">R:R</span>
+            <span>{hideLevels || plan.rrLines.length === 0 ? "—" : plan.rrLines.join(" · ")}</span>
+          </div>
+        </div>
+        {plan.provisionalInvalidation ? (
+          <div className="mt-3 rounded border border-amber-500/35 bg-amber-500/5 px-2 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-amber-200/90">
+              Provisional Invalidation Reference
+            </div>
+            <div className="mt-0.5 font-mono text-sm text-amber-100">
+              {plan.provisionalInvalidation.display}
+            </div>
+            <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+              NOT AN ACTIVE STOP
+            </div>
+            <p className="mt-1 text-[10px] leading-snug text-terminal-muted">
+              No position exists because entry conditions are not satisfied. Not used for
+              position-size calculation.
+            </p>
+          </div>
+        ) : null}
+      </div>
+
+      <Section title="Directional Evidence" defaultOpen>
+        <ul className="space-y-0.5 font-mono text-[11px]">
+          {plan.directionalEvidence.length === 0 ? (
+            <li className="text-terminal-muted">None</li>
           ) : (
-            plan.confirmations.map((c) => (
+            plan.directionalEvidence.map((c) => (
               <li key={c.id} className="text-terminal-up">
                 ✓ {c.label}
                 {c.detail ? <span className="text-terminal-muted"> — {c.detail}</span> : null}
@@ -269,72 +460,108 @@ export function TradePlanTab({
             ))
           )}
         </ul>
-        <div className="mb-2 text-[10px] font-medium uppercase text-terminal-muted">Missing</div>
-        <ul className="mb-3 space-y-0.5 font-mono text-[11px]">
-          {plan.missing.length === 0 ? (
+      </Section>
+
+      <Section title="Data Available" tip={TOOLTIPS.dataAvailable} tone="muted">
+        <ul className="space-y-1 font-mono text-[11px]">
+          {plan.dataAvailable.length === 0 ? (
+            <li className="text-terminal-muted">No optional feeds marked live</li>
+          ) : (
+            plan.dataAvailable.map((d) => (
+              <li key={d.id} className="flex justify-between gap-2 text-terminal-text">
+                <span>{d.label}</span>
+                <span className="text-terminal-muted">{d.status}</span>
+              </li>
+            ))
+          )}
+        </ul>
+        <p className="mt-1 text-[10px] text-terminal-muted">
+          Availability is not a BUY/SELL or bullish/bearish confirmation.
+        </p>
+      </Section>
+
+      <Section title="Missing Entry Confirmations" tip={TOOLTIPS.missing} tone="muted">
+        <ul className="space-y-1 font-mono text-[11px]">
+          {plan.missingEntryConfirmations.length === 0 ? (
             <li className="text-terminal-muted">None</li>
           ) : (
-            plan.missing.map((c) => (
+            plan.missingEntryConfirmations.map((c) => (
               <li key={c.id} className="text-terminal-muted">
-                ○ {c.label}
+                <div>○ {c.label}</div>
+                {c.detail ? <div className="pl-3 text-[10px] opacity-80">{c.detail}</div> : null}
               </li>
             ))
           )}
         </ul>
-        <div className="mb-2 text-[10px] font-medium uppercase text-terminal-muted">
-          Unavailable data
-        </div>
-        <ul className="space-y-0.5 font-mono text-[11px]">
-          {plan.unavailable.length === 0 ? (
-            <li className="text-terminal-muted">None flagged</li>
+      </Section>
+
+      <Section title="Failed Entry Gates" defaultOpen={plan.failedEntryGates.length > 0}>
+        <ul className="space-y-1 font-mono text-[11px]">
+          {plan.failedEntryGates.length === 0 ? (
+            <li className="text-terminal-muted">None</li>
           ) : (
-            plan.unavailable.map((c) => (
-              <li key={c.id} className="text-terminal-muted">
+            plan.failedEntryGates.map((c) => (
+              <li key={c.id} className="text-terminal-down">
+                <div>✗ {c.label}</div>
+                {c.detail ? (
+                  <div className="pl-3 text-[10px] text-terminal-muted">
+                    Reason: {c.detail}
+                  </div>
+                ) : null}
+              </li>
+            ))
+          )}
+        </ul>
+      </Section>
+
+      <Section
+        title="Unavailable / Not Confirmed"
+        tip={TOOLTIPS.na}
+        tone="muted"
+        defaultOpen={plan.unavailableNotConfirmed.length > 0}
+      >
+        <ul className="space-y-0.5 font-mono text-[11px] text-terminal-muted">
+          {plan.unavailableNotConfirmed.length === 0 ? (
+            <li>None flagged</li>
+          ) : (
+            plan.unavailableNotConfirmed.map((c) => (
+              <li key={c.id}>
                 {c.detail
                   ? `N/A — ${c.label}: ${c.detail}`
-                  : c.id === "choch" || c.id === "supply_demand" || c.id === "entry_setup"
+                  : c.id === "choch" || c.id === "supply_demand"
                     ? `N/A — ${c.label}`
-                    : `N/A — ${c.label} unavailable`}
+                    : `N/A — ${c.label}`}
               </li>
             ))
           )}
         </ul>
-        {plan.failures.length > 0 ? (
-          <>
-            <div className="mb-2 mt-3 text-[10px] font-medium uppercase text-terminal-muted">
-              Failed checks
-            </div>
-            <ul className="space-y-0.5 font-mono text-[11px]">
-              {plan.failures.map((c) => (
-                <li key={c.id} className="text-terminal-down">
-                  ✗ {c.label}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-      </div>
+      </Section>
 
       {/* Invalidation */}
-      <div className="rounded border border-terminal-border/60 p-3">
+      <div className="rounded border border-terminal-border/60 p-2">
         <div className="mb-1 text-[11px] uppercase tracking-wide text-terminal-muted">
           What invalidates it
         </div>
         <p className="font-mono text-xs text-amber-200">{plan.invalidation}</p>
         {plan.stop.price != null ? (
           <p className="mt-1 text-[10px] text-terminal-muted">
-            SL from stop engine: {plan.stop.display} (not invented in the UI)
+            Active SL from stop engine: {plan.stop.display}
           </p>
         ) : null}
       </div>
 
-      <Lifecycle active={plan.lifecycleStep} />
+      <Lifecycle active={plan.lifecycleStep} waitingNote={plan.lifecycleWaitingNote} />
 
       <div className="rounded border border-terminal-border/60 p-2">
-        <div className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
-          Candle-1 / Candle-2 (explanatory)
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <div className="text-[11px] uppercase tracking-wide text-terminal-muted">
+            Candle-1 / Candle-2 (explanatory)
+          </div>
+          <div className="font-mono text-[10px] text-terminal-muted">
+            Current stage: {plan.currentStage}
+          </div>
         </div>
-        <ol className="space-y-2 font-mono text-[11px]">
+        <ol className="space-y-1 font-mono text-[11px]">
           {plan.candleLifecycle.map((c) => (
             <li key={c.title}>
               <div className="text-terminal-text">{c.title}</div>
@@ -346,17 +573,6 @@ export function TradePlanTab({
       </div>
 
       {plan.direction ? <SidePlan plan={plan} /> : null}
-
-      {plan.mtfLines.length > 0 ? (
-        <div className="rounded border border-terminal-border/60 p-2 font-mono text-[11px]">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-terminal-muted">
-            Timeframes
-          </div>
-          {plan.mtfLines.map((line) => (
-            <div key={line}>{line}</div>
-          ))}
-        </div>
-      ) : null}
 
       {/* Position size calculator */}
       <div className="rounded border border-terminal-border/60 p-3">
@@ -425,9 +641,12 @@ export function TradePlanTab({
             <span>
               {sizing.valid && sizing.positionSize != null
                 ? `${sizing.positionSize.toLocaleString(undefined, { maximumFractionDigits: 4 })}  (${sizing.formula})`
-                : sizing.error || "—"}
+                : "Unavailable"}
             </span>
           </div>
+          {!sizing.valid && sizing.error ? (
+            <div className="text-[10px] text-terminal-muted">Reason: {sizing.error}</div>
+          ) : null}
         </div>
         <p className="mt-2 text-[10px] leading-snug text-amber-200/90">
           Position size is calculated from stop distance and account risk. Leverage changes margin
@@ -439,12 +658,13 @@ export function TradePlanTab({
       </div>
 
       {plan.dataNotes.length > 0 ? (
-        <div className="rounded border border-terminal-border/60 p-2 font-mono text-[10px] text-terminal-muted">
-          <div className="mb-1 uppercase tracking-wide">Data notes</div>
-          {plan.dataNotes.map((n) => (
-            <div key={n}>{n}</div>
-          ))}
-        </div>
+        <Section title="Data Notes" tone="muted" defaultOpen={false}>
+          <div className="font-mono text-[10px] text-terminal-muted">
+            {plan.dataNotes.map((n) => (
+              <div key={n}>{n}</div>
+            ))}
+          </div>
+        </Section>
       ) : null}
     </div>
   );

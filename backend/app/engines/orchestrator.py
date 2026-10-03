@@ -21,6 +21,7 @@ from app.ingestion.klines import normalize_timeframe
 from app.ingestion.liquidations import BinanceForceOrderProvider, LiquidationIngestion
 from app.ingestion.oi_scheduler import OIScheduler
 from app.ingestion.providers.router import FundamentalProviderRouter
+from app.ingestion.providers.sentiment import get_sentiment_provider
 from app.ingestion.ws_manager import WebSocketManager
 from app.models.ohlcv import Candle
 from app.models.schemas import FreshValue
@@ -117,6 +118,7 @@ class CalculationOrchestrator:
             ),
         )
         self.fundamentals = FundamentalProviderRouter(settings)
+        self.sentiment = get_sentiment_provider(settings)
         self.backfill = ProgressiveBackfillService(
             settings,
             rest,
@@ -137,6 +139,10 @@ class CalculationOrchestrator:
         self._running = True
         self._universe_symbols = [s.upper() for s in symbols]
         await self.fundamentals.start()
+        try:
+            await self.sentiment.start()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("sentiment_provider_start_failed", error=str(exc))
         live_syms = self._select_kline_live_symbols(self._universe_symbols)
         await self.kline_ws.start(live_syms)
         await self.trade_tips.sync_symbols(live_syms)
@@ -144,18 +150,50 @@ class CalculationOrchestrator:
         self.oi.set_symbols(symbols)
         await self.oi.start()
         await self.backfill.start()
-        # Init paper book once with settings (singleton)
+        # Init paper book once with settings (singleton), then hydrate from DB
+        from app.services.paper_risk import policy_from_settings
         from app.services.paper_trade import get_paper_trade_engine
 
-        get_paper_trade_engine(
+        paper = get_paper_trade_engine(
             starting_equity=float(self.settings.paper_starting_equity),
             risk_percent=float(self.settings.paper_risk_percent),
             enabled=bool(self.settings.paper_trade_enabled),
             entry_mode=str(getattr(self.settings, "paper_entry_mode", "path_a") or "path_a"),
+            risk_policy=policy_from_settings(self.settings),
         )
-        # Open any Path A setups already in cache after boot
         try:
-            get_paper_trade_engine().scan_cached_setups()
+            rows = await persistence.load_paper_trades(closed_limit=paper.max_closed)
+            paper.hydrate_from_rows(rows)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("paper_hydrate_failed", error=str(exc))
+        # Alerts: Redis first, else Postgres
+        try:
+            from app.services.alerts import get_alert_feed
+            from app.services.redis_state import redis_state
+
+            feed = get_alert_feed()
+            snap = await redis_state.get_alerts_state()
+            if not isinstance(snap, dict) or not snap.get("rows"):
+                db_rows = await persistence.load_alerts(limit=feed.maxlen)
+                if db_rows:
+                    snap = {
+                        "rows": db_rows,
+                        "latest_seq": max(
+                            (int(a.get("seq") or 0) for a in db_rows), default=0
+                        ),
+                    }
+            feed.hydrate_from_snapshot(snap if isinstance(snap, dict) else None)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("alerts_hydrate_failed", error=str(exc))
+        # Funding marks from DB until live WS overwrites
+        try:
+            fund_rows = await persistence.load_latest_funding_rates()
+            self.market.hydrate_funding_from_rows(fund_rows)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("funding_hydrate_failed", error=str(exc))
+        # Open any Path A setups already in cache after boot (dedupe keys restored)
+        try:
+            paper.scan_cached_setups()
         except Exception:  # noqa: BLE001
             pass
         # Background hydrate/enqueue so FastAPI lifespan can yield and bind :8000
@@ -169,6 +207,7 @@ class CalculationOrchestrator:
         )
         self._tasks.append(asyncio.create_task(self._db_flush_loop(), name="ohlcv_db_flush"))
         self._tasks.append(asyncio.create_task(self._fundamentals_loop(), name="fundamentals"))
+        self._tasks.append(asyncio.create_task(self._sentiment_loop(), name="sentiment"))
         self._tasks.append(asyncio.create_task(self._retention_loop(), name="retention"))
         self._tasks.append(
             asyncio.create_task(self._setup_ensure_loop(), name="setup_ensure_loop")
@@ -316,10 +355,26 @@ class CalculationOrchestrator:
                 logger.warning("visible_tip_loop_failed", error=str(exc))
 
     async def _hydrate_and_enqueue(self, symbols: list[str]) -> None:
-        """Load OHLCV from DB, restore setups, warm engines, then enqueue gaps."""
+        """Load OHLCV from DB, restore setups/OI, warm engines, then enqueue gaps."""
         try:
             await self.backfill.hydrate_from_db(symbols)
             await self._hydrate_setup_signals()
+            # OI history for active/visible tier so % changes aren't blank after restart
+            try:
+                prefer = list(
+                    dict.fromkeys(
+                        [
+                            *self.oi._prioritized()[:60],  # noqa: SLF001
+                            *(list(symbols)[:40]),
+                        ]
+                    )
+                )[:80]
+                oi_hist = await persistence.load_open_interest_history(
+                    prefer, limit_per_symbol=200, max_symbols=80
+                )
+                await self.oi.hydrate_from_db(oi_hist)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("oi_hydrate_failed", error=str(exc))
             if not self._running:
                 return
             self._tasks.append(
@@ -351,6 +406,10 @@ class CalculationOrchestrator:
         await self._liq_ws.stop_all()
         await self.oi.stop()
         await self.fundamentals.close()
+        try:
+            await self.sentiment.close()
+        except Exception:  # noqa: BLE001
+            pass
 
     async def on_symbols_changed(self, symbols: list[str]) -> None:
         self._universe_symbols = [s.upper() for s in symbols]
@@ -605,6 +664,56 @@ class CalculationOrchestrator:
                 logger.warning("fundamentals_refresh_failed", error=str(exc))
             await asyncio.sleep(self.fundamentals.refresh_seconds)
 
+    async def _sentiment_loop(self) -> None:
+        """Refresh LunarCrush social metrics on a slow cadence (not candle-tied)."""
+        await asyncio.sleep(20)
+        while self._running:
+            refresh = 300.0
+            try:
+                client = getattr(self.sentiment, "client", None)
+                if client is not None:
+                    refresh = float(getattr(client, "refresh_seconds", 300) or 300)
+                await self._refresh_sentiment()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("sentiment_refresh_failed", error=str(exc))
+            await asyncio.sleep(max(60.0, refresh))
+
+    async def _refresh_sentiment(self) -> None:
+        if not self.sentiment.configured:
+            return
+        symbols = list(self.market.symbols.keys())
+        if not symbols:
+            return
+        data = await self.sentiment.get_sentiment(symbols)
+        client = getattr(self.sentiment, "client", None)
+        if client is not None:
+            client.coverage_for_universe(symbols)
+        for sym, fields in data.items():
+            self.engines.set_sentiment(sym, fields)
+            # Persist a compact snapshot for sentiment_change history (optional DB)
+            sd = fields.get("sentiment")
+            if sd is not None and sd.value is not None and client is not None:
+                mapping = client.map_symbol(sym)
+                asset = (
+                    client.raw_asset(mapping.provider_symbol)
+                    if mapping.provider_symbol
+                    else None
+                )
+                await persistence.persist_sentiment_snapshot(
+                    symbol=sym,
+                    provider=str(getattr(self.sentiment, "provider_name", None) or "free_social"),
+                    provider_symbol=mapping.provider_symbol,
+                    observed_at=sd.timestamp,
+                    provider_generated_at=getattr(client.stats, "provider_generated_at", None),
+                    social_dominance=_fv_num(fields.get("social_dominance")),
+                    social_volume=_fv_num(fields.get("social_volume")),
+                    mentions=_fv_num(fields.get("mentions")),
+                    engagement=_fv_num(fields.get("engagement")),
+                    sentiment=_fv_num(fields.get("sentiment")),
+                    sentiment_change=_fv_num(fields.get("sentiment_change")),
+                    raw_payload_hash=client.payload_hash(asset) if asset else None,
+                )
+
     async def _refresh_fundamentals(self) -> None:
         symbols = list(self.market.symbols.keys())
         if not symbols:
@@ -647,10 +756,20 @@ class CalculationOrchestrator:
             "liquidations": self.liquidations.status(),
             "backfill": self.backfill.status(),
             "fundamentals": self.fundamentals.status(),
+            "sentiment": self.sentiment.status(),
             "provider_health": await provider_health.snapshot_all(),
             "rest_last_minute": audit,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+
+def _fv_num(fv: FreshValue | None) -> float | None:
+    if fv is None or fv.value is None:
+        return None
+    try:
+        return float(fv.value)
+    except (TypeError, ValueError):
+        return None
 
 
 orchestrator: CalculationOrchestrator | None = None
