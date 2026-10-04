@@ -1,0 +1,238 @@
+{
+  "combo02": {
+    "enabled": true,
+    "meta": {
+      "symbols": [
+        "BTCUSDT",
+        "ETHUSDT",
+        "SOLUSDT"
+      ],
+      "timeframes": [
+        "15m",
+        "1h"
+      ],
+      "combination_id": "COMBO_02",
+      "purpose": "strategy_evaluation_profile"
+    },
+    "stages": {
+      "bos_prefilter": {
+        "calls": 10794,
+        "elapsed_ms": 1434.422,
+        "elapsed_seconds": 1.434422
+      },
+      "cell_BTCUSDT_15m": {
+        "calls": 1,
+        "elapsed_ms": 6278.645,
+        "elapsed_seconds": 6.278645
+      },
+      "cell_BTCUSDT_1h": {
+        "calls": 1,
+        "elapsed_ms": 815.858,
+        "elapsed_seconds": 0.815858
+      },
+      "cell_ETHUSDT_15m": {
+        "calls": 1,
+        "elapsed_ms": 6157.871,
+        "elapsed_seconds": 6.157871
+      },
+      "cell_ETHUSDT_1h": {
+        "calls": 1,
+        "elapsed_ms": 847.144,
+        "elapsed_seconds": 0.847144
+      },
+      "cell_SOLUSDT_15m": {
+        "calls": 1,
+        "elapsed_ms": 4426.217,
+        "elapsed_seconds": 4.426217
+      },
+      "cell_SOLUSDT_1h": {
+        "calls": 1,
+        "elapsed_ms": 439.108,
+        "elapsed_seconds": 0.439108
+      },
+      "evaluate_combination_at_bar": {
+        "calls": 205,
+        "elapsed_ms": 15048.91,
+        "elapsed_seconds": 15.04891
+      },
+      "htf_alignment_gate": {
+        "calls": 205,
+        "elapsed_ms": 455.768,
+        "elapsed_seconds": 0.455768
+      },
+      "htf_precompute": {
+        "calls": 6,
+        "elapsed_ms": 505.762,
+        "elapsed_seconds": 0.505762
+      },
+      "structure_analyze_timeframe": {
+        "calls": 205,
+        "elapsed_ms": 14405.394,
+        "elapsed_seconds": 14.405394
+      },
+      "swing_extend": {
+        "calls": 11220,
+        "elapsed_ms": 727.998,
+        "elapsed_seconds": 0.727998
+      },
+      "trade_simulation": {
+        "calls": 426,
+        "elapsed_ms": 7.974,
+        "elapsed_seconds": 0.007974
+      }
+    },
+    "ranked": [
+      {
+        "stage": "evaluate_combination_at_bar",
+        "calls": 205,
+        "elapsed_ms": 15048.91,
+        "pct_of_staged": 29.2
+      },
+      {
+        "stage": "structure_analyze_timeframe",
+        "calls": 205,
+        "elapsed_ms": 14405.394,
+        "pct_of_staged": 27.9
+      },
+      {
+        "stage": "cell_BTCUSDT_15m",
+        "calls": 1,
+        "elapsed_ms": 6278.645,
+        "pct_of_staged": 12.2
+      },
+      {
+        "stage": "cell_ETHUSDT_15m",
+        "calls": 1,
+        "elapsed_ms": 6157.871,
+        "pct_of_staged": 11.9
+      },
+      {
+        "stage": "cell_SOLUSDT_15m",
+        "calls": 1,
+        "elapsed_ms": 4426.217,
+        "pct_of_staged": 8.6
+      },
+      {
+        "stage": "bos_prefilter",
+        "calls": 10794,
+        "elapsed_ms": 1434.422,
+        "pct_of_staged": 2.8
+      },
+      {
+        "stage": "cell_ETHUSDT_1h",
+        "calls": 1,
+        "elapsed_ms": 847.144,
+        "pct_of_staged": 1.6
+      },
+      {
+        "stage": "cell_BTCUSDT_1h",
+        "calls": 1,
+        "elapsed_ms": 815.858,
+        "pct_of_staged": 1.6
+      },
+      {
+        "stage": "swing_extend",
+        "calls": 11220,
+        "elapsed_ms": 727.998,
+        "pct_of_staged": 1.4
+      },
+      {
+        "stage": "htf_precompute",
+        "calls": 6,
+        "elapsed_ms": 505.762,
+        "pct_of_staged": 1.0
+      },
+      {
+        "stage": "htf_alignment_gate",
+        "calls": 205,
+        "elapsed_ms": 455.768,
+        "pct_of_staged": 0.9
+      },
+      {
+        "stage": "cell_SOLUSDT_1h",
+        "calls": 1,
+        "elapsed_ms": 439.108,
+        "pct_of_staged": 0.9
+      },
+      {
+        "stage": "trade_simulation",
+        "calls": 426,
+        "elapsed_ms": 7.974,
+        "pct_of_staged": 0.0
+      }
+    ],
+    "total_staged_ms": 51551.071
+  },
+  "lifecycle": {
+    "enabled": true,
+    "meta": {
+      "symbols": [
+        "BTCUSDT"
+      ],
+      "timeframes": [
+        "15m"
+      ],
+      "purpose": "lifecycle_profile"
+    },
+    "stages": {
+      "candles_as_of_copy": {
+        "calls": 1215,
+        "elapsed_ms": 25.634,
+        "elapsed_seconds": 0.025634
+      },
+      "detect_pullback": {
+        "calls": 896,
+        "elapsed_ms": 142.375,
+        "elapsed_seconds": 0.142375
+      },
+      "detect_retest": {
+        "calls": 319,
+        "elapsed_ms": 4321.82,
+        "elapsed_seconds": 4.32182
+      },
+      "lifecycle_BTCUSDT_15m": {
+        "calls": 1,
+        "elapsed_ms": 427378.212,
+        "elapsed_seconds": 427.378212
+      },
+      "lifecycle_discover_analyze_timeframe": {
+        "calls": 3072,
+        "elapsed_ms": 422566.006,
+        "elapsed_seconds": 422.566006
+      }
+    },
+    "ranked": [
+      {
+        "stage": "lifecycle_BTCUSDT_15m",
+        "calls": 1,
+        "elapsed_ms": 427378.212,
+        "pct_of_staged": 50.0
+      },
+      {
+        "stage": "lifecycle_discover_analyze_timeframe",
+        "calls": 3072,
+        "elapsed_ms": 422566.006,
+        "pct_of_staged": 49.5
+      },
+      {
+        "stage": "detect_retest",
+        "calls": 319,
+        "elapsed_ms": 4321.82,
+        "pct_of_staged": 0.5
+      },
+      {
+        "stage": "detect_pullback",
+        "calls": 896,
+        "elapsed_ms": 142.375,
+        "pct_of_staged": 0.0
+      },
+      {
+        "stage": "candles_as_of_copy",
+        "calls": 1215,
+        "elapsed_ms": 25.634,
+        "pct_of_staged": 0.0
+      }
+    ],
+    "total_staged_ms": 854434.046
+  }
+}

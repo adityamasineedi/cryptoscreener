@@ -365,8 +365,8 @@ def test_close_legacy_requires_confirm_and_skips_v1(monkeypatch):
     assert result["ok"] is True
     assert result["closed_count"] == 1
     assert "BTCUSDT" in result["skipped_v1"]
-    assert eng._open.get("BTCUSDT") is not None
-    assert eng._open.get("ARBUSDT") is None
+    assert eng.get_open("BTCUSDT", "V1") is not None
+    assert eng.get_open("ARBUSDT", "LEGACY") is None
     archived = eng._closed[0]
     assert archived.exit_reason == "legacy_cleanup"
     assert archived.signal_snippet.get("telegram_eligible") is False

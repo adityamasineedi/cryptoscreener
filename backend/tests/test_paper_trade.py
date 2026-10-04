@@ -348,7 +348,7 @@ def test_invalidated_setup_does_not_cancel_open(monkeypatch):
         is None
     )
     assert eng.status()["open_count"] == 1
-    assert eng._open["BTCUSDT"].status == "OPEN"
+    assert eng.get_open("BTCUSDT", "LEGACY").status == "OPEN"
     assert eng.status()["closed_count"] == 0
 
 
@@ -388,7 +388,7 @@ def test_hydrated_open_survives_invalidated_setup(monkeypatch):
         },
     )
     assert eng.status()["open_count"] == 1
-    assert eng._open["ETHUSDT"].id == "open-1"
+    assert eng.get_open("ETHUSDT", "LEGACY").id == "open-1"
 
 
 def test_hydrate_from_rows_restores_book_and_equity(monkeypatch):

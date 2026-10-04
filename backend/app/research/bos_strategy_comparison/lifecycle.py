@@ -85,10 +85,13 @@ def candles_as_of(
     candles: Sequence[Mapping[str, Any]], as_of_index: int
 ) -> list[Mapping[str, Any]]:
     """Strict no-lookahead window: only candles[0 : as_of_index+1]."""
+    from app.research.data_cache.stage_profiler import research_stage_profiler
+
     end = min(int(as_of_index), len(candles) - 1)
     if end < 0:
         return []
-    return list(candles[: end + 1])
+    with research_stage_profiler.time("candles_as_of_copy"):
+        return list(candles[: end + 1])
 
 
 @dataclass(frozen=True)
@@ -265,19 +268,22 @@ def evaluate_pullback_at(
     ema: float | None = None,
 ) -> dict[str, Any]:
     """Call production detect_pullback with frozen impulse; no future candles."""
+    from app.research.data_cache.stage_profiler import research_stage_profiler
+
     window = candles_as_of(candles, as_of_index)
     # as_of within truncated window is last index
-    return detect_pullback(
-        window,
-        event.frozen_bos,
-        event.frozen_impulse,
-        signal_config,
-        demand_zone=demand_zone,
-        supply_zone=supply_zone,
-        vwap=vwap,
-        ema=ema,
-        as_of_index=len(window) - 1,
-    )
+    with research_stage_profiler.time("detect_pullback"):
+        return detect_pullback(
+            window,
+            event.frozen_bos,
+            event.frozen_impulse,
+            signal_config,
+            demand_zone=demand_zone,
+            supply_zone=supply_zone,
+            vwap=vwap,
+            ema=ema,
+            as_of_index=len(window) - 1,
+        )
 
 
 def evaluate_retest_at(
@@ -289,16 +295,19 @@ def evaluate_retest_at(
     signal_config: SignalConfig,
 ) -> dict[str, Any]:
     """Call production detect_retest with frozen BOS + current pullback output."""
+    from app.research.data_cache.stage_profiler import research_stage_profiler
+
     window = candles_as_of(candles, as_of_index)
     direction = _direction_label(event.frozen_bos)
-    return detect_retest(
-        window,
-        event.frozen_bos,
-        dict(pullback),
-        signal_config,
-        direction=direction,
-        as_of_index=len(window) - 1,
-    )
+    with research_stage_profiler.time("detect_retest"):
+        return detect_retest(
+            window,
+            event.frozen_bos,
+            dict(pullback),
+            signal_config,
+            direction=direction,
+            as_of_index=len(window) - 1,
+        )
 
 
 def run_lifecycle(
@@ -521,8 +530,18 @@ def discover_impulse_events(
     events: list[FrozenImpulseEvent] = []
     bos_candidates = 0
 
+    from app.research.data_cache.stage_profiler import research_stage_profiler
+
     for i in range(start, len(candles)):
-        tf = engine.analyze_timeframe(symbol, timeframe, candles, as_of_index=i)
+        with research_stage_profiler.time("lifecycle_discover_analyze_timeframe"):
+            # Research-only: skip SwingRecord API serialization (use _swings_objs).
+            tf = engine.analyze_timeframe(
+                symbol,
+                timeframe,
+                candles,
+                as_of_index=i,
+                serialize_swings=False,
+            )
         bos = tf.get("bos")
         impulse = tf.get("impulse")
         if not _bos_confirmed(bos if isinstance(bos, Mapping) else None):

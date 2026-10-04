@@ -67,10 +67,11 @@ def max_drawdown_r(rs: list[float]) -> float:
 
 
 def fee_pct_of_gross(gross_pnl: float | None, fees: float | None) -> float | None:
+    """Fee share of |gross|. Fees may be NEGATIVE_COST or POSITIVE_COST."""
     if gross_pnl is None:
         return None
     g = abs(float(gross_pnl))
-    f = float(fees or 0)
+    f = abs(float(fees or 0))
     if g <= 1e-12:
         return None if f <= 0 else 1.0
     return f / g

@@ -36,3 +36,7 @@ backend/scripts/*_research_result*.json
 backend/scripts/*_research_summary*.txt
 backend/scripts/*_analysis_report.json
 backend/scripts/diagnose_*_result.json
+
+# SHORT research run outputs (regenerable; keep out of git for now)
+backend/reports/short_research/
+backend/app/reports/short_research/

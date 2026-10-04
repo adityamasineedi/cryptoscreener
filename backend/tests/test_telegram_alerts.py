@@ -24,6 +24,7 @@ def _v1_open_payload(**overrides):
         "entry_price": 100_000.0,
         "stop_price": 98_000.0,
         "tp1_price": 104_000.0,
+        "quantity": 0.0075,
         "risk_usd": 15.0,
         "timeframe": "1h",
         "signal_snippet": {
@@ -100,13 +101,53 @@ def test_format_entry_message():
     }
     text = format_telegram_message(alert)
     assert text is not None
-    assert "🟢 LONG BTCUSDT 1h (COMBO_02 v1 - CORE)" in text
+    assert "🟢 LONG BTCUSDT 1h" in text
+    assert "COMBO_02 v1 — CORE" in text
     assert "Entry: 100,000" in text
     assert "Stop: 98,000" in text
     assert "TP1: 104,000" in text
-    assert "Risk: 1.5%" in text
+    assert "Qty: 0.0075 BTC" in text
+    assert "(~$750.00)" in text
+    assert "Risk: $15.00 (1.5% of $1000.00)" in text
     assert "HTF: 4h=BULLISH, 1h=BULLISH, HTF_ALIGNED" in text
     assert "R: 2.00R" in text
+
+
+def test_format_entry_message_sol_includes_qty_and_distances():
+    alert = {
+        "type": "PAPER_ENTRY",
+        "symbol": "SOLUSDT",
+        "timeframe": "1h",
+        "payload": _v1_open_payload(
+            symbol="SOLUSDT",
+            entry_price=120.09,
+            stop_price=118.9719,
+            tp1_price=123.36,
+            quantity=4.471,
+            risk_usd=5.0,
+            signal_snippet={
+                "strategy_id": "COMBO_02_V1",
+                "source": "V1_PAPER_WATCHER",
+                "path": "A",
+                "combo_id": "COMBO_02",
+                "combo_version": "v1-combo02-long-htf",
+                "v1_tier": "secondary",
+                "risk_percent": 0.005,
+                "symbol": "SOLUSDT",
+                "timeframe": "1h",
+                "trend_4h": "BULLISH",
+                "trend_1h": "BULLISH",
+                "htf_alignment": "HTF_ALIGNED",
+                "telegram_eligible": True,
+            },
+        ),
+    }
+    text = format_telegram_message(alert)
+    assert text is not None
+    assert "Qty: 4.471 SOL" in text
+    assert "Stop: 118.9719 (−1.1181 / −0.93%)" in text
+    assert "TP1: 123.36 (+3.27 / +2.72%)" in text
+    assert "Risk: $5.00 (0.5% of $1000.00)" in text
 
 
 def test_format_exit_maps_stop_to_sl():
@@ -120,14 +161,16 @@ def test_format_exit_maps_stop_to_sl():
             exit_reason="STOP",
             pnl_usd=-15.0,
             r_multiple=-1.0,
+            quantity=0.15,
         ),
     }
     text = format_telegram_message(alert)
     assert text is not None
     assert text.startswith("🔴 CLOSE ETHUSDT 1h")
-    assert "(SL)" in text
+    assert "Exit: 98,000.00 (SL)" in text
+    assert "Qty: 0.15 ETH" in text
     assert "R: -1.00R" in text
-    assert "PnL: -15.00" in text
+    assert "PnL: $-15.00" in text
     assert "Hold: n/a bars" in text
 
 

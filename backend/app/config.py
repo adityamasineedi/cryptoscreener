@@ -181,6 +181,10 @@ class Settings(BaseSettings):
     research_gate_block_htf_conflict: bool = Field(
         default=False, alias="RESEARCH_GATE_BLOCK_HTF_CONFLICT"
     )
+    # Research-only ENTRY_PRICE_CHECK threshold (percent). Descriptive; not a trade rule.
+    research_only_entry_deviation_threshold: float = Field(
+        default=0.10, alias="RESEARCH_ONLY_ENTRY_DEVIATION_THRESHOLD"
+    )
 
     # System diagnostics (Issue Center) — thresholds & polling
     diag_ui_refresh_seconds: int = Field(default=5, alias="DIAG_UI_REFRESH_SECONDS")
@@ -222,6 +226,20 @@ class Settings(BaseSettings):
     diag_rest_429_warning: int = Field(default=5, alias="DIAG_REST_429_WARNING")
     diag_job_stale_heartbeat_seconds: float = Field(
         default=300.0, alias="DIAG_JOB_STALE_HEARTBEAT_SECONDS"
+    )
+    # UI research backtest job limits (observability / stall detection only)
+    backtest_job_timeout_seconds: float = Field(
+        default=3600.0, alias="BACKTEST_JOB_TIMEOUT_SECONDS"
+    )
+    backtest_heartbeat_timeout_seconds: float = Field(
+        default=120.0, alias="BACKTEST_HEARTBEAT_TIMEOUT_SECONDS"
+    )
+    backtest_db_timeout_seconds: float = Field(
+        default=60.0, alias="BACKTEST_DB_TIMEOUT_SECONDS"
+    )
+    # Research-only CPU stage timers (default off — no production impact)
+    research_profile_enabled: bool = Field(
+        default=False, alias="RESEARCH_PROFILE_ENABLED"
     )
     # Phase 3 — backups / snapshots (safe defaults; no auto-delete)
     backup_destination: str = Field(

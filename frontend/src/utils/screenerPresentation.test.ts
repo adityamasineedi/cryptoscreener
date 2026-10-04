@@ -22,8 +22,8 @@ import {
   tradeStatusLabel,
 } from "./screenerPresentation";
 
-function fv<T extends string | number | null = string | number | null>(
-  value: T,
+function fv<T extends string | number = string | number>(
+  value: T | null,
   status: FreshValue["status"] = "WAITING",
   methodology?: string,
 ): FreshValue<T> {
@@ -242,7 +242,7 @@ describe("V1 presentation safety", () => {
   it("WAITING/CONFLICT potential levels are reference/candidate only", () => {
     const waiting = row({
       setup_signal: fv("WAITING", "LIVE"),
-      setup_entry: fv(null, "WAITING"),
+      setup_entry: fv<number>(null, "WAITING"),
       setup_sl: fv(1.23, "LIVE"),
       setup_tp1: fv(1.45, "LIVE"),
       setup_rr: fv(4, "LIVE"),

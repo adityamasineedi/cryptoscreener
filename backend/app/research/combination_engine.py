@@ -62,6 +62,8 @@ def htf_alignment_gate(
     candles_4h: Sequence[Mapping[str, Any]] | None,
     setup_trend_label: str | None = None,
     htf_trend_cache: dict[tuple[str, int], str] | None = None,
+    htf_idx_1h_map: Sequence[int | None] | None = None,
+    htf_idx_4h_map: Sequence[int | None] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Hard HTF gate: require classify_htf_alignment == HTF_ALIGNED.
 
@@ -69,13 +71,10 @@ def htf_alignment_gate(
     Uses only closed 1h/4h bars at-or-before the setup bar timestamp (no look-ahead).
     """
     tf = (timeframe or "").lower()
-    series_1h = list(candles_1h) if candles_1h is not None else None
-    series_4h = list(candles_4h) if candles_4h is not None else None
-    # When the setup TF itself is an HTF role, reuse setup candles if not passed.
-    if series_1h is None and tf == "1h":
-        series_1h = list(candles)
-    if series_4h is None and tf == "4h":
-        series_4h = list(candles)
+    # Do NOT copy HTF series here — date-window 15m walks call this gate often.
+    # Reuse caller sequences; when setup TF is itself 1h/4h, fall back to setup.
+    series_1h = candles_1h if candles_1h is not None else (candles if tf == "1h" else None)
+    series_4h = candles_4h if candles_4h is not None else (candles if tf == "4h" else None)
 
     meta: dict[str, Any] = {
         "htf_alignment": None,
@@ -97,6 +96,8 @@ def htf_alignment_gate(
         config=signal_config,
         trend_15m=setup_trend_label if tf in ("15m", "5m", "1m") else None,
         trend_cache=htf_trend_cache,
+        idx_1h_map=htf_idx_1h_map,
+        idx_4h_map=htf_idx_4h_map,
     )
     align = classify_htf_alignment(
         bos_direction=(bos or {}).get("direction"),
@@ -281,6 +282,8 @@ def evaluate_combination_at_bar(
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
     htf_trend_cache: dict[tuple[str, int], str] | None = None,
+    htf_idx_1h_map: Sequence[int | None] | None = None,
+    htf_idx_4h_map: Sequence[int | None] | None = None,
 ) -> dict[str, Any]:
     """Evaluate one combination at historical bar N with as_of_index = N.
 
@@ -311,19 +314,24 @@ def evaluate_combination_at_bar(
             symbol, timeframe, candles, as_of_index, sd_engine=sd_engine
         )
 
+    from app.research.data_cache.stage_profiler import research_stage_profiler
+
     swing_list = list(swings) if swings is not None and not isinstance(swings, list) else swings
-    tf_analysis = local_engine.analyze_timeframe(
-        symbol,
-        timeframe,
-        candles,
-        rvol=rvol,
-        demand_zone=demand_zone,
-        supply_zone=supply_zone,
-        as_of_index=as_of_index,
-        swings=swing_list,
-        atr_value=atr_value,
-        volumes=volumes,
-    )
+    with research_stage_profiler.time("structure_analyze_timeframe"):
+        # Research hot path: keep SwingRecord objects; skip API to_dict/asdict/deepcopy.
+        tf_analysis = local_engine.analyze_timeframe(
+            symbol,
+            timeframe,
+            candles,
+            rvol=rvol,
+            demand_zone=demand_zone,
+            supply_zone=supply_zone,
+            as_of_index=as_of_index,
+            swings=swing_list,
+            atr_value=atr_value,
+            volumes=volumes,
+            serialize_swings=False,
+        )
     trend = tf_analysis.get("trend") or {}
     bos = tf_analysis.get("bos")
     impulse = tf_analysis.get("impulse")
@@ -344,18 +352,21 @@ def evaluate_combination_at_bar(
 
     htf_meta: dict[str, Any] = {}
     if combination.require_htf_alignment:
-        htf_ok, htf_meta = htf_alignment_gate(
-            symbol=symbol,
-            timeframe=timeframe,
-            candles=candles,
-            as_of_index=as_of_index,
-            bos=bos,
-            signal_config=local_cfg,
-            candles_1h=candles_1h,
-            candles_4h=candles_4h,
-            setup_trend_label=str(trend.get("trend") or "") or None,
-            htf_trend_cache=htf_trend_cache,
-        )
+        with research_stage_profiler.time("htf_alignment_gate"):
+            htf_ok, htf_meta = htf_alignment_gate(
+                symbol=symbol,
+                timeframe=timeframe,
+                candles=candles,
+                as_of_index=as_of_index,
+                bos=bos,
+                signal_config=local_cfg,
+                candles_1h=candles_1h,
+                candles_4h=candles_4h,
+                setup_trend_label=str(trend.get("trend") or "") or None,
+                htf_trend_cache=htf_trend_cache,
+                htf_idx_1h_map=htf_idx_1h_map,
+                htf_idx_4h_map=htf_idx_4h_map,
+            )
     else:
         htf_ok = True
 

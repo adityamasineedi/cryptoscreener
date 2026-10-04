@@ -32,6 +32,11 @@ ENTRY_STATUSES = {
 PATH_A = "path_a"
 PATH_B = "path_b"
 
+# Parallel paper streams — one open per (symbol, stream), not one per symbol.
+STREAM_LEGACY = "LEGACY"
+STREAM_V1 = "V1"
+STREAM_V2 = "V2"
+
 # Do not open paper trades on stale / incomplete OHLCV tips
 _STALE_OHLCV = frozenset({"TRAILING_STALE", "STALE", "WAITING", "UNAVAILABLE"})
 
@@ -102,13 +107,60 @@ class PaperTradeEngine:
         # Legacy setup→paper auto-entry (default OFF — research only when explicitly enabled).
         self.legacy_auto_entry_enabled = False
         self.realized_pnl = 0.0
-        self._open: dict[str, PaperPosition] = {}
+        # Keyed by (SYMBOL, STREAM) so LEGACY + V1 + V2 can coexist on one symbol.
+        self._open: dict[tuple[str, str], PaperPosition] = {}
         self._closed: list[PaperPosition] = []
         self._opened_keys: set[str] = set()
         self._lock = threading.RLock()
         self._persist: PersistFn | None = None
         self._pending_persist: list[dict[str, Any]] = []
         self._last_skip_reason: str | None = None
+
+    @staticmethod
+    def stream_of(pos: PaperPosition | dict[str, Any]) -> str:
+        """Classify an open/closed paper row into LEGACY / V1 / V2 stream."""
+        if isinstance(pos, PaperPosition):
+            snip = pos.signal_snippet or {}
+        else:
+            snip = (pos.get("signal_snippet") or {}) if isinstance(pos, dict) else {}
+            if not isinstance(snip, dict):
+                snip = {}
+        source = str(snip.get("source") or "")
+        strategy = str(snip.get("strategy_id") or "")
+        if source == "V1_PAPER_WATCHER" or strategy == "COMBO_02_V1":
+            return STREAM_V1
+        if source in (
+            "V2_CANDIDATE_PAPER_WATCHER",
+            "DYNAMIC_CANDIDATE_PIPELINE",
+        ) or strategy == "COMBO_02_V2_RESEARCH":
+            return STREAM_V2
+        return STREAM_LEGACY
+
+    @staticmethod
+    def book_key(symbol: str, stream: str) -> tuple[str, str]:
+        return (str(symbol or "").upper(), str(stream or STREAM_LEGACY).upper())
+
+    def _key_for(self, pos: PaperPosition) -> tuple[str, str]:
+        return self.book_key(pos.symbol, self.stream_of(pos))
+
+    def has_open(self, symbol: str, stream: str) -> bool:
+        with self._lock:
+            return self.book_key(symbol, stream) in self._open
+
+    def get_open(self, symbol: str, stream: str) -> PaperPosition | None:
+        with self._lock:
+            return self._open.get(self.book_key(symbol, stream))
+
+    def open_symbols(self, stream: str | None = None) -> set[str]:
+        with self._lock:
+            if stream is None:
+                return {p.symbol for p in self._open.values()}
+            stream_u = str(stream).upper()
+            return {
+                p.symbol
+                for p in self._open.values()
+                if self.stream_of(p) == stream_u
+            }
 
     def set_persist(self, fn: PersistFn | None) -> None:
         self._persist = fn
@@ -240,9 +292,10 @@ class PaperTradeEngine:
                 keys.add(f"{sym}|{src}|{path}|{bos_level if bos_level is not None else ''}")
 
                 if status == "OPEN":
-                    # Newest first from SQL — keep first per symbol
-                    if sym not in self._open:
-                        self._open[sym] = pos
+                    # Newest first from SQL — keep first per (symbol, stream)
+                    key = self.book_key(sym, self.stream_of(pos))
+                    if key not in self._open:
+                        self._open[key] = pos
                 else:
                     closed_rows.append(pos)
                     if pos.pnl_usd is not None and status == "CLOSED":
@@ -265,6 +318,14 @@ class PaperTradeEngine:
     def status(self) -> dict[str, Any]:
         with self._lock:
             open_risk = sum(p.risk_usd for p in self._open.values())
+            by_stream: dict[str, int] = {
+                STREAM_LEGACY: 0,
+                STREAM_V1: 0,
+                STREAM_V2: 0,
+            }
+            for p in self._open.values():
+                stream = self.stream_of(p)
+                by_stream[stream] = by_stream.get(stream, 0) + 1
             return {
                 "enabled": self.enabled,
                 "paper_only": True,
@@ -273,6 +334,7 @@ class PaperTradeEngine:
                 "equity": round(self.equity, 4),
                 "realized_pnl_usd": round(self.realized_pnl, 4),
                 "open_count": len(self._open),
+                "open_by_stream": by_stream,
                 "closed_count": len(self._closed),
                 "open_risk_usd": round(open_risk, 4),
                 # Legacy RESEARCH_15M default only — COMBO_02 v1 opens use book risk
@@ -291,6 +353,7 @@ class PaperTradeEngine:
                 ),
                 "legacy_auto_entry_enabled": self.legacy_auto_entry_enabled,
                 "v1_watcher_owns_entries": self.v1_watcher_owns_entries,
+                "parallel_streams": True,
                 "risk_policy": self.risk_policy.to_dict(),
                 "v1_profile": {
                     "enabled": self.v1_profile_enabled,
@@ -322,6 +385,10 @@ class PaperTradeEngine:
         """
         if not self.enabled or not payload:
             return None
+        from app.research.combo02_short_research import assert_short_research_only_boundary
+
+        # Phase 2: SHORT / SHORT research identity never opens paper.
+        assert_short_research_only_boundary(payload, detail="on_setup_signal")
         # Kill switch: screener/BOS/liq/UI alerts continue; only skip paper opens.
         if not self.legacy_auto_entry_enabled:
             self._last_skip_reason = f"{str(symbol).upper()}:legacy_auto_entry_disabled"
@@ -366,7 +433,8 @@ class PaperTradeEngine:
 
         direction = str(payload.get("direction") or "").upper()
         if direction == "SHORT":
-            return None
+            # Redundant fail-closed (also enforced above via PermissionError).
+            raise PermissionError("short_research_only")
         if direction not in ("LONG", ""):
             # Path A may leave direction empty while BOS is bullish
             if not path_a:
@@ -463,13 +531,17 @@ class PaperTradeEngine:
         with self._lock:
             open_count = len(self._open)
             open_risk = sum(p.risk_usd for p in self._open.values())
-            if sym in self._open:
-                self._last_skip_reason = f"{sym}:already_open"
+            legacy_key = self.book_key(sym, STREAM_LEGACY)
+            if legacy_key in self._open:
+                self._last_skip_reason = f"{sym}:already_open_legacy"
                 logger.info(
                     "paper_skip_already_open",
                     symbol=sym,
                     path=path_label,
-                    open_source=(self._open[sym].signal_snippet or {}).get("source"),
+                    stream=STREAM_LEGACY,
+                    open_source=(self._open[legacy_key].signal_snippet or {}).get(
+                        "source"
+                    ),
                 )
                 return None
             if dedupe_key in self._opened_keys:
@@ -520,11 +592,13 @@ class PaperTradeEngine:
                 )
                 if v1_pct > 0:
                     eff_risk_pct = float(v1_pct)
+        # v1/legacy paper path is LONG-only; pass direction explicitly (not a silent default).
         sized = position_size(
             account_equity=self.equity,
             risk_percent=eff_risk_pct,
             entry=entry_price,
             stop=stop_price,
+            direction="LONG",
         )
         qty = float(sized.get("final_quantity") or 0.0)
         risk_usd = float(sized.get("max_risk_amount") or 0.0)
@@ -574,7 +648,8 @@ class PaperTradeEngine:
                 htf_alignment = "HTF_NEUTRAL_UNAVAILABLE"
 
         with self._lock:
-            if sym in self._open:
+            legacy_key = self.book_key(sym, STREAM_LEGACY)
+            if legacy_key in self._open:
                 return None
             if dedupe_key in self._opened_keys:
                 return None
@@ -617,7 +692,7 @@ class PaperTradeEngine:
                 timeframe=setup_tf,
                 signal_snippet=legacy_snip,
             )
-            self._open[sym] = pos
+            self._open[legacy_key] = pos
             self._opened_keys.add(dedupe_key)
             self._queue_persist(pos)
             self._last_skip_reason = None
@@ -625,6 +700,7 @@ class PaperTradeEngine:
                 "paper_opened",
                 symbol=sym,
                 path=path_label,
+                stream=STREAM_LEGACY,
                 source=legacy_snip.get("source"),
                 strategy_id=legacy_snip.get("strategy_id"),
                 entry=entry_price,
@@ -661,8 +737,13 @@ class PaperTradeEngine:
         """
         if not self.enabled and not replay:
             return None
+        from app.research.combo02_short_research import assert_short_research_only_boundary
         from app.research.v1_production import COMBO_ID, COMBO_VERSION
         from app.services.paper_classification import classify_v1_watcher
+
+        assert_short_research_only_boundary(
+            eval_result, detail="open_v1_combo_position"
+        )
 
         sym = str(symbol or "").upper()
         tf = str(timeframe or "1h").lower()
@@ -714,7 +795,8 @@ class PaperTradeEngine:
         with self._lock:
             open_count = len(self._open)
             open_risk = sum(p.risk_usd for p in self._open.values())
-            if sym in self._open:
+            v1_key = self.book_key(sym, STREAM_V1)
+            if v1_key in self._open:
                 return None
             if dedupe_key in self._opened_keys:
                 return None
@@ -738,11 +820,13 @@ class PaperTradeEngine:
             mcap = None
             qv = None
 
+        # Frozen COMBO_02 v1 opener: LONG-only by contract.
         sized = position_size(
             account_equity=self.equity,
             risk_percent=risk_pct,
             entry=entry_price,
             stop=stop_price,
+            direction="LONG",
         )
         qty = float(sized.get("final_quantity") or 0.0)
         risk_usd = float(sized.get("max_risk_amount") or 0.0)
@@ -764,7 +848,7 @@ class PaperTradeEngine:
                 return None
 
         with self._lock:
-            if sym in self._open:
+            if v1_key in self._open:
                 return None
             if dedupe_key in self._opened_keys:
                 return None
@@ -805,7 +889,7 @@ class PaperTradeEngine:
                 timeframe=tf,
                 signal_snippet=v1_snip,
             )
-            self._open[sym] = pos
+            self._open[v1_key] = pos
             self._opened_keys.add(dedupe_key)
             self._queue_persist(pos)
             self._last_skip_reason = None
@@ -813,6 +897,7 @@ class PaperTradeEngine:
                 "paper_opened_v1_watcher",
                 symbol=sym,
                 timeframe=tf,
+                stream=STREAM_V1,
                 tier=tier,
                 entry=entry_price,
                 stop=stop_price,
@@ -851,11 +936,17 @@ class PaperTradeEngine:
         """
         if not self.enabled and not replay:
             return None
+        from app.research.combo02_short_research import assert_short_research_only_boundary
         from app.research.dynamic_candidate_constants import (
             EXPERIMENTAL_LABEL,
             MAX_OVERRIDE_RISK,
             SOURCE_WATCHER,
             STRATEGY_ID,
+        )
+
+        assert_short_research_only_boundary(
+            {"signal_snippet": signal_snippet, **(eval_result or {})},
+            detail="open_experimental_position",
         )
 
         sym = str(symbol or "").upper()
@@ -895,8 +986,10 @@ class PaperTradeEngine:
         if tp1 is None and risk_dist > 0:
             tp1 = entry_price + self.min_rr * risk_dist
 
+        live: float | None = None
+        live_price_source = "unavailable"
         if not replay:
-            live = _live_price(sym)
+            live, live_price_source = _live_price_with_source(sym)
             if live is None or live <= 0:
                 self._last_skip_reason = f"{sym}:v2_no_live_price"
                 return None
@@ -906,16 +999,21 @@ class PaperTradeEngine:
 
         dedupe_key = f"{sym}|{setup_bar_time_utc}|V2|{tf}"
         with self._lock:
-            if sym in self._open:
+            v2_key = self.book_key(sym, STREAM_V2)
+            if v2_key in self._open:
                 return None
             if dedupe_key in self._opened_keys:
                 return None
 
+        # V2 experimental paper still uses LONG-only openers in this phase.
+        # Fill price remains strategy entry (unchanged). Triad recorded separately.
+        paper_fill = float(entry_price)
         sized = position_size(
             account_equity=self.equity,
             risk_percent=risk_pct,
-            entry=entry_price,
+            entry=paper_fill,
             stop=stop_price,
+            direction="LONG",
         )
         qty = float(sized.get("final_quantity") or 0.0)
         risk_usd = float(sized.get("max_risk_amount") or 0.0)
@@ -923,8 +1021,44 @@ class PaperTradeEngine:
             self._last_skip_reason = f"{sym}:v2_zero_qty"
             return None
 
+        # Preserve BACKTEST_ENTRY / LIVE_SIGNAL_PRICE / PAPER_ENTRY distinctly.
+        backtest_entry = float(entry_price)
+        live_signal_price = float(live) if live is not None else None
+        snip["backtest_entry"] = backtest_entry
+        snip["live_signal_price"] = live_signal_price
+        snip["paper_entry"] = paper_fill
+        snip["price_source"] = live_price_source
+        if live_signal_price is not None and backtest_entry != 0:
+            snip["entry_deviation_pct"] = (
+                abs(live_signal_price - backtest_entry) / backtest_entry * 100.0
+            )
+        else:
+            snip["entry_deviation_pct"] = None
+        snip["paper_equals_backtest"] = abs(paper_fill - backtest_entry) < 1e-12
+        snip["signal_time"] = str(setup_bar_time_utc) if setup_bar_time_utc else None
+        snip["paper_entry_time"] = datetime.now(timezone.utc).isoformat()
+        snip["production_approved"] = False
+        snip["telegram_eligible"] = False
+        try:
+            from app.research.live_backtest_parity.entry_price import (
+                build_entry_triad,
+                check_entry_price,
+            )
+
+            triad = build_entry_triad(
+                backtest_entry=backtest_entry,
+                live_signal_price=live_signal_price,
+                paper_entry=paper_fill,
+                price_source=live_price_source,
+            )
+            check = check_entry_price(triad)
+            snip["entry_price_status"] = check.get("entry_price_status")
+            snip["entry_price_label"] = check.get("entry_price_label")
+        except Exception:  # noqa: BLE001
+            snip.setdefault("entry_price_status", "NOT_CHECKED")
+
         with self._lock:
-            if sym in self._open:
+            if v2_key in self._open:
                 return None
             if dedupe_key in self._opened_keys:
                 return None
@@ -933,7 +1067,7 @@ class PaperTradeEngine:
                 symbol=sym,
                 side="LONG",
                 status="OPEN",
-                entry_price=entry_price,
+                entry_price=paper_fill,
                 stop_price=stop_price,
                 tp1_price=tp1,
                 quantity=qty,
@@ -943,7 +1077,7 @@ class PaperTradeEngine:
                 timeframe=tf,
                 signal_snippet=snip,
             )
-            self._open[sym] = pos
+            self._open[v2_key] = pos
             self._opened_keys.add(dedupe_key)
             self._queue_persist(pos)
             self._last_skip_reason = None
@@ -970,8 +1104,17 @@ class PaperTradeEngine:
         """Manage open positions against mark/last prices. Returns newly closed."""
         closed: list[PaperPosition] = []
         with self._lock:
-            for sym, pos in list(self._open.items()):
-                px = prices.get(sym)
+            for _key, pos in list(self._open.items()):
+                # Phase 2: SHORT paper management is not implemented — fail closed.
+                if str(getattr(pos, "side", "") or "").upper() == "SHORT":
+                    raise PermissionError("short_research_only")
+                snip = getattr(pos, "signal_snippet", None) or {}
+                if isinstance(snip, dict) and (
+                    str(snip.get("strategy_id") or "") == "COMBO_02_SHORT_RESEARCH"
+                    or str(snip.get("source") or "") == "SHORT_RESEARCH_PIPELINE"
+                ):
+                    raise PermissionError("short_research_only")
+                px = prices.get(pos.symbol)
                 if px is None or px <= 0:
                     continue
                 pos.mark_price = px
@@ -986,28 +1129,41 @@ class PaperTradeEngine:
                     closed.append(self._close_locked(pos, float(pos.tp1_price), "TP1"))
         return closed
 
-    def _cancel_open(self, symbol: str, *, reason: str) -> PaperPosition | None:
+    def _cancel_open(
+        self,
+        symbol: str,
+        *,
+        reason: str,
+        stream: str | None = None,
+        pos: PaperPosition | None = None,
+    ) -> PaperPosition | None:
         with self._lock:
-            pos = self._open.get(symbol.upper())
-            if not pos:
+            target = pos
+            if target is None:
+                if stream is None:
+                    # Ambiguous when parallel streams exist — require stream/pos.
+                    return None
+                target = self._open.get(self.book_key(symbol, stream))
+            if not target:
                 return None
-            pos.status = "CANCELLED"
-            pos.closed_at = datetime.now(timezone.utc).isoformat()
-            pos.exit_reason = reason
-            pos.exit_price = pos.mark_price or pos.entry_price
-            pos.pnl_usd = 0.0
-            pos.r_multiple = 0.0
-            self._open.pop(symbol.upper(), None)
-            self._closed.insert(0, pos)
+            key = self._key_for(target)
+            target.status = "CANCELLED"
+            target.closed_at = datetime.now(timezone.utc).isoformat()
+            target.exit_reason = reason
+            target.exit_price = target.mark_price or target.entry_price
+            target.pnl_usd = 0.0
+            target.r_multiple = 0.0
+            self._open.pop(key, None)
+            self._closed.insert(0, target)
             self._trim_closed()
-            self._queue_persist(pos)
+            self._queue_persist(target)
             try:
                 from app.services.alerts import get_alert_feed
 
-                get_alert_feed().observe_paper_close(pos)
+                get_alert_feed().observe_paper_close(target)
             except Exception:  # noqa: BLE001
                 pass
-            return pos
+            return target
 
     def close_legacy_paper_positions(
         self,
@@ -1038,17 +1194,14 @@ class PaperTradeEngine:
         closed: list[dict[str, Any]] = []
         skipped_v1: list[str] = []
         with self._lock:
-            symbols = list(self._open.keys())
-        for sym in symbols:
-            pos = self._open.get(sym)
-            if pos is None:
-                continue
+            targets = list(self._open.values())
+        for pos in targets:
             fields = classification_fields_from_position(pos.to_dict())
             if is_v1_classified(fields) or (
                 str(fields.get("strategy_id") or "") == STRATEGY_COMBO_02_V1
                 and str(fields.get("source") or "") == SOURCE_V1_PAPER_WATCHER
             ):
-                skipped_v1.append(sym)
+                skipped_v1.append(pos.symbol)
                 continue
             # Ensure archived rows stay research-classified
             snip = dict(pos.signal_snippet or {})
@@ -1057,7 +1210,9 @@ class PaperTradeEngine:
             snip["telegram_eligible"] = False
             snip["archive_reason"] = reason
             pos.signal_snippet = snip
-            cancelled = self._cancel_open(sym, reason=reason)
+            cancelled = self._cancel_open(
+                pos.symbol, reason=reason, stream=self.stream_of(pos), pos=pos
+            )
             if cancelled:
                 closed.append(cancelled.to_dict())
         logger.info(
@@ -1089,7 +1244,7 @@ class PaperTradeEngine:
         pos.mark_price = exit_price
         pos.unrealized_pnl_usd = 0.0
         pos.unrealized_r = 0.0
-        self._open.pop(pos.symbol, None)
+        self._open.pop(self._key_for(pos), None)
         self.realized_pnl += pnl
         self._closed.insert(0, pos)
         self._trim_closed()
@@ -1097,6 +1252,7 @@ class PaperTradeEngine:
         logger.info(
             "paper_closed",
             symbol=pos.symbol,
+            stream=self.stream_of(pos),
             reason=reason,
             exit=exit_price,
             pnl=round(pnl, 4),
@@ -1141,19 +1297,25 @@ async def flush_paper_trade_persists(
     return len(rows)
 
 
-def _live_price(symbol: str) -> float | None:
+def _live_price_with_source(symbol: str) -> tuple[float | None, str]:
+    """Resolve live price with explicit source — never silently mix without label."""
     try:
         from app.services.market_store import market_store
 
         mark = market_store.mark_prices.get(symbol.upper())
         if mark is not None and getattr(mark, "mark_price", None):
-            return float(mark.mark_price)
+            return float(mark.mark_price), "mark_price"
         tick = market_store.get_ticker(symbol)
         if tick is not None and tick.price:
-            return float(tick.price)
+            return float(tick.price), "ticker_price"
     except Exception:  # noqa: BLE001
-        return None
-    return None
+        return None, "unavailable"
+    return None, "unavailable"
+
+
+def _live_price(symbol: str) -> float | None:
+    px, _src = _live_price_with_source(symbol)
+    return px
 
 
 def _setup_trend(payload: dict[str, Any]) -> str:

@@ -327,13 +327,19 @@ def open_v1_trade_ids(paper_engine: Any | None) -> dict[str, str]:
     try:
         with getattr(paper_engine, "_lock", None) or _NullCtx():
             open_map = getattr(paper_engine, "_open", {}) or {}
-            for sym, pos in list(open_map.items()):
+            for key, pos in list(open_map.items()):
                 snip = getattr(pos, "signal_snippet", None) or {}
                 if not isinstance(snip, dict):
                     snip = {}
                 sid = str(snip.get("strategy_id") or "")
-                if sid == STRATEGY_COMBO_02_V1:
-                    out[normalize_symbol(sym)] = str(getattr(pos, "id", "") or "")
+                if sid != STRATEGY_COMBO_02_V1:
+                    continue
+                sym = getattr(pos, "symbol", None)
+                if not sym and isinstance(key, tuple) and key:
+                    sym = key[0]
+                if not sym:
+                    continue
+                out[normalize_symbol(sym)] = str(getattr(pos, "id", "") or "")
     except Exception:  # noqa: BLE001
         return out
     return out

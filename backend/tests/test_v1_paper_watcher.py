@@ -179,8 +179,9 @@ def test_path_a_15m_blocked_when_watcher_owns_entries():
     assert "v1_watcher_owns_path_a" in (paper._last_skip_reason or "")
 
 
-def test_path_a_15m_opens_in_parallel_when_watcher_does_not_own(monkeypatch):
+def test_path_a_15m_opens_in_parallel_with_v1_on_same_symbol(monkeypatch):
     import app.services.paper_trade as paper_mod
+    from app.research.v1_production import V1Book
 
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
     paper = PaperTradeEngine(enabled=True, entry_mode=PATH_A, v1_profile_enabled=True)
@@ -204,10 +205,33 @@ def test_path_a_15m_opens_in_parallel_when_watcher_does_not_own(monkeypatch):
         "risk_reward": {"RISK_REWARD": "PASS"},
         "ohlcv_freshness": "OK",
     }
-    pos = paper.on_setup_signal("BTCUSDT", payload)
-    assert pos is not None
-    assert pos.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
-    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
+    legacy = paper.on_setup_signal("BTCUSDT", payload)
+    assert legacy is not None
+    assert legacy.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
+    assert legacy.signal_snippet.get("strategy_id") == "RESEARCH_15M"
+
+    v1 = paper.open_v1_combo_position(
+        symbol="BTCUSDT",
+        timeframe="1h",
+        book=V1Book("BTCUSDT", "1h", "core", 0.015, True),
+        eval_result={
+            "status": "LONG_ENTRY_CANDIDATE",
+            "entry_price": 100.0,
+            "stop_price": 98.0,
+            "tp1": 104.0,
+            "htf": {
+                "htf_alignment": "HTF_ALIGNED",
+                "trend_1h": "BULLISH",
+                "trend_4h": "BULLISH",
+            },
+        },
+        setup_bar_time_utc="2026-10-02T15:00:00+00:00",
+        emit_alert=False,
+    )
+    assert v1 is not None
+    assert paper.has_open("BTCUSDT", "LEGACY")
+    assert paper.has_open("BTCUSDT", "V1")
+    assert paper.status()["open_count"] == 2
 
 
 def test_path_b_cannot_label_combo02_v1():

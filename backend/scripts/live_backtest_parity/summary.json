@@ -1,0 +1,181 @@
+{
+  "disclaimer": "LIVE\u2194BACKTEST PARITY RESEARCH ONLY. No live orders. No dynamic production Telegram. No COMBO_02 parameter changes. No V1 modifications. Descriptive entry deviation only.",
+  "total_live_candidates": 38,
+  "asof_matches": 38,
+  "asof_mismatches": 0,
+  "match_rate": 1.0,
+  "future_data_fails": 0,
+  "entry_deviation": {
+    "P50": 0.0,
+    "P75": 0.0,
+    "P90": 0.0,
+    "P95": 0.0,
+    "P99": 0.0,
+    "MAX": 0.0,
+    "n": 38
+  },
+  "entry_deviation_buckets": [
+    {
+      "bucket": "0-0.02%",
+      "signal_count": 38,
+      "paper_entries": 38,
+      "average_deviation": 0.0,
+      "median_deviation": 0.0,
+      "max_deviation": 0.0,
+      "win_loss": null
+    },
+    {
+      "bucket": "0.02-0.05%",
+      "signal_count": 0,
+      "paper_entries": 0,
+      "average_deviation": null,
+      "median_deviation": null,
+      "max_deviation": null,
+      "win_loss": null
+    },
+    {
+      "bucket": "0.05-0.10%",
+      "signal_count": 0,
+      "paper_entries": 0,
+      "average_deviation": null,
+      "median_deviation": null,
+      "max_deviation": null,
+      "win_loss": null
+    },
+    {
+      "bucket": "0.10-0.20%",
+      "signal_count": 0,
+      "paper_entries": 0,
+      "average_deviation": null,
+      "median_deviation": null,
+      "max_deviation": null,
+      "win_loss": null
+    },
+    {
+      "bucket": "0.20-0.50%",
+      "signal_count": 0,
+      "paper_entries": 0,
+      "average_deviation": null,
+      "median_deviation": null,
+      "max_deviation": null,
+      "win_loss": null
+    },
+    {
+      "bucket": ">0.50%",
+      "signal_count": 0,
+      "paper_entries": 0,
+      "average_deviation": null,
+      "median_deviation": null,
+      "max_deviation": null,
+      "win_loss": null
+    }
+  ],
+  "latency": {
+    "candle_close_to_signal_ms": {
+      "P50": 9.0,
+      "P75": 10.0,
+      "P90": 11.0,
+      "P95": 11.299999999999997,
+      "P99": 13.0,
+      "MAX": 13.0,
+      "n": 38
+    },
+    "signal_to_trade_plan_ms": {
+      "P50": 11.5,
+      "P75": 12.0,
+      "P90": 14.0,
+      "P95": 14.149999999999999,
+      "P99": 16.260000000000005,
+      "MAX": 17.0,
+      "n": 38
+    },
+    "trade_plan_to_alert_ms": {
+      "P50": 0.0,
+      "P75": 0.0,
+      "P90": 0.0,
+      "P95": 0.0,
+      "P99": 0.0,
+      "MAX": 0.0,
+      "n": 38
+    },
+    "alert_to_paper_entry_ms": {
+      "P50": 0.0,
+      "P75": 0.0,
+      "P90": 0.0,
+      "P95": 0.0,
+      "P99": 0.0,
+      "MAX": 0.0,
+      "n": 38
+    },
+    "candle_close_to_paper_entry_ms": {
+      "P50": 20.0,
+      "P75": 23.0,
+      "P90": 25.300000000000004,
+      "P95": 26.299999999999997,
+      "P99": 29.260000000000005,
+      "MAX": 30.0,
+      "n": 38
+    },
+    "total_signal_to_entry_ms": {
+      "P50": 11.5,
+      "P75": 12.0,
+      "P90": 14.0,
+      "P95": 14.149999999999999,
+      "P99": 16.260000000000005,
+      "MAX": 17.0,
+      "n": 38
+    }
+  },
+  "entry_price_check": {
+    "VALID": 38,
+    "STALE": 0,
+    "UNAVAILABLE": 0,
+    "STALE_ENTRY": 0
+  },
+  "telegram": {
+    "generated": 38,
+    "sent": 0,
+    "blocked": 38,
+    "failed": 0
+  },
+  "per_symbol": {
+    "BTCUSDT": {
+      "bars_replayed": 800,
+      "candidates": 8,
+      "mismatches": 0,
+      "future_data_fails": 0
+    },
+    "ETHUSDT": {
+      "bars_replayed": 800,
+      "candidates": 11,
+      "mismatches": 0,
+      "future_data_fails": 0
+    },
+    "SOLUSDT": {
+      "bars_replayed": 800,
+      "candidates": 19,
+      "mismatches": 0,
+      "future_data_fails": 0
+    }
+  },
+  "verdict": {
+    "LIVE_BACKTEST_PARITY": "PASS",
+    "NO_LOOKAHEAD": "PASS",
+    "ENTRY_PRICE_TRACEABILITY": "PASS",
+    "LATENCY_TRACEABILITY": "PASS",
+    "TELEGRAM_TRACEABILITY": "PASS",
+    "NO_LIVE_ORDERS": "CONFIRMED",
+    "NO_PRODUCTION_APPROVAL": "CONFIRMED",
+    "NO_STRATEGY_CHANGES": "CONFIRMED"
+  },
+  "extra": {
+    "data_source": "postgres_ohlcv",
+    "disclaimer": "LIVE\u2194BACKTEST PARITY RESEARCH ONLY. No live orders. No dynamic production Telegram. No COMBO_02 parameter changes. No V1 modifications. Descriptive entry deviation only.",
+    "timeframe": "15m",
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ]
+  }
+}

@@ -292,7 +292,7 @@ def test_compute_trade_metrics_uses_enrich_trade_fields():
             "r_net": 0.5,
             "r_gross": 0.6,
             "r_multiple": 0.6,
-            "fee_total_usd": 1.0,
+            "fee_total_usd": -1.0,
             "gross_pnl_usd": 12.0,
             "net_pnl_usd": 11.0,
             "holding_bars": 5,
@@ -304,7 +304,7 @@ def test_compute_trade_metrics_uses_enrich_trade_fields():
             "status": "CLOSED",
             "r_net": -1.0,
             "r_gross": -0.9,
-            "fee_total_usd": 1.0,
+            "fee_total_usd": -1.0,
             "gross_pnl_usd": -18.0,
             "net_pnl_usd": -19.0,
             "holding_bars": 10,
@@ -315,7 +315,7 @@ def test_compute_trade_metrics_uses_enrich_trade_fields():
     ]
     m = compute_trade_metrics(trades)
     assert m["trade_count"] == 2
-    assert m["total_fees"] == 2.0
+    assert m["total_fees"] == -2.0
     assert m["gross_pnl"] == -6.0
     assert m["net_pnl"] == -8.0
     assert m["max_losing_streak"] == 1

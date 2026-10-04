@@ -386,6 +386,24 @@ export type StrategyMatrixRow = {
   candle_source?: string;
   trades?: StrategyTradeRow[];
   status?: string;
+  strategy_id?: string;
+  combo_version?: string;
+  source?: string;
+  symbol_role?: string | null;
+  timeframe_role?: string;
+  configured_risk_percent?: number;
+  effective_risk_percent?: number;
+  effective_risk_amount?: number;
+  risk_source?: string;
+  production_comparable?: boolean;
+  research_only?: boolean;
+  dataset_fingerprint?: string | null;
+  configuration_fingerprint?: string;
+  requested_range?: Record<string, unknown>;
+  actual_range?: Record<string, unknown>;
+  paper_trade_created?: boolean;
+  live_trade_created?: boolean;
+  telegram_sent?: boolean;
 };
 
 export type StrategyMatrixResponse = {
@@ -398,6 +416,25 @@ export type StrategyMatrixResponse = {
   limit?: number;
   risk_usd?: number;
   leverage?: number;
+  strategy_id?: string;
+  combo_version?: string;
+  source?: string;
+  setup_timeframe?: string;
+  htf_timeframes?: string[];
+  htf_alignment?: string;
+  configured_risk_percent?: number;
+  effective_risk_percent?: number;
+  effective_risk_amount?: number;
+  risk_source?: string;
+  production_comparable?: boolean;
+  research_only?: boolean;
+  short_status?: string;
+  period_mode?: string;
+  dataset_fingerprint?: string;
+  configuration_fingerprint?: string;
+  paper_trade_created?: boolean;
+  live_trade_created?: boolean;
+  telegram_sent?: boolean;
   fee_model?: {
     taker_fee?: number;
     maker_fee?: number;
@@ -405,6 +442,7 @@ export type StrategyMatrixResponse = {
     leverage?: number;
     note?: string;
   };
+  fee_metadata?: Record<string, unknown>;
   symbols?: string[];
   timeframes?: string[];
   rows: StrategyMatrixRow[];
@@ -412,6 +450,7 @@ export type StrategyMatrixResponse = {
   disclaimer?: string;
   timestamp?: string;
   reason?: string;
+  error_code?: string;
 };
 
 export type OhlcvRangeRow = {
@@ -602,6 +641,103 @@ export function fetchCombo02CandidateResults(stamp?: string) {
   return getJson<Combo02CandidateResultsResponse>(
     `/api/research/combo02-candidate-results${qs ? `?${qs}` : ""}`
   );
+}
+
+export type ShortResearchCandidate = {
+  symbol: string;
+  timeframe?: string;
+  direction?: string;
+  strategy_id?: string;
+  combo_version?: string;
+  source?: string;
+  research_tier?: string;
+  state?: string;
+  research_quality?: string;
+  paper_eligible?: boolean;
+  production_approved?: boolean;
+  telegram_eligible?: boolean;
+  run_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  data_health?: Record<string, unknown>;
+  base_research?: Record<string, unknown>;
+  oos?: Record<string, unknown>;
+  oos_split?: Record<string, unknown>;
+  direction_checks?: Array<Record<string, unknown>>;
+  rejection_reasons?: Array<Record<string, unknown>>;
+  portfolio?: Record<string, unknown>;
+  risk_simulation?: Record<string, unknown>;
+  sample_size?: Record<string, unknown>;
+  quality_warnings?: Array<Record<string, unknown>>;
+  lookahead_audit?: Record<string, unknown>;
+  forensic_lookahead?: Record<string, unknown>;
+  trade_forensic_audits?: Array<Record<string, unknown>>;
+  research_windows?: Record<string, unknown>;
+  window_status?: string;
+  partition_counts?: Record<string, unknown>;
+  oos_development?: Record<string, unknown>;
+  oos_validation?: Record<string, unknown>;
+  execution_model?: Record<string, unknown>;
+  reconciliation?: Record<string, unknown>;
+  prepaper_review?: Record<string, unknown>;
+  blockers?: string[];
+  human_label?: string;
+  configuration_hash?: string;
+  dataset_hash?: string;
+  engine_version?: string;
+  strategy_fingerprint?: string;
+  historical_disclaimer?: string;
+  labels?: Record<string, string>;
+};
+
+export type ShortResearchListResponse = {
+  status?: string;
+  strategy_id?: string;
+  combo_version?: string;
+  source?: string;
+  direction?: string;
+  paper_eligible?: boolean;
+  production_approved?: boolean;
+  telegram_eligible?: boolean;
+  disclaimer?: string;
+  candidates?: ShortResearchCandidate[];
+  batch_summary?: Record<string, unknown>;
+  labels?: Record<string, string>;
+  read_only?: boolean;
+  execution_rights?: boolean;
+  v1_unchanged?: boolean;
+  timestamp?: string;
+};
+
+/** Read-only SHORT research candidates (never paper / Telegram / production). */
+export function fetchShortResearchCandidates() {
+  return getJson<ShortResearchListResponse>("/api/research/short-candidates");
+}
+
+export function fetchShortResearchCandidate(symbol: string) {
+  return getJson<{
+    status?: string;
+    candidate?: ShortResearchCandidate;
+  }>(`/api/research/short-candidates/${encodeURIComponent(symbol)}`);
+}
+
+/** Starts SHORT research batch only — never opens paper/live trades. */
+export async function runShortResearchCandidates(body?: {
+  symbols?: string[];
+  run_id?: string;
+  run_oos?: boolean;
+}) {
+  const res = await fetch(`${API_BASE}/api/research/short-candidates/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `API /api/research/short-candidates/run failed: ${res.status}`
+    );
+  }
+  return res.json() as Promise<ShortResearchListResponse & { run_id?: string }>;
 }
 
 export type DynamicEligibilityReason = {
@@ -795,13 +931,47 @@ export type BacktestJob = {
   total_cells?: number;
   done_cells?: number;
   pct?: number;
+  progress_percent?: number;
   current?: string;
+  phase?: string;
+  bars_processed?: number;
+  total_bars?: number;
+  trades?: number;
+  trades_generated?: number;
+  last_heartbeat?: string | null;
+  rows_loaded?: number;
+  load_meta?: Record<string, unknown>;
+  timing?: Record<string, unknown>;
   started_at?: string | null;
   finished_at?: string | null;
   error?: string | null;
+  error_code?: string | null;
   rows?: StrategyMatrixRow[];
   elapsed_seconds?: number | null;
   disclaimer?: string | null;
+  strategy_id?: string;
+  combo_version?: string;
+  source?: string;
+  setup_timeframe?: string;
+  htf_timeframes?: string[];
+  htf_alignment?: string;
+  risk_mode?: string;
+  configured_risk_percent?: number;
+  effective_risk_percent?: number;
+  effective_risk_amount?: number;
+  risk_source?: string;
+  symbol_role?: string | null;
+  production_comparable?: boolean;
+  research_only?: boolean;
+  short_status?: string;
+  period_mode?: string;
+  dataset_fingerprint?: string | null;
+  configuration_fingerprint?: string;
+  paper_trade_created?: boolean;
+  live_trade_created?: boolean;
+  telegram_sent?: boolean;
+  safety_notice?: string;
+  mismatch_reasons?: string[];
 };
 
 export function fetchBacktestJobStatus() {
@@ -815,6 +985,11 @@ export async function startBacktestJob(body: {
   timeframes: string[];
   direction?: "LONG" | "SHORT";
   combination_id?: string;
+  strategy_id?: string;
+  combo_version?: string;
+  setup_timeframe?: string;
+  risk_mode?: string;
+  research_risk_override?: boolean;
   limit?: number;
   risk_usd?: number;
   principal_usd?: number;
@@ -838,8 +1013,12 @@ export async function startBacktestJob(body: {
   return res.json() as Promise<{
     status: string;
     error?: string;
+    error_code?: string;
     job?: BacktestJob;
     timestamp?: string;
+    paper_trade_created?: boolean;
+    live_trade_created?: boolean;
+    telegram_sent?: boolean;
   }>;
 }
 

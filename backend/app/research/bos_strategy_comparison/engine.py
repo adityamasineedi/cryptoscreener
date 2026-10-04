@@ -144,6 +144,7 @@ def evaluate_strategy_at_bar(
             timeframe,
             candles,
             as_of_index=as_of_index,
+            serialize_swings=False,
         )
     trend = tf_analysis.get("trend") or {}
     bos = tf_analysis.get("bos")
@@ -208,6 +209,7 @@ def evaluate_strategy_at_bar(
                 demand_zone=demand_zone,
                 supply_zone=supply_zone,
                 as_of_index=as_of_index,
+                serialize_swings=False,
             )
             trend = tf_analysis.get("trend") or {}
             bos = tf_analysis.get("bos")

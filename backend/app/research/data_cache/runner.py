@@ -31,12 +31,13 @@ def run_strategy_on_dataset(
     signal_config: SignalConfig | None = None,
     research_config: ResearchConfig | None = None,
     metrics: ResearchCacheMetrics | None = None,
+    preloaded_candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Execute frozen combination engine on cached candles (no PG re-read)."""
     combo = get_combination(combination_id)
     if combo is None:
         return {"status": "NOT_FOUND", "combination_id": combination_id}
-    candles = dataset.as_candles()
+    candles = list(preloaded_candles) if preloaded_candles is not None else dataset.as_candles()
     t0 = time.monotonic()
     out = run_combination_backtest(
         dataset.symbol,
@@ -46,8 +47,8 @@ def run_strategy_on_dataset(
         signal_config=signal_config or SignalConfig(),
         research_config=research_config or ResearchConfig(),
         direction_filter=direction.upper(),
-        candles_1h=list(candles_1h) if candles_1h is not None else None,
-        candles_4h=list(candles_4h) if candles_4h is not None else None,
+        candles_1h=candles_1h,
+        candles_4h=candles_4h,
     )
     elapsed = time.monotonic() - t0
     if metrics is not None:
@@ -94,10 +95,16 @@ def run_strategies_on_bundle(
         )
 
     results: list[dict[str, Any]] = []
+    # Convert each series to candle dicts once — reused across strategies.
+    candle_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for (sym, tf), ds in bundle.datasets.items():
+        candle_cache[(sym, tf)] = ds.as_candles()
+
     for (sym, tf), ds in bundle.datasets.items():
         # HTF series from the same prepared bundle when present
-        c1h = bundle.get(sym, "1h")
-        c4h = bundle.get(sym, "4h")
+        c1h_list = candle_cache.get((sym, "1h"))
+        c4h_list = candle_cache.get((sym, "4h"))
+        setup_candles = candle_cache[(sym, tf)]
         for combo_id in combination_ids:
             cell_key = RunCheckpoint.cell_key(sym, tf) + f"|{combo_id}"
             # Resume: skip completed combo cells recorded in result_summary
@@ -116,9 +123,10 @@ def run_strategies_on_bundle(
                     ds,
                     combination_id=combo_id,
                     direction=direction,
-                    candles_1h=c1h.as_candles() if c1h else None,
-                    candles_4h=c4h.as_candles() if c4h else None,
+                    candles_1h=c1h_list,
+                    candles_4h=c4h_list,
                     metrics=metrics,
+                    preloaded_candles=setup_candles,
                 )
                 summary = {
                     "combination_id": combo_id,

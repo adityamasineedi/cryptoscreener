@@ -218,7 +218,19 @@ class SignalEngine:
         swings: list | None = None,
         atr_value: float | None = None,
         volumes: Sequence[float] | None = None,
+        serialize_swings: bool = True,
     ) -> dict[str, Any]:
+        """Analyze one timeframe for structure (swings/trend/BOS/…/retest).
+
+        ``serialize_swings`` (default True) builds the API ``swings`` list via
+        ``SwingRecord.to_dict()`` / ``dataclasses.asdict``. Production and REST
+        callers must keep the default.
+
+        Research hot paths that already consume ``_swings_objs`` should pass
+        ``serialize_swings=False`` to skip the deepcopy-heavy serialization.
+        When False, ``swings`` is an empty list; never expose ``_swings_objs``
+        in API/websocket payloads (``analyze()`` already strips it).
+        """
         if not candles:
             return {
                 "timeframe": timeframe,
@@ -288,10 +300,12 @@ class SignalEngine:
             as_of_index=as_of_index,
             atr_value=atr_value,
         )
+        # Production/API: serialize for JSON payloads. Research: keep objects only.
+        swings_out = [s.to_dict() for s in swings] if serialize_swings else []
         return {
             "timeframe": timeframe,
             "trend": trend,
-            "swings": [s.to_dict() for s in swings],
+            "swings": swings_out,
             "bos": bos,
             "choch": choch,
             "impulse": impulse,
@@ -550,6 +564,7 @@ class SignalEngine:
         lev = leverage if leverage is not None else cfg.default_leverage
         risk_mgmt: dict[str, Any] = {}
         if entry_price and stop and stop.get("final_stop") is not None:
+            # Pass explicit direction when known. Never coerce missing → LONG here.
             pos = position_size(
                 account_equity=eq,
                 risk_percent=rp,
@@ -560,6 +575,7 @@ class SignalEngine:
                 leverage=lev,
                 fee_rate=cfg.fee_rate,
                 slippage_rate=cfg.slippage_rate,
+                direction=direction,
             )
             liq = liquidation_price
             if liq is None and direction:
@@ -573,7 +589,7 @@ class SignalEngine:
                 position=pos,
                 config=cfg,
                 liquidation_price=liq,
-                direction=direction or "LONG",
+                direction=direction,
             )
             risk_mgmt = {**pos, **checks}
 

@@ -1,0 +1,440 @@
+{
+  "dataset": {
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "timeframes": [
+      "15m",
+      "1h"
+    ],
+    "start": "2025-01-01",
+    "end": "2025-02-01",
+    "source": "postgresql"
+  },
+  "worker_count": 4,
+  "stages": {
+    "A_postgresql_load": {
+      "seconds": 0.452117,
+      "rows_loaded": 12096,
+      "postgres_queries": 9,
+      "peak_rss_mb": 99.54
+    },
+    "B_parquet_write": {
+      "seconds": 3.3239,
+      "rows": 12096,
+      "cache_misses": 9,
+      "metrics": {
+        "processing_seconds": 3.328,
+        "cache_hits": 0,
+        "cache_misses": 9,
+        "cache_hit_ratio": 0.0,
+        "postgres_queries": 9,
+        "rows_loaded": 12096,
+        "parquet_rows_loaded": 12096,
+        "feature_cache_hits": 0,
+        "feature_cache_misses": 0,
+        "event_cache_hits": 0,
+        "event_cache_misses": 0,
+        "db_seconds": 9.109,
+        "cache_load_seconds": 11.593,
+        "feature_seconds": 0.0,
+        "event_seconds": 0.0,
+        "strategy_seconds": 0.0,
+        "write_seconds": 0.861,
+        "peak_memory_mb": 120.36,
+        "errors": []
+      }
+    },
+    "C_parquet_read": {
+      "seconds": 0.175445,
+      "rows": 12096,
+      "cache_hits": 9,
+      "postgres_queries": 0,
+      "metrics": {
+        "processing_seconds": 0.172,
+        "cache_hits": 9,
+        "cache_misses": 0,
+        "cache_hit_ratio": 1.0,
+        "postgres_queries": 0,
+        "rows_loaded": 0,
+        "parquet_rows_loaded": 12096,
+        "feature_cache_hits": 0,
+        "feature_cache_misses": 0,
+        "event_cache_hits": 0,
+        "event_cache_misses": 0,
+        "db_seconds": 0.0,
+        "cache_load_seconds": 0.172,
+        "feature_seconds": 0.0,
+        "event_seconds": 0.0,
+        "strategy_seconds": 0.0,
+        "write_seconds": 0.0,
+        "peak_memory_mb": 121.19,
+        "errors": []
+      }
+    },
+    "D_polars_numpy_conversion": {
+      "seconds": 0.473571,
+      "candles": 12096
+    },
+    "E_feature_calculation": {
+      "seconds": 0.038403,
+      "feature_rows": 11520,
+      "note": "Research FeatureCache ATR/rvol/EMA \u2014 not consumed by COMBO_02 engine"
+    },
+    "F_bos_event_generation": {
+      "seconds": 0.0,
+      "bos_events": 0,
+      "skipped": true
+    },
+    "G_lifecycle_generation": {
+      "seconds": 0.0,
+      "lifecycle_count": 0,
+      "skipped": true
+    },
+    "H_strategy_evaluation": {
+      "seconds": 90.58432,
+      "H1_baseline_pg_combo02_seconds": 21.03353,
+      "H2_optimized_parquet_combo02_seconds": 25.009471,
+      "H3_multi_combo_on_bundle_seconds": 44.541318,
+      "H4_multi_strategy_bos_runner_seconds": 0.0,
+      "baseline_trades": 17,
+      "optimized_trades": 17,
+      "multi_bundle": {
+        "run_id": "09d9980ba181",
+        "result_count": 18
+      },
+      "bos_runner_status": null,
+      "bos_htf_precompute_seconds": null
+    },
+    "I_result_aggregation": {
+      "seconds": 0.000186,
+      "aggregate": {
+        "cells": 6,
+        "total_trades": 17,
+        "by_symbol": {
+          "BTCUSDT": {
+            "15m": {
+              "sample_size": 4,
+              "average_R": -0.25
+            },
+            "1h": {
+              "sample_size": 2,
+              "average_R": 0.5
+            }
+          },
+          "ETHUSDT": {
+            "15m": {
+              "sample_size": 2,
+              "average_R": 0.556633677403654
+            },
+            "1h": {
+              "sample_size": 2,
+              "average_R": -1.0
+            }
+          },
+          "SOLUSDT": {
+            "15m": {
+              "sample_size": 5,
+              "average_R": 0.8
+            },
+            "1h": {
+              "sample_size": 2,
+              "average_R": 1.9999999999999987
+            }
+          }
+        }
+      }
+    },
+    "J_result_persistence": {
+      "seconds": 0.04484,
+      "golden_path": "E:\\cryptoscreener\\backend\\scripts\\research_benchmark_golden\\baseline_20261004T140204Z.json",
+      "checkpoint_run_id": "09d9980ba181"
+    },
+    "K_total": {
+      "seconds": 95.461916
+    }
+  },
+  "correctness": {
+    "ohlcv_BTCUSDT_15m": {
+      "status": "PASS",
+      "rows": 3072
+    },
+    "ohlcv_BTCUSDT_1h": {
+      "status": "PASS",
+      "rows": 768
+    },
+    "ohlcv_ETHUSDT_15m": {
+      "status": "PASS",
+      "rows": 3072
+    },
+    "ohlcv_ETHUSDT_1h": {
+      "status": "PASS",
+      "rows": 768
+    },
+    "ohlcv_SOLUSDT_15m": {
+      "status": "PASS",
+      "rows": 3072
+    },
+    "ohlcv_SOLUSDT_1h": {
+      "status": "PASS",
+      "rows": 768
+    },
+    "OHLCV": "PASS",
+    "Features": "PASS",
+    "BOS": "SKIPPED",
+    "Lifecycle": "SKIPPED",
+    "trades_BTCUSDT_15m": {
+      "status": "PASS",
+      "trade_count": 4
+    },
+    "metrics_BTCUSDT_15m": {
+      "status": "PASS",
+      "metrics": {
+        "sample_size": 4,
+        "average_R": -0.25,
+        "expectancy_R": -0.25,
+        "profit_factor": 0.6666666666666666,
+        "max_drawdown_R": 2.0,
+        "tp1_hit_rate": 0.25,
+        "sl_rate": 0.75
+      }
+    },
+    "trades_BTCUSDT_1h": {
+      "status": "PASS",
+      "trade_count": 2
+    },
+    "metrics_BTCUSDT_1h": {
+      "status": "PASS",
+      "metrics": {
+        "sample_size": 2,
+        "average_R": 0.5,
+        "expectancy_R": 0.5,
+        "profit_factor": 2.0,
+        "max_drawdown_R": 1.0,
+        "tp1_hit_rate": 0.5,
+        "sl_rate": 0.5
+      }
+    },
+    "trades_ETHUSDT_15m": {
+      "status": "PASS",
+      "trade_count": 2
+    },
+    "metrics_ETHUSDT_15m": {
+      "status": "PASS",
+      "metrics": {
+        "sample_size": 2,
+        "average_R": 0.556633677403654,
+        "expectancy_R": 0.556633677403654,
+        "profit_factor": 2.113267354807308,
+        "max_drawdown_R": 1.0,
+        "tp1_hit_rate": 0.5,
+        "sl_rate": 0.5
+      }
+    },
+    "trades_ETHUSDT_1h": {
+      "status": "PASS",
+      "trade_count": 2
+    },
+    "metrics_ETHUSDT_1h": {
+      "status": "PASS",
+      "metrics": {
+        "sample_size": 2,
+        "average_R": -1.0,
+        "expectancy_R": -1.0,
+        "profit_factor": 0.0,
+        "max_drawdown_R": 2.0,
+        "tp1_hit_rate": 0.0,
+        "sl_rate": 1.0
+      }
+    },
+    "trades_SOLUSDT_15m": {
+      "status": "PASS",
+      "trade_count": 5
+    },
+    "metrics_SOLUSDT_15m": {
+      "status": "PASS",
+      "metrics": {
+        "sample_size": 5,
+        "average_R": 0.8,
+        "expectancy_R": 0.8,
+        "profit_factor": 3.0,
+        "max_drawdown_R": 1.0,
+        "tp1_hit_rate": 0.6,
+        "sl_rate": 0.4
+      }
+    },
+    "trades_SOLUSDT_1h": {
+      "status": "PASS",
+      "trade_count": 2
+    },
+    "metrics_SOLUSDT_1h": {
+      "status": "FIRST_MISMATCH",
+      "stage": "metrics.profit_factor",
+      "baseline": Infinity,
+      "optimized": Infinity
+    },
+    "Trades": "PASS",
+    "Metrics": "FAIL",
+    "Strategies": "PASS",
+    "No-lookahead": "PASS"
+  },
+  "bottleneck_ranking": [
+    {
+      "rank": 1,
+      "stage": "Strategy evaluation",
+      "seconds": 90.58432,
+      "pct_total": 94.9
+    },
+    {
+      "rank": 2,
+      "stage": "Parquet write (cold)",
+      "seconds": 3.3239,
+      "pct_total": 3.5
+    },
+    {
+      "rank": 3,
+      "stage": "Polars-to-dict conversion",
+      "seconds": 0.473571,
+      "pct_total": 0.5
+    },
+    {
+      "rank": 4,
+      "stage": "PostgreSQL load",
+      "seconds": 0.452117,
+      "pct_total": 0.5
+    },
+    {
+      "rank": 5,
+      "stage": "Parquet read (warm)",
+      "seconds": 0.175445,
+      "pct_total": 0.2
+    },
+    {
+      "rank": 6,
+      "stage": "Persistence",
+      "seconds": 0.04484,
+      "pct_total": 0.0
+    },
+    {
+      "rank": 7,
+      "stage": "Feature calculation",
+      "seconds": 0.038403,
+      "pct_total": 0.0
+    },
+    {
+      "rank": 8,
+      "stage": "Aggregation",
+      "seconds": 0.000186,
+      "pct_total": 0.0
+    }
+  ],
+  "production_isolation": {
+    "live_signal_engine": "UNCHANGED",
+    "websocket": "UNCHANGED",
+    "rest_collectors": "UNCHANGED",
+    "trade_plan": "UNCHANGED",
+    "paper_trading": "UNCHANGED",
+    "telegram": "UNCHANGED"
+  },
+  "dataset_availability": {
+    "status": "OK",
+    "coverage": {
+      "BTCUSDT/15m": {
+        "rows": 3072,
+        "first": "2025-01-01T00:00:00+00:00",
+        "last": "2025-02-01T23:45:00+00:00"
+      },
+      "BTCUSDT/1h": {
+        "rows": 768,
+        "first": "2025-01-01T00:00:00+00:00",
+        "last": "2025-02-01T23:00:00+00:00"
+      },
+      "ETHUSDT/15m": {
+        "rows": 3072,
+        "first": "2025-01-01T00:00:00+00:00",
+        "last": "2025-02-01T23:45:00+00:00"
+      },
+      "ETHUSDT/1h": {
+        "rows": 768,
+        "first": "2025-01-01T00:00:00+00:00",
+        "last": "2025-02-01T23:00:00+00:00"
+      },
+      "SOLUSDT/15m": {
+        "rows": 3072,
+        "first": "2025-01-01T00:00:00+00:00",
+        "last": "2025-02-01T23:45:00+00:00"
+      },
+      "SOLUSDT/1h": {
+        "rows": 768,
+        "first": "2025-01-01T00:00:00+00:00",
+        "last": "2025-02-01T23:00:00+00:00"
+      }
+    }
+  },
+  "summary": {
+    "cold_runtime_seconds": 25.283119,
+    "warm_runtime_seconds": 25.658487,
+    "speedup_warm_vs_cold_load_eval": 0.985,
+    "baseline_strategy_seconds": 21.03353,
+    "optimized_strategy_seconds": 25.009471,
+    "multi_strategy_bundle_seconds": 44.541318,
+    "rows_loaded": 12096,
+    "candles_converted": 12096,
+    "bos_events": 0,
+    "lifecycle_count": 0,
+    "trades_baseline": 17,
+    "trades_optimized": 17,
+    "db_queries_cold_pg": 9,
+    "db_queries_warm_cache": 0,
+    "peak_tracemalloc_mb": 18.835,
+    "peak_rss_mb": 136.54,
+    "worker_count": 4,
+    "database_is_primary_bottleneck": false,
+    "database_note": "DATABASE_IS_NOT_PRIMARY_BOTTLENECK"
+  },
+  "status": "OK",
+  "stage_table": [
+    [
+      "PostgreSQL load",
+      0.452117
+    ],
+    [
+      "Parquet write (cold)",
+      3.3239
+    ],
+    [
+      "Parquet read (warm)",
+      0.175445
+    ],
+    [
+      "Polars-to-dict conversion",
+      0.473571
+    ],
+    [
+      "Feature calculation",
+      0.038403
+    ],
+    [
+      "BOS/event generation",
+      0.0
+    ],
+    [
+      "Lifecycle generation",
+      0.0
+    ],
+    [
+      "Strategy evaluation",
+      90.58432
+    ],
+    [
+      "Aggregation",
+      0.000186
+    ],
+    [
+      "Persistence",
+      0.04484
+    ]
+  ]
+}

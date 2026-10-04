@@ -13,9 +13,26 @@ from app.config import get_settings
 from app.engines.mtf.indicators import atr_series
 from app.engines.supply_demand.engine import SupplyDemandEngine
 from app.research.bos_combinations import CombinationDefinition, get_combination
+from app.research.bos_strategy_comparison.htf import (
+    build_htf_as_of_index_map,
+    precompute_htf_trend_cache,
+)
 from app.research.combination_engine import (
     _clone_signal_config,
     evaluate_combination_at_bar,
+)
+from app.research.backtest_timing import (
+    BACKTEST_END,
+    BACKTEST_HEARTBEAT,
+    BACKTEST_START,
+    HTF_PRECOMPUTE_END,
+    HTF_PRECOMPUTE_START,
+    METRICS_END,
+    METRICS_START,
+    SIGNAL_GENERATION_END,
+    STRUCTURE_SCAN_HEARTBEAT,
+    STRUCTURE_SCAN_START,
+    emit_phase,
 )
 from app.research.config import (
     AMBIGUOUS_CONSERVATIVE,
@@ -28,6 +45,7 @@ from app.research.config import (
     split_period_indices,
     walk_forward_windows,
 )
+from app.research.data_cache.stage_profiler import research_stage_profiler
 from app.research.data_quality import verify_ohlcv
 from app.research.metrics import compute_metrics
 from app.research.schemas import ResearchTrade
@@ -280,6 +298,8 @@ def run_combination_backtest(
     should_cancel: Any | None = None,
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
+    progress_callback: Any | None = None,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     """Run one combination on one symbol/timeframe series.
 
@@ -289,6 +309,9 @@ def run_combination_backtest(
 
     When the combination requires HTF alignment, pass ``candles_1h`` /
     ``candles_4h`` (closed bars only). Missing HTF series fail closed (no entries).
+
+    ``progress_callback`` receives dict heartbeats (phase / bars / trades) for
+    UI job polling — does not affect trade results.
     """
     t0 = time.perf_counter()
     combo = (
@@ -301,6 +324,7 @@ def run_combination_backtest(
 
     rcfg = research_config or ResearchConfig()
     scfg = signal_config or SignalConfig()
+    # Keep HTF references (no deep copy) — gate must not mutate series.
     htf_1h = list(candles_1h) if candles_1h is not None else None
     htf_4h = list(candles_4h) if candles_4h is not None else None
     # Setup TF may itself be 1h/4h — reuse when HTF series not supplied.
@@ -310,6 +334,33 @@ def run_combination_backtest(
             htf_1h = list(candles)
         if htf_4h is None and tf_l == "4h":
             htf_4h = list(candles)
+
+    def _progress(phase: str, *, bars: int = 0, total: int = 0, trades_n: int = 0, **extra: Any) -> None:
+        payload = {
+            "phase": phase,
+            "bars_processed": bars,
+            "total_bars": total,
+            "trades": trades_n,
+            "symbol": symbol.upper(),
+            "timeframe": timeframe,
+            "elapsed_seconds": time.perf_counter() - t0,
+            **extra,
+        }
+        emit_phase(
+            phase,
+            job_id=job_id,
+            symbol=symbol.upper(),
+            timeframe=timeframe,
+            elapsed_seconds=payload["elapsed_seconds"],
+            bars_processed=bars,
+            total_bars=total,
+            trades=trades_n,
+        )
+        if progress_callback is not None:
+            try:
+                progress_callback(payload)
+            except Exception:  # noqa: BLE001
+                pass
     quality = verify_ohlcv(candles, timeframe, config=rcfg)
     if quality["status"] == "INSUFFICIENT_DATA":
         return {
@@ -350,6 +401,7 @@ def run_combination_backtest(
     candles_processed = 0
     min_bars = rcfg.min_bars
     loop_start = max(min_bars, start)
+    walk_total = max(0, end - loop_start)
 
     # Hot-path caches: reuse engines + incremental swings (O(n) not O(n²)).
     local_cfg = _clone_signal_config(
@@ -378,6 +430,48 @@ def run_combination_backtest(
     prev_break = False
     prev_swing_n = len(swings)
     htf_trend_cache: dict[tuple[str, int], str] = {}
+    htf_idx_1h_map: list[int | None] | None = None
+    htf_idx_4h_map: list[int | None] | None = None
+    htf_precompute_seconds = 0.0
+
+    _progress(BACKTEST_START, bars=0, total=walk_total, trades_n=0)
+    _progress(STRUCTURE_SCAN_START, bars=0, total=walk_total, trades_n=0)
+
+    # Precompute closed-bar HTF trends once (same labels as on-demand trend_at_as_of).
+    if combo.require_htf_alignment and (htf_1h is not None or htf_4h is not None):
+        t_htf = time.perf_counter()
+        _progress(HTF_PRECOMPUTE_START, bars=0, total=walk_total, trades_n=0)
+        with research_stage_profiler.time("htf_precompute"):
+            if htf_1h:
+                precompute_htf_trend_cache(
+                    htf_1h,
+                    timeframe="1h",
+                    symbol=symbol,
+                    config=local_cfg,
+                    cache=htf_trend_cache,
+                )
+                htf_idx_1h_map = build_htf_as_of_index_map(series, htf_1h)
+            if htf_4h:
+                precompute_htf_trend_cache(
+                    htf_4h,
+                    timeframe="4h",
+                    symbol=symbol,
+                    config=local_cfg,
+                    cache=htf_trend_cache,
+                )
+                htf_idx_4h_map = build_htf_as_of_index_map(series, htf_4h)
+        htf_precompute_seconds = time.perf_counter() - t_htf
+        _progress(
+            HTF_PRECOMPUTE_END,
+            bars=0,
+            total=walk_total,
+            trades_n=0,
+            htf_cache_entries=len(htf_trend_cache),
+            htf_precompute_seconds=round(htf_precompute_seconds, 6),
+        )
+
+    last_hb = time.perf_counter()
+    hb_every_bars = 500
 
     for i in range(loop_start, end):
         if should_cancel is not None and i % 64 == 0 and should_cancel():
@@ -392,46 +486,68 @@ def run_combination_backtest(
                 "elapsed_seconds": time.perf_counter() - t0,
                 "candles_processed": candles_processed,
                 "setups_processed": setups,
+                "htf_precompute_seconds": htf_precompute_seconds,
+                "htf_cache_entries": len(htf_trend_cache),
                 "disclaimer": "CANCELLED — walk aborted",
             }
         candles_processed += 1
-        swings = extend_swings(
-            swings,
-            series,
-            left=swing_cfg.swing_left_bars,
-            right=swing_cfg.swing_right_bars,
-            symbol=symbol,
-            timeframe=timeframe,
-            atr_period=local_cfg.atr_period,
-            minimum_swing_distance_atr=swing_cfg.minimum_swing_distance_atr,
-            as_of_index=i,
-            highs=highs_arr,
-            lows=lows_arr,
-            closes=closes_arr,
-        )
+        now = time.perf_counter()
+        if (
+            candles_processed == 1
+            or candles_processed % hb_every_bars == 0
+            or (now - last_hb) >= 1.0
+        ):
+            last_hb = now
+            closed_n = sum(1 for t in trades if t.outcome != "OPEN")
+            if open_trade is not None:
+                closed_n += 0
+            _progress(
+                STRUCTURE_SCAN_HEARTBEAT
+                if candles_processed < walk_total
+                else BACKTEST_HEARTBEAT,
+                bars=candles_processed,
+                total=walk_total,
+                trades_n=len(trades),
+            )
+        with research_stage_profiler.time("swing_extend"):
+            swings = extend_swings(
+                swings,
+                series,
+                left=swing_cfg.swing_left_bars,
+                right=swing_cfg.swing_right_bars,
+                symbol=symbol,
+                timeframe=timeframe,
+                atr_period=local_cfg.atr_period,
+                minimum_swing_distance_atr=swing_cfg.minimum_swing_distance_atr,
+                as_of_index=i,
+                highs=highs_arr,
+                lows=lows_arr,
+                closes=closes_arr,
+            )
         swing_grew = len(swings) != prev_swing_n
         prev_swing_n = len(swings)
         if open_trade is not None:
             # Manage with current bar (after entry)
             _simulate_partial = True
-            c = series[i]
-            high = float(c.get("high") or c.get("h") or 0)
-            low = float(c.get("low") or c.get("l") or 0)
-            targets = [t for t in (open_trade.tp1, open_trade.tp2, open_trade.tp3) if t is not None]
-            # accumulate excursions
-            if not hasattr(open_trade, "_highs"):
-                open_trade._highs = []  # type: ignore[attr-defined]
-                open_trade._lows = []  # type: ignore[attr-defined]
-            open_trade._highs.append(high)  # type: ignore[attr-defined]
-            open_trade._lows.append(low)  # type: ignore[attr-defined]
-            outcome, exit_px, ambiguous = resolve_intrabar_outcome(
-                direction=open_trade.direction,
-                high=high,
-                low=low,
-                stop=open_trade.stop_price,
-                targets=targets,
-                handling=rcfg.ambiguous_handling,
-            )
+            with research_stage_profiler.time("trade_simulation"):
+                c = series[i]
+                high = float(c.get("high") or c.get("h") or 0)
+                low = float(c.get("low") or c.get("l") or 0)
+                targets = [t for t in (open_trade.tp1, open_trade.tp2, open_trade.tp3) if t is not None]
+                # accumulate excursions
+                if not hasattr(open_trade, "_highs"):
+                    open_trade._highs = []  # type: ignore[attr-defined]
+                    open_trade._lows = []  # type: ignore[attr-defined]
+                open_trade._highs.append(high)  # type: ignore[attr-defined]
+                open_trade._lows.append(low)  # type: ignore[attr-defined]
+                outcome, exit_px, ambiguous = resolve_intrabar_outcome(
+                    direction=open_trade.direction,
+                    high=high,
+                    low=low,
+                    stop=open_trade.stop_price,
+                    targets=targets,
+                    handling=rcfg.ambiguous_handling,
+                )
             if outcome:
                 open_trade.exit_index = i
                 ts = candle_time(c)
@@ -481,9 +597,10 @@ def run_combination_backtest(
         # Also skip sticky same-level breaks until structure (swings) updates —
         # otherwise uptrends re-evaluate thousands of identical BOS bars.
         if combo.require_bos:
-            brk = _bos_break_possible(
-                series, i, swings, direction_filter=direction_filter
-            )
+            with research_stage_profiler.time("bos_prefilter"):
+                brk = _bos_break_possible(
+                    series, i, swings, direction_filter=direction_filter
+                )
             if not brk:
                 prev_break = False
                 continue
@@ -491,24 +608,27 @@ def run_combination_backtest(
                 continue
             prev_break = True
 
-        setup = evaluate_combination_at_bar(
-            symbol=symbol,
-            timeframe=timeframe,
-            candles=series,
-            as_of_index=i,
-            combination=combo,
-            signal_config=scfg,
-            research_config=rcfg,
-            signal_engine=signal_engine,
-            sd_engine=sd_engine,
-            swings=swings,
-            compute_sd=bool(combo.require_sd),
-            atr_value=atr_arr[i],
-            volumes=vols_arr,
-            candles_1h=htf_1h,
-            candles_4h=htf_4h,
-            htf_trend_cache=htf_trend_cache,
-        )
+        with research_stage_profiler.time("evaluate_combination_at_bar"):
+            setup = evaluate_combination_at_bar(
+                symbol=symbol,
+                timeframe=timeframe,
+                candles=series,
+                as_of_index=i,
+                combination=combo,
+                signal_config=scfg,
+                research_config=rcfg,
+                signal_engine=signal_engine,
+                sd_engine=sd_engine,
+                swings=swings,
+                compute_sd=bool(combo.require_sd),
+                atr_value=atr_arr[i],
+                volumes=vols_arr,
+                candles_1h=htf_1h,
+                candles_4h=htf_4h,
+                htf_trend_cache=htf_trend_cache,
+                htf_idx_1h_map=htf_idx_1h_map,
+                htf_idx_4h_map=htf_idx_4h_map,
+            )
         if setup.get("status") not in (
             "LONG_ENTRY_CANDIDATE",
             "SHORT_ENTRY_CANDIDATE",
@@ -547,6 +667,14 @@ def run_combination_backtest(
                     if combo.require_htf_alignment
                     else {}
                 ),
+                **(
+                    {
+                        "bos_level": (setup.get("bos") or {}).get("broken_level"),
+                        "bos_direction": (setup.get("bos") or {}).get("direction"),
+                    }
+                    if isinstance(setup.get("bos"), dict)
+                    else {}
+                ),
             },
         )
 
@@ -554,6 +682,13 @@ def run_combination_backtest(
     if open_trade is not None:
         open_trade.outcome = "OPEN"
         trades.append(open_trade)
+
+    _progress(
+        SIGNAL_GENERATION_END,
+        bars=candles_processed,
+        total=walk_total,
+        trades_n=len(trades),
+    )
 
     closed_for_metrics = [t for t in trades if t.outcome != "OPEN"]
     period_start = None
@@ -564,6 +699,7 @@ def run_combination_backtest(
         period_start = ts0.isoformat() if ts0 else None
         period_end = ts1.isoformat() if ts1 else None
 
+    _progress(METRICS_START, bars=candles_processed, total=walk_total, trades_n=len(trades))
     result = compute_metrics(
         closed_for_metrics,
         combination_id=combo.combination_id,
@@ -586,6 +722,8 @@ def run_combination_backtest(
             "profit_factor": result.profit_factor,
         }
     }
+    _progress(METRICS_END, bars=candles_processed, total=walk_total, trades_n=len(trades))
+    _progress(BACKTEST_END, bars=candles_processed, total=walk_total, trades_n=len(trades))
 
     return {
         "status": "OK",
@@ -604,6 +742,8 @@ def run_combination_backtest(
         "candles_processed": candles_processed,
         "setups_processed": setups,
         "sample_size": result.sample_size,
+        "htf_precompute_seconds": htf_precompute_seconds,
+        "htf_cache_entries": len(htf_trend_cache),
         "label": "RESEARCH_COMPARISON",
         "disclaimer": result.disclaimer,
     }

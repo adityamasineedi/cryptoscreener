@@ -118,16 +118,24 @@ def compute_trade_metrics(
 
         fee = t.get("fee_total_usd")
         if fee is None:
+            fee = t.get("total_fee")
+        if fee is None:
+            fee = t.get("fees")
+        if fee is None:
             fee = t.get("fees_usd")
         fees += float(fee or 0.0)
 
         g = t.get("gross_pnl_usd")
+        if g is None:
+            g = t.get("gross_pnl")
         if g is None:
             g = t.get("pnl_usd")
         if g is not None:
             gross_pnl += float(g)
 
         n = t.get("net_pnl_usd")
+        if n is None:
+            n = t.get("net_pnl")
         if n is None:
             n = t.get("pnl_usd_net")
         if n is None:
@@ -170,10 +178,11 @@ def compute_trade_metrics(
         "gross_avg_r": None if avg_g is None else round(avg_g, 4),
         "net_avg_r": None if avg_n is None else round(avg_n, 4),
         "profit_factor": None if pf is None or not math.isfinite(pf) else round(pf, 4),
-        "gross_pnl": round(gross_pnl, 4),
-        "net_pnl": round(net_pnl, 4),
-        "total_fees": round(fees, 4),
-        "fees_over_gross_pnl": None if fee_share is None else round(fee_share, 4),
+        # Exact sums — do not round before fee/equity reconciliation.
+        "gross_pnl": gross_pnl,
+        "net_pnl": net_pnl,
+        "total_fees": fees,
+        "fees_over_gross_pnl": None if fee_share is None else fee_share,
         "max_drawdown_r": round(dd, 4),
         "max_losing_streak": lose_streak,
         "max_winning_streak": win_streak,

@@ -408,6 +408,38 @@ def run_multi_strategy_backtest(
     end = min(len(series), index_end if index_end is not None else len(series))
     loop_start = max(rcfg.min_bars, start)
 
+    # Research-only speed: precompute closed-bar HTF trends once (same labels as
+    # on-demand trend_at_as_of). Does not change HTF / BOS / entry semantics.
+    from app.research.bos_strategy_comparison.htf import (
+        build_htf_as_of_index_map,
+        precompute_htf_trend_cache,
+    )
+
+    htf_idx_1h_map: list[int | None] | None = None
+    htf_idx_4h_map: list[int | None] | None = None
+    htf_precompute_seconds = 0.0
+    if candles_1h or candles_4h:
+        t_htf = time.perf_counter()
+        if candles_1h:
+            precompute_htf_trend_cache(
+                candles_1h,
+                timeframe="1h",
+                symbol=symbol,
+                config=local_cfg,
+                cache=trend_cache,
+            )
+            htf_idx_1h_map = build_htf_as_of_index_map(series, candles_1h)
+        if candles_4h:
+            precompute_htf_trend_cache(
+                candles_4h,
+                timeframe="4h",
+                symbol=symbol,
+                config=local_cfg,
+                cache=trend_cache,
+            )
+            htf_idx_4h_map = build_htf_as_of_index_map(series, candles_4h)
+        htf_precompute_seconds = time.perf_counter() - t_htf
+
     immediate_strats = [
         st for st in strat_list if not strategy_needs_lifecycle(st) or not use_lifecycle
     ]
@@ -519,6 +551,8 @@ def run_multi_strategy_backtest(
                 config=local_cfg,
                 trend_cache=trend_cache,
                 include_5m=False,
+                idx_1h_map=htf_idx_1h_map,
+                idx_4h_map=htf_idx_4h_map,
             )
             setup = evaluate_strategy_at_bar(
                 symbol=symbol,
@@ -578,7 +612,11 @@ def run_multi_strategy_backtest(
             continue
 
         tf_analysis = engine.analyze_timeframe(
-            symbol, timeframe, series, as_of_index=i
+            symbol,
+            timeframe,
+            series,
+            as_of_index=i,
+            serialize_swings=False,
         )
         bos = tf_analysis.get("bos")
         if not (bos and bos.get("state") == "CONFIRMED" and bos.get("direction")):
@@ -595,6 +633,8 @@ def run_multi_strategy_backtest(
             trend_15m=str((tf_analysis.get("trend") or {}).get("trend") or ""),
             trend_cache=trend_cache,
             include_5m=False,
+            idx_1h_map=htf_idx_1h_map,
+            idx_4h_map=htf_idx_4h_map,
         )
 
         demand_zone = supply_zone = None
@@ -610,6 +650,7 @@ def run_multi_strategy_backtest(
                 demand_zone=demand_zone,
                 supply_zone=supply_zone,
                 as_of_index=i,
+                serialize_swings=False,
             )
 
         for st in flat_imm:
@@ -691,6 +732,8 @@ def run_multi_strategy_backtest(
         "candles_processed": candles_processed,
         "lifecycle": lifecycle_stats,
         "use_lifecycle": use_lifecycle,
+        "htf_precompute_seconds": htf_precompute_seconds,
+        "htf_cache_entries": len(trend_cache),
         "disclaimer": DISCLAIMER,
     }
 

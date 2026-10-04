@@ -9,6 +9,13 @@ import math
 from typing import Any
 
 from app.signals.config import SignalConfig
+from app.signals.schemas import Direction
+from app.signals.trade_math import (
+    DirectionRequiredError,
+    parse_direction_optional,
+    stop_distance,
+    validate_trade_geometry,
+)
 
 
 def risk_reward(
@@ -72,6 +79,37 @@ def risk_reward(
     }
 
 
+def _zero_position(
+    *,
+    account_equity: float,
+    risk_percent: float,
+    entry: float,
+    stop: float,
+    leverage: float,
+    direction: str | None,
+    reason: str,
+) -> dict[str, Any]:
+    max_risk = account_equity * risk_percent
+    return {
+        "account_equity": account_equity,
+        "risk_percent": risk_percent,
+        "max_risk_amount": max_risk,
+        "entry": entry,
+        "stop": stop,
+        "risk_per_unit": 0.0,
+        "raw_quantity": 0.0,
+        "final_quantity": 0.0,
+        "notional": 0.0,
+        "estimated_fee": 0.0,
+        "estimated_slippage": 0.0,
+        "leverage": leverage,
+        "direction": direction,
+        "geometry_ok": False,
+        "reason": reason,
+        "note": "Risk calculator only — does not place trades",
+    }
+
+
 def position_size(
     *,
     account_equity: float,
@@ -83,25 +121,78 @@ def position_size(
     leverage: float = 5.0,
     fee_rate: float = 0.0004,
     slippage_rate: float = 0.0002,
+    direction: Direction | str | None = None,
+    require_direction: bool = False,
 ) -> dict[str, Any]:
+    """Size a position from equity risk and stop distance.
+
+    When ``direction`` is provided, stop geometry is validated and distance is
+    signed (LONG: entry-stop, SHORT: stop-entry). Missing direction never becomes
+    LONG. Legacy callers may omit direction and use absolute distance; pass
+    ``require_direction=True`` for fail-closed shared math.
+    """
+    parsed = parse_direction_optional(direction)
+    if require_direction and parsed is None:
+        return _zero_position(
+            account_equity=account_equity,
+            risk_percent=risk_percent,
+            entry=entry,
+            stop=stop,
+            leverage=leverage,
+            direction=None,
+            reason="direction is required",
+        )
+
     max_risk = account_equity * risk_percent
-    risk_per_unit = abs(entry - stop)
-    if risk_per_unit <= 0 or account_equity <= 0 or risk_percent <= 0:
-        return {
-            "account_equity": account_equity,
-            "risk_percent": risk_percent,
-            "max_risk_amount": max_risk,
-            "entry": entry,
-            "stop": stop,
-            "risk_per_unit": risk_per_unit,
-            "raw_quantity": 0.0,
-            "final_quantity": 0.0,
-            "notional": 0.0,
-            "estimated_fee": 0.0,
-            "estimated_slippage": 0.0,
-            "leverage": leverage,
-            "note": "Risk calculator only — does not place trades",
-        }
+    if account_equity <= 0 or risk_percent <= 0:
+        return _zero_position(
+            account_equity=account_equity,
+            risk_percent=risk_percent,
+            entry=entry,
+            stop=stop,
+            leverage=leverage,
+            direction=parsed.value if parsed else None,
+            reason="Invalid equity or risk_percent",
+        )
+
+    if parsed is not None:
+        geom = validate_trade_geometry(parsed, entry, stop)
+        if not geom.ok:
+            return _zero_position(
+                account_equity=account_equity,
+                risk_percent=risk_percent,
+                entry=entry,
+                stop=stop,
+                leverage=leverage,
+                direction=parsed.value,
+                reason=geom.reason or "Invalid trade geometry",
+            )
+        try:
+            risk_per_unit = stop_distance(parsed, entry, stop)
+        except (DirectionRequiredError, ValueError) as exc:
+            return _zero_position(
+                account_equity=account_equity,
+                risk_percent=risk_percent,
+                entry=entry,
+                stop=stop,
+                leverage=leverage,
+                direction=parsed.value,
+                reason=str(exc),
+            )
+    else:
+        # Legacy unsigned path — not a LONG default.
+        risk_per_unit = abs(float(entry) - float(stop))
+        if risk_per_unit <= 0:
+            return _zero_position(
+                account_equity=account_equity,
+                risk_percent=risk_percent,
+                entry=entry,
+                stop=stop,
+                leverage=leverage,
+                direction=None,
+                reason="Invalid stop distance",
+            )
+
     raw = max_risk / risk_per_unit
     step = max(contract_quantity_step, 1e-12)
     final = math.floor(raw / step) * step
@@ -122,6 +213,9 @@ def position_size(
         "estimated_slippage": notional * slippage_rate,
         "leverage": leverage,
         "margin_requirement": (notional / leverage) if leverage > 0 else None,
+        "direction": parsed.value if parsed else None,
+        "geometry_ok": True,
+        "reason": None,
         "note": "Risk calculator only — does not place trades",
     }
 
@@ -134,9 +228,11 @@ def futures_risk_checks(
     position: dict[str, Any],
     config: SignalConfig,
     liquidation_price: float | None = None,
-    direction: str = "LONG",
+    direction: Direction | str | None = None,
 ) -> dict[str, Any]:
+    """Futures risk warnings. Direction is optional and never coerced to LONG."""
     warnings: list[str] = []
+    parsed = parse_direction_optional(direction)
     stop_pct = abs(entry - stop) / entry if entry else None
     if stop_pct is not None and stop_pct < config.stop_too_close_pct:
         warnings.append("STOP_TOO_CLOSE")
@@ -148,6 +244,11 @@ def futures_risk_checks(
     equity = position.get("account_equity")
     if margin is not None and equity is not None and margin > equity:
         warnings.append("INSUFFICIENT_MARGIN")
+
+    if parsed is not None:
+        geom = validate_trade_geometry(parsed, entry, stop)
+        if not geom.ok:
+            warnings.append("INVALID_STOP_GEOMETRY")
 
     dist_liq = None
     if liquidation_price is not None and entry:
@@ -165,7 +266,7 @@ def futures_risk_checks(
         "leverage": leverage,
         "notional_exposure": position.get("notional"),
         "warnings": warnings,
-        "direction": direction,
+        "direction": parsed.value if parsed else None,
         "liquidation_data": "LIVE" if liquidation_price is not None else "N/A",
     }
 
@@ -174,13 +275,19 @@ def estimate_liquidation_price(
     *,
     entry: float,
     leverage: float,
-    direction: str,
+    direction: Direction | str | None,
     maintenance_margin_rate: float = 0.004,
 ) -> float | None:
     """Simple isolated-ish estimate. Returns None if inputs invalid — never fake."""
     if entry <= 0 or leverage <= 0:
         return None
+    try:
+        from app.signals.trade_math import require_direction
+
+        d = require_direction(direction)
+    except DirectionRequiredError:
+        return None
     # Approximate: long liq ≈ entry * (1 - 1/lev + mmr)
-    if direction == "LONG":
+    if d == Direction.LONG:
         return entry * (1.0 - (1.0 / leverage) + maintenance_margin_rate)
     return entry * (1.0 + (1.0 / leverage) - maintenance_margin_rate)

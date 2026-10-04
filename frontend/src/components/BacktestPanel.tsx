@@ -7,6 +7,18 @@ import {
   type StrategyMatrixRow,
   type StrategyTradeRow,
 } from "../api/client";
+import {
+  allFrozenV1Symbols,
+  assessProductionComparable,
+  barsToApproxDays,
+  FEE_DISPLAY,
+  formatBarsDuration,
+  lookbackLabelForTf,
+  symbolRoleDisplay,
+  timeframeRoleLabel,
+  V1_PRODUCTION_RISK,
+  v1RiskForSymbol,
+} from "../backtest/v1Config";
 import { tradeRowKey } from "../chart/backtestTradeOverlay";
 import {
   mergeSymbols,
@@ -17,6 +29,7 @@ import { useBacktestJobStore } from "../store/backtestJobStore";
 import { BacktestTradeChart } from "./BacktestTradeChart";
 import { CandidateResearchPanel } from "./CandidateResearchPanel";
 import { DynamicCandidatePipelinePanel } from "./DynamicCandidatePipelinePanel";
+import { ShortResearchPanel } from "./ShortResearchPanel";
 
 type PeriodMode = "lookback" | "dates";
 
@@ -49,27 +62,28 @@ function v1TierBadge(tier: "core" | "secondary" | "research"): {
 } {
   if (tier === "core") {
     return {
-      label: "v1 core",
+      label: "v1 CORE",
       className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
     };
   }
   if (tier === "secondary") {
     return {
-      label: "v1 secondary",
+      label: "v1 SECONDARY",
       className: "border-amber-500/40 bg-amber-500/10 text-amber-200",
     };
   }
   return {
-    label: "research only",
+    label: "research-only",
     className: "border-terminal-border bg-white/5 text-terminal-muted",
   };
 }
-const LOOKBACKS = [
-  { id: "12d", label: "~12 days", limit: 1200, hint: "15m ≈ 12.5d · 1h ≈ 50d" },
-  { id: "30d", label: "~30 days", limit: 2880, hint: "15m ≈ 30d · 1h ≈ 120d" },
-  { id: "60d", label: "~60 days", limit: 5760, hint: "15m ≈ 60d · 1h ≈ 240d" },
-  { id: "90d", label: "~90 days", limit: 8640, hint: "15m ≈ 90d" },
-  { id: "max", label: "Max (~127d 15m)", limit: 12200, hint: "Uses full DB tail" },
+
+const LOOKBACK_LIMITS = [
+  { id: "12d", limit: 1200 },
+  { id: "30d", limit: 2880 },
+  { id: "60d", limit: 5760 },
+  { id: "90d", limit: 8640 },
+  { id: "max", limit: 12200 },
 ] as const;
 
 function pct(v: number | null | undefined): string {
@@ -151,14 +165,16 @@ export function BacktestPanel() {
   const [customSymbols, setCustomSymbols] = useState("");
   const [timeframes, setTimeframes] = useState<string[]>(["1h"]);
   const [direction, setDirection] = useState<"LONG" | "SHORT">("LONG");
-  const [lookbackId, setLookbackId] = useState<(typeof LOOKBACKS)[number]["id"]>("60d");
+  const [lookbackId, setLookbackId] = useState<(typeof LOOKBACK_LIMITS)[number]["id"]>("60d");
   const [customLimit, setCustomLimit] = useState("");
   const [periodMode, setPeriodMode] = useState<PeriodMode>("lookback");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [principalUsd, setPrincipalUsd] = useState(1000);
-  const [riskPct, setRiskPct] = useState(2);
-  const [riskUsd, setRiskUsd] = useState(20);
+  const [riskPct, setRiskPct] = useState(1.5);
+  const [riskUsd, setRiskUsd] = useState(15);
+  const [researchRiskOverride, setResearchRiskOverride] = useState(false);
+  const [shortNotice, setShortNotice] = useState<string | null>(null);
   const [leverage, setLeverage] = useState(2);
   const [takerFeePct, setTakerFeePct] = useState(0.04);
   const [makerFeePct, setMakerFeePct] = useState(0.02);
@@ -174,6 +190,11 @@ export function BacktestPanel() {
   const setStoreError = useBacktestJobStore((s) => s.setError);
 
   const loading = active || job?.status === "running";
+  const frozenV1Selection = allFrozenV1Symbols(symbols);
+  const lockV1Risk = frozenV1Selection && !researchRiskOverride;
+  const primaryTf = timeframes.includes("1h")
+    ? "1h"
+    : timeframes[0] || "1h";
 
   const limit = useMemo(() => {
     // Date mode loads by calendar bounds from Postgres (full series slice).
@@ -183,8 +204,60 @@ export function BacktestPanel() {
     if (customLimit && Number.isFinite(custom) && custom >= 50) {
       return Math.min(Math.floor(custom), 20000);
     }
-    return LOOKBACKS.find((l) => l.id === lookbackId)?.limit ?? 5760;
+    return LOOKBACK_LIMITS.find((l) => l.id === lookbackId)?.limit ?? 5760;
   }, [customLimit, lookbackId, periodMode, start, end]);
+
+  const approxDays = useMemo(
+    () => barsToApproxDays(limit, primaryTf),
+    [limit, primaryTf]
+  );
+
+  const comparability = useMemo(
+    () =>
+      assessProductionComparable({
+        symbols,
+        timeframes,
+        direction,
+        researchRiskOverride,
+        leverage,
+        takerFeePct,
+        makerFeePct,
+      }),
+    [
+      symbols,
+      timeframes,
+      direction,
+      researchRiskOverride,
+      leverage,
+      takerFeePct,
+      makerFeePct,
+    ]
+  );
+
+  // Auto-apply frozen v1 production risk when editing is locked.
+  useEffect(() => {
+    if (!lockV1Risk) return;
+    if (symbols.length === 1) {
+      const r = v1RiskForSymbol(symbols[0], principalUsd);
+      if (r) {
+        setRiskPct(r.riskPercent);
+        setRiskUsd(r.riskUsd);
+      }
+      return;
+    }
+    // Multi-symbol: show BTC core as the summary default; API sizes each cell.
+    const btc = v1RiskForSymbol("BTCUSDT", principalUsd);
+    if (btc && symbols.includes("BTCUSDT")) {
+      setRiskPct(btc.riskPercent);
+      setRiskUsd(btc.riskUsd);
+    } else {
+      const first = v1RiskForSymbol(symbols[0], principalUsd);
+      if (first) {
+        setRiskPct(first.riskPercent);
+        setRiskUsd(first.riskUsd);
+      }
+    }
+  }, [lockV1Risk, symbols, principalUsd]);
 
   const effectiveStart = periodMode === "dates" ? start || undefined : undefined;
   const effectiveEnd = periodMode === "dates" ? end || undefined : undefined;
@@ -314,9 +387,11 @@ export function BacktestPanel() {
     const done = job.done_cells ?? 0;
     const total = job.total_cells;
     const rawPct =
-      job.pct != null && Number.isFinite(job.pct)
-        ? Number(job.pct)
-        : (done / total) * 100;
+      job.progress_percent != null && Number.isFinite(job.progress_percent)
+        ? Number(job.progress_percent)
+        : job.pct != null && Number.isFinite(job.pct)
+          ? Number(job.pct)
+          : (done / total) * 100;
     const pctNum = Math.min(100, rawPct);
     const pct =
       pctNum > 0 && pctNum < 10
@@ -328,14 +403,24 @@ export function BacktestPanel() {
       : (job.elapsed_seconds ?? 0) * 1000;
     const remaining = Math.max(0, total - done);
     let etaMs: number | null = null;
+    const bars = job.bars_processed ?? 0;
+    const totalBars = job.total_bars ?? 0;
     if (done > 0 && elapsedMs > 0) {
       etaMs = (elapsedMs / done) * remaining;
+    } else if (bars > 0 && totalBars > bars && elapsedMs > 0) {
+      etaMs = (elapsedMs / bars) * (totalBars - bars);
     }
     return {
       pct,
       done,
       total,
       current: job.current || "",
+      phase: job.phase || "",
+      barsProcessed: bars,
+      totalBars,
+      trades: job.trades_generated ?? job.trades ?? 0,
+      lastHeartbeat: job.last_heartbeat || null,
+      rowsLoaded: job.rows_loaded ?? 0,
       elapsedLabel: formatDuration(elapsedMs),
       etaLabel: etaMs == null ? "…" : formatDuration(etaMs),
     };
@@ -346,16 +431,31 @@ export function BacktestPanel() {
       setStoreError("Pick at least one symbol and timeframe");
       return;
     }
+    if (direction === "SHORT") {
+      setShortNotice(
+        "SHORT research is paused. SHORT paper trading, production, and Telegram are disabled. No SHORT backtest will enter an operational path."
+      );
+      setStoreError("short_research_paused");
+      return;
+    }
     if (periodMode === "dates" && !start && !end) {
       setStoreError("Custom dates mode needs a start and/or end day (UTC)");
       return;
     }
     setSelectedKey(null);
+    setShortNotice(null);
     await startJob({
       symbols,
       timeframes,
-      direction,
+      direction: "LONG",
       combination_id: "COMBO_02",
+      strategy_id: "COMBO_02_V1",
+      combo_version: "v1",
+      setup_timeframe: primaryTf,
+      risk_mode: researchRiskOverride
+        ? "RESEARCH_OVERRIDE"
+        : "V1_PRODUCTION_PROFILE",
+      research_risk_override: researchRiskOverride,
       limit,
       risk_usd: riskUsd,
       principal_usd: principalUsd,
@@ -370,6 +470,8 @@ export function BacktestPanel() {
     symbols,
     timeframes,
     direction,
+    primaryTf,
+    researchRiskOverride,
     limit,
     riskUsd,
     principalUsd,
@@ -439,36 +541,53 @@ export function BacktestPanel() {
           Strategy Backtest
         </h1>
         <p className="mt-1 max-w-3xl text-xs text-terminal-muted">
-          Run the HL Long Path A playbook (COMBO_02 v1: Trend + BOS + 4h/1h HTF)
-          on real Postgres OHLCV. Same engine as the research scripts — not a
-          profitability claim. Core/secondary cells size from the v1 production
-          profile (BTC 1h 1.5%, ETH/SOL 1h 0.5%); 15m is research-only.
+          COMBO_02 v1 research backtest on Postgres OHLCV. LONG-only production
+          profile. Same engine as research scripts — not a profitability claim.
+          No paper or live trade is created from this screen.
         </p>
       </div>
 
       <section className="mb-4 rounded border border-terminal-border/80 p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded border border-terminal-accent/40 bg-terminal-accent/10 px-2 py-1 font-mono text-terminal-accent">
-            COMBO_02 v1 · TREND_BOS · HTF
+            Strategy: COMBO_02 v1
           </span>
           <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
-            core: BTC 1h @ 1.5%
+            Direction: LONG
           </span>
-          <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">
-            secondary: ETH/SOL 1h @ 0.5% · 4h optional
+          <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
+            Setup TF: 1h
+          </span>
+          <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
+            HTF: 1h + 4h bullish alignment
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-muted">
-            research: 15m
+            Source: V1_RESEARCH_BACKTEST
           </span>
-          <span
-            className="text-terminal-muted"
-            title="COMBO_02 = HTF-gated v1; COMBO_02_LOCAL = legacy/research-only (not used in this UI)."
-          >
-            {direction === "LONG"
-              ? "Gates: setup BULLISH + bullish BOS + 4h/1h HTF_ALIGNED (longs only)"
-              : "Structure filter: LH + LL (shorts)"}
+          <span className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-200">
+            SHORT status: PAUSED
           </span>
         </div>
+
+        {comparability.productionComparable ? (
+          <div className="mb-3 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
+            <div className="font-semibold">FROZEN V1 CONFIGURATION</div>
+            <div>Production-comparable research run</div>
+          </div>
+        ) : (
+          <div className="mb-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+            <div className="font-semibold">RESEARCH-ONLY CONFIGURATION</div>
+            <div>
+              This configuration differs from the frozen COMBO_02 v1 profile.
+              Results must not be compared directly with production v1 results.
+            </div>
+            {comparability.reasons.length ? (
+              <div className="mt-1 font-mono text-[10px] text-amber-100/80">
+                Reasons: {comparability.reasons.join(", ")}
+              </div>
+            ) : null}
+          </div>
+        )}
 
         <div className="grid gap-3 term-md:grid-cols-2 term-lg:grid-cols-4">
           <div>
@@ -489,7 +608,7 @@ export function BacktestPanel() {
                   <button
                     key={s}
                     type="button"
-                    title={`${s} — ${badge.label} on 1h`}
+                    title={symbolRoleDisplay(s, "1h")}
                     onClick={() => setSymbols((prev) => toggleInList(prev, s))}
                     className={`rounded border px-2 py-1 font-mono text-xs ${
                       on
@@ -560,14 +679,12 @@ export function BacktestPanel() {
             <div className="flex flex-wrap gap-1">
               {TF_OPTIONS.map((tf) => {
                 const on = timeframes.includes(tf);
-                const tfTier =
-                  tf === "1h" ? "core" : tf === "4h" ? "secondary" : "research";
-                const badge = v1TierBadge(tfTier);
+                const role = timeframeRoleLabel(tf);
                 return (
                   <button
                     key={tf}
                     type="button"
-                    title={`${tf} — ${badge.label}`}
+                    title={`${tf} — ${role}`}
                     onClick={() => setTimeframes((prev) => toggleInList(prev, tf))}
                     className={`rounded border px-2 py-1 font-mono text-xs ${
                       on
@@ -576,13 +693,19 @@ export function BacktestPanel() {
                     }`}
                   >
                     {tf}
-                    <span className={`ml-1 text-[9px] ${badge.className} rounded px-1`}>
-                      {badge.label}
+                    <span className="ml-1 rounded border border-terminal-border bg-white/5 px-1 text-[9px] text-terminal-muted">
+                      {role}
                     </span>
                   </button>
                 );
               })}
             </div>
+            {timeframes.includes("4h") ? (
+              <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-100">
+                4h setup is not the frozen COMBO_02 v1 1h production configuration.
+                Results are research-only and not production-comparable.
+              </div>
+            ) : null}
           </div>
 
           <div>
@@ -590,21 +713,46 @@ export function BacktestPanel() {
               Direction
             </div>
             <div className="flex flex-wrap gap-1">
-              {(["LONG", "SHORT"] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setDirection(d)}
-                  className={`rounded border px-2 py-1 font-mono text-xs ${
-                    direction === d
-                      ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
-                      : "border-terminal-border text-terminal-muted"
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setDirection("LONG");
+                  setShortNotice(null);
+                }}
+                className={`rounded border px-2 py-1 font-mono text-xs ${
+                  direction === "LONG"
+                    ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
+                    : "border-terminal-border text-terminal-muted"
+                }`}
+              >
+                LONG
+              </button>
+              <button
+                type="button"
+                aria-disabled="true"
+                title="SHORT research is paused"
+                onClick={() =>
+                  setShortNotice(
+                    "SHORT research is paused. SHORT paper trading, production, and Telegram are disabled. No SHORT backtest will enter an operational path."
+                  )
+                }
+                className="rounded border border-rose-500/30 bg-rose-500/5 px-2 py-1 text-left font-mono text-xs text-rose-200/80 opacity-80"
+              >
+                <div>SHORT</div>
+                <div className="text-[9px] leading-tight text-rose-200/70">Paused</div>
+                <div className="text-[9px] leading-tight text-rose-200/60">
+                  Research disabled
+                </div>
+              </button>
             </div>
+            <div className="mt-1 font-mono text-[10px] text-terminal-muted">
+              Direction: LONG · SHORT status: PAUSED
+            </div>
+            {shortNotice ? (
+              <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 text-[10px] text-rose-100">
+                {shortNotice}
+              </div>
+            ) : null}
           </div>
 
           <label className="text-xs">
@@ -622,18 +770,34 @@ export function BacktestPanel() {
           </label>
         </div>
 
+        <div className="mt-3 rounded border border-terminal-border/60 bg-black/20 px-3 py-2 text-[11px] text-terminal-muted">
+          <div className="mb-1 font-semibold uppercase tracking-wide text-terminal-text">
+            Effective production risk
+          </div>
+          <div className="font-mono text-[11px] text-terminal-text">
+            BTCUSDT core — 1.5% / ${Math.round((principalUsd * 1.5) / 100)}
+          </div>
+          <div className="font-mono text-[11px] text-terminal-text">
+            ETHUSDT secondary — 0.5% / ${Math.round((principalUsd * 0.5) / 100)}
+          </div>
+          <div className="font-mono text-[11px] text-terminal-text">
+            SOLUSDT secondary — 0.5% / ${Math.round((principalUsd * 0.5) / 100)}
+          </div>
+        </div>
+
         <div className="mt-3 grid gap-3 term-md:grid-cols-4">
           <label className="text-xs">
             <span className="mb-1 block text-terminal-muted">Risk % of principal (1R)</span>
             <input
               type="number"
               min={0.1}
-              step={0.5}
+              step={0.1}
               value={riskPct}
+              disabled={lockV1Risk}
               onChange={(e) =>
                 applyRiskFromPrincipal(principalUsd, Number(e.target.value) || 0)
               }
-              className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
+              className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none disabled:opacity-50"
             />
           </label>
           <label className="text-xs">
@@ -643,8 +807,9 @@ export function BacktestPanel() {
               min={1}
               step={1}
               value={riskUsd}
+              disabled={lockV1Risk}
               onChange={(e) => setRiskUsd(Number(e.target.value) || 20)}
-              className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
+              className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none disabled:opacity-50"
             />
           </label>
           <label className="text-xs">
@@ -659,10 +824,33 @@ export function BacktestPanel() {
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
             />
           </label>
-          <div className="flex items-end text-[11px] text-terminal-muted">
-            Default: $1,000 · 2% risk = $20/R · {leverage}x margin. Qty from stop risk; leverage only sets margin = notional/lev.
+          <div className="flex flex-col justify-end gap-1 text-[11px] text-terminal-muted">
+            {frozenV1Selection ? (
+              <label className="flex items-start gap-2 text-terminal-text">
+                <input
+                  type="checkbox"
+                  checked={researchRiskOverride}
+                  onChange={(e) => setResearchRiskOverride(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Research risk override
+                  <span className="block text-[10px] text-terminal-muted">
+                    Enables manual risk; marks results research-only
+                  </span>
+                </span>
+              </label>
+            ) : (
+              <span>Non-v1 symbols use the configured research risk.</span>
+            )}
           </div>
         </div>
+        {researchRiskOverride ? (
+          <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+            This risk differs from the frozen COMBO_02 v1 production profile.
+            Results are research-only and are not production-comparable.
+          </div>
+        ) : null}
 
         <div className="mt-3 grid gap-3 term-md:grid-cols-3">
           <label className="text-xs">
@@ -691,8 +879,13 @@ export function BacktestPanel() {
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
             />
           </label>
-          <div className="flex items-end text-[11px] text-terminal-muted">
-            Defaults: Binance USDT-M VIP0 (taker 0.04% / maker 0.02%). Qty sized so stop risk = Risk $. Leverage {leverage}x → margin = notional/{leverage}.
+          <div className="rounded border border-terminal-border/50 bg-black/15 px-2 py-1.5 font-mono text-[10px] text-terminal-muted">
+            <div>Entry type: {FEE_DISPLAY.entryType}</div>
+            <div>Entry fee type: Market entry → taker fee</div>
+            <div>Exit type: {FEE_DISPLAY.exitType}</div>
+            <div>Exit fee type: Market exit → taker fee</div>
+            <div>Fee basis: {FEE_DISPLAY.feeBasis}</div>
+            <div>Fee convention: {FEE_DISPLAY.feeConvention}</div>
           </div>
         </div>
 
@@ -710,7 +903,7 @@ export function BacktestPanel() {
                   : "border-terminal-border text-terminal-muted"
               }`}
             >
-              Recent lookback
+              DB-tail mode
             </button>
             <button
               type="button"
@@ -721,34 +914,48 @@ export function BacktestPanel() {
                   : "border-terminal-border text-terminal-muted"
               }`}
             >
-              Custom dates (any year)
+              Calendar-range mode
             </button>
           </div>
 
           {periodMode === "lookback" ? (
             <>
-              <div className="mb-1 text-[11px] text-terminal-muted">
-                Bars from DB tail (ignores calendar year)
+              <div className="mb-1 rounded border border-terminal-border/50 bg-black/15 px-2 py-1.5 text-[11px] text-terminal-muted">
+                <div className="font-semibold text-terminal-text">DB-tail mode</div>
+                <div>Uses the latest N available candles</div>
+                <div>Does not represent a calendar-year filter</div>
               </div>
               <div className="flex flex-wrap gap-1">
-                {LOOKBACKS.map((l) => (
-                  <button
-                    key={l.id}
-                    type="button"
-                    title={l.hint}
-                    onClick={() => {
-                      setLookbackId(l.id);
-                      setCustomLimit("");
-                    }}
-                    className={`rounded border px-2 py-1 text-xs ${
-                      !customLimit && lookbackId === l.id
-                        ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
-                        : "border-terminal-border text-terminal-muted"
-                    }`}
-                  >
-                    {l.label}
-                  </button>
-                ))}
+                {LOOKBACK_LIMITS.map((l) => {
+                  const days = barsToApproxDays(l.limit, primaryTf);
+                  const label =
+                    l.id === "max"
+                      ? `Max (${l.limit.toLocaleString()} bars)`
+                      : lookbackLabelForTf(l.limit, primaryTf);
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      title={formatBarsDuration(l.limit, primaryTf)}
+                      onClick={() => {
+                        setLookbackId(l.id);
+                        setCustomLimit("");
+                      }}
+                      className={`rounded border px-2 py-1 text-xs ${
+                        !customLimit && lookbackId === l.id
+                          ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
+                          : "border-terminal-border text-terminal-muted"
+                      }`}
+                    >
+                      {label}
+                      {days != null && l.id !== "max" ? (
+                        <span className="ml-1 text-[9px] opacity-70">
+                          ({l.limit.toLocaleString()})
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
               <label className="mt-2 block text-xs">
                 <span className="mb-1 block text-terminal-muted">Custom bars (optional)</span>
@@ -759,11 +966,21 @@ export function BacktestPanel() {
                   className="w-36 rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
                 />
               </label>
+              <div className="mt-1 font-mono text-[11px] text-terminal-text">
+                Bars requested: {limit.toLocaleString()}
+              </div>
+              <div className="font-mono text-[11px] text-terminal-muted">
+                Approximate duration:{" "}
+                {approxDays != null
+                  ? `${approxDays} days at ${primaryTf}`
+                  : "—"}
+              </div>
             </>
           ) : (
             <>
-              <div className="mb-1 text-[11px] text-terminal-muted">
-                UTC calendar window — pick a year preset or any start/end (needs OHLCV in DB)
+              <div className="mb-1 rounded border border-terminal-border/50 bg-black/15 px-2 py-1.5 text-[11px] text-terminal-muted">
+                <div className="font-semibold text-terminal-text">Calendar-range mode</div>
+                <div>Uses only candles inside the requested UTC range</div>
               </div>
               <div className="mb-2 flex flex-wrap gap-1">
                 {YEAR_PRESETS.map((y) => (
@@ -807,10 +1024,69 @@ export function BacktestPanel() {
             </>
           )}
 
+          <div className="mt-3 rounded border border-terminal-border/70 bg-black/25 px-3 py-2 font-mono text-[11px] text-terminal-muted">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-terminal-text">
+              Pre-run configuration summary
+            </div>
+            <div>Selected symbol: {symbols.join(", ") || "—"}</div>
+            <div>
+              Symbol role:{" "}
+              {symbols.map((s) => symbolRoleDisplay(s, primaryTf)).join("; ") || "—"}
+            </div>
+            <div>Strategy: COMBO_02 v1</div>
+            <div>Direction: LONG</div>
+            <div>Setup timeframe: {primaryTf} ({timeframeRoleLabel(primaryTf)})</div>
+            <div>HTF requirement: 1h + 4h bullish alignment</div>
+            <div>
+              Effective risk:{" "}
+              {lockV1Risk
+                ? symbols
+                    .filter((s) => s in V1_PRODUCTION_RISK)
+                    .map((s) => {
+                      const r = v1RiskForSymbol(s, principalUsd);
+                      return r ? `${s} ${r.riskPercent}% / $${r.riskUsd}` : s;
+                    })
+                    .join(" · ") || `${riskPct}% / $${riskUsd}`
+                : `${riskPct}% / $${riskUsd}`}
+            </div>
+            <div>
+              Risk source:{" "}
+              {researchRiskOverride
+                ? "Research override"
+                : frozenV1Selection
+                  ? "V1 production profile"
+                  : "Research fallback"}
+            </div>
+            <div>Entry model: MARKET or LIMIT_RETEST</div>
+            <div>
+              Fee model: taker {takerFeePct}% / maker {makerFeePct}% · basis executed
+              notional
+            </div>
+            <div>Leverage: {leverage}×</div>
+            <div>
+              Bars/date range:{" "}
+              {periodMode === "dates"
+                ? `Calendar ${effectiveStart || "…"} → ${effectiveEnd || "…"}`
+                : `DB-tail ${limit.toLocaleString()} bars ≈ ${approxDays ?? "—"} days at ${primaryTf}`}
+            </div>
+            <div>
+              Production comparable:{" "}
+              <span
+                className={
+                  comparability.productionComparable
+                    ? "text-emerald-300"
+                    : "text-amber-200"
+                }
+              >
+                {comparability.productionComparable ? "YES" : "NO"}
+              </span>
+            </div>
+          </div>
+
           <div className="mt-2 flex flex-wrap items-end gap-3">
             <button
               type="button"
-              disabled={loading}
+              disabled={loading || direction === "SHORT"}
               onClick={() => void run()}
               className="rounded border border-terminal-accent bg-terminal-accent/15 px-4 py-1.5 text-sm text-terminal-accent disabled:opacity-50"
             >
@@ -832,8 +1108,8 @@ export function BacktestPanel() {
           </div>
           <div className="mt-1 font-mono text-[11px] text-terminal-muted">
             {periodMode === "dates"
-              ? `Date window ${effectiveStart || "…"} → ${effectiveEnd || "…"} · ${symbols.length}×${timeframes.length} cells · runs in background`
-              : `Using limit=${limit} bars · ${symbols.length}×${timeframes.length} cells · runs in background`}
+              ? `Calendar-range mode ${effectiveStart || "…"} → ${effectiveEnd || "…"} · ${symbols.length}×${timeframes.length} cells · runs in background`
+              : `DB-tail mode · Bars requested: ${limit.toLocaleString()} · ≈ ${approxDays ?? "—"} days at ${primaryTf} · ${symbols.length}×${timeframes.length} cells`}
           </div>
           {coverage.length ? (
             <div className="mt-1 font-mono text-[11px] text-terminal-muted">
@@ -893,10 +1169,22 @@ export function BacktestPanel() {
               </div>
               <div className="mt-1.5 font-mono text-[11px] text-terminal-muted">
                 Running {progressView.current}
-                {progressView.done === 0
-                  ? " — first cell scans structure bar-by-bar (15m date windows are heaviest); safe to leave this tab"
-                  : " — safe to leave this tab"}
+                {progressView.phase ? ` · ${progressView.phase}` : ""}
+                {progressView.totalBars > 0
+                  ? ` · bars ${progressView.barsProcessed}/${progressView.totalBars}`
+                  : progressView.rowsLoaded > 0
+                    ? ` · rows loaded ${progressView.rowsLoaded}`
+                    : progressView.done === 0
+                      ? " — first cell scans structure bar-by-bar (15m date windows are heaviest)"
+                      : ""}
+                {` · trades ${progressView.trades}`}
+                {" — safe to leave this tab"}
               </div>
+              {progressView.lastHeartbeat ? (
+                <div className="mt-0.5 font-mono text-[10px] text-terminal-muted/80">
+                  last heartbeat {progressView.lastHeartbeat}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -969,6 +1257,115 @@ export function BacktestPanel() {
           </div>
           <div className="mb-3 grid gap-1 rounded border border-terminal-border/80 bg-black/20 px-3 py-2 font-mono text-[11px] text-terminal-muted term-md:grid-cols-2">
             <div>
+              Strategy identity:{" "}
+              <span className="text-terminal-text">
+                {job?.strategy_id || "COMBO_02_V1"} · {job?.combo_version || "v1"}
+              </span>
+            </div>
+            <div>
+              Direction:{" "}
+              <span className="text-terminal-text">{job?.direction || "LONG"}</span>
+              {" · "}
+              SHORT status:{" "}
+              <span className="text-rose-200">{job?.short_status || "PAUSED"}</span>
+            </div>
+            <div>
+              Symbol role:{" "}
+              <span className="text-terminal-text">
+                {selected
+                  ? symbolRoleDisplay(selected.symbol, selected.timeframe)
+                  : symbols.map((s) => symbolRoleDisplay(s, primaryTf)).join("; ")}
+              </span>
+            </div>
+            <div>
+              Effective risk:{" "}
+              <span className="text-terminal-text">
+                {selected?.effective_risk_percent != null
+                  ? `${(selected.effective_risk_percent * 100).toFixed(2)}% / $${num(selected.effective_risk_amount ?? selected.risk_usd, 0)}`
+                  : job?.effective_risk_percent != null
+                    ? `${(job.effective_risk_percent * 100).toFixed(2)}% / $${num(job.effective_risk_amount, 0)}`
+                    : `${riskPct}% / $${riskUsd}`}
+              </span>
+            </div>
+            <div>
+              Risk source:{" "}
+              <span className="text-terminal-text">
+                {selected?.risk_source || job?.risk_source || "V1_PRODUCTION_PROFILE"}
+              </span>
+            </div>
+            <div>
+              Setup timeframe:{" "}
+              <span className="text-terminal-text">
+                {selected?.timeframe || primaryTf} (
+                {timeframeRoleLabel(selected?.timeframe || primaryTf)})
+              </span>
+            </div>
+            <div>
+              HTF requirement:{" "}
+              <span className="text-terminal-text">1h + 4h bullish alignment</span>
+            </div>
+            <div>
+              Requested range:{" "}
+              <span className="text-terminal-text">
+                {job?.period_mode === "CALENDAR_RANGE" || periodMode === "dates"
+                  ? `Calendar ${job?.start_date || effectiveStart || "…"} → ${job?.end_date || effectiveEnd || "…"}`
+                  : `DB-tail ${job?.limit ?? limit} bars`}
+              </span>
+            </div>
+            <div>
+              Actual range:{" "}
+              <span className="text-terminal-text">
+                {selected
+                  ? `${String(selected.period_start || "—").slice(0, 10)} → ${String(selected.period_end || "—").slice(0, 10)}`
+                  : "—"}
+              </span>
+            </div>
+            <div>
+              Bars used:{" "}
+              <span className="text-terminal-text">
+                {selected?.bars_loaded ?? "—"}
+                {selected?.timeframe
+                  ? ` · ≈ ${barsToApproxDays(Number(selected.bars_loaded || 0), selected.timeframe) ?? "—"} days`
+                  : ""}
+              </span>
+            </div>
+            <div>
+              Dataset fingerprint:{" "}
+              <span className="text-terminal-text">
+                {selected?.dataset_fingerprint || job?.dataset_fingerprint || "—"}
+              </span>
+            </div>
+            <div>
+              Configuration fingerprint:{" "}
+              <span className="text-terminal-text">
+                {selected?.configuration_fingerprint ||
+                  job?.configuration_fingerprint ||
+                  "—"}
+              </span>
+            </div>
+            <div>
+              Production comparable:{" "}
+              <span
+                className={
+                  (selected?.production_comparable ?? job?.production_comparable)
+                    ? "text-emerald-300"
+                    : "text-amber-200"
+                }
+              >
+                {(selected?.production_comparable ?? job?.production_comparable)
+                  ? "YES"
+                  : "NO"}
+              </span>
+            </div>
+            <div>
+              Research-only status:{" "}
+              <span className="text-terminal-text">
+                {(selected?.research_only ?? job?.research_only ?? true)
+                  ? "YES"
+                  : "NO"}
+              </span>
+            </div>
+            <div>
               Playbook:{" "}
               <span className="text-terminal-text">{result.playbook || "—"}</span>
             </div>
@@ -979,12 +1376,21 @@ export function BacktestPanel() {
               </span>
             </div>
             <div>
-              Pooled n={pooled.n} · avg R={num(pooled.avgR)} · gross PnL={money(pooled.pnl)}{" "}
-              <span className="text-terminal-muted">(@ ${riskUsd}/R before fees)</span>
+              Pooled n={pooled.n} · avg R={num(pooled.avgR)} · gross PnL={money(pooled.pnl)}
             </div>
             <div>
-              Fees: taker {(takerFeePct).toFixed(2)}% / maker {(makerFeePct).toFixed(2)}% · leverage{" "}
-              {(job?.leverage ?? leverage)}x · click a row for trade blotter
+              Fees: taker {takerFeePct.toFixed(2)}% / maker {makerFeePct.toFixed(2)}% ·
+              leverage {(job?.leverage ?? leverage)}x · entry {FEE_DISPLAY.entryType}
+            </div>
+            <div className="text-amber-100/90 term-md:col-span-2">
+              Historical research only. Not a profitability claim. No paper or live
+              trade created.
+            </div>
+            <div className="term-md:col-span-2 text-terminal-text">
+              paper_trade_created ={" "}
+              {String(job?.paper_trade_created ?? false)} · live_trade_created ={" "}
+              {String(job?.live_trade_created ?? false)} · telegram_sent ={" "}
+              {String(job?.telegram_sent ?? false)}
             </div>
             <div className="text-terminal-muted term-md:col-span-2">{result.disclaimer}</div>
           </div>
@@ -1093,9 +1499,20 @@ export function BacktestPanel() {
                       <Sparkline values={row.equity_curve_r || []} />
                     </td>
                     <td className="px-2 py-2 font-mono text-terminal-muted">
-                      {String(row.period_start || "—").slice(0, 10)} →{" "}
-                      {String(row.period_end || "—").slice(0, 10)}
-                      <div className="text-[10px]">bars={row.bars_loaded ?? "—"}</div>
+                      <div className="text-[10px]">
+                        Actual: {String(row.period_start || "—").slice(0, 10)} →{" "}
+                        {String(row.period_end || "—").slice(0, 10)}
+                      </div>
+                      <div className="text-[10px]">
+                        Bars loaded/used: {row.bars_loaded ?? "—"}
+                        {row.timeframe
+                          ? ` · ≈ ${barsToApproxDays(Number(row.bars_loaded || 0), row.timeframe) ?? "—"}d`
+                          : ""}
+                      </div>
+                      <div className="text-[10px]">
+                        {row.risk_source || "—"} ·{" "}
+                        {row.production_comparable ? "prod-comparable" : "research-only"}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1113,6 +1530,7 @@ export function BacktestPanel() {
       ) : null}
 
       <CandidateResearchPanel />
+      <ShortResearchPanel />
       <DynamicCandidatePipelinePanel />
     </div>
   );

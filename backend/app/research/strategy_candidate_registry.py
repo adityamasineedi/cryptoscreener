@@ -256,6 +256,13 @@ def can_approve_for_paper(row: dict[str, Any]) -> bool:
 
     Never approve merely because backtest/oos/portfolio artifacts exist.
     """
+    # SHORT research is never paper-approvable via the dynamic LONG v2 path.
+    if str(row.get("strategy_id") or "") == "COMBO_02_SHORT_RESEARCH":
+        return False
+    if str(row.get("state") or "").upper() == "SHORT_RESEARCH_CANDIDATE":
+        return False
+    if str(row.get("direction") or "").upper() == "SHORT":
+        return False
     if str(row.get("state") or "").upper() != "V2_PAPER_CANDIDATE":
         return False
     if str(row.get("backtest_status") or "").upper() not in BACKTEST_PASS_STATUSES:
@@ -848,6 +855,13 @@ class StrategyCandidateRegistry:
         row = await self.get_by_symbol(symbol)
         if row is None:
             raise KeyError(f"candidate not found: {symbol}")
+
+        if (
+            str(row.get("strategy_id") or "") == "COMBO_02_SHORT_RESEARCH"
+            or str(row.get("state") or "").upper() == "SHORT_RESEARCH_CANDIDATE"
+            or str(row.get("direction") or "").upper() == "SHORT"
+        ):
+            raise PermissionError("short_research_only")
 
         state = str(row.get("state") or "").upper()
         if state == "RESEARCH_REJECTED":

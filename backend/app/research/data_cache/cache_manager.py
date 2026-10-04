@@ -93,16 +93,16 @@ class ResearchCacheManager:
                 )
                 if ok:
                     try:
+                        # Integrity: full-file sha256. Do NOT re-read Parquet here —
+                        # load() performs the single materializing read. Manifest
+                        # row_count is trusted after sha256 matches.
                         digest = file_sha256(parquet_path)
                         if man.sha256 and digest != man.sha256:
                             ok = False
                             reason = "sha256_mismatch"
-                        else:
-                            # Light schema check
-                            df = read_ohlcv_parquet(parquet_path)
-                            if df.height != int(man.row_count):
-                                ok = False
-                                reason = "row_count_mismatch"
+                        elif int(man.row_count or 0) < 0:
+                            ok = False
+                            reason = "row_count_mismatch"
                     except Exception as exc:  # noqa: BLE001
                         ok = False
                         reason = f"cache_read_failed:{exc}"

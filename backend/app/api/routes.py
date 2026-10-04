@@ -1023,8 +1023,13 @@ async def research_long_strategy_backtest_job_status() -> dict[str, Any]:
 async def research_long_strategy_backtest_start(
     body: dict[str, Any] = Body(default_factory=dict),
 ) -> dict[str, Any]:
-    """Start a background HL/LH Trend+BOS matrix backtest (survives UI navigation)."""
+    """Start a background HL/LH Trend+BOS matrix backtest (survives UI navigation).
+
+    Configuration-safety only: resolves v1 risk profile metadata and rejects
+    paused SHORT requests. Does not create paper/live trades or send Telegram.
+    """
     from app.research.backtest_job import backtest_job_service
+    from app.research.backtest_ui_config import BacktestConfigError
 
     def _as_list(v: Any) -> list[str]:
         if v is None:
@@ -1033,17 +1038,54 @@ async def research_long_strategy_backtest_start(
             return [str(x) for x in v]
         return [s for s in str(v).split(",") if s.strip()]
 
-    symbols = _as_list(body.get("symbols") or "BTCUSDT,ETHUSDT,SOLUSDT")
-    timeframes = _as_list(body.get("timeframes") or "15m,1h")
+    # Support single-symbol request shape from the safety contract.
+    if body.get("symbol") and not body.get("symbols"):
+        symbols = _as_list(body.get("symbol"))
+    else:
+        symbols = _as_list(body.get("symbols") or "BTCUSDT,ETHUSDT,SOLUSDT")
+    if body.get("setup_timeframe") and not body.get("timeframes"):
+        timeframes = _as_list(body.get("setup_timeframe"))
+    else:
+        timeframes = _as_list(body.get("timeframes") or "1h")
+
+    principal = float(body.get("principal") or body.get("principal_usd") or 1000.0)
+    risk_usd = body.get("risk_usd")
+    if risk_usd is None and body.get("risk_percent") is not None:
+        rp = float(body.get("risk_percent"))
+        pct = rp / 100.0 if rp > 1.0 else rp
+        risk_usd = principal * pct
+    if risk_usd is None:
+        risk_usd = 20.0
+
     try:
         job = await backtest_job_service.start(
             symbols=symbols,
             timeframes=timeframes,
             direction=str(body.get("direction") or "LONG"),
             combination_id=str(body.get("combination_id") or "COMBO_02"),
+            strategy_id=(
+                str(body.get("strategy_id")) if body.get("strategy_id") else None
+            ),
+            combo_version=(
+                str(body.get("combo_version")) if body.get("combo_version") else None
+            ),
+            setup_timeframe=(
+                str(body.get("setup_timeframe"))
+                if body.get("setup_timeframe")
+                else None
+            ),
+            risk_mode=(
+                str(body.get("risk_mode")) if body.get("risk_mode") else None
+            ),
+            research_risk_override=bool(body.get("research_risk_override") or False),
             limit=int(body.get("limit") or 1200),
-            risk_usd=float(body.get("risk_usd") or 20.0),
-            principal_usd=float(body.get("principal_usd") or 1000.0),
+            risk_usd=float(risk_usd),
+            risk_percent=(
+                float(body.get("risk_percent"))
+                if body.get("risk_percent") is not None
+                else None
+            ),
+            principal_usd=principal,
             leverage=float(body.get("leverage") or 2.0),
             taker_fee_pct=float(body.get("taker_fee_pct") or 0.04),
             maker_fee_pct=float(body.get("maker_fee_pct") or 0.02),
@@ -1059,10 +1101,25 @@ async def research_long_strategy_backtest_start(
                 else None
             ),
         )
+    except BacktestConfigError as exc:
+        return {
+            "status": "ERROR",
+            "error": str(exc),
+            "error_code": exc.code,
+            "short_research_paused": exc.code == "short_research_paused",
+            "paper_trade_created": False,
+            "live_trade_created": False,
+            "telegram_sent": False,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     except ValueError as exc:
         return {
             "status": "ERROR",
             "error": str(exc),
+            "error_code": "validation_error",
+            "paper_trade_created": False,
+            "live_trade_created": False,
+            "telegram_sent": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except RuntimeError as exc:
@@ -1075,6 +1132,9 @@ async def research_long_strategy_backtest_start(
     return {
         "status": "STARTED",
         "job": job,
+        "paper_trade_created": False,
+        "live_trade_created": False,
+        "telegram_sent": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1169,6 +1229,124 @@ async def research_combo02_candidate_results(
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
+
+
+@router.get("/research/short-candidates")
+async def research_short_candidates() -> dict[str, Any]:
+    """Read-only COMBO_02 SHORT research candidates (never paper/Telegram/v1)."""
+    from app.research.combo02_short_research_runner import api_list_response
+
+    return api_list_response()
+
+
+@router.get("/research/short-candidates/{symbol}")
+async def research_short_candidate_detail(symbol: str) -> dict[str, Any]:
+    """Read-only detail for one SHORT research symbol."""
+    from app.research.combo02_short_research_runner import api_symbol_response
+
+    return api_symbol_response(symbol)
+
+
+@router.post("/research/short-candidates/run")
+async def research_short_candidates_run(
+    payload: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
+    """Start SHORT research batch only — never creates paper/live trades.
+
+    Optional body: ``symbols``, ``run_id``, ``run_oos`` (default true),
+    ``timeframe`` (must be ``1h`` when provided).
+    """
+    from fastapi import HTTPException
+
+    from app.research.combo02_short_research import (
+        SHORT_RESEARCH_MODULE_INCOMPLETE_CODE,
+        assert_short_research_pipeline_complete,
+        short_research_pipeline_status,
+    )
+    from app.research.combo02_short_research_runner import run_short_research_batch
+    from app.research.short_research_constants import (
+        DEFAULT_SHORT_RESEARCH_UNIVERSE,
+        SETUP_TIMEFRAME,
+    )
+    from app.research.short_research_quality import validate_timeframe
+
+    try:
+        assert_short_research_pipeline_complete()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": SHORT_RESEARCH_MODULE_INCOMPLETE_CODE,
+                "message": str(exc),
+                "pipeline_status": short_research_pipeline_status(),
+                "paper_eligible": False,
+                "production_approved": False,
+                "telegram_eligible": False,
+            },
+        ) from exc
+
+    body = payload or {}
+    symbols = body.get("symbols")
+    if symbols is None:
+        universe = list(DEFAULT_SHORT_RESEARCH_UNIVERSE)
+    else:
+        universe = [str(s).upper().strip() for s in symbols]
+        for sym in universe:
+            if not sym or not sym.isalnum() or not sym.endswith("USDT"):
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "unknown_symbol",
+                        "symbol": sym,
+                        "message": "Symbol must be a non-empty *USDT pair",
+                    },
+                )
+    tf = body.get("timeframe")
+    if tf is not None:
+        tf_check = validate_timeframe(str(tf))
+        if not tf_check["ok"] or str(tf).lower() != SETUP_TIMEFRAME:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "bad_timeframe",
+                    "timeframe": tf,
+                    "message": f"SHORT research setup timeframe must be {SETUP_TIMEFRAME}",
+                },
+            )
+    run_id = body.get("run_id")
+    run_oos = bool(body.get("run_oos", True))
+    report = await run_short_research_batch(
+        symbols=universe,
+        run_id=str(run_id) if run_id else None,
+        run_oos=run_oos,
+        persist=True,
+    )
+    return {
+        "status": "OK",
+        "strategy_id": report.get("strategy_id"),
+        "combo_version": report.get("combo_version"),
+        "source": report.get("source"),
+        "direction": report.get("direction"),
+        "paper_eligible": False,
+        "production_approved": False,
+        "telegram_eligible": False,
+        "run_id": report.get("run_id"),
+        "candidates": report.get("candidates") or [],
+        "disclaimer": report.get("disclaimer"),
+        "historical_disclaimer": report.get("historical_disclaimer"),
+        "configuration_hash": report.get("configuration_hash"),
+        "dataset_hash": report.get("dataset_hash"),
+        "engine_version": report.get("engine_version"),
+        "execution_model": report.get("execution_model"),
+        "research_windows": report.get("research_windows"),
+        "window_status": report.get("window_status"),
+        "evidence_mode": report.get("evidence_mode"),
+        "batch_summary": report.get("batch_summary"),
+        "read_only": True,
+        "execution_rights": False,
+        "v1_unchanged": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/research/candidates")
@@ -1446,7 +1624,7 @@ async def research_long_strategy_backtest(
         description="Comma-separated symbols",
     ),
     timeframes: str = Query(
-        default="15m,1h",
+        default="1h",
         description="Comma-separated timeframes",
     ),
     direction: str = Query(default="LONG", description="LONG or SHORT"),
@@ -1455,9 +1633,13 @@ async def research_long_strategy_backtest(
         default=1200,
         ge=50,
         le=20000,
-        description="OHLCV bars from DB tail (~96 bars/day on 15m)",
+        description="OHLCV bars from DB tail (duration depends on timeframe)",
     ),
     risk_usd: float = Query(default=20.0, ge=1.0, le=10_000.0),
+    principal_usd: float = Query(default=1000.0, ge=100.0, le=10_000_000.0),
+    leverage: float = Query(default=2.0, ge=1.0, le=125.0),
+    risk_mode: str | None = Query(default=None),
+    research_risk_override: bool = Query(default=False),
     taker_fee_pct: float = Query(
         default=0.04,
         ge=0.0,
@@ -1474,7 +1656,18 @@ async def research_long_strategy_backtest(
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    """UI Backtest tab — lean HL/LH Trend+BOS matrix (same engine as research scripts)."""
+    """UI Backtest tab — lean HL/LH Trend+BOS matrix (same engine as research scripts).
+
+    Rejects paused SHORT requests. Applies v1 production risk metadata per cell.
+    Does not create paper/live trades or send Telegram.
+    """
+    from app.research.backtest_ui_config import (
+        BacktestConfigError,
+        cell_risk_lookup,
+        enrich_row_with_config,
+        job_identity_payload,
+        validate_backtest_request,
+    )
     from app.research.service import get_bos_research_service
 
     syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
@@ -1484,22 +1677,119 @@ async def research_long_strategy_backtest(
             "status": "ERROR",
             "reason": "symbols and timeframes required",
             "rows": [],
+            "paper_trade_created": False,
+            "live_trade_created": False,
+            "telegram_sent": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    payload = await get_bos_research_service().strategy_matrix(
-        combination_id=combination_id.upper(),
-        symbols=syms,
-        timeframes=tfs,
-        direction=direction,
-        limit=limit,
-        risk_usd=risk_usd,
-        start_date=start_date,
-        end_date=end_date,
-        taker_fee=taker_fee_pct / 100.0,
-        maker_fee=maker_fee_pct / 100.0,
-        include_trades=include_trades,
-    )
-    return {**payload, "timestamp": datetime.now(timezone.utc).isoformat()}
+    try:
+        resolved = validate_backtest_request(
+            symbols=syms,
+            timeframes=tfs,
+            direction=direction,
+            combination_id=combination_id.upper(),
+            risk_mode=risk_mode,
+            research_risk_override=research_risk_override,
+            risk_usd=risk_usd,
+            principal_usd=principal_usd,
+            leverage=leverage,
+            taker_fee_pct=taker_fee_pct,
+            maker_fee_pct=maker_fee_pct,
+            start_date=start_date,
+            end_date=end_date,
+            allow_short=False,
+        )
+    except BacktestConfigError as exc:
+        return {
+            "status": "ERROR",
+            "error": str(exc),
+            "error_code": exc.code,
+            "reason": exc.code,
+            "short_research_paused": exc.code == "short_research_paused",
+            "rows": [],
+            "paper_trade_created": False,
+            "live_trade_created": False,
+            "telegram_sent": False,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    # Sync path: run one matrix call per cell so each keeps its effective v1 risk.
+    rows: list[dict[str, Any]] = []
+    playbook = None
+    combination_name = None
+    disclaimer = None
+    label = None
+    dataset_fp = None
+    elapsed = 0.0
+    svc = get_bos_research_service()
+    for sym in syms:
+        for tf in tfs:
+            cell = cell_risk_lookup(resolved, sym, tf)
+            cell_risk = float(cell.effective_risk_amount) if cell else float(risk_usd)
+            payload = await svc.strategy_matrix(
+                combination_id=combination_id.upper(),
+                symbols=[sym],
+                timeframes=[tf],
+                direction=resolved.direction,
+                limit=limit,
+                risk_usd=cell_risk,
+                start_date=start_date,
+                end_date=end_date,
+                taker_fee=taker_fee_pct / 100.0,
+                maker_fee=maker_fee_pct / 100.0,
+                leverage=leverage,
+                include_trades=include_trades,
+            )
+            if playbook is None:
+                playbook = payload.get("playbook")
+                combination_name = payload.get("combination_name")
+                disclaimer = payload.get("disclaimer")
+                label = payload.get("label")
+                dataset_fp = payload.get("dataset_id") or payload.get("dataset")
+            elapsed += float(payload.get("elapsed_seconds") or 0)
+            for row in payload.get("rows") or []:
+                enriched = enrich_row_with_config(
+                    row, resolved, dataset_fingerprint=str(dataset_fp) if dataset_fp else None
+                )
+                enriched["requested_range"] = {
+                    "mode": resolved.period_mode,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "limit": limit,
+                    "requested_range_available": bool(
+                        row.get("period_start") and row.get("period_end")
+                    ),
+                }
+                enriched["risk_usd"] = cell_risk
+                rows.append(enriched)
+
+    identity = job_identity_payload(resolved)
+    return {
+        "status": "OK",
+        "label": label,
+        "playbook": playbook,
+        "combination_id": combination_id.upper(),
+        "combination_name": combination_name,
+        "direction": resolved.direction,
+        "limit": limit,
+        "risk_usd": risk_usd,
+        "principal_usd": principal_usd,
+        "leverage": leverage,
+        "symbols": syms,
+        "timeframes": tfs,
+        "rows": rows,
+        "elapsed_seconds": round(elapsed, 3),
+        "disclaimer": disclaimer,
+        "dataset_fingerprint": str(dataset_fp) if dataset_fp else None,
+        "requested_range": {
+            "mode": resolved.period_mode,
+            "start_date": start_date,
+            "end_date": end_date,
+            "limit": limit,
+        },
+        **identity,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/research/bos-combinations")
@@ -2192,7 +2482,7 @@ async def paper_opportunities(
             except Exception:  # noqa: BLE001
                 continue
 
-    open_syms = set(eng._open.keys())  # noqa: SLF001
+    open_syms = eng.open_symbols("LEGACY")
     rows = list_trade_opportunities(limit=limit, open_symbols=open_syms, include_waiting=True)
     by_tier: dict[str, int] = {}
     for r in rows:

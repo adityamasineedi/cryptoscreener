@@ -118,10 +118,12 @@ export function CandidateResearchPanel() {
                           ? "—"
                           : `${(Number(port.btc_overlap_pct) * 100).toFixed(0)}%`
                       }`
-                    : port?.recommendation_note ||
-                      (r.corr_daily_net_r_vs_btc != null
+                    : typeof port?.recommendation_note === "string" &&
+                        port.recommendation_note
+                      ? port.recommendation_note
+                      : r.corr_daily_net_r_vs_btc != null
                         ? `corr BTC ${num(Number(r.corr_daily_net_r_vs_btc), 2)}`
-                        : "—");
+                        : "—";
                 const oos = String(r.oos_label || "—");
                 const tier = String(r.eligibility_tier || "—");
                 return (

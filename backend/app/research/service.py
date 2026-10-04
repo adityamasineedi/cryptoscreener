@@ -14,6 +14,18 @@ from datetime import datetime, timezone
 from typing import Any, Sequence
 
 from app.core.logging import get_logger
+from app.research.backtest_timing import (
+    DB_QUERY_END,
+    DB_QUERY_START,
+    DATE_FILTER_END,
+    DATE_FILTER_START,
+    HTF_DATA_LOAD_END,
+    HTF_DATA_LOAD_START,
+    RAW_ROWS_LOADED,
+    TIMEFRAME_NORMALIZATION_END,
+    TIMEFRAME_NORMALIZATION_START,
+    emit_phase,
+)
 from app.research.bos_combinations import COMBINATIONS, get_combination, list_combinations
 from app.research.combination_backtest import (
     compare_combinations,
@@ -885,6 +897,8 @@ class BosResearchService:
         leverage: float = 2.0,
         include_trades: bool = True,
         should_cancel: Any | None = None,
+        progress_callback: Any | None = None,
+        job_id: str | None = None,
     ) -> dict[str, Any]:
         """Lean multi-symbol/TF backtest for the UI Backtest tab (no OOS/WF)."""
         from app.research.trade_fees import DEFAULT_LEVERAGE
@@ -892,6 +906,7 @@ class BosResearchService:
         lev = max(1.0, float(leverage or DEFAULT_LEVERAGE))
         clear_candle_cache()
         t0 = time.perf_counter()
+        timing: dict[str, Any] = {}
         combo = get_combination(combination_id)
         if combo is None:
             return {
@@ -905,6 +920,31 @@ class BosResearchService:
         if direction_u not in {"LONG", "SHORT"}:
             direction_u = "LONG"
         rows: list[dict[str, Any]] = []
+
+        def _notify(phase: str, **kwargs: Any) -> None:
+            emit_phase(
+                phase,
+                job_id=job_id,
+                symbol=kwargs.get("symbol"),
+                timeframe=kwargs.get("timeframe"),
+                elapsed_seconds=time.perf_counter() - t0,
+                rows_loaded=int(kwargs.get("rows_loaded") or 0),
+                bars_processed=int(kwargs.get("bars_processed") or 0),
+                total_bars=int(kwargs.get("total_bars") or 0),
+                trades=int(kwargs.get("trades") or 0),
+            )
+            if progress_callback is not None:
+                try:
+                    progress_callback(
+                        {
+                            "phase": phase,
+                            "elapsed_seconds": time.perf_counter() - t0,
+                            **kwargs,
+                        }
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
         for tf in timeframes:
             for sym in symbols:
                 if should_cancel is not None and should_cancel():
@@ -913,7 +953,11 @@ class BosResearchService:
                         "combination_id": combination_id,
                         "rows": rows,
                         "elapsed_seconds": round(time.perf_counter() - t0, 3),
+                        "timing": timing,
                     }
+                _notify(TIMEFRAME_NORMALIZATION_START, symbol=sym, timeframe=tf)
+                _notify(DB_QUERY_START, symbol=sym, timeframe=tf)
+                t_db = time.perf_counter()
                 candles, eval_start, load_meta = await _load_research_candles(
                     sym,
                     tf,
@@ -922,6 +966,65 @@ class BosResearchService:
                     end_date=end_date,
                     warmup_bars=warmup,
                 )
+                db_seconds = time.perf_counter() - t_db
+                timing["db_query_seconds"] = round(db_seconds, 6)
+                timing["rows_loaded"] = len(candles)
+                first_ts = candles[0].get("time") if candles else None
+                last_ts = candles[-1].get("time") if candles else None
+                load_report = {
+                    "symbol": load_meta.get("symbol") or sym,
+                    "timeframe": load_meta.get("timeframe") or tf,
+                    "requested_start": start_date,
+                    "requested_end": end_date,
+                    "actual_start": str(first_ts) if first_ts else None,
+                    "actual_end": str(last_ts) if last_ts else None,
+                    "rows_loaded": len(candles),
+                    "eval_start": eval_start,
+                    "requested_range_available": bool(
+                        candles
+                        and (
+                            not start_date
+                            or load_meta.get("period_start")
+                            or first_ts
+                        )
+                    ),
+                    "candle_source": load_meta.get("candle_source"),
+                }
+                timing["load_report"] = load_report
+                _notify(
+                    DB_QUERY_END,
+                    symbol=sym,
+                    timeframe=tf,
+                    rows_loaded=len(candles),
+                    query_duration_seconds=round(db_seconds, 6),
+                    first_timestamp=load_report["actual_start"],
+                    last_timestamp=load_report["actual_end"],
+                    load_meta=load_report,
+                    timing={"db_query_seconds": timing["db_query_seconds"]},
+                )
+                _notify(
+                    RAW_ROWS_LOADED,
+                    symbol=sym,
+                    timeframe=tf,
+                    rows_loaded=len(candles),
+                    load_meta=load_report,
+                )
+                _notify(
+                    DATE_FILTER_START,
+                    symbol=sym,
+                    timeframe=tf,
+                    rows_loaded=len(candles),
+                )
+                _notify(
+                    DATE_FILTER_END,
+                    symbol=sym,
+                    timeframe=tf,
+                    rows_loaded=len(candles),
+                    load_meta=load_report,
+                )
+                _notify(TIMEFRAME_NORMALIZATION_END, symbol=sym, timeframe=tf)
+                _notify(HTF_DATA_LOAD_START, symbol=sym, timeframe=tf)
+                t_htf = time.perf_counter()
                 c1h, c4h = await _load_htf_candles_for_combo(
                     sym,
                     require_htf=bool(combo.require_htf_alignment),
@@ -930,6 +1033,19 @@ class BosResearchService:
                     start_date=start_date,
                     end_date=end_date,
                     warmup_bars=warmup,
+                )
+                htf_seconds = time.perf_counter() - t_htf
+                timing["htf_load_seconds"] = round(htf_seconds, 6)
+                timing["htf_1h_rows"] = len(c1h or [])
+                timing["htf_4h_rows"] = len(c4h or [])
+                _notify(
+                    HTF_DATA_LOAD_END,
+                    symbol=sym,
+                    timeframe=tf,
+                    rows_loaded=len(candles),
+                    htf_1h_rows=timing["htf_1h_rows"],
+                    htf_4h_rows=timing["htf_4h_rows"],
+                    timing={"htf_load_seconds": timing["htf_load_seconds"]},
                 )
                 # CPU-heavy sync path — run in a thread so the API event loop
                 # (health, progress cell requests) is not blocked for minutes.
@@ -953,9 +1069,18 @@ class BosResearchService:
                         should_cancel=should_cancel,
                         candles_1h=c1h,
                         candles_4h=c4h,
+                        progress_callback=progress_callback,
+                        job_id=job_id,
                     )
 
                 out = await asyncio.to_thread(_run_bt)
+                timing["backtest_seconds"] = round(
+                    float(out.get("elapsed_seconds") or 0), 6
+                )
+                timing["htf_precompute_seconds"] = out.get("htf_precompute_seconds")
+                timing["htf_cache_entries"] = out.get("htf_cache_entries")
+                timing["candles_processed"] = out.get("candles_processed")
+                timing["setups_processed"] = out.get("setups_processed")
                 if out.get("status") == "CANCELLED":
                     return {
                         "status": "CANCELLED",
@@ -1069,6 +1194,7 @@ class BosResearchService:
             "end_date": end_date,
             "rows": rows,
             "elapsed_seconds": round(time.perf_counter() - t0, 3),
+            "timing": timing,
             "timezone": "UTC",
             "disclaimer": (
                 "Historical research only — not a profitability claim. "

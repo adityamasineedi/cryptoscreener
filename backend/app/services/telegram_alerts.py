@@ -70,6 +70,43 @@ def _fmt_r(value: Any) -> str:
     return f"{n:.2f}R"
 
 
+def _fmt_qty(value: Any) -> str:
+    n = _f(value)
+    if n is None or n <= 0:
+        return "—"
+    if n >= 1000:
+        return f"{n:,.3f}".rstrip("0").rstrip(".")
+    if n >= 1:
+        return f"{n:.4f}".rstrip("0").rstrip(".")
+    return f"{n:.6f}".rstrip("0").rstrip(".")
+
+
+def _base_asset(symbol: str) -> str:
+    sym = str(symbol or "").upper()
+    for quote in ("USDT", "USDC", "BUSD", "USD"):
+        if sym.endswith(quote) and len(sym) > len(quote):
+            return sym[: -len(quote)]
+    return sym or "?"
+
+
+def _stop_distance(entry: float | None, stop: float | None) -> float | None:
+    if entry is None or stop is None:
+        return None
+    dist = abs(entry - stop)
+    return dist if dist > 0 else None
+
+
+def _resolve_quantity(payload: dict[str, Any]) -> float | None:
+    qty = _f(payload.get("quantity"))
+    if qty is not None and qty > 0:
+        return qty
+    risk_usd = _f(payload.get("risk_usd"))
+    dist = _stop_distance(_f(payload.get("entry_price")), _f(payload.get("stop_price")))
+    if risk_usd is not None and risk_usd > 0 and dist is not None:
+        return risk_usd / dist
+    return None
+
+
 def _snippet(payload: dict[str, Any]) -> dict[str, Any]:
     raw = payload.get("signal_snippet") or {}
     return raw if isinstance(raw, dict) else {}
@@ -113,11 +150,27 @@ def is_v1_paper_alert(alert: dict[str, Any] | None) -> bool:
     timeframe = str(_pick("timeframe") or "").lower()
     htf = str(_pick("htf_alignment") or snip.get("htf_alignment") or "").upper()
 
-    # Dynamic v2 research / experimental paper must never reach v1 Telegram.
-    if strategy_id in ("COMBO_02_V2_RESEARCH",) or source in (
+    # Dynamic v2 research / SHORT research / experimental paper must never
+    # reach v1 Telegram.
+    if strategy_id in (
+        "COMBO_02_V2_RESEARCH",
+        "COMBO_02_SHORT_RESEARCH",
+        "SHORT_PULLBACK_REJECTION_RESEARCH",
+        "COMBO_02_SHORT_ENTRY_RESEARCH",
+    ) or source in (
         "DYNAMIC_CANDIDATE_PIPELINE",
         "V2_CANDIDATE_PAPER_WATCHER",
+        "SHORT_RESEARCH_PIPELINE",
+        "SHORT_ENTRY_DIAGNOSTIC_PIPELINE",
     ):
+        return False
+    if str(_pick("combo_version") or "").lower() in (
+        "v2-short-research",
+        "v1-short-pullback-rejection",
+        "v2-short-entry-research",
+    ):
+        return False
+    if str(_pick("direction") or "").upper() == "SHORT":
         return False
 
     if strategy_id != "COMBO_02_V1":
@@ -187,6 +240,16 @@ def format_telegram_message(alert: dict[str, Any]) -> str | None:
     timeframe = str(
         alert.get("timeframe") or payload.get("timeframe") or snip.get("timeframe") or ""
     )
+    asset = _base_asset(symbol)
+    entry = _f(payload.get("entry_price"))
+    stop = _f(payload.get("stop_price"))
+    tp1 = _f(payload.get("tp1_price"))
+    qty = _resolve_quantity(payload)
+    notional = (qty * entry) if qty is not None and entry is not None else None
+    stop_dist = _stop_distance(entry, stop)
+    stop_pct = (
+        (stop_dist / entry * 100.0) if stop_dist is not None and entry and entry > 0 else None
+    )
 
     if alert_type == "PAPER_ENTRY":
         tier = str(snip.get("v1_tier") or "core").upper()
@@ -197,13 +260,31 @@ def format_telegram_message(alert: dict[str, Any]) -> str | None:
         principal_s = (
             f"${_fmt_money(principal)}" if principal is not None else "$—"
         )
+        qty_line = f"Qty: {_fmt_qty(qty)} {asset}"
+        if notional is not None:
+            qty_line += f" (~${_fmt_money(notional)})"
+        stop_line = f"Stop: {_fmt_price(stop)}"
+        if stop_dist is not None:
+            stop_line += f" (−{_fmt_price(stop_dist)}"
+            if stop_pct is not None:
+                stop_line += f" / −{stop_pct:.2f}%"
+            stop_line += ")"
+        tp_line = f"TP1: {_fmt_price(tp1)}"
+        if entry is not None and tp1 is not None:
+            reward = abs(tp1 - entry)
+            tp_line += f" (+{_fmt_price(reward)}"
+            if entry > 0:
+                tp_line += f" / +{reward / entry * 100.0:.2f}%"
+            tp_line += ")"
         return (
-            f"🟢 LONG {symbol} {timeframe} (COMBO_02 v1 - {tier})\n"
-            f"Entry: {_fmt_price(payload.get('entry_price'))} | "
-            f"Stop: {_fmt_price(payload.get('stop_price'))} | "
-            f"TP1: {_fmt_price(payload.get('tp1_price'))}\n"
-            f"Risk: {_fmt_pct(risk_pct)} "
-            f"({_fmt_money(risk_usd)} @ {principal_s}) | R: {_fmt_r(target_r)}\n"
+            f"🟢 LONG {symbol} {timeframe}\n"
+            f"COMBO_02 v1 — {tier}\n"
+            f"Entry: {_fmt_price(entry)}\n"
+            f"{stop_line}\n"
+            f"{tp_line}\n"
+            f"{qty_line}\n"
+            f"Risk: ${_fmt_money(risk_usd)} ({_fmt_pct(risk_pct)} of {principal_s}) · "
+            f"R: {_fmt_r(target_r)}\n"
             f"HTF: 4h={snip.get('trend_4h') or '—'}, "
             f"1h={snip.get('trend_1h') or '—'}, "
             f"{snip.get('htf_alignment') or '—'}"
@@ -215,11 +296,15 @@ def format_telegram_message(alert: dict[str, Any]) -> str | None:
         if hold is None:
             hold = snip.get("hold_bars")
         hold_s = str(hold) if hold is not None else "n/a"
+        qty_line = f"Qty: {_fmt_qty(qty)} {asset}"
+        if notional is not None:
+            qty_line += f" (entry ~${_fmt_money(notional)})"
         return (
             f"🔴 CLOSE {symbol} {timeframe}\n"
-            f"Exit: {_fmt_price(payload.get('exit_price'))} ({outcome}) | "
+            f"Exit: {_fmt_price(payload.get('exit_price'))} ({outcome})\n"
+            f"{qty_line}\n"
             f"R: {_fmt_r(payload.get('r_multiple'))} | "
-            f"PnL: {_fmt_money(payload.get('pnl_usd'))}\n"
+            f"PnL: ${_fmt_money(payload.get('pnl_usd'))}\n"
             f"Hold: {hold_s} bars"
         )
 

@@ -62,6 +62,23 @@ def is_v1_long_entry(result: Mapping[str, Any] | None) -> bool:
     """Hard checks on combination-engine output for COMBO_02 v1 LONG."""
     if not result or not isinstance(result, Mapping):
         return False
+    # SHORT research identity / direction can never satisfy v1 LONG entry.
+    if str(result.get("strategy_id") or "") in (
+        "COMBO_02_SHORT_RESEARCH",
+        "SHORT_PULLBACK_REJECTION_RESEARCH",
+        "COMBO_02_SHORT_ENTRY_RESEARCH",
+    ):
+        return False
+    if str(result.get("source") or "") == "SHORT_RESEARCH_PIPELINE":
+        return False
+    if str(result.get("combo_version") or "").lower() in (
+        "v2-short-research",
+        "v1-short-pullback-rejection",
+        "v2-short-entry-research",
+    ):
+        return False
+    if str(result.get("direction") or "").upper() == "SHORT":
+        return False
     if str(result.get("status") or "") != "LONG_ENTRY_CANDIDATE":
         return False
     if str(result.get("direction") or "").upper() != "LONG":
@@ -312,6 +329,12 @@ class V1PaperWatcher:
         if self.timeframe != "1h":
             self._last_skip = f"unsupported_tf:{self.timeframe}"
             return None
+        # SHORT research never enters the frozen v1 watcher path.
+        from app.research.short_research_constants import STRATEGY_ID as SHORT_STRATEGY_ID
+
+        if str(getattr(book, "strategy_id", "") or "") == SHORT_STRATEGY_ID:
+            self._last_skip = f"{normalize_symbol(symbol)}:short_research_only"
+            raise PermissionError("short_research_only")
 
         from app.services.ohlcv_store import ohlcv_store
 
@@ -447,8 +470,11 @@ class V1PaperWatcher:
                     hi = float(bar.get("high") or px)
                     lo = float(bar.get("low") or px)
                     open_pos = None
-                    with getattr(paper, "_lock", threading.RLock()):
-                        open_pos = getattr(paper, "_open", {}).get(book.symbol)
+                    if hasattr(paper, "get_open"):
+                        open_pos = paper.get_open(book.symbol, "V1")
+                    else:
+                        with getattr(paper, "_lock", threading.RLock()):
+                            open_pos = getattr(paper, "_open", {}).get(book.symbol)
                     if open_pos is not None:
                         stop = float(open_pos.stop_price or 0)
                         tp1 = open_pos.tp1_price
@@ -457,9 +483,17 @@ class V1PaperWatcher:
                             mark = stop
                         elif tp1 is not None and hi >= float(tp1):
                             mark = float(tp1)
-                        before = book.symbol in getattr(paper, "_open", {})
+                        before = (
+                            paper.has_open(book.symbol, "V1")
+                            if hasattr(paper, "has_open")
+                            else book.symbol in getattr(paper, "_open", {})
+                        )
                         paper.tick({book.symbol: mark})
-                        after = book.symbol in getattr(paper, "_open", {})
+                        after = (
+                            paper.has_open(book.symbol, "V1")
+                            if hasattr(paper, "has_open")
+                            else book.symbol in getattr(paper, "_open", {})
+                        )
                         if before and not after:
                             # Match backtest: clear sticky break after exit
                             self._prev_break[book.symbol] = False
@@ -478,7 +512,12 @@ class V1PaperWatcher:
                     if tip_iso:
                         self._watermarks[book.symbol] = tip_iso
 
-                if book.symbol in getattr(paper, "_open", {}):
+                already_v1 = (
+                    paper.has_open(book.symbol, "V1")
+                    if hasattr(paper, "has_open")
+                    else book.symbol in getattr(paper, "_open", {})
+                )
+                if already_v1:
                     continue
                 if not allows:
                     continue

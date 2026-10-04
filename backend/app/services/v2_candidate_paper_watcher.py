@@ -229,6 +229,33 @@ class V2CandidatePaperWatcher:
             self._last_skip = f"{sym}:not_paper_validating"
             return None
 
+        # SHORT research identity can never enter the v2 LONG paper watcher.
+        from app.research.short_research_constants import (
+            COMBO_VERSION as SHORT_COMBO_VERSION,
+            SOURCE as SHORT_SOURCE,
+            STRATEGY_ID as SHORT_STRATEGY_ID,
+        )
+
+        _SHORT_IDS = {
+            SHORT_STRATEGY_ID,
+            "SHORT_PULLBACK_REJECTION_RESEARCH",
+            "COMBO_02_SHORT_ENTRY_RESEARCH",
+        }
+        _SHORT_VERSIONS = {
+            SHORT_COMBO_VERSION,
+            "v1-short-pullback-rejection",
+            "v2-short-entry-research",
+        }
+        if (
+            str(book.get("strategy_id") or "") in _SHORT_IDS
+            or str(book.get("source") or "") == SHORT_SOURCE
+            or str(book.get("combo_version") or "").lower() in _SHORT_VERSIONS
+            or str(book.get("state") or "").upper() == "SHORT_RESEARCH_CANDIDATE"
+            or str(book.get("direction") or "").upper() == "SHORT"
+        ):
+            self._last_skip = f"{sym}:short_research_only"
+            raise PermissionError("short_research_only")
+
         risk = float(book.get("risk_percent") or 0)
         if risk <= 0 or risk > MAX_OVERRIDE_RISK + 1e-15:
             self._last_skip = f"{sym}:risk_out_of_bounds"
@@ -276,6 +303,9 @@ class V2CandidatePaperWatcher:
             risk_percent=risk,
             as_of_index=tip_idx,
         )
+        if str(eval_result.get("direction") or "").upper() == "SHORT":
+            self._last_skip = f"{sym}:short_research_only"
+            raise PermissionError("short_research_only")
         if not is_v1_long_entry(eval_result):
             # Same gate shape as v1 LONG entry; identity remains v2.
             self._last_skip = f"{sym}:no_long_entry:{eval_result.get('status')}"

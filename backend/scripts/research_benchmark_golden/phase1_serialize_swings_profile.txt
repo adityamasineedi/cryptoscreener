@@ -1,0 +1,48 @@
+         5949233 function calls (5921838 primitive calls) in 5.746 seconds
+
+   Ordered by: cumulative time
+   List reduced from 346 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.002    0.002    5.750    5.750 E:\cryptoscreener\backend\scripts\verify_serialize_swings_phase1.py:145(_run_combo)
+        6    0.159    0.026    5.748    0.958 E:\cryptoscreener\backend\app\research\combination_backtest.py:285(run_combination_backtest)
+      205    0.014    0.000    2.655    0.013 E:\cryptoscreener\backend\app\research\combination_engine.py:264(evaluate_combination_at_bar)
+      253    0.710    0.003    2.384    0.009 E:\cryptoscreener\backend\app\signals\_candle_utils.py:37(series_ohlcv)
+      205    0.011    0.000    2.171    0.011 E:\cryptoscreener\backend\app\signals\signal_engine.py:206(analyze_timeframe)
+      205    0.021    0.000    2.121    0.010 E:\cryptoscreener\backend\app\signals\bos_engine.py:12(detect_bos)
+    10794    0.576    0.000    1.139    0.000 E:\cryptoscreener\backend\app\research\combination_backtest.py:60(_bos_break_possible)
+   304977    0.717    0.000    1.047    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:23(ohlc)
+    16980    0.161    0.000    0.655    0.000 E:\cryptoscreener\backend\app\signals\swing_detector.py:150(extend_swings)
+    16789    0.533    0.000    0.581    0.000 E:\cryptoscreener\backend\app\signals\trend_engine.py:10(infer_trend)
+  1763137    0.493    0.000    0.493    0.000 {method 'get' of 'dict' objects}
+  1521292    0.421    0.000    0.421    0.000 {method 'append' of 'list' objects}
+      205    0.003    0.000    0.352    0.002 E:\cryptoscreener\backend\app\research\combination_engine.py:53(htf_alignment_gate)
+      205    0.002    0.000    0.347    0.002 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:194(htf_trends_for_setup_bar)
+       36    0.068    0.002    0.344    0.010 E:\cryptoscreener\backend\app\signals\swing_detector.py:18(detect_swings)
+      440    0.001    0.000    0.342    0.001 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:57(trend_at_as_of)
+       30    0.000    0.000    0.340    0.011 E:\cryptoscreener\backend\app\signals\swing_detector.py:129(swings_for_timeframe)
+       12    0.022    0.002    0.311    0.026 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:86(precompute_htf_trend_cache)
+        6    0.000    0.000    0.295    0.049 E:\cryptoscreener\backend\app\config.py:266(indicators_config)
+        6    0.000    0.000    0.294    0.049 E:\cryptoscreener\backend\app\config.py:18(load_yaml)
+        6    0.000    0.000    0.291    0.049 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\__init__.py:117(safe_load)
+        6    0.001    0.000    0.291    0.049 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\__init__.py:74(load)
+        6    0.000    0.000    0.289    0.048 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\constructor.py:47(get_single_data)
+   293773    0.201    0.000    0.278    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:32(volume_at)
+        6    0.000    0.000    0.272    0.045 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:29(get_single_node)
+        6    0.000    0.000    0.270    0.045 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:50(compose_document)
+   1542/6    0.008    0.000    0.270    0.045 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:63(compose_node)
+    126/6    0.003    0.000    0.270    0.045 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:117(compose_mapping_node)
+     3325    0.165    0.000    0.266    0.000 {method 'sort' of 'list' objects}
+     4380    0.006    0.000    0.240    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\parser.py:94(check_event)
+    11508    0.020    0.000    0.186    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\scanner.py:113(check_token)
+   116784    0.116    0.000    0.180    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:9(candle_time)
+        6    0.078    0.013    0.168    0.028 E:\cryptoscreener\backend\app\research\data_quality.py:49(verify_ohlcv)
+       12    0.052    0.004    0.129    0.011 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:126(build_htf_as_of_index_map)
+     2352    0.012    0.000    0.128    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\scanner.py:156(fetch_more_tokens)
+     3302    0.120    0.000    0.120    0.000 E:\cryptoscreener\backend\app\signals\swing_detector.py:110(_label_swings)
+   635894    0.101    0.000    0.101    0.000 E:\cryptoscreener\backend\app\signals\swing_detector.py:245(<lambda>)
+      211    0.001    0.000    0.100    0.000 E:\cryptoscreener\backend\app\research\combination_engine.py:31(_clone_signal_config)
+22788/211    0.047    0.000    0.099    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:118(deepcopy)
+      720    0.003    0.000    0.098    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\parser.py:427(parse_block_mapping_key)
+
+

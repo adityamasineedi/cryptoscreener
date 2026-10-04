@@ -11,6 +11,13 @@ from enum import Enum
 from typing import Any
 
 
+class Direction(str, Enum):
+    """Strict trade direction. Missing values must fail closed in shared math."""
+
+    LONG = "LONG"
+    SHORT = "SHORT"
+
+
 class SignalStatus(str, Enum):
     ENTRY_CANDIDATE = "ENTRY_CANDIDATE"
     LONG_ENTRY_CANDIDATE = "LONG_ENTRY_CANDIDATE"

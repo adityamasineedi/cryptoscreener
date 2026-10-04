@@ -1,0 +1,524 @@
+{
+  "status": "OK",
+  "dataset": {
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "timeframes": [
+      "15m",
+      "1h"
+    ],
+    "start": "2025-01-01",
+    "end": "2025-02-01",
+    "rows_loaded": 12096
+  },
+  "dataset_prepare_seconds": 0.44652,
+  "strategy_evaluation_wall_seconds": 18.965191,
+  "trade_count": 17,
+  "expected_trade_count_golden": 17,
+  "trade_count_matches_golden": true,
+  "cells": [
+    {
+      "symbol": "BTCUSDT",
+      "timeframe": "15m",
+      "sample_size": 4,
+      "trades": 4,
+      "elapsed_seconds": 6.278079600000183,
+      "candles_processed": 3022
+    },
+    {
+      "symbol": "BTCUSDT",
+      "timeframe": "1h",
+      "sample_size": 2,
+      "trades": 2,
+      "elapsed_seconds": 0.8154684000000998,
+      "candles_processed": 718
+    },
+    {
+      "symbol": "ETHUSDT",
+      "timeframe": "15m",
+      "sample_size": 2,
+      "trades": 2,
+      "elapsed_seconds": 6.1570903000001636,
+      "candles_processed": 3022
+    },
+    {
+      "symbol": "ETHUSDT",
+      "timeframe": "1h",
+      "sample_size": 2,
+      "trades": 2,
+      "elapsed_seconds": 0.846746499999881,
+      "candles_processed": 718
+    },
+    {
+      "symbol": "SOLUSDT",
+      "timeframe": "15m",
+      "sample_size": 5,
+      "trades": 5,
+      "elapsed_seconds": 4.4256946999998945,
+      "candles_processed": 3022
+    },
+    {
+      "symbol": "SOLUSDT",
+      "timeframe": "1h",
+      "sample_size": 2,
+      "trades": 2,
+      "elapsed_seconds": 0.43895729999985633,
+      "candles_processed": 718
+    }
+  ],
+  "top_functions": [
+    {
+      "function": "_run_combo_matrix",
+      "file": "E:\\cryptoscreener\\backend\\scripts\\profile_strategy_evaluation.py",
+      "line": 116,
+      "call_count": 1,
+      "cumulative_seconds": 18.966823,
+      "self_seconds": 0.002867,
+      "pct_of_strategy_wall": 100.0,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "feature_atr"
+    },
+    {
+      "function": "run_combination_backtest",
+      "file": "E:\\cryptoscreener\\backend\\app\\research\\combination_backtest.py",
+      "line": 285,
+      "call_count": 6,
+      "cumulative_seconds": 18.962086,
+      "self_seconds": 0.200342,
+      "pct_of_strategy_wall": 100.0,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "other"
+    },
+    {
+      "function": "evaluate_combination_at_bar",
+      "file": "E:\\cryptoscreener\\backend\\app\\research\\combination_engine.py",
+      "line": 264,
+      "call_count": 205,
+      "cumulative_seconds": 15.026334,
+      "self_seconds": 0.02007,
+      "pct_of_strategy_wall": 79.2,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "entry_evaluation"
+    },
+    {
+      "function": "analyze_timeframe",
+      "file": "E:\\cryptoscreener\\backend\\app\\signals\\signal_engine.py",
+      "line": 206,
+      "call_count": 205,
+      "cumulative_seconds": 14.402393,
+      "self_seconds": 0.072967,
+      "pct_of_strategy_wall": 75.9,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "structure_calculation"
+    },
+    {
+      "function": "to_dict",
+      "file": "E:\\cryptoscreener\\backend\\app\\signals\\schemas.py",
+      "line": 97,
+      "call_count": 50363,
+      "cumulative_seconds": 11.681953,
+      "self_seconds": 0.215687,
+      "pct_of_strategy_wall": 61.6,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "other"
+    },
+    {
+      "function": "asdict",
+      "file": "C:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib\\dataclasses.py",
+      "line": 1308,
+      "call_count": 50449,
+      "cumulative_seconds": 10.955408,
+      "self_seconds": 0.080703,
+      "pct_of_strategy_wall": 57.8,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "other"
+    },
+    {
+      "function": "_asdict_inner",
+      "file": "C:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib\\dataclasses.py",
+      "line": 1332,
+      "call_count": 506132,
+      "cumulative_seconds": 10.805404,
+      "self_seconds": 1.323823,
+      "pct_of_strategy_wall": 57.0,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "other"
+    },
+    {
+      "function": "deepcopy",
+      "file": "C:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib\\copy.py",
+      "line": 118,
+      "call_count": 727870,
+      "cumulative_seconds": 8.547017,
+      "self_seconds": 3.356021,
+      "pct_of_strategy_wall": 45.1,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "object_copying"
+    },
+    {
+      "function": "_reconstruct",
+      "file": "C:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib\\copy.py",
+      "line": 247,
+      "call_count": 302389,
+      "cumulative_seconds": 7.074571,
+      "self_seconds": 1.259552,
+      "pct_of_strategy_wall": 37.3,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "other"
+    },
+    {
+      "function": "<genexpr>",
+      "file": "C:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib\\copy.py",
+      "line": 252,
+      "call_count": 906956,
+      "cumulative_seconds": 6.550036,
+      "self_seconds": 0.655839,
+      "pct_of_strategy_wall": 34.5,
+      "classification": "PRIMARY_BOTTLENECK",
+      "category": "other"
+    }
+  ],
+  "dependency_map_findings": {
+    "architecture_note": "COMBO_02 combination_backtest walks bars with incremental swings; full analyze_timeframe only on BOS-prefilter hits. Multi-strategy BOS runner / lifecycle discovery still call analyze_timeframe every bar when used.",
+    "repeated_work_signals": {
+      "swing_extend_calls_per_bar_walk": 11220,
+      "bos_prefilter_calls": 10794,
+      "full_evaluate_combination_calls": 205,
+      "structure_analyze_timeframe_calls": 205,
+      "htf_alignment_gate_calls": 205,
+      "structure_calls_approx_equal_eval_calls": true
+    },
+    "lifecycle_copy_pattern": {
+      "candles_as_of_copy_calls": null,
+      "candles_as_of_copy_ms": null,
+      "note": "If lifecycle profiling is enabled, candles_as_of_copy counts list slices rebuilt per pullback/retest evaluation (O(bars) copy each time)."
+    },
+    "top_cprofile_categories": [
+      {
+        "category": "feature_atr",
+        "function": "_run_combo_matrix",
+        "cumulative_seconds": 18.966823,
+        "self_seconds": 0.002867,
+        "call_count": 1
+      },
+      {
+        "category": "other",
+        "function": "run_combination_backtest",
+        "cumulative_seconds": 18.962086,
+        "self_seconds": 0.200342,
+        "call_count": 6
+      },
+      {
+        "category": "entry_evaluation",
+        "function": "evaluate_combination_at_bar",
+        "cumulative_seconds": 15.026334,
+        "self_seconds": 0.02007,
+        "call_count": 205
+      },
+      {
+        "category": "structure_calculation",
+        "function": "analyze_timeframe",
+        "cumulative_seconds": 14.402393,
+        "self_seconds": 0.072967,
+        "call_count": 205
+      },
+      {
+        "category": "other",
+        "function": "to_dict",
+        "cumulative_seconds": 11.681953,
+        "self_seconds": 0.215687,
+        "call_count": 50363
+      },
+      {
+        "category": "other",
+        "function": "asdict",
+        "cumulative_seconds": 10.955408,
+        "self_seconds": 0.080703,
+        "call_count": 50449
+      },
+      {
+        "category": "other",
+        "function": "_asdict_inner",
+        "cumulative_seconds": 10.805404,
+        "self_seconds": 1.323823,
+        "call_count": 506132
+      },
+      {
+        "category": "object_copying",
+        "function": "deepcopy",
+        "cumulative_seconds": 8.547017,
+        "self_seconds": 3.356021,
+        "call_count": 727870
+      },
+      {
+        "category": "other",
+        "function": "_reconstruct",
+        "cumulative_seconds": 7.074571,
+        "self_seconds": 1.259552,
+        "call_count": 302389
+      },
+      {
+        "category": "other",
+        "function": "<genexpr>",
+        "cumulative_seconds": 6.550036,
+        "self_seconds": 0.655839,
+        "call_count": 906956
+      },
+      {
+        "category": "other",
+        "function": "series_ohlcv",
+        "cumulative_seconds": 2.920274,
+        "self_seconds": 0.854077,
+        "call_count": 253
+      },
+      {
+        "category": "bos_detection",
+        "function": "detect_bos",
+        "cumulative_seconds": 2.603256,
+        "self_seconds": 0.026689,
+        "call_count": 205
+      },
+      {
+        "category": "other",
+        "function": "_bos_break_possible",
+        "cumulative_seconds": 1.368307,
+        "self_seconds": 0.689464,
+        "call_count": 10794
+      },
+      {
+        "category": "other",
+        "function": "<method 'get' of 'dict' objects>",
+        "cumulative_seconds": 1.346168,
+        "self_seconds": 1.346168,
+        "call_count": 3475488
+      },
+      {
+        "category": "other",
+        "function": "ohlc",
+        "cumulative_seconds": 1.30018,
+        "self_seconds": 0.88244,
+        "call_count": 304977
+      }
+    ],
+    "lifecycle_stage_timings": {
+      "enabled": true,
+      "meta": {
+        "symbols": [
+          "BTCUSDT"
+        ],
+        "timeframes": [
+          "15m"
+        ],
+        "purpose": "lifecycle_profile"
+      },
+      "stages": {
+        "candles_as_of_copy": {
+          "calls": 1215,
+          "elapsed_ms": 25.634,
+          "elapsed_seconds": 0.025634
+        },
+        "detect_pullback": {
+          "calls": 896,
+          "elapsed_ms": 142.375,
+          "elapsed_seconds": 0.142375
+        },
+        "detect_retest": {
+          "calls": 319,
+          "elapsed_ms": 4321.82,
+          "elapsed_seconds": 4.32182
+        },
+        "lifecycle_BTCUSDT_15m": {
+          "calls": 1,
+          "elapsed_ms": 427378.212,
+          "elapsed_seconds": 427.378212
+        },
+        "lifecycle_discover_analyze_timeframe": {
+          "calls": 3072,
+          "elapsed_ms": 422566.006,
+          "elapsed_seconds": 422.566006
+        }
+      },
+      "ranked": [
+        {
+          "stage": "lifecycle_BTCUSDT_15m",
+          "calls": 1,
+          "elapsed_ms": 427378.212,
+          "pct_of_staged": 50.0
+        },
+        {
+          "stage": "lifecycle_discover_analyze_timeframe",
+          "calls": 3072,
+          "elapsed_ms": 422566.006,
+          "pct_of_staged": 49.5
+        },
+        {
+          "stage": "detect_retest",
+          "calls": 319,
+          "elapsed_ms": 4321.82,
+          "pct_of_staged": 0.5
+        },
+        {
+          "stage": "detect_pullback",
+          "calls": 896,
+          "elapsed_ms": 142.375,
+          "pct_of_staged": 0.0
+        },
+        {
+          "stage": "candles_as_of_copy",
+          "calls": 1215,
+          "elapsed_ms": 25.634,
+          "pct_of_staged": 0.0
+        }
+      ],
+      "total_staged_ms": 854434.046
+    },
+    "lifecycle_wall_seconds": 427.37827309999966,
+    "lifecycle_top_cprofile": [
+      {
+        "category": "lifecycle_construction",
+        "function": "_run_lifecycle_pass",
+        "cumulative_seconds": 427.407033,
+        "self_seconds": 0.000637,
+        "call_count": 1
+      },
+      {
+        "category": "lifecycle_construction",
+        "function": "run_lifecycles_for_series",
+        "cumulative_seconds": 427.377611,
+        "self_seconds": 0.000941,
+        "call_count": 1
+      },
+      {
+        "category": "impulse_detection",
+        "function": "discover_impulse_events",
+        "cumulative_seconds": 422.794346,
+        "self_seconds": 0.583981,
+        "call_count": 1
+      },
+      {
+        "category": "structure_calculation",
+        "function": "analyze_timeframe",
+        "cumulative_seconds": 421.996282,
+        "self_seconds": 1.330823,
+        "call_count": 3072
+      },
+      {
+        "category": "other",
+        "function": "to_dict",
+        "cumulative_seconds": 190.177734,
+        "self_seconds": 3.622309,
+        "call_count": 918766
+      },
+      {
+        "category": "other",
+        "function": "asdict",
+        "cumulative_seconds": 178.072259,
+        "self_seconds": 1.40629,
+        "call_count": 918766
+      },
+      {
+        "category": "other",
+        "function": "_asdict_inner",
+        "cumulative_seconds": 175.545911,
+        "self_seconds": 21.565716,
+        "call_count": 9187660
+      },
+      {
+        "category": "object_copying",
+        "function": "deepcopy",
+        "cumulative_seconds": 136.732338,
+        "self_seconds": 54.59271,
+        "call_count": 12865236
+      },
+      {
+        "category": "other",
+        "function": "series_ohlcv",
+        "cumulative_seconds": 130.543595,
+        "self_seconds": 38.313237,
+        "call_count": 9519
+      },
+      {
+        "category": "other",
+        "function": "_reconstruct",
+        "cumulative_seconds": 112.721653,
+        "self_seconds": 20.779574,
+        "call_count": 5512598
+      },
+      {
+        "category": "swing_detection",
+        "function": "swings_for_timeframe",
+        "cumulative_seconds": 106.088224,
+        "self_seconds": 0.137809,
+        "call_count": 3072
+      },
+      {
+        "category": "swing_detection",
+        "function": "detect_swings",
+        "cumulative_seconds": 105.922407,
+        "self_seconds": 21.020124,
+        "call_count": 3072
+      },
+      {
+        "category": "other",
+        "function": "<genexpr>",
+        "cumulative_seconds": 105.790905,
+        "self_seconds": 10.850779,
+        "call_count": 16537792
+      },
+      {
+        "category": "bos_detection",
+        "function": "detect_bos",
+        "cumulative_seconds": 62.300818,
+        "self_seconds": 0.479952,
+        "call_count": 3072
+      },
+      {
+        "category": "impulse_detection",
+        "function": "detect_impulse",
+        "cumulative_seconds": 61.444466,
+        "self_seconds": 0.322632,
+        "call_count": 3072
+      }
+    ]
+  },
+  "optimization_candidates": [
+    {
+      "id": 1,
+      "title": "Skip SwingRecord.to_dict/asdict/deepcopy in research analyze_timeframe hot path",
+      "evidence": "COMBO_02: to_dict 50,363 calls / 11.7s cum; asdict 10.96s; deepcopy 727,870 calls / 8.55s. Triggered by signal_engine.analyze_timeframe returning swings:[s.to_dict()...] even when research already has _swings_objs.",
+      "measured": {
+        "combo_analyze_timeframe_seconds": 14.4,
+        "combo_evaluate_calls": 205,
+        "to_dict_calls": 50363,
+        "deepcopy_calls": 727870
+      },
+      "risk": "Must keep public analyze_timeframe API for live paths; research path can prefer _swings_objs without serializing every SwingRecord. Equality-gated.",
+      "expected_impact": "PRIMARY — majority of the 15s spent inside evaluate_combination_at_bar"
+    },
+    {
+      "id": 2,
+      "title": "Lifecycle discovery: stop full analyze_timeframe on every bar",
+      "evidence": "BTCUSDT 15m lifecycle: lifecycle_discover_analyze_timeframe 3,072 calls / 422.6s; full detect_swings each bar (no extend_swings). COMBO_02 already proves incremental swings + BOS prefilter works (11,220 swing_extend vs 205 full evals).",
+      "measured": {
+        "lifecycle_wall_seconds": 427.4,
+        "discover_analyze_calls": 3072,
+        "candles_as_of_copy_ms": 25.6,
+        "detect_retest_seconds": 4.32
+      },
+      "risk": "Must preserve BOS+impulse freeze and no-lookahead. Reuse combination_backtest incremental pattern. Equality-gated.",
+      "expected_impact": "PRIMARY for lifecycle / multi-strategy BOS runner paths"
+    },
+    {
+      "id": 3,
+      "title": "Shared structure/BOS event cache across strategies on one series",
+      "evidence": "COMBO_02 alone does not share structure with other strategies; each combo/strategy matrix cell reloads walk. Bundle candle reuse exists; structure/BOS/lifecycle not yet shared. Multi-combo bundle was 44s in prior benchmark vs ~21s single combo.",
+      "risk": "Cache must be as_of closed-bar identical; no lookahead. Golden equality required.",
+      "expected_impact": "SECONDARY for multi-strategy research; smaller for single COMBO_02"
+    }
+  ],
+  "decision": "READY_FOR_OPTIMIZATION",
+  "created_at": "2026-10-04T14:13:35.770962+00:00"
+}

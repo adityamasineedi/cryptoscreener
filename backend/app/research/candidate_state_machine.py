@@ -16,10 +16,12 @@ CANDIDATE_STATES: FrozenSet[str] = frozenset(
         "DATA_READY",
         "BACKTEST_QUEUED",
         "BACKTEST_RUNNING",
+        "BACKTEST_COMPLETED",
         "RESEARCH_REJECTED",
         "PROMISING",
         "OOS_PENDING",
         "OOS_FAILED",
+        "SHORT_RESEARCH_CANDIDATE",
         "V2_PAPER_CANDIDATE",
         "PAPER_VALIDATING",
         "APPROVED",
@@ -44,16 +46,36 @@ ALLOWED_TRANSITIONS: dict[str, FrozenSet[str]] = {
         {
             "PROMISING",
             "RESEARCH_REJECTED",
+            "BACKTEST_COMPLETED",
             "DATA_PENDING",
             "ARCHIVED",
         }
     ),
+    "BACKTEST_COMPLETED": frozenset(
+        {
+            "PROMISING",
+            "RESEARCH_REJECTED",
+            "SHORT_RESEARCH_CANDIDATE",
+            "OOS_FAILED",
+            "ARCHIVED",
+        }
+    ),
     "RESEARCH_REJECTED": frozenset({"DATA_PENDING", "ARCHIVED", "SUSPENDED"}),
-    "PROMISING": frozenset({"OOS_PENDING", "RESEARCH_REJECTED", "ARCHIVED"}),
+    "PROMISING": frozenset(
+        {"OOS_PENDING", "RESEARCH_REJECTED", "SHORT_RESEARCH_CANDIDATE", "ARCHIVED"}
+    ),
     "OOS_PENDING": frozenset(
-        {"OOS_FAILED", "V2_PAPER_CANDIDATE", "RESEARCH_REJECTED", "ARCHIVED"}
+        {
+            "OOS_FAILED",
+            "V2_PAPER_CANDIDATE",
+            "SHORT_RESEARCH_CANDIDATE",
+            "RESEARCH_REJECTED",
+            "ARCHIVED",
+        }
     ),
     "OOS_FAILED": frozenset({"OOS_PENDING", "ARCHIVED", "SUSPENDED"}),
+    # SHORT research terminal — never transitions into paper/production.
+    "SHORT_RESEARCH_CANDIDATE": frozenset({"ARCHIVED", "SUSPENDED", "OOS_FAILED"}),
     "V2_PAPER_CANDIDATE": frozenset(
         {"PAPER_VALIDATING", "SUSPENDED", "ARCHIVED", "OOS_PENDING"}
     ),
@@ -116,8 +138,10 @@ def badge_for_state(state: str, *, state_reason: str | None = None) -> str:
         "DATA_READY",
         "BACKTEST_QUEUED",
         "BACKTEST_RUNNING",
+        "BACKTEST_COMPLETED",
         "PROMISING",
         "OOS_PENDING",
+        "SHORT_RESEARCH_CANDIDATE",
     ):
         return "RESEARCH ONLY"
     if s == "V2_PAPER_CANDIDATE":
@@ -148,6 +172,8 @@ def research_tier_for_row(row: dict) -> str:
         return "OOS_FAILED"
     if backtest_tier == "INSUFFICIENT_DATA":
         return "INSUFFICIENT_DATA"
+    if state == "SHORT_RESEARCH_CANDIDATE" or oos_status == "SHORT_RESEARCH_CANDIDATE":
+        return "SHORT_RESEARCH_CANDIDATE"
     if backtest_tier == "PROMISING":
         return "PROMISING"
     # WATCHLIST is display-only and never paper-eligible.

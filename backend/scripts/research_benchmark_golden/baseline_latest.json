@@ -1,0 +1,1670 @@
+{
+  "dataset": {
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "timeframes": [
+      "15m",
+      "1h"
+    ],
+    "start": "2025-01-01",
+    "end": "2025-02-01",
+    "source": "postgresql"
+  },
+  "coverage": {
+    "BTCUSDT/15m": {
+      "rows": 3072,
+      "first": "2025-01-01T00:00:00+00:00",
+      "last": "2025-02-01T23:45:00+00:00"
+    },
+    "BTCUSDT/1h": {
+      "rows": 768,
+      "first": "2025-01-01T00:00:00+00:00",
+      "last": "2025-02-01T23:00:00+00:00"
+    },
+    "ETHUSDT/15m": {
+      "rows": 3072,
+      "first": "2025-01-01T00:00:00+00:00",
+      "last": "2025-02-01T23:45:00+00:00"
+    },
+    "ETHUSDT/1h": {
+      "rows": 768,
+      "first": "2025-01-01T00:00:00+00:00",
+      "last": "2025-02-01T23:00:00+00:00"
+    },
+    "SOLUSDT/15m": {
+      "rows": 3072,
+      "first": "2025-01-01T00:00:00+00:00",
+      "last": "2025-02-01T23:45:00+00:00"
+    },
+    "SOLUSDT/1h": {
+      "rows": 768,
+      "first": "2025-01-01T00:00:00+00:00",
+      "last": "2025-02-01T23:00:00+00:00"
+    }
+  },
+  "cells": [
+    {
+      "symbol": "BTCUSDT",
+      "timeframe": "15m",
+      "status": "OK",
+      "sample_size": 4,
+      "result": {
+        "combination_id": "COMBO_02",
+        "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+        "period_start": "2025-01-01T00:00:00+00:00",
+        "period_end": "2025-02-01T23:45:00+00:00",
+        "symbol": "BTCUSDT",
+        "timeframe": "15m",
+        "direction": "LONG",
+        "sample_size": 4,
+        "long_setups": 4,
+        "short_setups": 0,
+        "tp1_hits": 1,
+        "tp2_hits": 0,
+        "tp3_hits": 0,
+        "sl_hits": 3,
+        "ambiguous_trades": 0,
+        "ambiguous_count": 0,
+        "tp1_hit_rate": 0.25,
+        "tp2_hit_rate": 0.0,
+        "tp3_hit_rate": 0.0,
+        "sl_rate": 0.75,
+        "average_R": -0.25,
+        "median_R": -1.0,
+        "expectancy_R": -0.25,
+        "profit_factor": 0.6666666666666666,
+        "gross_profit_R": 2.0,
+        "gross_loss_R": -3.0,
+        "max_drawdown_R": 2.0,
+        "average_MAE_R": 0.8633329786811963,
+        "average_MFE_R": 1.1197729831841348,
+        "average_holding_time": 6.25,
+        "median_holding_time": 6.5,
+        "signals_per_day": 10.971428571428572,
+        "signals_per_week": 76.8,
+        "data_coverage": 1.0,
+        "data_quality": "DATA_OK",
+        "regime": "REGIME_NOT_AVAILABLE",
+        "period_label": "FULL",
+        "r_values": [
+          -1.0,
+          -1.0,
+          2.0,
+          -1.0
+        ],
+        "equity_curve_r": [
+          0.0,
+          -1.0,
+          -2.0,
+          0.0,
+          -1.0
+        ],
+        "drawdown_curve_r": [
+          0.0,
+          -1.0,
+          -2.0,
+          0.0,
+          -1.0
+        ],
+        "setup_frequency": [
+          {
+            "date": "2025-01-17",
+            "count": 4,
+            "sample_size": 4
+          }
+        ],
+        "by_timeframe": {
+          "15m": {
+            "sample_size": 4,
+            "average_R": -0.25,
+            "expectancy_R": -0.25,
+            "profit_factor": 0.6666666666666666
+          }
+        },
+        "by_direction": {
+          "LONG": {
+            "sample_size": 4,
+            "average_R": -0.25,
+            "expectancy_R": -0.25,
+            "tp1_hits": 1,
+            "sl_hits": 3
+          },
+          "SHORT": {
+            "sample_size": 0,
+            "average_R": null,
+            "expectancy_R": null,
+            "tp1_hits": 0,
+            "sl_hits": 0
+          }
+        },
+        "by_asset_group": {
+          "BTC": {
+            "sample_size": 4,
+            "average_R": -0.25
+          }
+        },
+        "by_regime": {
+          "REGIME_NOT_AVAILABLE": {
+            "sample_size": 4
+          }
+        },
+        "condition_definition": {
+          "combination_id": "COMBO_02",
+          "name": "TREND_BOS",
+          "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+          "require_bos": true,
+          "require_trend": true,
+          "require_impulse": false,
+          "require_pullback": false,
+          "require_rvol": false,
+          "require_sd": false,
+          "require_rr": false,
+          "require_htf_alignment": true,
+          "conditions": [
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)"
+          ],
+          "gates": {
+            "BOS": true,
+            "Trend": true,
+            "Impulse": false,
+            "Pullback": false,
+            "RVOL": false,
+            "S/D": false,
+            "R:R": false,
+            "HTF": true
+          },
+          "direction_filter_notes": {
+            "setup_tf_only": false,
+            "htf_hard_gate": true
+          }
+        },
+        "disclaimer": "Research comparison \u2014 historical analysis only. Not a ranking, not a profitability claim, not a trade recommendation.",
+        "label": "RESEARCH_COMPARISON"
+      },
+      "candles_processed": 3022,
+      "htf_precompute_seconds": 0.1402235999998993,
+      "trades": [
+        {
+          "symbol": "BTCUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1578,
+          "signal_time": "2025-01-17T10:30:00+00:00",
+          "direction": "LONG",
+          "entry_price": 102336.3,
+          "stop_price": 102068.90900071307,
+          "tp1": 102871.08199857386,
+          "tp2": 103138.4729978608,
+          "tp3": 103405.86399714772,
+          "rr": 4.0,
+          "exit_index": 1580,
+          "exit_time": "2025-01-17T11:00:00+00:00",
+          "exit_price": 102068.90900071307,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 2,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 2,
+          "mae": 289.0,
+          "mfe": 50.80000000000291,
+          "mae_r": 1.0808142412074297,
+          "mfe_r": 0.18998395658595357,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "BTC",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "BTCUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1586,
+          "signal_time": "2025-01-17T12:30:00+00:00",
+          "direction": "LONG",
+          "entry_price": 102665.0,
+          "stop_price": 102242.35686462314,
+          "tp1": 103510.28627075371,
+          "tp2": 103932.92940613057,
+          "tp3": 104355.57254150743,
+          "rr": 4.0,
+          "exit_index": 1594,
+          "exit_time": "2025-01-17T14:30:00+00:00",
+          "exit_price": 102242.35686462314,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 8,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 8,
+          "mae": 457.3999999999942,
+          "mfe": 528.8999999999942,
+          "mae_r": 1.0822369079581666,
+          "mfe_r": 1.2514103642743228,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "BTC",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "BTCUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1595,
+          "signal_time": "2025-01-17T14:45:00+00:00",
+          "direction": "LONG",
+          "entry_price": 103322.0,
+          "stop_price": 102393.08518294658,
+          "tp1": 105179.82963410683,
+          "tp2": 106108.74445116025,
+          "tp3": 107037.65926821367,
+          "rr": 4.0,
+          "exit_index": 1605,
+          "exit_time": "2025-01-17T17:15:00+00:00",
+          "exit_price": 105179.82963410683,
+          "outcome": "TP1",
+          "r_multiple": 2.0,
+          "holding_bars": 10,
+          "time_to_tp1": 10,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 101.0,
+          "mfe": 1946.5,
+          "mae_r": 0.10872902245264972,
+          "mfe_r": 2.0954558634067593,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "BTC",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": true,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "BTCUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1613,
+          "signal_time": "2025-01-17T19:15:00+00:00",
+          "direction": "LONG",
+          "entry_price": 105356.8,
+          "stop_price": 104903.41316939745,
+          "tp1": 106263.57366120511,
+          "tp2": 106716.96049180767,
+          "tp3": 107170.34732241022,
+          "rr": 4.0,
+          "exit_index": 1618,
+          "exit_time": "2025-01-17T20:30:00+00:00",
+          "exit_price": 104903.41316939745,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 5,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 5,
+          "mae": 535.6999999999971,
+          "mfe": 427.1999999999971,
+          "mae_r": 1.181551743106539,
+          "mfe_r": 0.942241748469503,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "BTC",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "BTCUSDT",
+      "timeframe": "1h",
+      "status": "OK",
+      "sample_size": 2,
+      "result": {
+        "combination_id": "COMBO_02",
+        "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+        "period_start": "2025-01-01T00:00:00+00:00",
+        "period_end": "2025-02-01T23:00:00+00:00",
+        "symbol": "BTCUSDT",
+        "timeframe": "1h",
+        "direction": "LONG",
+        "sample_size": 2,
+        "long_setups": 2,
+        "short_setups": 0,
+        "tp1_hits": 1,
+        "tp2_hits": 0,
+        "tp3_hits": 0,
+        "sl_hits": 1,
+        "ambiguous_trades": 0,
+        "ambiguous_count": 0,
+        "tp1_hit_rate": 0.5,
+        "tp2_hit_rate": 0.0,
+        "tp3_hit_rate": 0.0,
+        "sl_rate": 0.5,
+        "average_R": 0.5,
+        "median_R": 0.5,
+        "expectancy_R": 0.5,
+        "profit_factor": 2.0,
+        "gross_profit_R": 2.0,
+        "gross_loss_R": -1.0,
+        "max_drawdown_R": 1.0,
+        "average_MAE_R": 0.7946423975346184,
+        "average_MFE_R": 1.625782528008035,
+        "average_holding_time": 122.0,
+        "median_holding_time": 122.0,
+        "signals_per_day": 2.5263157894736845,
+        "signals_per_week": 17.68421052631579,
+        "data_coverage": 1.0,
+        "data_quality": "DATA_OK",
+        "regime": "REGIME_NOT_AVAILABLE",
+        "period_label": "FULL",
+        "r_values": [
+          2.0,
+          -1.0
+        ],
+        "equity_curve_r": [
+          0.0,
+          2.0,
+          1.0
+        ],
+        "drawdown_curve_r": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "setup_frequency": [
+          {
+            "date": "2025-01-17",
+            "count": 2,
+            "sample_size": 2
+          }
+        ],
+        "by_timeframe": {
+          "1h": {
+            "sample_size": 2,
+            "average_R": 0.5,
+            "expectancy_R": 0.5,
+            "profit_factor": 2.0
+          }
+        },
+        "by_direction": {
+          "LONG": {
+            "sample_size": 2,
+            "average_R": 0.5,
+            "expectancy_R": 0.5,
+            "tp1_hits": 1,
+            "sl_hits": 1
+          },
+          "SHORT": {
+            "sample_size": 0,
+            "average_R": null,
+            "expectancy_R": null,
+            "tp1_hits": 0,
+            "sl_hits": 0
+          }
+        },
+        "by_asset_group": {
+          "BTC": {
+            "sample_size": 2,
+            "average_R": 0.5
+          }
+        },
+        "by_regime": {
+          "REGIME_NOT_AVAILABLE": {
+            "sample_size": 2
+          }
+        },
+        "condition_definition": {
+          "combination_id": "COMBO_02",
+          "name": "TREND_BOS",
+          "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+          "require_bos": true,
+          "require_trend": true,
+          "require_impulse": false,
+          "require_pullback": false,
+          "require_rvol": false,
+          "require_sd": false,
+          "require_rr": false,
+          "require_htf_alignment": true,
+          "conditions": [
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)"
+          ],
+          "gates": {
+            "BOS": true,
+            "Trend": true,
+            "Impulse": false,
+            "Pullback": false,
+            "RVOL": false,
+            "S/D": false,
+            "R:R": false,
+            "HTF": true
+          },
+          "direction_filter_notes": {
+            "setup_tf_only": false,
+            "htf_hard_gate": true
+          }
+        },
+        "disclaimer": "Research comparison \u2014 historical analysis only. Not a ranking, not a profitability claim, not a trade recommendation.",
+        "label": "RESEARCH_COMPARISON"
+      },
+      "candles_processed": 718,
+      "htf_precompute_seconds": 0.11399400000004789,
+      "trades": [
+        {
+          "symbol": "BTCUSDT",
+          "timeframe": "1h",
+          "combination_id": "COMBO_02",
+          "entry_index": 385,
+          "signal_time": "2025-01-17T01:00:00+00:00",
+          "direction": "LONG",
+          "entry_price": 101636.2,
+          "stop_price": 99817.52250446688,
+          "tp1": 105273.55499106624,
+          "tp2": 107092.23248659936,
+          "tp3": 108910.90998213248,
+          "rr": 4.0,
+          "exit_index": 403,
+          "exit_time": "2025-01-17T19:00:00+00:00",
+          "exit_price": 105273.55499106624,
+          "outcome": "TP1",
+          "r_multiple": 2.0,
+          "holding_bars": 18,
+          "time_to_tp1": 18,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 910.3999999999942,
+          "mfe": 4147.800000000003,
+          "mae_r": 0.5005835296450528,
+          "mfe_r": 2.28066823842461,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "BTC",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": true,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "BTCUSDT",
+          "timeframe": "1h",
+          "combination_id": "COMBO_02",
+          "entry_index": 404,
+          "signal_time": "2025-01-17T20:00:00+00:00",
+          "direction": "LONG",
+          "entry_price": 104654.5,
+          "stop_price": 99148.76560768756,
+          "tp1": 115665.96878462489,
+          "tp2": 121171.70317693733,
+          "tp3": 126677.43756924977,
+          "rr": 4.0,
+          "exit_index": 630,
+          "exit_time": "2025-01-27T06:00:00+00:00",
+          "exit_price": 99148.76560768756,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 226,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 226,
+          "mae": 5994.100000000006,
+          "mfe": 5345.5,
+          "mae_r": 1.0887012654241839,
+          "mfe_r": 0.9708968175914597,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "BTC",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "ETHUSDT",
+      "timeframe": "15m",
+      "status": "OK",
+      "sample_size": 2,
+      "result": {
+        "combination_id": "COMBO_02",
+        "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+        "period_start": "2025-01-01T00:00:00+00:00",
+        "period_end": "2025-02-01T23:45:00+00:00",
+        "symbol": "ETHUSDT",
+        "timeframe": "15m",
+        "direction": "LONG",
+        "sample_size": 2,
+        "long_setups": 2,
+        "short_setups": 0,
+        "tp1_hits": 1,
+        "tp2_hits": 0,
+        "tp3_hits": 0,
+        "sl_hits": 1,
+        "ambiguous_trades": 0,
+        "ambiguous_count": 0,
+        "tp1_hit_rate": 0.5,
+        "tp2_hit_rate": 0.0,
+        "tp3_hit_rate": 0.0,
+        "sl_rate": 0.5,
+        "average_R": 0.556633677403654,
+        "median_R": 0.556633677403654,
+        "expectancy_R": 0.556633677403654,
+        "profit_factor": 2.113267354807308,
+        "gross_profit_R": 2.113267354807308,
+        "gross_loss_R": -1.0,
+        "max_drawdown_R": 1.0,
+        "average_MAE_R": 0.828080262137671,
+        "average_MFE_R": 2.2160028582050564,
+        "average_holding_time": 39.0,
+        "median_holding_time": 39.0,
+        "signals_per_day": 27.428571428571427,
+        "signals_per_week": 192.0,
+        "data_coverage": 1.0,
+        "data_quality": "DATA_OK",
+        "regime": "REGIME_NOT_AVAILABLE",
+        "period_label": "FULL",
+        "r_values": [
+          2.113267354807308,
+          -1.0
+        ],
+        "equity_curve_r": [
+          0.0,
+          2.113267354807308,
+          1.113267354807308
+        ],
+        "drawdown_curve_r": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "setup_frequency": [
+          {
+            "date": "2025-01-17",
+            "count": 2,
+            "sample_size": 2
+          }
+        ],
+        "by_timeframe": {
+          "15m": {
+            "sample_size": 2,
+            "average_R": 0.556633677403654,
+            "expectancy_R": 0.556633677403654,
+            "profit_factor": 2.113267354807308
+          }
+        },
+        "by_direction": {
+          "LONG": {
+            "sample_size": 2,
+            "average_R": 0.556633677403654,
+            "expectancy_R": 0.556633677403654,
+            "tp1_hits": 1,
+            "sl_hits": 1
+          },
+          "SHORT": {
+            "sample_size": 0,
+            "average_R": null,
+            "expectancy_R": null,
+            "tp1_hits": 0,
+            "sl_hits": 0
+          }
+        },
+        "by_asset_group": {
+          "ETH": {
+            "sample_size": 2,
+            "average_R": 0.556633677403654
+          }
+        },
+        "by_regime": {
+          "REGIME_NOT_AVAILABLE": {
+            "sample_size": 2
+          }
+        },
+        "condition_definition": {
+          "combination_id": "COMBO_02",
+          "name": "TREND_BOS",
+          "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+          "require_bos": true,
+          "require_trend": true,
+          "require_impulse": false,
+          "require_pullback": false,
+          "require_rvol": false,
+          "require_sd": false,
+          "require_rr": false,
+          "require_htf_alignment": true,
+          "conditions": [
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)"
+          ],
+          "gates": {
+            "BOS": true,
+            "Trend": true,
+            "Impulse": false,
+            "Pullback": false,
+            "RVOL": false,
+            "S/D": false,
+            "R:R": false,
+            "HTF": true
+          },
+          "direction_filter_notes": {
+            "setup_tf_only": false,
+            "htf_hard_gate": true
+          }
+        },
+        "disclaimer": "Research comparison \u2014 historical analysis only. Not a ranking, not a profitability claim, not a trade recommendation.",
+        "label": "RESEARCH_COMPARISON"
+      },
+      "candles_processed": 3022,
+      "htf_precompute_seconds": 0.11566319999997177,
+      "trades": [
+        {
+          "symbol": "ETHUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1570,
+          "signal_time": "2025-01-17T08:30:00+00:00",
+          "direction": "LONG",
+          "entry_price": 3392.81,
+          "stop_price": 3376.300020834027,
+          "tp1": 3427.7,
+          "tp2": 3441.96,
+          "tp3": 3458.8499166638926,
+          "rr": 4.0,
+          "exit_index": 1576,
+          "exit_time": "2025-01-17T10:00:00+00:00",
+          "exit_price": 3427.7,
+          "outcome": "TP1",
+          "r_multiple": 2.113267354807308,
+          "holding_bars": 6,
+          "time_to_tp1": 6,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 8.739999999999782,
+          "mfe": 45.42000000000007,
+          "mae_r": 0.5293768036977781,
+          "mfe_r": 2.7510634352349794,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "ETH",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": true,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "ETHUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1577,
+          "signal_time": "2025-01-17T10:15:00+00:00",
+          "direction": "LONG",
+          "entry_price": 3420.17,
+          "stop_price": 3357.895404868263,
+          "tp1": 3598.69,
+          "tp2": 3599.49,
+          "tp3": 3669.268380526948,
+          "rr": 4.0,
+          "exit_index": 1649,
+          "exit_time": "2025-01-18T04:15:00+00:00",
+          "exit_price": 3357.895404868263,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 72,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 72,
+          "mae": 70.17000000000007,
+          "mfe": 104.67999999999984,
+          "mae_r": 1.1267837205775642,
+          "mfe_r": 1.6809422811751336,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "ETH",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "ETHUSDT",
+      "timeframe": "1h",
+      "status": "OK",
+      "sample_size": 2,
+      "result": {
+        "combination_id": "COMBO_02",
+        "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+        "period_start": "2025-01-01T00:00:00+00:00",
+        "period_end": "2025-02-01T23:00:00+00:00",
+        "symbol": "ETHUSDT",
+        "timeframe": "1h",
+        "direction": "LONG",
+        "sample_size": 2,
+        "long_setups": 2,
+        "short_setups": 0,
+        "tp1_hits": 0,
+        "tp2_hits": 0,
+        "tp3_hits": 0,
+        "sl_hits": 2,
+        "ambiguous_trades": 0,
+        "ambiguous_count": 0,
+        "tp1_hit_rate": 0.0,
+        "tp2_hit_rate": 0.0,
+        "tp3_hit_rate": 0.0,
+        "sl_rate": 1.0,
+        "average_R": -1.0,
+        "median_R": -1.0,
+        "expectancy_R": -1.0,
+        "profit_factor": 0.0,
+        "gross_profit_R": 0,
+        "gross_loss_R": -2.0,
+        "max_drawdown_R": 2.0,
+        "average_MAE_R": 1.1529318217561442,
+        "average_MFE_R": 0.9115624985442181,
+        "average_holding_time": 15.5,
+        "median_holding_time": 15.5,
+        "signals_per_day": 0.2191780821917808,
+        "signals_per_week": 1.5342465753424657,
+        "data_coverage": 1.0,
+        "data_quality": "DATA_OK",
+        "regime": "REGIME_NOT_AVAILABLE",
+        "period_label": "FULL",
+        "r_values": [
+          -1.0,
+          -1.0
+        ],
+        "equity_curve_r": [
+          0.0,
+          -1.0,
+          -2.0
+        ],
+        "drawdown_curve_r": [
+          0.0,
+          -1.0,
+          -2.0
+        ],
+        "setup_frequency": [
+          {
+            "date": "2025-01-17",
+            "count": 1,
+            "sample_size": 1
+          },
+          {
+            "date": "2025-01-26",
+            "count": 1,
+            "sample_size": 1
+          }
+        ],
+        "by_timeframe": {
+          "1h": {
+            "sample_size": 2,
+            "average_R": -1.0,
+            "expectancy_R": -1.0,
+            "profit_factor": 0.0
+          }
+        },
+        "by_direction": {
+          "LONG": {
+            "sample_size": 2,
+            "average_R": -1.0,
+            "expectancy_R": -1.0,
+            "tp1_hits": 0,
+            "sl_hits": 2
+          },
+          "SHORT": {
+            "sample_size": 0,
+            "average_R": null,
+            "expectancy_R": null,
+            "tp1_hits": 0,
+            "sl_hits": 0
+          }
+        },
+        "by_asset_group": {
+          "ETH": {
+            "sample_size": 2,
+            "average_R": -1.0
+          }
+        },
+        "by_regime": {
+          "REGIME_NOT_AVAILABLE": {
+            "sample_size": 2
+          }
+        },
+        "condition_definition": {
+          "combination_id": "COMBO_02",
+          "name": "TREND_BOS",
+          "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+          "require_bos": true,
+          "require_trend": true,
+          "require_impulse": false,
+          "require_pullback": false,
+          "require_rvol": false,
+          "require_sd": false,
+          "require_rr": false,
+          "require_htf_alignment": true,
+          "conditions": [
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)"
+          ],
+          "gates": {
+            "BOS": true,
+            "Trend": true,
+            "Impulse": false,
+            "Pullback": false,
+            "RVOL": false,
+            "S/D": false,
+            "R:R": false,
+            "HTF": true
+          },
+          "direction_filter_notes": {
+            "setup_tf_only": false,
+            "htf_hard_gate": true
+          }
+        },
+        "disclaimer": "Research comparison \u2014 historical analysis only. Not a ranking, not a profitability claim, not a trade recommendation.",
+        "label": "RESEARCH_COMPARISON"
+      },
+      "candles_processed": 718,
+      "htf_precompute_seconds": 0.05319010000016533,
+      "trades": [
+        {
+          "symbol": "ETHUSDT",
+          "timeframe": "1h",
+          "combination_id": "COMBO_02",
+          "entry_index": 385,
+          "signal_time": "2025-01-17T01:00:00+00:00",
+          "direction": "LONG",
+          "entry_price": 3384.71,
+          "stop_price": 3305.0787207087583,
+          "tp1": 3609.83,
+          "tp2": 3630.0,
+          "tp3": 3703.235117164967,
+          "rr": 4.0,
+          "exit_index": 413,
+          "exit_time": "2025-01-18T05:00:00+00:00",
+          "exit_price": 3305.0787207087583,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 28,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 28,
+          "mae": 94.71000000000004,
+          "mfe": 140.13999999999987,
+          "mae_r": 1.1893567558246765,
+          "mfe_r": 1.7598612159356979,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "ETH",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": true,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "ETHUSDT",
+          "timeframe": "1h",
+          "combination_id": "COMBO_02",
+          "entry_index": 604,
+          "signal_time": "2025-01-26T04:00:00+00:00",
+          "direction": "LONG",
+          "entry_price": 3351.0,
+          "stop_price": 3330.767254238094,
+          "tp1": 3396.65,
+          "tp2": 3413.55,
+          "tp3": 3431.930983047623,
+          "rr": 4.0,
+          "exit_index": 607,
+          "exit_time": "2025-01-26T07:00:00+00:00",
+          "exit_price": 3330.767254238094,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 3,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 3,
+          "mae": 22.590000000000146,
+          "mfe": 1.2800000000002,
+          "mae_r": 1.1165068876876116,
+          "mfe_r": 0.06326378115273824,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "ETH",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "SOLUSDT",
+      "timeframe": "15m",
+      "status": "OK",
+      "sample_size": 5,
+      "result": {
+        "combination_id": "COMBO_02",
+        "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+        "period_start": "2025-01-01T00:00:00+00:00",
+        "period_end": "2025-02-01T23:45:00+00:00",
+        "symbol": "SOLUSDT",
+        "timeframe": "15m",
+        "direction": "LONG",
+        "sample_size": 5,
+        "long_setups": 5,
+        "short_setups": 0,
+        "tp1_hits": 3,
+        "tp2_hits": 0,
+        "tp3_hits": 0,
+        "sl_hits": 2,
+        "ambiguous_trades": 0,
+        "ambiguous_count": 0,
+        "tp1_hit_rate": 0.6,
+        "tp2_hit_rate": 0.0,
+        "tp3_hit_rate": 0.0,
+        "sl_rate": 0.4,
+        "average_R": 0.8,
+        "median_R": 2.0,
+        "expectancy_R": 0.8,
+        "profit_factor": 3.0,
+        "gross_profit_R": 6.0,
+        "gross_loss_R": -2.0,
+        "max_drawdown_R": 1.0,
+        "average_MAE_R": 1.216166648897165,
+        "average_MFE_R": 2.061426965146629,
+        "average_holding_time": 5.2,
+        "median_holding_time": 2,
+        "signals_per_day": 15.483870967741934,
+        "signals_per_week": 108.38709677419354,
+        "data_coverage": 1.0,
+        "data_quality": "DATA_OK",
+        "regime": "REGIME_NOT_AVAILABLE",
+        "period_label": "FULL",
+        "r_values": [
+          2.0,
+          2.0,
+          -1.0,
+          2.0,
+          -1.0
+        ],
+        "equity_curve_r": [
+          0.0,
+          2.0,
+          4.0,
+          3.0,
+          5.0,
+          4.0
+        ],
+        "drawdown_curve_r": [
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0,
+          -1.0
+        ],
+        "setup_frequency": [
+          {
+            "date": "2025-01-18",
+            "count": 5,
+            "sample_size": 5
+          }
+        ],
+        "by_timeframe": {
+          "15m": {
+            "sample_size": 5,
+            "average_R": 0.8,
+            "expectancy_R": 0.8,
+            "profit_factor": 3.0
+          }
+        },
+        "by_direction": {
+          "LONG": {
+            "sample_size": 5,
+            "average_R": 0.8,
+            "expectancy_R": 0.8,
+            "tp1_hits": 3,
+            "sl_hits": 2
+          },
+          "SHORT": {
+            "sample_size": 0,
+            "average_R": null,
+            "expectancy_R": null,
+            "tp1_hits": 0,
+            "sl_hits": 0
+          }
+        },
+        "by_asset_group": {
+          "UNKNOWN": {
+            "sample_size": 5,
+            "average_R": 0.8
+          }
+        },
+        "by_regime": {
+          "REGIME_NOT_AVAILABLE": {
+            "sample_size": 5
+          }
+        },
+        "condition_definition": {
+          "combination_id": "COMBO_02",
+          "name": "TREND_BOS",
+          "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+          "require_bos": true,
+          "require_trend": true,
+          "require_impulse": false,
+          "require_pullback": false,
+          "require_rvol": false,
+          "require_sd": false,
+          "require_rr": false,
+          "require_htf_alignment": true,
+          "conditions": [
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)"
+          ],
+          "gates": {
+            "BOS": true,
+            "Trend": true,
+            "Impulse": false,
+            "Pullback": false,
+            "RVOL": false,
+            "S/D": false,
+            "R:R": false,
+            "HTF": true
+          },
+          "direction_filter_notes": {
+            "setup_tf_only": false,
+            "htf_hard_gate": true
+          }
+        },
+        "disclaimer": "Research comparison \u2014 historical analysis only. Not a ranking, not a profitability claim, not a trade recommendation.",
+        "label": "RESEARCH_COMPARISON"
+      },
+      "candles_processed": 3022,
+      "htf_precompute_seconds": 0.17205310000008467,
+      "trades": [
+        {
+          "symbol": "SOLUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1643,
+          "signal_time": "2025-01-18T02:45:00+00:00",
+          "direction": "LONG",
+          "entry_price": 221.98,
+          "stop_price": 218.56864504030355,
+          "tp1": 228.80270991939287,
+          "tp2": 232.2140648790893,
+          "tp3": 235.62541983878575,
+          "rr": 4.0,
+          "exit_index": 1650,
+          "exit_time": "2025-01-18T04:30:00+00:00",
+          "exit_price": 228.80270991939287,
+          "outcome": "TP1",
+          "r_multiple": 2.0,
+          "holding_bars": 7,
+          "time_to_tp1": 7,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 2.859999999999985,
+          "mfe": 8.110000000000014,
+          "mae_r": 0.8383765494325702,
+          "mfe_r": 2.377354481083284,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "UNKNOWN",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": true,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "SOLUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1653,
+          "signal_time": "2025-01-18T05:15:00+00:00",
+          "direction": "LONG",
+          "entry_price": 229.67,
+          "stop_price": 225.20137729036838,
+          "tp1": 238.6072454192632,
+          "tp2": 243.0758681288948,
+          "tp3": 247.5444908385264,
+          "rr": 4.0,
+          "exit_index": 1667,
+          "exit_time": "2025-01-18T08:45:00+00:00",
+          "exit_price": 238.6072454192632,
+          "outcome": "TP1",
+          "r_multiple": 2.0,
+          "holding_bars": 14,
+          "time_to_tp1": 14,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 4.189999999999998,
+          "mfe": 10.730000000000018,
+          "mae_r": 0.9376490861421202,
+          "mfe_r": 2.4011872778770815,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "UNKNOWN",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "SOLUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1668,
+          "signal_time": "2025-01-18T09:00:00+00:00",
+          "direction": "LONG",
+          "entry_price": 239.34,
+          "stop_price": 237.44494409333117,
+          "tp1": 243.13011181333766,
+          "tp2": 245.0251677200065,
+          "tp3": 246.92022362667532,
+          "rr": 4.0,
+          "exit_index": 1670,
+          "exit_time": "2025-01-18T09:30:00+00:00",
+          "exit_price": 237.44494409333117,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 2,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 2,
+          "mae": 3.210000000000008,
+          "mfe": 2.4099999999999966,
+          "mae_r": 1.6938814251884606,
+          "mfe_r": 1.271730291185101,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "UNKNOWN",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "SOLUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1671,
+          "signal_time": "2025-01-18T09:45:00+00:00",
+          "direction": "LONG",
+          "entry_price": 238.03,
+          "stop_price": 236.08001391146087,
+          "tp1": 241.92997217707827,
+          "tp2": 243.8799582656174,
+          "tp3": 245.82994435415654,
+          "rr": 4.0,
+          "exit_index": 1673,
+          "exit_time": "2025-01-18T10:15:00+00:00",
+          "exit_price": 241.92997217707827,
+          "outcome": "TP1",
+          "r_multiple": 2.0,
+          "holding_bars": 2,
+          "time_to_tp1": 2,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 0.3199999999999932,
+          "mfe": 5.569999999999993,
+          "mae_r": 0.1641037348321427,
+          "mfe_r": 2.8564306344220407,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "UNKNOWN",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "SOLUSDT",
+          "timeframe": "15m",
+          "combination_id": "COMBO_02",
+          "entry_index": 1674,
+          "signal_time": "2025-01-18T10:30:00+00:00",
+          "direction": "LONG",
+          "entry_price": 241.99,
+          "stop_price": 240.71896376220099,
+          "tp1": 244.53207247559806,
+          "tp2": 245.80310871339708,
+          "tp3": 247.0741449511961,
+          "rr": 4.0,
+          "exit_index": 1675,
+          "exit_time": "2025-01-18T10:45:00+00:00",
+          "exit_price": 240.71896376220099,
+          "outcome": "SL",
+          "r_multiple": -1.0,
+          "holding_bars": 1,
+          "time_to_tp1": null,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": 1,
+          "mae": 3.1100000000000136,
+          "mfe": 1.7800000000000011,
+          "mae_r": 2.4468224488905306,
+          "mfe_r": 1.400432141165636,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "UNKNOWN",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": false,
+            "pullback": false,
+            "rvol": false,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "SOLUSDT",
+      "timeframe": "1h",
+      "status": "OK",
+      "sample_size": 2,
+      "result": {
+        "combination_id": "COMBO_02",
+        "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+        "period_start": "2025-01-01T00:00:00+00:00",
+        "period_end": "2025-02-01T23:00:00+00:00",
+        "symbol": "SOLUSDT",
+        "timeframe": "1h",
+        "direction": "LONG",
+        "sample_size": 2,
+        "long_setups": 2,
+        "short_setups": 0,
+        "tp1_hits": 2,
+        "tp2_hits": 0,
+        "tp3_hits": 0,
+        "sl_hits": 0,
+        "ambiguous_trades": 0,
+        "ambiguous_count": 0,
+        "tp1_hit_rate": 1.0,
+        "tp2_hit_rate": 0.0,
+        "tp3_hit_rate": 0.0,
+        "sl_rate": 0.0,
+        "average_R": 1.9999999999999987,
+        "median_R": 1.9999999999999987,
+        "expectancy_R": 1.9999999999999987,
+        "profit_factor": Infinity,
+        "gross_profit_R": 3.9999999999999973,
+        "gross_loss_R": 0,
+        "max_drawdown_R": 0.0,
+        "average_MAE_R": 0.37015794632718463,
+        "average_MFE_R": 2.694436285476922,
+        "average_holding_time": 11.0,
+        "median_holding_time": 11.0,
+        "signals_per_day": 3.6923076923076925,
+        "signals_per_week": 25.846153846153847,
+        "data_coverage": 1.0,
+        "data_quality": "DATA_OK",
+        "regime": "REGIME_NOT_AVAILABLE",
+        "period_label": "FULL",
+        "r_values": [
+          2.0,
+          1.9999999999999976
+        ],
+        "equity_curve_r": [
+          0.0,
+          2.0,
+          3.9999999999999973
+        ],
+        "drawdown_curve_r": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "setup_frequency": [
+          {
+            "date": "2025-01-18",
+            "count": 2,
+            "sample_size": 2
+          }
+        ],
+        "by_timeframe": {
+          "1h": {
+            "sample_size": 2,
+            "average_R": 1.9999999999999987,
+            "expectancy_R": 1.9999999999999987,
+            "profit_factor": Infinity
+          }
+        },
+        "by_direction": {
+          "LONG": {
+            "sample_size": 2,
+            "average_R": 1.9999999999999987,
+            "expectancy_R": 1.9999999999999987,
+            "tp1_hits": 2,
+            "sl_hits": 0
+          },
+          "SHORT": {
+            "sample_size": 0,
+            "average_R": null,
+            "expectancy_R": null,
+            "tp1_hits": 0,
+            "sl_hits": 0
+          }
+        },
+        "by_asset_group": {
+          "UNKNOWN": {
+            "sample_size": 2,
+            "average_R": 1.9999999999999987
+          }
+        },
+        "by_regime": {
+          "REGIME_NOT_AVAILABLE": {
+            "sample_size": 2
+          }
+        },
+        "condition_definition": {
+          "combination_id": "COMBO_02",
+          "name": "TREND_BOS",
+          "description": "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF structure aligned with BOS direction (fail closed).",
+          "require_bos": true,
+          "require_trend": true,
+          "require_impulse": false,
+          "require_pullback": false,
+          "require_rvol": false,
+          "require_sd": false,
+          "require_rr": false,
+          "require_htf_alignment": true,
+          "conditions": [
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)"
+          ],
+          "gates": {
+            "BOS": true,
+            "Trend": true,
+            "Impulse": false,
+            "Pullback": false,
+            "RVOL": false,
+            "S/D": false,
+            "R:R": false,
+            "HTF": true
+          },
+          "direction_filter_notes": {
+            "setup_tf_only": false,
+            "htf_hard_gate": true
+          }
+        },
+        "disclaimer": "Research comparison \u2014 historical analysis only. Not a ranking, not a profitability claim, not a trade recommendation.",
+        "label": "RESEARCH_COMPARISON"
+      },
+      "candles_processed": 718,
+      "htf_precompute_seconds": 0.050259600000117644,
+      "trades": [
+        {
+          "symbol": "SOLUSDT",
+          "timeframe": "1h",
+          "combination_id": "COMBO_02",
+          "entry_index": 412,
+          "signal_time": "2025-01-18T04:00:00+00:00",
+          "direction": "LONG",
+          "entry_price": 228.36,
+          "stop_price": 218.88418467049408,
+          "tp1": 247.31163065901188,
+          "tp2": 256.7874459885178,
+          "tp3": 266.26326131802375,
+          "rr": 4.0,
+          "exit_index": 423,
+          "exit_time": "2025-01-18T15:00:00+00:00",
+          "exit_price": 247.31163065901188,
+          "outcome": "TP1",
+          "r_multiple": 2.0,
+          "holding_bars": 11,
+          "time_to_tp1": 11,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 2.880000000000024,
+          "mfe": 31.639999999999986,
+          "mae_r": 0.3039316301397556,
+          "mfe_r": 3.3390266588964526,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "UNKNOWN",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": true,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        },
+        {
+          "symbol": "SOLUSDT",
+          "timeframe": "1h",
+          "combination_id": "COMBO_02",
+          "entry_index": 425,
+          "signal_time": "2025-01-18T17:00:00+00:00",
+          "direction": "LONG",
+          "entry_price": 252.03,
+          "stop_price": 240.82427967493155,
+          "tp1": 274.4414406501369,
+          "tp2": 285.64716097520534,
+          "tp3": 296.8528813002738,
+          "rr": 4.0,
+          "exit_index": 436,
+          "exit_time": "2025-01-19T04:00:00+00:00",
+          "exit_price": 274.4414406501369,
+          "outcome": "TP1",
+          "r_multiple": 1.9999999999999976,
+          "holding_bars": 11,
+          "time_to_tp1": 11,
+          "time_to_tp2": null,
+          "time_to_tp3": null,
+          "time_to_sl": null,
+          "mae": 4.890000000000015,
+          "mfe": 22.97,
+          "mae_r": 0.43638426251461365,
+          "mfe_r": 2.0498459120573918,
+          "ambiguous": false,
+          "period_label": "FULL",
+          "asset_group": "UNKNOWN",
+          "condition_snapshot": {
+            "bos": true,
+            "trend": true,
+            "impulse": true,
+            "pullback": false,
+            "rvol": true,
+            "sd": false,
+            "htf": true,
+            "rr": true,
+            "entry_type": "MARKET",
+            "htf_alignment": "HTF_ALIGNED",
+            "trend_4h": "BULLISH",
+            "trend_1h": "BULLISH"
+          }
+        }
+      ]
+    }
+  ],
+  "created_at": "2026-10-04T14:02:04.621921+00:00"
+}

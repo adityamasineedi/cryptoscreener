@@ -9,6 +9,7 @@ import {
   type PaperOpportunity,
   type PaperPosition,
   type PaperStatus,
+  type PaperWatcherBookLive,
 } from "../api/client";
 
 function fmt(n: number | null | undefined, digits = 2): string {
@@ -215,7 +216,9 @@ export function PaperTradePanel() {
             <span className="text-terminal-text">COMBO_02 v1 1h watcher</span>{" "}
             (BTC / ETH / SOL) and 15m{" "}
             <span className="text-terminal-text">RESEARCH_15M</span> Trade chances,
-            each with its own source label. One open position per symbol; exits at
+            each with its own source label. LEGACY and v1 tracks stay open
+            separately on the same symbol; Telegram only for COMBO_02 v1.
+            Exits at
             stop or TP1 on mark/last. No real exchange orders. Freeze:{" "}
             <span className="font-mono text-terminal-text/80">v1-combo02-long-htf</span>.
           </p>
@@ -348,7 +351,7 @@ export function PaperTradePanel() {
         </h2>
         <TradeTable
           rows={open}
-          empty="No open paper positions — waiting for next COMBO_02 v1 1h LONG (BTC/ETH/SOL, HTF-aligned)."
+          empty="No open paper positions — LEGACY 15m and COMBO_02 v1 are tracked separately."
           mode="open"
         />
       </section>
@@ -394,7 +397,9 @@ function MonitorPanel({
   telegram: PaperStatus["telegram"];
   status: PaperStatus | null;
 }) {
-  const books = watcher?.live?.length ? watcher.live : watcher?.books || [];
+  const liveBooks = watcher?.live?.length ? watcher.live : [];
+  const books: Array<PaperWatcherBookLive | { symbol: string; timeframe?: string; tier?: string; risk_percent?: number }> =
+    liveBooks.length ? liveBooks : watcher?.books || [];
   const tgReady = Boolean(telegram?.ready);
   const tgReason = telegram?.reason || null;
   const bookRisk =
@@ -501,7 +506,9 @@ function MonitorPanel({
             </thead>
             <tbody>
               {books.map((b) => {
-                const live = "tip_status" in b ? b : null;
+                const live: PaperWatcherBookLive | null = liveBooks.length
+                  ? (b as PaperWatcherBookLive)
+                  : null;
                 const gates = live?.gates;
                 const gateTxt = gates
                   ? `T${gates.trend ? "✓" : "·"} B${gates.bos ? "✓" : "·"} H${gates.htf ? "✓" : "·"}`
@@ -681,6 +688,7 @@ function TradeTable({
         <thead className="bg-black/20 text-[10px] uppercase tracking-wide text-terminal-muted">
           <tr>
             <th className="px-2 py-1.5">Symbol</th>
+            <th className="px-2 py-1.5">Stream</th>
             <th className="px-2 py-1.5">Path</th>
             <th className="px-2 py-1.5">Version</th>
             {mode === "cancelled" ? (
@@ -721,6 +729,15 @@ function TradeTable({
             const snippet = (r.signal_snippet || {}) as Record<string, unknown>;
             const path = String(snippet.path || "—");
             const ver = String(snippet.combo_version || "—");
+            const source = String(snippet.source || "");
+            const stream =
+              source === "V1_PAPER_WATCHER" ||
+              String(snippet.strategy_id || "") === "COMBO_02_V1"
+                ? "V1"
+                : source === "V2_CANDIDATE_PAPER_WATCHER" ||
+                    String(snippet.strategy_id || "") === "COMBO_02_V2_RESEARCH"
+                  ? "V2"
+                  : "LEGACY";
             const riskPct = snippet.risk_percent as number | null | undefined;
             const riskLabel =
               riskPct != null
@@ -729,6 +746,18 @@ function TradeTable({
             return (
             <tr key={r.id} className="border-t border-terminal-border/70">
               <td className="px-2 py-1.5 text-terminal-text">{r.symbol}</td>
+              <td
+                className={`px-2 py-1.5 whitespace-nowrap ${
+                  stream === "V1"
+                    ? "text-emerald-300"
+                    : stream === "V2"
+                      ? "text-amber-200"
+                      : "text-terminal-muted"
+                }`}
+                title={source || stream}
+              >
+                {stream}
+              </td>
               <td className="px-2 py-1.5 whitespace-nowrap" title={path}>
                 {path}
               </td>

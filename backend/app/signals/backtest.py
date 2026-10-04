@@ -12,6 +12,7 @@ from typing import Any, Mapping, Sequence
 from app.signals.config import SignalConfig
 from app.signals.signal_engine import SignalEngine
 from app.signals.schemas import SignalStatus
+from app.signals.trade_math import parse_direction_optional
 
 
 @dataclass
@@ -181,10 +182,20 @@ def run_backtest(
                 sp = analysis.stop.get("final_stop")
                 tps = [float(t["target_price"]) for t in analysis.targets if t.get("target_price")]
                 if ep is not None and sp is not None and tps:
+                    parsed = parse_direction_optional(analysis.direction)
+                    # SHORT research path: never invent LONG from a missing direction.
+                    if analysis.status == SignalStatus.SHORT_ENTRY_CANDIDATE.value:
+                        if parsed is None or parsed.value != "SHORT":
+                            continue
+                        trade_direction = "SHORT"
+                    else:
+                        # Explicit LONG default only for non-SHORT entry statuses
+                        # (preserves historical LONG backtest callers).
+                        trade_direction = parsed.value if parsed is not None else "LONG"
                     report.entries += 1
                     open_trade = BacktestTrade(
                         entry_index=i,
-                        direction=str(analysis.direction or "LONG"),
+                        direction=trade_direction,
                         entry=float(ep),
                         stop=float(sp),
                         targets=tps,

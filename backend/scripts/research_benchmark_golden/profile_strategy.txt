@@ -1,0 +1,139 @@
+RESEARCH STRATEGY EVALUATION PROFILE
+============================================================
+Dataset: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'] ['15m', '1h'] 2025-01-01->2025-02-01
+COMBO_02 wall seconds: 18.965
+Trades: 17 (golden expect 17)
+
+TOP FUNCTIONS (cumulative)
+------------------------------------------------------------
+  18.967s  100.0%  n=1         [PRIMARY_BOTTLENECK]  feature_atr               _run_combo_matrix
+  18.962s  100.0%  n=6         [PRIMARY_BOTTLENECK]  other                     run_combination_backtest
+  15.026s   79.2%  n=205       [PRIMARY_BOTTLENECK]  entry_evaluation          evaluate_combination_at_bar
+  14.402s   75.9%  n=205       [PRIMARY_BOTTLENECK]  structure_calculation     analyze_timeframe
+  11.682s   61.6%  n=50363     [PRIMARY_BOTTLENECK]  other                     to_dict
+  10.955s   57.8%  n=50449     [PRIMARY_BOTTLENECK]  other                     asdict
+  10.805s   57.0%  n=506132    [PRIMARY_BOTTLENECK]  other                     _asdict_inner
+   8.547s   45.1%  n=727870    [PRIMARY_BOTTLENECK]  object_copying            deepcopy
+   7.075s   37.3%  n=302389    [PRIMARY_BOTTLENECK]  other                     _reconstruct
+   6.550s   34.5%  n=906956    [PRIMARY_BOTTLENECK]  other                     <genexpr>
+
+cProfile dump (COMBO_02):
+         16137780 function calls (14246952 primitive calls) in 18.949 seconds
+
+   Ordered by: cumulative time
+   List reduced from 446 to 60 due to restriction <60>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.003    0.003   18.967   18.967 E:\cryptoscreener\backend\scripts\profile_strategy_evaluation.py:116(_run_combo_matrix)
+        6    0.200    0.033   18.962    3.160 E:\cryptoscreener\backend\app\research\combination_backtest.py:285(run_combination_backtest)
+      205    0.020    0.000   15.026    0.073 E:\cryptoscreener\backend\app\research\combination_engine.py:264(evaluate_combination_at_bar)
+      205    0.073    0.000   14.402    0.070 E:\cryptoscreener\backend\app\signals\signal_engine.py:206(analyze_timeframe)
+    50363    0.216    0.000   11.682    0.000 E:\cryptoscreener\backend\app\signals\schemas.py:97(to_dict)
+    50449    0.081    0.000   10.955    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1308(asdict)
+506132/50449    1.324    0.000   10.805    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1332(_asdict_inner)
+727870/100937    3.356    0.000    8.547    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:118(deepcopy)
+302389/100937    1.260    0.000    7.075    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:247(_reconstruct)
+906956/302600    0.656    0.000    6.550    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:252(<genexpr>)
+      253    0.854    0.003    2.920    0.012 E:\cryptoscreener\backend\app\signals\_candle_utils.py:37(series_ohlcv)
+      205    0.027    0.000    2.603    0.013 E:\cryptoscreener\backend\app\signals\bos_engine.py:12(detect_bos)
+    10794    0.689    0.000    1.368    0.000 E:\cryptoscreener\backend\app\research\combination_backtest.py:60(_bos_break_possible)
+  3475488    1.346    0.000    1.346    0.000 {method 'get' of 'dict' objects}
+   304977    0.882    0.000    1.300    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:23(ohlc)
+   201663    0.421    0.000    0.980    0.000 {method '__reduce_ex__' of 'object' objects}
+    16980    0.189    0.000    0.799    0.000 E:\cryptoscreener\backend\app\signals\swing_detector.py:150(extend_swings)
+    16789    0.635    0.000    0.693    0.000 E:\cryptoscreener\backend\app\signals\trend_engine.py:10(infer_trend)
+  1622028    0.585    0.000    0.585    0.000 {method 'append' of 'list' objects}
+   100727    0.389    0.000    0.558    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copyreg.py:107(_slotnames)
+    50449    0.327    0.000    0.541    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1278(fields)
+   202296    0.362    0.000    0.507    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:231(_keep_alive)
+   101465    0.480    0.000    0.480    0.000 {method 'isoformat' of 'datetime.datetime' objects}
+  1137198    0.467    0.000    0.467    0.000 {built-in method builtins.getattr}
+      205    0.004    0.000    0.453    0.002 E:\cryptoscreener\backend\app\research\combination_engine.py:53(htf_alignment_gate)
+      205    0.003    0.000    0.446    0.002 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:194(htf_trends_for_setup_bar)
+       36    0.086    0.002    0.443    0.012 E:\cryptoscreener\backend\app\signals\swing_detector.py:18(detect_swings)
+      440    0.001    0.000    0.441    0.001 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:57(trend_at_as_of)
+       30    0.001    0.000    0.438    0.015 E:\cryptoscreener\backend\app\signals\swing_detector.py:129(swings_for_timeframe)
+  1334336    0.425    0.000    0.425    0.000 {built-in method builtins.id}
+        6    0.000    0.000    0.362    0.060 E:\cryptoscreener\backend\app\config.py:266(indicators_config)
+        6    0.000    0.000    0.362    0.060 E:\cryptoscreener\backend\app\config.py:18(load_yaml)
+        6    0.000    0.000    0.359    0.060 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\__init__.py:117(safe_load)
+        6    0.001    0.000    0.359    0.060 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\__init__.py:74(load)
+        6    0.000    0.000    0.356    0.059 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\constructor.py:47(get_single_data)
+       12    0.024    0.002    0.351    0.029 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:86(precompute_htf_trend_cache)
+        6    0.000    0.000    0.340    0.057 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:29(get_single_node)
+        6    0.000    0.000    0.338    0.056 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:50(compose_document)
+   1542/6    0.009    0.000    0.338    0.056 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:63(compose_node)
+    126/6    0.004    0.000    0.337    0.056 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\composer.py:117(compose_mapping_node)
+   293773    0.237    0.000    0.335    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:32(volume_at)
+     3325    0.208    0.000    0.324    0.000 {method 'sort' of 'list' objects}
+   758154    0.315    0.000    0.316    0.000 {built-in method builtins.isinstance}
+     4380    0.008    0.000    0.303    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\parser.py:94(check_event)
+    46296    0.046    0.000    0.272    0.000 {built-in method builtins.next}
+    23067    0.033    0.000    0.262    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py:141(__exit__)
+   201762    0.184    0.000    0.257    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1296(_is_dataclass_instance)
+   406245    0.232    0.000    0.232    0.000 {built-in method builtins.hasattr}
+    11508    0.024    0.000    0.232    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\scanner.py:113(check_token)
+    46134    0.056    0.000    0.226    0.000 E:\cryptoscreener\backend\app\research\data_cache\stage_profiler.py:53(time)
+   116784    0.139    0.000    0.217    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:9(candle_time)
+        6    0.094    0.016    0.201    0.034 E:\cryptoscreener\backend\app\research\data_quality.py:49(verify_ohlcv)
+   505042    0.166    0.000    0.166    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1293(<genexpr>)
+     3302    0.161    0.000    0.161    0.000 E:\cryptoscreener\backend\app\signals\swing_detector.py:110(_label_swings)
+     2352    0.015    0.000    0.159    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\scanner.py:156(fetch_more_tokens)
+       12    0.062    0.005    0.154    0.013 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\htf.py:126(build_htf_as_of_index_map)
+    23067    0.112    0.000    0.153    0.000 E:\cryptoscreener\backend\app\research\data_cache\stage_profiler.py:45(add)
+       42    0.058    0.001    0.131    0.003 E:\cryptoscreener\backend\app\engines\mtf\indicators.py:37(_true_ranges)
+      720    0.004    0.000    0.123    0.000 E:\cryptoscreener\backend\.venv\Lib\site-packages\yaml\parser.py:427(parse_block_mapping_key)
+      211    0.001    0.000    0.117    0.001 E:\cryptoscreener\backend\app\research\combination_engine.py:31(_clone_signal_config)
+
+
+
+
+cProfile dump (lifecycle):
+         463443321 function calls (429439504 primitive calls) in 426.936 seconds
+
+   Ordered by: cumulative time
+   List reduced from 342 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.001    0.001  427.407  427.407 E:\cryptoscreener\backend\scripts\profile_strategy_evaluation.py:174(_run_lifecycle_pass)
+        1    0.001    0.001  427.378  427.378 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\lifecycle.py:561(run_lifecycles_for_series)
+        1    0.584    0.584  422.794  422.794 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\lifecycle.py:514(discover_impulse_events)
+     3072    1.331    0.000  421.996    0.137 E:\cryptoscreener\backend\app\signals\signal_engine.py:206(analyze_timeframe)
+   918766    3.622    0.000  190.178    0.000 E:\cryptoscreener\backend\app\signals\schemas.py:97(to_dict)
+   918766    1.406    0.000  178.072    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1308(asdict)
+9187660/918766   21.566    0.000  175.546    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1332(_asdict_inner)
+12865236/1837616   54.593    0.000  136.732    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:118(deepcopy)
+     9519   38.313    0.004  130.544    0.014 E:\cryptoscreener\backend\app\signals\_candle_utils.py:37(series_ohlcv)
+5512598/1837534   20.780    0.000  112.722    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:247(_reconstruct)
+     3072    0.138    0.000  106.088    0.035 E:\cryptoscreener\backend\app\signals\swing_detector.py:129(swings_for_timeframe)
+     3072   21.020    0.007  105.922    0.034 E:\cryptoscreener\backend\app\signals\swing_detector.py:18(detect_swings)
+16537792/5512600   10.851    0.000  105.791    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:252(<genexpr>)
+     3072    0.480    0.000   62.301    0.020 E:\cryptoscreener\backend\app\signals\bos_engine.py:12(detect_bos)
+     3072    0.323    0.000   61.444    0.020 E:\cryptoscreener\backend\app\signals\impulse_engine.py:13(detect_impulse)
+     9519    2.736    0.000   57.111    0.006 E:\cryptoscreener\backend\app\engines\mtf\indicators.py:53(atr)
+ 14535573   38.168    0.000   55.976    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:23(ohlc)
+     9519   23.619    0.002   52.498    0.006 E:\cryptoscreener\backend\app\engines\mtf\indicators.py:37(_true_ranges)
+113490788   36.337    0.000   36.337    0.000 {method 'get' of 'dict' objects}
+ 89807280   27.702    0.000   27.702    0.000 {method 'append' of 'list' objects}
+ 14514309   10.723    0.000   14.961    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:32(volume_at)
+  3675066    6.742    0.000   14.637    0.000 {method '__reduce_ex__' of 'object' objects}
+  9409587    8.942    0.000   14.149    0.000 E:\cryptoscreener\backend\app\signals\_candle_utils.py:9(candle_time)
+ 21970024   10.934    0.000   10.934    0.000 {built-in method builtins.max}
+    28557    9.362    0.000    9.362    0.000 E:\cryptoscreener\backend\app\engines\mtf\indicators.py:10(_as_floats)
+   918766    5.379    0.000    8.838    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1278(fields)
+  3675154    6.204    0.000    8.544    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copy.py:231(_keep_alive)
+  1837532    6.253    0.000    7.894    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\copyreg.py:107(_slotnames)
+ 29003493    7.873    0.000    7.873    0.000 {built-in method builtins.abs}
+  1838439    7.646    0.000    7.646    0.000 {method 'isoformat' of 'datetime.datetime' objects}
+ 20218630    7.491    0.000    7.491    0.000 {built-in method builtins.getattr}
+ 23890701    6.873    0.000    6.873    0.000 {built-in method builtins.id}
+20502971/20495975    6.229    0.000    6.323    0.000 {built-in method builtins.isinstance}
+       46    0.022    0.000    4.579    0.100 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\lifecycle.py:313(run_lifecycle)
+      319    0.009    0.000    4.346    0.014 E:\cryptoscreener\backend\app\research\bos_strategy_comparison\lifecycle.py:289(evaluate_retest_at)
+     3391    0.033    0.000    4.320    0.001 E:\cryptoscreener\backend\app\signals\retest_engine.py:66(detect_retest)
+  8373948    4.271    0.000    4.271    0.000 {built-in method builtins.min}
+  3675064    2.982    0.000    4.114    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1296(_is_dataclass_instance)
+  9187660    2.658    0.000    2.658    0.000 C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\dataclasses.py:1293(<genexpr>)
+  7350156    2.579    0.000    2.579    0.000 {built-in method builtins.hasattr}
+
+

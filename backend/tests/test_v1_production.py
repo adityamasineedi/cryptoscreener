@@ -96,7 +96,11 @@ def _path_a(
     }
 
 
-def test_path_a_v1_applies_btc_core_risk():
+def test_path_a_legacy_and_v1_coexist_on_same_symbol(monkeypatch):
+    """LEGACY + V1 streams track separately — same symbol may have both open."""
+    import app.services.paper_trade as paper_mod
+
+    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
     eng = PaperTradeEngine(
         entry_mode="path_a",
         starting_equity=1000,
@@ -105,32 +109,39 @@ def test_path_a_v1_applies_btc_core_risk():
         v1_profile_enabled=True,
     )
     eng.legacy_auto_entry_enabled = True
-    pos = eng.on_setup_signal("BTCUSDT", _path_a())
-    assert pos is not None
-    assert pos.risk_usd == pytest.approx(15.0)
-    # Legacy setup path is RESEARCH_15M — never COMBO_02_V1 identity.
-    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
-    assert pos.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
-    assert pos.signal_snippet.get("telegram_eligible") is False
-    assert pos.signal_snippet.get("trend_1h") == "BULLISH"
-    assert pos.signal_snippet.get("trend_4h") == "BULLISH"
-    assert pos.signal_snippet.get("htf_alignment") in ("STRONG_LONG", "HTF_ALIGNED")
+    eng.v1_watcher_owns_entries = False
 
+    legacy = eng.on_setup_signal("BTCUSDT", _path_a())
+    assert legacy is not None
+    assert legacy.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
+    assert eng.has_open("BTCUSDT", "LEGACY")
 
-def test_path_a_v1_eth_secondary_risk():
-    eng = PaperTradeEngine(
-        entry_mode="path_a",
-        starting_equity=1000,
-        risk_policy=PaperRiskPolicy(enabled=False),
-        v1_profile_enabled=True,
-        v1_secondary_enabled=True,
+    from app.research.v1_production import V1Book
+
+    v1 = eng.open_v1_combo_position(
+        symbol="BTCUSDT",
+        timeframe="1h",
+        book=V1Book("BTCUSDT", "1h", "core", 0.015, True),
+        eval_result={
+            "status": "LONG_ENTRY_CANDIDATE",
+            "entry_price": 100.0,
+            "stop_price": 98.0,
+            "tp1": 104.0,
+            "htf": {
+                "htf_alignment": "HTF_ALIGNED",
+                "trend_1h": "BULLISH",
+                "trend_4h": "BULLISH",
+            },
+        },
+        setup_bar_time_utc="2026-10-02T15:00:00+00:00",
+        emit_alert=False,
     )
-    eng.legacy_auto_entry_enabled = True
-    pos = eng.on_setup_signal("ETHUSDT", _path_a())
-    assert pos is not None
-    assert pos.risk_usd == pytest.approx(5.0)
-    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
-    assert paper_risk_percent("ETHUSDT") == pytest.approx(0.005)
+    assert v1 is not None
+    assert v1.signal_snippet.get("source") == "V1_PAPER_WATCHER"
+    assert eng.has_open("BTCUSDT", "V1")
+    assert eng.status()["open_count"] == 2
+    assert eng.status()["open_by_stream"]["LEGACY"] == 1
+    assert eng.status()["open_by_stream"]["V1"] == 1
 
 
 def test_path_a_legacy_allows_outside_v1_universe():
@@ -150,17 +161,18 @@ def test_path_a_legacy_allows_outside_v1_universe():
     assert pos.signal_snippet.get("source") == "LEGACY_SETUP_SIGNAL"
 
 
-def test_path_a_legacy_opens_eth_when_v1_secondary_disabled():
-    """v1 secondary flag only affects watcher books / soft sizing, not legacy opens."""
+def test_path_a_legacy_may_open_btc_when_v1_profile_off():
+    """Without v1 profile, BTC remains a normal RESEARCH_15M Path A symbol."""
     eng = PaperTradeEngine(
         entry_mode="path_a",
         starting_equity=1000,
         risk_policy=PaperRiskPolicy(enabled=False),
-        v1_profile_enabled=True,
-        v1_secondary_enabled=False,
+        v1_profile_enabled=False,
     )
     eng.legacy_auto_entry_enabled = True
     eng.v1_watcher_owns_entries = False
-    pos = eng.on_setup_signal("ETHUSDT", _path_a())
+    pos = eng.on_setup_signal("BTCUSDT", _path_a())
     assert pos is not None
     assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
+    assert pos.signal_snippet.get("telegram_eligible") is False
+    assert paper_risk_percent("ETHUSDT") == pytest.approx(0.005)

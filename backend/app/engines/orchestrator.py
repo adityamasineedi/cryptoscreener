@@ -800,7 +800,10 @@ class CalculationOrchestrator:
                 # Flush opens/closes first so a restart mid-sleep cannot drop them
                 await flush_paper_trade_persists(paper)
                 prices: dict[str, float] = {}
-                for sym in list(paper._open.keys()):  # noqa: SLF001
+                for pos in list(paper._open.values()):  # noqa: SLF001
+                    sym = getattr(pos, "symbol", None)
+                    if not sym:
+                        continue
                     mark = market_store.mark_prices.get(sym)
                     if mark is not None and getattr(mark, "mark_price", None):
                         prices[sym] = float(mark.mark_price)
