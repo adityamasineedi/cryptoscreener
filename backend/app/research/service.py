@@ -93,6 +93,9 @@ async def _load_research_candles(
 
     Date bounds use UTC calendar days: start <= ts < end_exclusive.
     Warmup bars precede start so structure/gates can form before evaluation.
+
+    When ``RESEARCH_CACHE_ENABLED=true`` and date bounds are set, prefers the
+    research Parquet cache (bulk PG on miss). Live trading paths do not use this.
     """
     from app.services.database import db_manager
     from app.research.postgres_ohlcv import (
@@ -104,8 +107,37 @@ async def _load_research_candles(
     tf = normalize_research_timeframe(timeframe)
     bounds = resolve_date_bounds(start_date, end_date)
     source = "postgresql_ohlcv"
+    raw: list[dict[str, Any]] = []
+
+    # Research-only cache path (optional). Never used by live signal engines.
     try:
-        if db_manager.enabled and db_manager.engine is not None:
+        from app.research.data_cache.config import load_research_cache_config
+
+        cache_cfg = load_research_cache_config()
+        if (
+            cache_cfg.enabled
+            and (bounds["start"] is not None or bounds["end_exclusive"] is not None)
+            and db_manager.enabled
+            and db_manager.engine is not None
+        ):
+            from app.research.data_cache.cache_manager import get_research_cache
+
+            start_s = start_date[:10] if start_date else None
+            end_s = end_date[:10] if end_date else None
+            ds = await get_research_cache(cache_cfg).load(
+                symbol=sym,
+                timeframe=tf,
+                start=start_s,
+                end=end_s,
+            )
+            raw = ds.as_candles()
+            source = f"research_parquet_cache:{ds.source}"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("research_cache_load_failed", error=str(exc))
+        raw = []
+
+    try:
+        if not raw and db_manager.enabled and db_manager.engine is not None:
             if bounds["start"] is not None or bounds["end_exclusive"] is not None:
                 # Bounded SQL load (+ warmup) — never pull the entire multi-year series.
                 raw = await load_ohlcv_series_range(
@@ -117,7 +149,7 @@ async def _load_research_candles(
                 )
             else:
                 raw = await load_ohlcv_series_tail(sym, tf, limit=max(limit, 1))
-        else:
+        elif not raw:
             source = "ohlcv_store_memory"
             raw = _load_candles_memory(sym, tf, limit if not bounds["start"] else 50_000)
             if not raw:
@@ -850,10 +882,14 @@ class BosResearchService:
         end_date: str | None = None,
         taker_fee: float = DEFAULT_TAKER_FEE,
         maker_fee: float = DEFAULT_MAKER_FEE,
+        leverage: float = 2.0,
         include_trades: bool = True,
         should_cancel: Any | None = None,
     ) -> dict[str, Any]:
         """Lean multi-symbol/TF backtest for the UI Backtest tab (no OOS/WF)."""
+        from app.research.trade_fees import DEFAULT_LEVERAGE
+
+        lev = max(1.0, float(leverage or DEFAULT_LEVERAGE))
         clear_candle_cache()
         t0 = time.perf_counter()
         combo = get_combination(combination_id)
@@ -934,6 +970,7 @@ class BosResearchService:
                     risk_usd=risk_usd,
                     taker_fee=taker_fee,
                     maker_fee=maker_fee,
+                    leverage=lev,
                     closed_only=True,
                 ) if include_trades else []
                 net_pnls = [
@@ -984,6 +1021,7 @@ class BosResearchService:
                         "pnl_usd_net": pnl_net,
                         "fees_usd": fee_total,
                         "risk_usd": risk_usd,
+                        "leverage": lev,
                         "bars_loaded": len(candles),
                         "candle_source": load_meta.get("candle_source"),
                         "trades": trades,
@@ -1013,13 +1051,16 @@ class BosResearchService:
             "require_htf_alignment": bool(combo.require_htf_alignment),
             "limit": limit,
             "risk_usd": risk_usd,
+            "leverage": lev,
             "fee_model": {
                 "taker_fee": taker_fee,
                 "maker_fee": maker_fee,
                 "exit_fee": taker_fee,
+                "leverage": lev,
                 "note": (
                     "Entry uses maker fee for LIMIT_RETEST, else taker. "
-                    "Exit uses taker. Binance USDT-M VIP0 defaults unless overridden."
+                    "Exit uses taker. Binance USDT-M VIP0 defaults unless overridden. "
+                    "Leverage sets margin = notional/leverage only; qty still from risk $/stop."
                 ),
             },
             "symbols": [normalize_research_symbol(s) for s in symbols],

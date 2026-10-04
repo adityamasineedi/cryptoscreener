@@ -949,8 +949,8 @@ async def research_ohlcv_expand_start(
     Body:
       symbols: list[str] | comma-string
       timeframes: list[str] | comma-string
-      until: YYYY-MM-DD (walk history back to this UTC day)
-      refresh_tip: bool (also fill forward to now; default true)
+      until: YYYY-MM-DD (walk history back to this UTC day; omit for tip-only)
+      refresh_tip: bool (fill forward to now; default true; required if until omitted)
       max_pages: int (safety cap per series; default 200)
     """
     from app.research.ohlcv_expand import ohlcv_expand_service
@@ -1044,6 +1044,7 @@ async def research_long_strategy_backtest_start(
             limit=int(body.get("limit") or 1200),
             risk_usd=float(body.get("risk_usd") or 20.0),
             principal_usd=float(body.get("principal_usd") or 1000.0),
+            leverage=float(body.get("leverage") or 2.0),
             taker_fee_pct=float(body.get("taker_fee_pct") or 0.04),
             maker_fee_pct=float(body.get("maker_fee_pct") or 0.02),
             include_trades=bool(body.get("include_trades", True)),
@@ -1311,12 +1312,16 @@ async def research_approve_candidate_paper(
         strategy_candidate_registry,
     )
 
+    from app.research.dynamic_candidate_constants import COMBO_VERSION
+
     confirm = bool(body.get("confirm"))
     note = body.get("approval_note")
     risk = body.get("requested_risk_percent")
     if risk is None:
         risk = DEFAULT_REQUESTED_RISK_PERCENT
-    override = bool(body.get("risk_override_above_half_pct"))
+    override = bool(body.get("risk_override_above_half_pct")) or bool(
+        body.get("risk_override_above_default")
+    )
     actor = str(body.get("operator") or body.get("actor") or "operator")
 
     try:
@@ -1327,6 +1332,7 @@ async def research_approve_candidate_paper(
             requested_risk_percent=float(risk),
             actor=actor,
             risk_override_above_half_pct=override,
+            risk_override_above_default=override,
         )
     except KeyError as exc:
         return {
@@ -1349,12 +1355,20 @@ async def research_approve_candidate_paper(
 
     item = serialize_candidate(row)
     assert item.get("telegram_eligible") is False
+    assert item.get("production_approved") is False
     assert str(item.get("strategy_id")) == STRATEGY_ID
+    assert str(item.get("combo_version")) == COMBO_VERSION
+    risk_out = float(item.get("risk_percent") or 0)
     return {
         "status": "OK",
+        "state": "PAPER_VALIDATING",
+        "strategy_id": STRATEGY_ID,
+        "combo_version": COMBO_VERSION,
+        "production_approved": False,
+        "telegram_eligible": False,
+        "risk_percent": risk_out,
         "candidate": item,
         "disclaimer": DISCLAIMER,
-        "telegram_eligible": False,
         "v1_unchanged": True,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -2087,8 +2101,25 @@ def _enrich_paper_status(status: dict[str, Any]) -> dict[str, Any]:
                     wstatus["live"] = []
                     wstatus["live_error"] = str(exc)
             out["v1_watcher"] = wstatus
+            # Clarify risk: engine.risk_percent is legacy RESEARCH_15M default;
+            # v1 opens size from book.risk_percent (BTC 1.5%, ETH/SOL 0.5%).
+            out["risk_percent_legacy_research_15m"] = out.get("risk_percent")
+            out["v1_book_risk"] = {
+                str(b.get("symbol")): {
+                    "tier": b.get("tier"),
+                    "risk_percent": b.get("risk_percent"),
+                    "risk_pct_display": (
+                        f"{float(b.get('risk_percent') or 0) * 100:g}%"
+                        if b.get("risk_percent") is not None
+                        else None
+                    ),
+                }
+                for b in (wstatus.get("books") or [])
+                if isinstance(b, dict) and b.get("symbol")
+            }
         else:
             out["v1_watcher"] = {"enabled": False}
+            out["v1_book_risk"] = {}
     except Exception as exc:  # noqa: BLE001
         out["v1_watcher"] = {"enabled": watcher_enabled, "error": str(exc)}
     try:

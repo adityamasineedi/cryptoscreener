@@ -15,6 +15,7 @@ from app.research.candidate_state_machine import OperatorOnlyTransition
 from app.research.combo02_candidate_eligibility import (
     classify_eligibility,
     classify_oos,
+    eligibility_report,
     fee_pct_of_gross,
     portfolio_recommendation,
 )
@@ -113,7 +114,7 @@ async def run_candidate_backtest_gate(
         return {"status": "ENGINE_ERROR", "symbol": sym, "error": str(exc)}
 
     fee_share = fee_pct_of_gross(run.get("gross_pnl"), run.get("fees"))
-    tier, reasons, conditions = classify_eligibility(
+    metrics_kwargs = dict(
         trade_count=int(run.get("trade_count") or 0),
         net_avg_r=run.get("net_avg_r"),
         net_pnl=run.get("net_pnl"),
@@ -123,10 +124,13 @@ async def run_candidate_backtest_gate(
         fee_share=fee_share,
         thresholds=thr,
     )
+    tier, reasons, conditions = classify_eligibility(**metrics_kwargs)
+    elig = eligibility_report(**metrics_kwargs)
     # Display label only — WATCHLIST is not an executable registry state.
     display_tier = tier
     target_state = _map_tier_to_state(tier)
     reason = ",".join(reasons) if reasons else display_tier
+    prev_port = row.get("portfolio_report") if isinstance(row.get("portfolio_report"), dict) else {}
 
     fields = {
         "backtest_window_start_utc": win.base_start,
@@ -142,6 +146,10 @@ async def run_candidate_backtest_gate(
         "backtest_fees": run.get("fees"),
         "backtest_max_dd_r": run.get("max_drawdown_r"),
         "backtest_max_losing_streak": run.get("max_losing_streak"),
+        "portfolio_report": {
+            **prev_port,
+            "base_eligibility": elig,
+        },
         "risk_percent": 0.0,
     }
     await strategy_candidate_registry.transition(
@@ -284,6 +292,7 @@ async def run_candidate_oos_portfolio_gate(
         portfolio_fail = True
         portfolio_reasons.append(f"high_corr_btc={corr_btc}")
 
+    prev_port = row.get("portfolio_report") if isinstance(row.get("portfolio_report"), dict) else {}
     oos_fields = {
         "oos_status": oos_label,
         "oos_window_start_utc": win.oos_val_start,
@@ -300,10 +309,19 @@ async def run_candidate_oos_portfolio_gate(
         "peak_concurrent_positions": peak,
         "portfolio_incremental_dd_r": inc_dd,
         "portfolio_report": {
+            **prev_port,
             **rec,
+            "base_eligibility": prev_port.get("base_eligibility"),
             "oos_conditions": oos_conds,
             "oos_reasons": oos_reasons,
+            "oos_eligibility": {
+                "tier": oos_label,
+                "passed": oos_label == "V2_PAPER_CANDIDATE" and not portfolio_fail,
+                "reasons": oos_conds,
+                "reason_codes": oos_reasons,
+            },
             "portfolio_fail": portfolio_fail,
+            "portfolio_status": "FAIL" if portfolio_fail else "PASS",
             "portfolio_reasons": portfolio_reasons,
             "checked_at_utc": datetime.now(timezone.utc).isoformat(),
         },

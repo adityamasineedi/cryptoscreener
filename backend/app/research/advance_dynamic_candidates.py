@@ -1,6 +1,10 @@
 """Advance dynamic registry candidates: data-health → COMBO_02 backtest → OOS.
 
 Never promotes to PAPER_VALIDATING / APPROVED. Never enables Telegram.
+
+Advance responses split:
+- run_summary — what this invocation did
+- registry_summary — durable totals across the registry
 """
 
 from __future__ import annotations
@@ -21,6 +25,68 @@ from app.research.strategy_candidate_registry import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+def _empty_run_summary() -> dict[str, int]:
+    return {
+        "health_ready": 0,
+        "backtests_started": 0,
+        "oos_started": 0,
+        "rejected": 0,
+        "advanced": 0,
+        "errors": 0,
+    }
+
+
+def _count_run_event(
+    run_summary: dict[str, int],
+    *,
+    result: dict[str, Any],
+    kind: str,
+) -> None:
+    """Update this-run counters from a single gate result."""
+    status = str(result.get("status") or "").upper()
+    state = str(result.get("state") or "").upper()
+
+    if kind == "health":
+        if result.get("ready"):
+            run_summary["health_ready"] += 1
+            if state == "DATA_READY":
+                run_summary["advanced"] += 1
+        else:
+            # Not ready after a health check counts as a this-run reject/block.
+            if status not in ("NOT_FOUND",):
+                run_summary["rejected"] += 1
+        if status in ("ERROR", "ENGINE_ERROR"):
+            run_summary["errors"] += 1
+        return
+
+    if kind == "backtest":
+        if status in ("SKIP", "NOT_FOUND"):
+            return
+        run_summary["backtests_started"] += 1
+        if status in ("ERROR", "ENGINE_ERROR"):
+            run_summary["errors"] += 1
+            run_summary["rejected"] += 1
+            return
+        if state == "PROMISING":
+            run_summary["advanced"] += 1
+        elif state == "RESEARCH_REJECTED":
+            run_summary["rejected"] += 1
+        return
+
+    if kind == "oos":
+        if status in ("SKIP", "NOT_FOUND"):
+            return
+        run_summary["oos_started"] += 1
+        if status in ("ERROR", "ENGINE_ERROR"):
+            run_summary["errors"] += 1
+            run_summary["rejected"] += 1
+            return
+        if state == "V2_PAPER_CANDIDATE":
+            run_summary["advanced"] += 1
+        elif state in ("OOS_FAILED", "RESEARCH_REJECTED"):
+            run_summary["rejected"] += 1
 
 
 async def advance_dynamic_candidates(
@@ -47,6 +113,7 @@ async def advance_dynamic_candidates(
     health_results: list[dict[str, Any]] = []
     backtest_results: list[dict[str, Any]] = []
     oos_results: list[dict[str, Any]] = []
+    run_summary = _empty_run_summary()
 
     for row in rows:
         sym = str(row["symbol"])
@@ -57,21 +124,46 @@ async def advance_dynamic_candidates(
             "DATA_PENDING",
             "DATA_READY",  # re-validate
         ):
-            hr = await check_candidate_data_health(sym, queue_backfill=True)
+            try:
+                hr = await check_candidate_data_health(sym, queue_backfill=True)
+            except Exception as exc:  # noqa: BLE001
+                hr = {
+                    "status": "ERROR",
+                    "symbol": sym,
+                    "ready": False,
+                    "error": str(exc),
+                }
             health_results.append(hr)
+            _count_run_event(run_summary, result=hr, kind="health")
             # refresh
             row = await strategy_candidate_registry.get_by_symbol(sym) or row
             state = str(row.get("state") or "")
 
         if run_backtest and state in ("DATA_READY", "BACKTEST_QUEUED"):
-            br = await run_candidate_backtest_gate(sym)
+            try:
+                br = await run_candidate_backtest_gate(sym)
+            except Exception as exc:  # noqa: BLE001
+                br = {
+                    "status": "ERROR",
+                    "symbol": sym,
+                    "error": str(exc),
+                }
             backtest_results.append(br)
+            _count_run_event(run_summary, result=br, kind="backtest")
             row = await strategy_candidate_registry.get_by_symbol(sym) or row
             state = str(row.get("state") or "")
 
         if run_oos and state == "PROMISING":
-            oos = await run_candidate_oos_portfolio_gate(sym)
+            try:
+                oos = await run_candidate_oos_portfolio_gate(sym)
+            except Exception as exc:  # noqa: BLE001
+                oos = {
+                    "status": "ERROR",
+                    "symbol": sym,
+                    "error": str(exc),
+                }
             oos_results.append(oos)
+            _count_run_event(run_summary, result=oos, kind="oos")
 
     final_rows = []
     for row in (
@@ -88,14 +180,13 @@ async def advance_dynamic_candidates(
     ):
         final_rows.append(serialize_candidate(row))
 
+    registry_summary = await strategy_candidate_registry.registry_summary()
+
     summary = {
         "status": "OK",
         "strategy_id": STRATEGY_ID,
-        "health_checked": len(health_results),
-        "health_ready": sum(1 for h in health_results if h.get("ready")),
-        "health_blocked": sum(1 for h in health_results if not h.get("ready")),
-        "backtests_run": len(backtest_results),
-        "oos_run": len(oos_results),
+        "run_summary": run_summary,
+        "registry_summary": registry_summary,
         "health": health_results,
         "backtests": backtest_results,
         "oos": oos_results,
@@ -106,9 +197,7 @@ async def advance_dynamic_candidates(
     }
     logger.info(
         "dynamic_candidates_advanced",
-        health_checked=summary["health_checked"],
-        health_ready=summary["health_ready"],
-        backtests_run=summary["backtests_run"],
-        oos_run=summary["oos_run"],
+        run_summary=run_summary,
+        registry_summary=registry_summary,
     )
     return summary

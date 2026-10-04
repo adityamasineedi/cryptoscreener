@@ -339,6 +339,10 @@ export type StrategyTradeRow = {
   entry_type?: string;
   qty?: number;
   risk_usd?: number;
+  leverage?: number;
+  notional_entry_usd?: number;
+  margin_usd?: number | null;
+  liquidation_price?: number | null;
   fee_entry_usd?: number;
   fee_exit_usd?: number;
   fee_total_usd?: number;
@@ -377,6 +381,7 @@ export type StrategyMatrixRow = {
   pnl_usd_net?: number | null;
   fees_usd?: number | null;
   risk_usd?: number;
+  leverage?: number;
   bars_loaded?: number;
   candle_source?: string;
   trades?: StrategyTradeRow[];
@@ -392,10 +397,12 @@ export type StrategyMatrixResponse = {
   direction?: string;
   limit?: number;
   risk_usd?: number;
+  leverage?: number;
   fee_model?: {
     taker_fee?: number;
     maker_fee?: number;
     exit_fee?: number;
+    leverage?: number;
     note?: string;
   };
   symbols?: string[];
@@ -597,30 +604,79 @@ export function fetchCombo02CandidateResults(stamp?: string) {
   );
 }
 
+export type DynamicEligibilityReason = {
+  rule?: string;
+  name?: string;
+  actual?: unknown;
+  required?: string;
+  passed?: boolean;
+  detail?: string;
+};
+
 export type DynamicCandidateRow = {
   id?: string;
   symbol: string;
   state?: string;
   state_reason?: string | null;
   badge?: string;
+  research_tier?: string | null;
+  operational_state?: string | null;
+  operator_paper_approval?: string | null;
+  production_approval?: string | null;
+  production_approved?: boolean;
+  telegram_eligibility?: string | null;
+  portfolio_status?: string | null;
+  blocked_reason?: string | null;
+  base_backtest_status?: string | null;
+  oos_display_status?: string | null;
+  source?: string | null;
+  safety_badges?: string[];
+  eligibility_reasons?: DynamicEligibilityReason[];
+  oos_rule_reasons?: DynamicEligibilityReason[];
   discovery_rank?: number | null;
   discovery_volume_usd?: number | null;
+  ohlcv_1h_start_utc?: string | null;
+  ohlcv_1h_end_utc?: string | null;
+  ohlcv_4h_start_utc?: string | null;
+  ohlcv_4h_end_utc?: string | null;
   ohlcv_1h_completeness?: number | null;
   ohlcv_4h_completeness?: number | null;
+  history_days?: number | null;
   data_health_block_reason?: string | null;
   backtest_tier?: string | null;
   backtest_status?: string | null;
   backtest_trade_count?: number | null;
+  backtest_win_rate?: number | null;
   backtest_net_avg_r?: number | null;
   backtest_profit_factor?: number | null;
+  backtest_net_pnl?: number | null;
+  backtest_fees?: number | null;
+  backtest_max_dd_r?: number | null;
+  backtest_max_losing_streak?: number | null;
+  backtest_engine_fingerprint?: Record<string, unknown> | null;
   oos_status?: string | null;
+  oos_window_start_utc?: string | null;
+  oos_window_end_utc?: string | null;
   oos_trade_count?: number | null;
   oos_net_avg_r?: number | null;
+  oos_profit_factor?: number | null;
+  oos_net_pnl?: number | null;
+  oos_max_dd_r?: number | null;
+  oos_max_losing_streak?: number | null;
   portfolio_overlap_btc?: number | null;
   portfolio_overlap_eth?: number | null;
   portfolio_overlap_sol?: number | null;
+  peak_concurrent_positions?: number | null;
+  portfolio_incremental_dd_r?: number | null;
+  portfolio_report?: Record<string, unknown> | null;
   operator_approved?: boolean;
+  experimental_paper_approved?: boolean;
+  operator_approved_by?: string | null;
+  operator_approved_at_utc?: string | null;
+  approval_note?: string | null;
   telegram_eligible?: boolean;
+  strategy_id?: string | null;
+  combo_version?: string | null;
   risk_percent?: number | null;
   updated_at_utc?: string | null;
   state_updated_at_utc?: string | null;
@@ -647,12 +703,49 @@ export function fetchDynamicCandidates(state?: string) {
   );
 }
 
+export type DynamicCandidateDetailResponse = {
+  status: string;
+  candidate?: DynamicCandidateRow;
+  audit?: Array<Record<string, unknown>>;
+  disclaimer?: string;
+  read_only_except_approve_paper?: boolean;
+  timestamp?: string;
+  symbol?: string;
+};
+
+/** Persisted registry detail for one symbol (expand/drawer). */
+export function fetchDynamicCandidateDetail(symbol: string) {
+  return getJson<DynamicCandidateDetailResponse>(
+    `/api/research/candidates/${encodeURIComponent(symbol)}`
+  );
+}
+
+export type DynamicAdvanceRunSummary = {
+  health_ready: number;
+  backtests_started: number;
+  oos_started: number;
+  rejected: number;
+  advanced: number;
+  errors: number;
+};
+
+export type DynamicAdvanceRegistrySummary = {
+  discovered: number;
+  data_pending: number;
+  data_ready: number;
+  backtest_completed: number;
+  research_rejected: number;
+  oos_failed: number;
+  v2_paper_candidate: number;
+  paper_validating: number;
+  experimental_paper_candidates?: number;
+  production_approved: number;
+  suspended: number;
+};
+
 export type DynamicAdvanceResponse = DynamicCandidatesResponse & {
-  health_checked?: number;
-  health_ready?: number;
-  health_blocked?: number;
-  backtests_run?: number;
-  oos_run?: number;
+  run_summary?: DynamicAdvanceRunSummary;
+  registry_summary?: DynamicAdvanceRegistrySummary;
   health?: Array<Record<string, unknown>>;
   backtests?: Array<Record<string, unknown>>;
   oos?: Array<Record<string, unknown>>;
@@ -692,6 +785,8 @@ export type BacktestJob = {
   label?: string | null;
   limit?: number;
   risk_usd?: number;
+  principal_usd?: number;
+  leverage?: number;
   taker_fee_pct?: number;
   maker_fee_pct?: number;
   include_trades?: boolean;
@@ -723,6 +818,7 @@ export async function startBacktestJob(body: {
   limit?: number;
   risk_usd?: number;
   principal_usd?: number;
+  leverage?: number;
   taker_fee_pct?: number;
   maker_fee_pct?: number;
   include_trades?: boolean;
@@ -845,7 +941,14 @@ export type PaperStatus = {
   open_count: number;
   closed_count: number;
   open_risk_usd: number;
+  /** Legacy RESEARCH_15M default (often 2%) — not COMBO_02 v1 book sizing. */
   risk_percent: number;
+  risk_percent_legacy_research_15m?: number;
+  risk_percent_label?: string;
+  v1_book_risk?: Record<
+    string,
+    { tier?: string; risk_percent?: number; risk_pct_display?: string | null }
+  >;
   entry_mode?: string;
   entry_mode_label?: string;
   legacy_auto_entry_enabled?: boolean;

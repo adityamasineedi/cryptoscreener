@@ -34,6 +34,10 @@ logger = structlog.get_logger(__name__)
 V1_PATH_LABEL = "A"
 DEFAULT_SETUP_TF = "1h"
 _MIN_SETUP_BARS = 50
+# Cap eval windows — full DB-hydrated histories (500+) block the asyncio loop
+# when evaluate_combination_at_bar runs synchronously on paper/status polls.
+_MAX_EVAL_BARS_1H = 250
+_MAX_EVAL_BARS_4H = 200
 
 
 def _iso(ts: datetime | None) -> str | None:
@@ -207,6 +211,14 @@ class V1PaperWatcher:
             return {"status": "NO_SETUP", "reason": "insufficient_1h_history"}
         if not candles_4h:
             return {"status": "NO_SETUP", "reason": "missing_4h", "htf": {}}
+        # Keep tip-aligned windows — drop ancient history that only slows eval.
+        if len(series) > _MAX_EVAL_BARS_1H:
+            drop = len(series) - _MAX_EVAL_BARS_1H
+            series = series[drop:]
+            as_of_index = as_of_index - drop
+        htf = list(candles_4h)
+        if len(htf) > _MAX_EVAL_BARS_4H:
+            htf = htf[-_MAX_EVAL_BARS_4H:]
         return evaluate_combination_at_bar(
             symbol=normalize_symbol(symbol),
             timeframe=self.timeframe,
@@ -216,7 +228,7 @@ class V1PaperWatcher:
             signal_config=self.signal_config,
             research_config=self.research_config,
             candles_1h=series,
-            candles_4h=list(candles_4h),
+            candles_4h=htf,
             compute_sd=False,
         )
 

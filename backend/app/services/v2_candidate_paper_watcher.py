@@ -16,9 +16,11 @@ from app.research.bos_combinations import get_combination
 from app.research.combination_engine import evaluate_combination_at_bar
 from app.research.config import ResearchConfig
 from app.research.dynamic_candidate_constants import (
+    BLOCKED_PORTFOLIO_RISK_CAP,
     COMBO_ID,
     COMBO_VERSION,
     EXPERIMENTAL_LABEL,
+    MAX_OVERRIDE_RISK,
     SOURCE_WATCHER,
     STRATEGY_ID,
 )
@@ -66,12 +68,14 @@ def classify_v2_candidate(
         "trend_4h": str(trend_4h or "").upper() or None,
         "risk_percent": float(risk_percent),
         "telegram_eligible": False,
+        "production_approved": False,
         "experimental_label": EXPERIMENTAL_LABEL,
         "v1": False,
     }
     if extra:
         snip.update(extra)
     snip["telegram_eligible"] = False
+    snip["production_approved"] = False
     snip["strategy_id"] = STRATEGY_ID
     snip["source"] = SOURCE_WATCHER
     return snip
@@ -86,7 +90,7 @@ class V2CandidatePaperWatcher:
         enabled: bool = False,
         timeframe: str = DEFAULT_SETUP_TF,
         max_open_positions: int = 1,
-        max_total_risk_percent: float = 0.005,
+        max_total_risk_percent: float = MAX_OVERRIDE_RISK,
         max_v1_book_risk_percent: float = 0.05,
         paper_engine: Any | None = None,
         signal_config: SignalConfig | None = None,
@@ -226,11 +230,14 @@ class V2CandidatePaperWatcher:
             return None
 
         risk = float(book.get("risk_percent") or 0)
-        if risk <= 0 or risk > 0.005:
+        if risk <= 0 or risk > MAX_OVERRIDE_RISK + 1e-15:
             self._last_skip = f"{sym}:risk_out_of_bounds"
             return None
         if bool(book.get("telegram_eligible")):
             self._last_skip = f"{sym}:telegram_eligible_forbidden"
+            return None
+        if bool(book.get("production_approved")):
+            self._last_skip = f"{sym}:production_approved_forbidden"
             return None
         if not bool(book.get("operator_approved")):
             self._last_skip = f"{sym}:not_operator_approved"
@@ -276,15 +283,57 @@ class V2CandidatePaperWatcher:
 
         paper = self._paper_engine()
         open_n, open_risk = self._v2_open_risk(paper)
+        peak_concurrent = open_n + 1  # would-be peak if this trade opened
         if open_n >= self.max_open_positions:
             self._last_skip = f"{sym}:max_v2_positions"
             return None
         if open_risk + risk > self.max_total_risk_percent + 1e-12:
+            # Internal reason max_v2_risk; public reason is blocked_portfolio_risk_cap.
             self._last_skip = f"{sym}:max_v2_risk"
+            await self._persist_block_reason(
+                sym,
+                reason=BLOCKED_PORTFOLIO_RISK_CAP,
+                detail={
+                    "symbol": sym,
+                    "decision": "BLOCKED",
+                    "reason": BLOCKED_PORTFOLIO_RISK_CAP,
+                    "blocked_reason": BLOCKED_PORTFOLIO_RISK_CAP,
+                    "internal_reason": "max_v2_risk",
+                    "v1_open_risk_percent": 0.0,
+                    "dynamic_open_risk_percent": open_risk,
+                    "dynamic_requested_risk_percent": risk,
+                    "max_total_risk_percent": self.max_total_risk_percent,
+                    "peak_concurrent_positions": peak_concurrent,
+                },
+            )
             return None
         v1_risk = self._v1_open_risk(paper)
-        if v1_risk >= self.max_v1_book_risk_percent:
-            self._last_skip = f"{sym}:v1_book_risk_cap"
+        combined = v1_risk + open_risk + risk
+        if combined > self.max_v1_book_risk_percent + 1e-12:
+            self._last_skip = f"{sym}:{BLOCKED_PORTFOLIO_RISK_CAP}"
+            await self._persist_block_reason(
+                sym,
+                reason=BLOCKED_PORTFOLIO_RISK_CAP,
+                detail={
+                    "symbol": sym,
+                    "decision": "BLOCKED",
+                    "reason": BLOCKED_PORTFOLIO_RISK_CAP,
+                    "blocked_reason": BLOCKED_PORTFOLIO_RISK_CAP,
+                    "internal_reason": "v1_book_risk_cap",
+                    "v1_open_risk_percent": v1_risk,
+                    "dynamic_open_risk_percent": open_risk,
+                    "dynamic_requested_risk_percent": risk,
+                    "combined_risk_percent": combined,
+                    "max_total_risk_percent": self.max_v1_book_risk_percent,
+                    "peak_concurrent_positions": peak_concurrent,
+                    # Legacy aliases retained for existing tests/UI.
+                    "v1_open_risk": v1_risk,
+                    "v2_open_risk": open_risk,
+                    "requested_risk": risk,
+                    "combined_risk": combined,
+                    "cap": self.max_v1_book_risk_percent,
+                },
+            )
             return None
 
         # Open via generic paper machinery with v2 classification — never v1 path.
@@ -296,8 +345,17 @@ class V2CandidatePaperWatcher:
             htf_alignment=htf.get("htf_alignment"),
             trend_1h=htf.get("trend_1h"),
             trend_4h=htf.get("trend_4h"),
-            extra={"setup_bar_time_utc": tip_iso, "experimental": True},
+            extra={
+                "setup_bar_time_utc": tip_iso,
+                "experimental": True,
+                "production_approved": False,
+            },
         )
+        assert snip.get("strategy_id") != "COMBO_02_V1"
+        assert snip.get("telegram_eligible") is False
+        assert snip.get("source") == SOURCE_WATCHER
+        assert snip.get("production_approved") is False
+
         open_fn = getattr(paper, "open_experimental_position", None)
         if callable(open_fn):
             pos = open_fn(
@@ -320,6 +378,17 @@ class V2CandidatePaperWatcher:
             )
             return None
 
+        if pos is not None:
+            # Hard isolation asserts on the opened trade record when available.
+            snip_out = getattr(pos, "signal_snippet", None) or (
+                pos.get("signal_snippet") if isinstance(pos, dict) else None
+            )
+            if isinstance(snip_out, dict):
+                assert snip_out.get("strategy_id") != "COMBO_02_V1"
+                assert snip_out.get("telegram_eligible") is False
+                assert snip_out.get("source") == SOURCE_WATCHER
+                assert snip_out.get("production_approved") is False
+
         logger.info(
             "v2_candidate_paper_open",
             symbol=sym,
@@ -328,6 +397,59 @@ class V2CandidatePaperWatcher:
             label=EXPERIMENTAL_LABEL,
         )
         return pos
+
+    async def _persist_block_reason(
+        self,
+        symbol: str,
+        *,
+        reason: str,
+        detail: dict[str, Any],
+    ) -> None:
+        """Persist exposure block on the candidate for operator detail view."""
+        try:
+            row = await strategy_candidate_registry.get_by_symbol(symbol)
+            if row is None:
+                return
+            port = row.get("portfolio_report") if isinstance(row.get("portfolio_report"), dict) else {}
+            block_payload = {
+                **detail,
+                "reason": reason,
+                "decision": detail.get("decision") or "BLOCKED",
+            }
+            await strategy_candidate_registry.update_fields(
+                symbol,
+                {
+                    "portfolio_report": {
+                        **port,
+                        "last_block_reason": reason,
+                        "blocked_reason": reason,
+                        "last_block_detail": block_payload,
+                        "last_block_at_utc": datetime.now(timezone.utc).isoformat(),
+                        "last_trade_decision": block_payload,
+                    }
+                },
+                actor="v2_candidate_paper_watcher",
+                note=reason,
+            )
+            await strategy_candidate_registry.append_audit(
+                candidate_id=str(row["id"]),
+                symbol=str(row["symbol"]),
+                action="TRADE_DECISION_BLOCKED",
+                actor="v2_candidate_paper_watcher",
+                previous_state=str(row.get("state")),
+                new_state=str(row.get("state")),
+                previous_risk=float(row.get("risk_percent") or 0),
+                new_risk=float(row.get("risk_percent") or 0),
+                note=reason,
+                payload=block_payload,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "v2_watcher_block_persist_failed",
+                symbol=symbol,
+                reason=reason,
+                error=str(exc),
+            )
 
 
 _v2_watcher: V2CandidatePaperWatcher | None = None

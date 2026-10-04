@@ -76,8 +76,73 @@ def fee_pct_of_gross(gross_pnl: float | None, fees: float | None) -> float | Non
     return f / g
 
 
-def _cond(name: str, ok: bool, detail: str) -> dict[str, Any]:
-    return {"name": name, "passed": bool(ok), "detail": detail}
+def _rule(
+    rule: str,
+    actual: Any,
+    required: str,
+    passed: bool,
+    *,
+    detail: str | None = None,
+) -> dict[str, Any]:
+    """Machine-readable eligibility reason (PASS/FAIL per rule)."""
+    row = {
+        "rule": rule,
+        "actual": actual,
+        "required": required,
+        "passed": bool(passed),
+        # Backward-compatible aliases used by older tests/UI.
+        "name": rule,
+        "detail": detail
+        if detail is not None
+        else f"{rule}: actual={actual} required={required}",
+    }
+    return row
+
+
+def evaluate_reject_conditions(
+    *,
+    trade_count: int,
+    net_avg_r: float | None,
+    net_pnl: float | None,
+    profit_factor: float | None,
+    max_dd_r: float | None,
+    max_lose_streak: int | None,
+    fee_share: float | None,
+    thresholds: EligibilityThresholds = DEFAULT_THRESHOLDS,
+) -> list[dict[str, Any]]:
+    """Floor gates — failing any of these → RESEARCH_REJECTED."""
+    n = int(trade_count or 0)
+    net_e = float(net_avg_r) if net_avg_r is not None else 0.0
+    net_p = float(net_pnl) if net_pnl is not None else 0.0
+    pf = float(profit_factor) if profit_factor is not None else 0.0
+    dd = float(max_dd_r) if max_dd_r is not None else 0.0
+    streak = int(max_lose_streak or 0)
+    fees = float(fee_share) if fee_share is not None else 0.0
+    fee_ok = fee_share is None or fees < thresholds.reject_fee_pct_of_gross
+    return [
+        _rule("trades_ge_10", n, f">= {thresholds.insufficient_max_trades + 1}", n > thresholds.insufficient_max_trades),
+        _rule("net_avg_r_gt_0", round(net_e, 4), "> 0", net_e > 0),
+        _rule("net_pnl_gt_0", round(net_p, 4), "> 0", net_p > 0),
+        _rule("profit_factor_gt_1", round(pf, 4), "> 1", pf > 1.0),
+        _rule(
+            "max_drawdown_le_10R",
+            round(dd, 4),
+            f"<= {thresholds.reject_max_dd_r}",
+            dd <= thresholds.reject_max_dd_r,
+        ),
+        _rule(
+            "max_losing_streak_le_10",
+            streak,
+            f"<= {thresholds.reject_max_losing_streak}",
+            streak <= thresholds.reject_max_losing_streak,
+        ),
+        _rule(
+            "fees_lt_70pct_gross",
+            None if fee_share is None else round(fees, 4),
+            f"< {thresholds.reject_fee_pct_of_gross}",
+            fee_ok,
+        ),
+    ]
 
 
 def evaluate_promising_conditions(
@@ -100,40 +165,42 @@ def evaluate_promising_conditions(
     fees = float(fee_share) if fee_share is not None else 0.0
     fee_ok = fee_share is None or fees < thresholds.promising_max_fee_pct_of_gross
     return [
-        _cond(
+        _rule(
             "trades_ge_20",
+            n,
+            f">= {thresholds.promising_min_trades}",
             n >= thresholds.promising_min_trades,
-            f"trades={n} (need >={thresholds.promising_min_trades})",
         ),
-        _cond(
+        _rule(
             "net_avg_r_gt_0_25",
+            round(net_e, 4),
+            f"> {thresholds.promising_min_net_avg_r}",
             net_e > thresholds.promising_min_net_avg_r,
-            f"net_avg_r={net_e:.4f} (need >{thresholds.promising_min_net_avg_r})",
         ),
-        _cond("net_pnl_gt_0", net_p > 0, f"net_pnl={net_p:.4f}"),
-        _cond(
+        _rule("net_pnl_gt_0", round(net_p, 4), "> 0", net_p > 0),
+        _rule(
             "profit_factor_gt_1_25",
+            round(pf, 4),
+            f"> {thresholds.promising_min_profit_factor}",
             pf > thresholds.promising_min_profit_factor,
-            f"pf={pf:.4f} (need >{thresholds.promising_min_profit_factor})",
         ),
-        _cond(
+        _rule(
             "max_dd_le_6r",
+            round(dd, 4),
+            f"<= {thresholds.promising_max_dd_r}",
             dd <= thresholds.promising_max_dd_r,
-            f"max_dd={dd:.4f}R (need <={thresholds.promising_max_dd_r}R)",
         ),
-        _cond(
+        _rule(
             "max_losing_streak_le_6",
+            streak,
+            f"<= {thresholds.promising_max_losing_streak}",
             streak <= thresholds.promising_max_losing_streak,
-            f"streak={streak} (need <={thresholds.promising_max_losing_streak})",
         ),
-        _cond(
+        _rule(
             "fees_lt_70pct_gross",
+            None if fee_share is None else round(fees, 4),
+            f"< {thresholds.promising_max_fee_pct_of_gross}",
             fee_ok,
-            (
-                "fee_share=n/a"
-                if fee_share is None
-                else f"fee_share={fees:.4f} (need <{thresholds.promising_max_fee_pct_of_gross})"
-            ),
         ),
     ]
 
@@ -149,8 +216,13 @@ def classify_eligibility(
     fee_share: float | None,
     thresholds: EligibilityThresholds = DEFAULT_THRESHOLDS,
 ) -> tuple[Tier, list[str], list[dict[str, Any]]]:
-    """Return (tier, reasons, condition_rows). Research labels only."""
-    conditions = evaluate_promising_conditions(
+    """Return (tier, reasons, condition_rows). Research labels only.
+
+    ``condition_rows`` are machine-readable ``{rule, actual, required, passed}``
+    objects. On REJECT the matrix uses reject-floor rules; otherwise promising.
+    """
+    n = int(trade_count or 0)
+    promising = evaluate_promising_conditions(
         trade_count=trade_count,
         net_avg_r=net_avg_r,
         net_pnl=net_pnl,
@@ -160,10 +232,18 @@ def classify_eligibility(
         fee_share=fee_share,
         thresholds=thresholds,
     )
-    reasons: list[str] = []
-    n = int(trade_count or 0)
+    reject_conds = evaluate_reject_conditions(
+        trade_count=trade_count,
+        net_avg_r=net_avg_r,
+        net_pnl=net_pnl,
+        profit_factor=profit_factor,
+        max_dd_r=max_dd_r,
+        max_lose_streak=max_lose_streak,
+        fee_share=fee_share,
+        thresholds=thresholds,
+    )
     if n <= thresholds.insufficient_max_trades:
-        return "INSUFFICIENT_DATA", [f"trades={n} < 10"], conditions
+        return "INSUFFICIENT_DATA", [f"trades={n} < 10"], reject_conds
 
     net_e = float(net_avg_r) if net_avg_r is not None else 0.0
     net_p = float(net_pnl) if net_pnl is not None else 0.0
@@ -172,6 +252,7 @@ def classify_eligibility(
     streak = int(max_lose_streak or 0)
     fees = float(fee_share) if fee_share is not None else 0.0
 
+    reasons: list[str] = []
     if net_e <= 0 or net_p <= 0:
         reasons.append("non_positive_net_expectancy_or_pnl")
     if pf <= 1.0:
@@ -183,16 +264,47 @@ def classify_eligibility(
     if fee_share is not None and fees >= thresholds.reject_fee_pct_of_gross:
         reasons.append(f"fees_consume>={thresholds.reject_fee_pct_of_gross:.0%}_gross")
     if reasons:
-        return "REJECT", reasons, conditions
+        return "REJECT", reasons, reject_conds
 
-    if all(c["passed"] for c in conditions):
-        return "PROMISING", ["meets_promising_thresholds"], conditions
+    if all(c["passed"] for c in promising):
+        return "PROMISING", ["meets_promising_thresholds"], promising
 
     if n >= thresholds.watchlist_min_trades and net_e > 0 and net_p > 0:
-        fail = [c["name"] for c in conditions if not c["passed"]]
-        return "WATCHLIST", fail or ["positive_but_not_promising"], conditions
+        fail = [c["rule"] for c in promising if not c["passed"]]
+        return "WATCHLIST", fail or ["positive_but_not_promising"], promising
 
-    return "REJECT", ["failed_watchlist_floor"], conditions
+    return "REJECT", ["failed_watchlist_floor"], reject_conds
+
+
+def eligibility_report(
+    *,
+    trade_count: int,
+    net_avg_r: float | None,
+    net_pnl: float | None,
+    profit_factor: float | None,
+    max_dd_r: float | None,
+    max_lose_streak: int | None,
+    fee_share: float | None,
+    thresholds: EligibilityThresholds = DEFAULT_THRESHOLDS,
+) -> dict[str, Any]:
+    """Operator-facing structured eligibility (persisted for UI)."""
+    tier, reason_codes, reasons = classify_eligibility(
+        trade_count=trade_count,
+        net_avg_r=net_avg_r,
+        net_pnl=net_pnl,
+        profit_factor=profit_factor,
+        max_dd_r=max_dd_r,
+        max_lose_streak=max_lose_streak,
+        fee_share=fee_share,
+        thresholds=thresholds,
+    )
+    display = "RESEARCH_REJECTED" if tier == "REJECT" else tier
+    return {
+        "tier": display,
+        "passed": tier == "PROMISING",
+        "reasons": reasons,
+        "reason_codes": reason_codes,
+    }
 
 
 def classify_oos(
@@ -226,34 +338,39 @@ def classify_oos(
     streak = int(oos_max_lose_streak or 0)
 
     conditions = [
-        _cond(
+        _rule(
             "oos_trades_ge_10",
+            n,
+            f">= {thresholds.oos_min_trades}",
             n >= thresholds.oos_min_trades,
-            f"trades={n} (need >={thresholds.oos_min_trades})",
         ),
-        _cond(
+        _rule(
             "oos_net_avg_r_gt_0",
+            round(net_e, 4),
+            f"> {thresholds.oos_min_net_avg_r}",
             net_e > thresholds.oos_min_net_avg_r,
-            f"net_avg_r={net_e:.4f}",
         ),
-        _cond("oos_net_pnl_gt_0", net_p > 0, f"net_pnl={net_p:.4f}"),
-        _cond(
+        _rule("oos_net_pnl_gt_0", round(net_p, 4), "> 0", net_p > 0),
+        _rule(
             "oos_pf_gt_1",
+            round(pf, 4),
+            f"> {thresholds.oos_min_profit_factor}",
             pf > thresholds.oos_min_profit_factor,
-            f"pf={pf:.4f}",
         ),
-        _cond(
+        _rule(
             "oos_no_severe_dd",
+            round(dd, 4),
+            f"<= {thresholds.oos_severe_max_dd_r}",
             dd <= thresholds.oos_severe_max_dd_r,
-            f"max_dd={dd:.4f}R (severe >{thresholds.oos_severe_max_dd_r}R)",
         ),
-        _cond(
+        _rule(
             "oos_no_severe_streak",
+            streak,
+            f"<= {thresholds.oos_severe_max_losing_streak}",
             streak <= thresholds.oos_severe_max_losing_streak,
-            f"streak={streak} (severe >{thresholds.oos_severe_max_losing_streak})",
         ),
     ]
-    fails = [c["name"] for c in conditions if not c["passed"]]
+    fails = [c["rule"] for c in conditions if not c["passed"]]
     if n < thresholds.oos_min_trades:
         return "INSUFFICIENT_OOS_DATA", fails, conditions
     if fails:

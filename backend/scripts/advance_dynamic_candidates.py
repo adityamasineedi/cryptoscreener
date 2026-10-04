@@ -82,11 +82,29 @@ def _print_table(summary: dict) -> None:
             f"{str(r.get('oos_status') or '—'):<22} "
             f"{block:<40}"
         )
+    run = summary.get("run_summary") or {}
+    reg = summary.get("registry_summary") or {}
     print(
-        f"\nhealth_ready={summary.get('health_ready')}  "
-        f"blocked={summary.get('health_blocked')}  "
-        f"backtests={summary.get('backtests_run')}  "
-        f"oos={summary.get('oos_run')}"
+        "\nThis run: "
+        f"health_ready={run.get('health_ready')}  "
+        f"backtests_started={run.get('backtests_started')}  "
+        f"oos_started={run.get('oos_started')}  "
+        f"advanced={run.get('advanced')}  "
+        f"rejected={run.get('rejected')}  "
+        f"errors={run.get('errors')}"
+    )
+    print(
+        "Registry: "
+        f"discovered={reg.get('discovered')}  "
+        f"data_pending={reg.get('data_pending')}  "
+        f"data_ready={reg.get('data_ready')}  "
+        f"backtest_completed={reg.get('backtest_completed')}  "
+        f"research_rejected={reg.get('research_rejected')}  "
+        f"oos_failed={reg.get('oos_failed')}  "
+        f"v2_paper_candidate={reg.get('v2_paper_candidate')}  "
+        f"paper_validating={reg.get('paper_validating')}  "
+        f"production_approved={reg.get('production_approved')}  "
+        f"suspended={reg.get('suspended')}"
     )
     blocked = [
         h

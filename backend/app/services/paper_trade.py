@@ -275,7 +275,14 @@ class PaperTradeEngine:
                 "open_count": len(self._open),
                 "closed_count": len(self._closed),
                 "open_risk_usd": round(open_risk, 4),
+                # Legacy RESEARCH_15M default only — COMBO_02 v1 opens use book risk
+                # (BTC 1.5%, ETH/SOL 0.5%), not this field.
                 "risk_percent": self.risk_percent,
+                "risk_percent_legacy_research_15m": self.risk_percent,
+                "risk_percent_label": (
+                    f"legacy RESEARCH_15M default {self.risk_percent * 100:g}% "
+                    "(v1 books: BTC 1.5% / ETH/SOL 0.5%)"
+                ),
                 "entry_mode": self.entry_mode,
                 "entry_mode_label": (
                     "Path A · COMBO_02 v1 (HTF-gated)"
@@ -846,6 +853,7 @@ class PaperTradeEngine:
             return None
         from app.research.dynamic_candidate_constants import (
             EXPERIMENTAL_LABEL,
+            MAX_OVERRIDE_RISK,
             SOURCE_WATCHER,
             STRATEGY_ID,
         )
@@ -853,7 +861,7 @@ class PaperTradeEngine:
         sym = str(symbol or "").upper()
         tf = str(timeframe or "1h").lower()
         risk_pct = float(risk_percent or 0.0)
-        if risk_pct <= 0 or risk_pct > 0.005:
+        if risk_pct <= 0 or risk_pct > MAX_OVERRIDE_RISK + 1e-15:
             self._last_skip_reason = f"{sym}:v2_risk_out_of_bounds"
             return None
 
@@ -865,6 +873,7 @@ class PaperTradeEngine:
             self._last_skip_reason = f"{sym}:v2_bad_source"
             return None
         snip["telegram_eligible"] = False
+        snip["production_approved"] = False
         snip["experimental_label"] = EXPERIMENTAL_LABEL
         snip["risk_percent"] = risk_pct
 

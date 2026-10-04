@@ -1,7 +1,8 @@
 """Size trades and apply exchange fees for research blotter display.
 
 Fees are modeled as round-trip notional rates (Binance USDT-M style).
-Does not mutate live signal state.
+Leverage only affects margin (notional / leverage); qty is still sized from
+risk_$ / |entry − stop|. Does not mutate live signal state.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from typing import Any, Mapping, Sequence
 # Binance USDT-M VIP0 defaults (fraction of notional)
 DEFAULT_TAKER_FEE = 0.0004  # 0.04%
 DEFAULT_MAKER_FEE = 0.0002  # 0.02%
+DEFAULT_LEVERAGE = 2.0
 
 
 def _fee_for_entry_type(
@@ -32,8 +34,9 @@ def enrich_trade_execution(
     taker_fee: float = DEFAULT_TAKER_FEE,
     maker_fee: float = DEFAULT_MAKER_FEE,
     exit_fee: float | None = None,
+    leverage: float = DEFAULT_LEVERAGE,
 ) -> dict[str, Any]:
-    """Attach qty, gross/net PnL, and fee fields for one research trade."""
+    """Attach qty, gross/net PnL, fee, and margin fields for one research trade."""
     entry = float(trade.get("entry_price") or 0.0)
     stop = float(trade.get("stop_price") or 0.0)
     exit_px = trade.get("exit_price")
@@ -70,14 +73,28 @@ def enrich_trade_execution(
         if float(risk_usd) > 0:
             r_net = net_pnl / float(risk_usd)
 
+    lev = max(1.0, float(leverage or DEFAULT_LEVERAGE))
+    notional_entry = abs(qty * entry) if qty else 0.0
+    margin_usd = (notional_entry / lev) if lev > 0 else None
+    # Isolated approx (ignores mmr): long liq ≈ entry * (1 - 1/lev)
+    liquidation_price = None
+    if entry > 0 and lev > 0:
+        if direction == "SHORT":
+            liquidation_price = entry * (1.0 + 1.0 / lev)
+        else:
+            liquidation_price = entry * (1.0 - 1.0 / lev)
+
     return {
         **dict(trade),
         "entry_type": entry_type or "MARKET",
         "qty": qty,
         "risk_usd": float(risk_usd),
         "risk_per_unit": risk_per_unit if risk_per_unit else None,
-        "notional_entry_usd": abs(qty * entry) if qty else 0.0,
+        "leverage": lev,
+        "notional_entry_usd": notional_entry,
         "notional_exit_usd": abs(qty * float(exit_px)) if exit_px is not None and qty else None,
+        "margin_usd": margin_usd,
+        "liquidation_price": liquidation_price,
         "fee_entry_rate": fee_entry_rate,
         "fee_exit_rate": fee_exit_rate,
         "fee_entry_usd": fee_entry,
@@ -97,6 +114,7 @@ def enrich_trades(
     taker_fee: float = DEFAULT_TAKER_FEE,
     maker_fee: float = DEFAULT_MAKER_FEE,
     exit_fee: float | None = None,
+    leverage: float = DEFAULT_LEVERAGE,
     closed_only: bool = True,
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
@@ -110,6 +128,7 @@ def enrich_trades(
             taker_fee=taker_fee,
             maker_fee=maker_fee,
             exit_fee=exit_fee,
+            leverage=leverage,
         )
         row["trade_no"] = len(out) + 1
         row["source_index"] = i

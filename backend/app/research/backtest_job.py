@@ -31,6 +31,7 @@ class BacktestJob:
     limit: int = 1200
     risk_usd: float = 20.0
     principal_usd: float = 1000.0
+    leverage: float = 2.0
     taker_fee_pct: float = 0.04
     maker_fee_pct: float = 0.02
     include_trades: bool = True
@@ -72,6 +73,7 @@ class BacktestJob:
             "limit": self.limit,
             "risk_usd": self.risk_usd,
             "principal_usd": self.principal_usd,
+            "leverage": self.leverage,
             "taker_fee_pct": self.taker_fee_pct,
             "maker_fee_pct": self.maker_fee_pct,
             "include_trades": self.include_trades,
@@ -113,6 +115,7 @@ class BacktestJobService:
         limit: int = 1200,
         risk_usd: float = 20.0,
         principal_usd: float = 1000.0,
+        leverage: float = 2.0,
         taker_fee_pct: float = 0.04,
         maker_fee_pct: float = 0.02,
         include_trades: bool = True,
@@ -138,6 +141,7 @@ class BacktestJobService:
         lim = max(50, min(int(limit), 20000))
         risk = max(1.0, min(float(risk_usd), 10_000.0))
         principal = max(100.0, min(float(principal_usd), 10_000_000.0))
+        lev = max(1.0, min(float(leverage or 2.0), 125.0))
         taker = max(0.0, min(float(taker_fee_pct), 1.0))
         maker = max(0.0, min(float(maker_fee_pct), 1.0))
         start_s = str(start_date).strip()[:10] if start_date else None
@@ -158,6 +162,7 @@ class BacktestJobService:
                 limit=lim,
                 risk_usd=risk,
                 principal_usd=principal,
+                leverage=lev,
                 taker_fee_pct=taker,
                 maker_fee_pct=maker,
                 include_trades=bool(include_trades),
@@ -231,6 +236,7 @@ class BacktestJobService:
                     end_date=job.end_date,
                     taker_fee=job.taker_fee_pct / 100.0,
                     maker_fee=job.maker_fee_pct / 100.0,
+                    leverage=float(job.leverage),
                     include_trades=job.include_trades,
                     should_cancel=lambda: job._cancel,
                 )

@@ -197,6 +197,8 @@ class OhlcvExpandService:
             raise ValueError("At least one supported timeframe is required")
         if until:
             parse_until_ms(until)  # validate early
+        if not until and not refresh_tip:
+            raise ValueError("Provide until (backward history) and/or refresh_tip=true")
 
         async with self._lock:
             if self._job is not None and self._job.status == "running":
@@ -246,18 +248,12 @@ class OhlcvExpandService:
                 await rest.start()
                 owns_rest = True
 
-            # Show a visible non-zero % during hydrate (can take minutes on large DBs).
-            # Do NOT zero this until a cell overwrites it — otherwise polls can catch
-            # "Loading…" with pct=0 right after load_from_db returns.
-            job.current = "Loading candles from DB…"
-            job.cell_fraction = 0.05
-            await ohlcv_store.load_from_db(
-                symbols=job.symbols,
-                timeframes=job.timeframes,
-                limit_per_series=200_000,
-            )
-
             until_ms = parse_until_ms(job.until) if job.until else None
+            # Gap-fill uses DB MIN/MAX as cursors — do not hydrate 200k bars into
+            # memory (that was the main "already have data" stall).
+            job.current = "Checking coverage…"
+            job.cell_fraction = 0.05
+            now_ms = int(time.time() * 1000)
 
             for sym in job.symbols:
                 for tf in job.timeframes:
@@ -265,9 +261,7 @@ class OhlcvExpandService:
                         job.status = "cancelled"
                         job.finished_at = datetime.now(timezone.utc).isoformat()
                         return
-                    job.current = f"{sym} {tf} · starting…"
-                    # Small non-zero fraction so overall % moves as soon as a cell starts
-                    # (6 cells → ~1.7% visible immediately, not stuck at 0%).
+                    job.current = f"{sym} {tf} · checking…"
                     job.cell_fraction = 0.1
 
                     def _on_page(
@@ -286,8 +280,42 @@ class OhlcvExpandService:
 
                     result = SeriesResult(symbol=sym, timeframe=tf)
                     try:
+                        step = TIMEFRAME_MS.get(tf) or 60_000
+                        t0 = await db_earliest_ms(sym, tf)
+                        t1 = await db_latest_ms(sym, tf)
+                        tip_ok = t1 is not None and t1 >= now_ms - step * 2
+                        back_ok = until_ms is None or (
+                            t0 is not None and t0 <= until_ms
+                        )
+                        # Already covers requested history + tip — no REST.
+                        if tip_ok and back_ok:
+                            result.written = 0
+                            result.direction = "already_complete"
+                            result.bars = len(ohlcv_store.get_closed(sym, tf) or [])
+                            result.db_start = (
+                                datetime.fromtimestamp(
+                                    t0 / 1000, tz=timezone.utc
+                                ).isoformat()
+                                if t0 is not None
+                                else None
+                            )
+                            result.db_end = (
+                                datetime.fromtimestamp(
+                                    t1 / 1000, tz=timezone.utc
+                                ).isoformat()
+                                if t1 is not None
+                                else None
+                            )
+                            job.current = f"{sym} {tf} · already complete"
+                            job.results.append(result)
+                            job.done_cells += 1
+                            job.cell_fraction = 0.0
+                            continue
+
                         written = 0
-                        if until_ms is not None:
+                        need_back = until_ms is not None and not back_ok
+                        need_tip = bool(job.refresh_tip) and not tip_ok
+                        if need_back:
                             n = await expand_series_backward(
                                 rest,
                                 sym,
@@ -300,7 +328,7 @@ class OhlcvExpandService:
                             )
                             written += n
                             result.direction = "backward"
-                        if job.refresh_tip and not job._cancel:
+                        if need_tip and not job._cancel:
                             tip_pages = min(40, job.max_pages)
                             n = await expand_series_forward(
                                 rest,
@@ -312,9 +340,12 @@ class OhlcvExpandService:
                                 on_written=_on_written,
                             )
                             written += n
-                            result.direction = (
-                                "backward+tip" if until_ms is not None else "tip"
-                            )
+                            if need_back:
+                                result.direction = "backward+tip"
+                            else:
+                                result.direction = "tip"
+                        if not need_back and not need_tip:
+                            result.direction = "already_complete"
                         result.written = written
                         # Coverage snapshot — avoid COUNT(*) on huge tables (blocks UI %).
                         job.current = f"{sym} {tf} · coverage…"
@@ -323,12 +354,12 @@ class OhlcvExpandService:
                         store_bars = len(ohlcv_store.get_closed(sym, tf) or [])
                         result.bars = store_bars
                         result.db_start = (
-                            datetime.fromtimestamp(t0 / 1000, tz=timezone.utc).date().isoformat()
+                            datetime.fromtimestamp(t0 / 1000, tz=timezone.utc).isoformat()
                             if t0 is not None
                             else None
                         )
                         result.db_end = (
-                            datetime.fromtimestamp(t1 / 1000, tz=timezone.utc).date().isoformat()
+                            datetime.fromtimestamp(t1 / 1000, tz=timezone.utc).isoformat()
                             if t1 is not None
                             else None
                         )

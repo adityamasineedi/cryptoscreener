@@ -18,11 +18,26 @@ from sqlalchemy import text
 from app.research.candidate_state_machine import (
     OPERATOR_ONLY_STATES,
     assert_transition_allowed,
+    badge_for_state,
+    operational_state_for_row,
+    operator_paper_approval_label,
+    portfolio_status_for_row,
+    production_approval_label,
+    research_tier_for_row,
+    safety_badges_for_row,
+    telegram_eligibility_label,
 )
 from app.research.dynamic_candidate_constants import (
+    BACKTEST_PASS_STATUSES,
     COMBO_VERSION,
     DEFAULT_RISK_PERCENT,
+    MAX_DEFAULT_RISK,
+    MAX_OVERRIDE_RISK,
+    OOS_PASS_STATUSES,
+    PORTFOLIO_PASS_STATUSES,
+    PRODUCTION_APPROVED_DEFAULT,
     SOURCE_PIPELINE,
+    SOURCE_WATCHER,
     STRATEGY_ID,
     TELEGRAM_ELIGIBLE_DEFAULT,
 )
@@ -99,12 +114,17 @@ SCHEMA_DDL: list[str] = [
         combo_version               TEXT NOT NULL DEFAULT 'v2-research',
         source                      TEXT NOT NULL DEFAULT 'DYNAMIC_CANDIDATE_PIPELINE',
         telegram_eligible           BOOLEAN NOT NULL DEFAULT FALSE,
+        production_approved         BOOLEAN NOT NULL DEFAULT FALSE,
 
         created_at_utc              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at_utc              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
         UNIQUE (symbol, strategy_id)
     )
+    """,
+    """
+    ALTER TABLE strategy_candidate_registry
+        ADD COLUMN IF NOT EXISTS production_approved BOOLEAN NOT NULL DEFAULT FALSE
     """,
     """
     CREATE TABLE IF NOT EXISTS strategy_candidate_audit_log (
@@ -220,17 +240,70 @@ def default_candidate_row(symbol: str, **overrides: Any) -> dict[str, Any]:
         "combo_version": COMBO_VERSION,
         "source": SOURCE_PIPELINE,
         "telegram_eligible": bool(TELEGRAM_ELIGIBLE_DEFAULT),
+        "production_approved": bool(PRODUCTION_APPROVED_DEFAULT),
         "created_at_utc": now,
         "updated_at_utc": now,
     }
     row.update(overrides)
     row["symbol"] = str(row["symbol"]).upper().strip()
     row["telegram_eligible"] = False  # never auto-enable
+    row["production_approved"] = False  # dynamic never production-approved
     return row
 
 
+def can_approve_for_paper(row: dict[str, Any]) -> bool:
+    """True only when base/OOS/health/portfolio have explicit pass values.
+
+    Never approve merely because backtest/oos/portfolio artifacts exist.
+    """
+    if str(row.get("state") or "").upper() != "V2_PAPER_CANDIDATE":
+        return False
+    if str(row.get("backtest_status") or "").upper() not in BACKTEST_PASS_STATUSES:
+        return False
+    if str(row.get("backtest_tier") or "").upper() != "PROMISING":
+        return False
+    if str(row.get("oos_status") or "").upper() not in OOS_PASS_STATUSES:
+        return False
+    port = row.get("portfolio_report") or {}
+    if not isinstance(port, dict) or not port:
+        return False
+    if port.get("portfolio_fail"):
+        return False
+    if portfolio_status_for_row(row) not in PORTFOLIO_PASS_STATUSES:
+        return False
+    c1 = float(row.get("ohlcv_1h_completeness") or 0)
+    c4 = float(row.get("ohlcv_4h_completeness") or 0)
+    if c1 < 0.99 or c4 < 0.99:
+        return False
+    if row.get("data_health_block_reason"):
+        return False
+    return True
+
+
+def validate_requested_risk(
+    risk: float,
+    *,
+    risk_override_above_half_pct: bool = False,
+    risk_override_above_default: bool | None = None,
+) -> None:
+    """Enforce 0.25% default / 0.50% override hard caps."""
+    override = bool(risk_override_above_half_pct) or bool(risk_override_above_default)
+    if risk <= 0:
+        raise PermissionError("reject: requested_risk_percent must be > 0")
+    if risk > MAX_DEFAULT_RISK + 1e-15 and not override:
+        raise PermissionError(
+            "reject: risk above 0.25% requires explicit override "
+            "(risk_override_above_default=true); project max 0.50%"
+        )
+    if risk > MAX_OVERRIDE_RISK + 1e-15:
+        raise PermissionError(
+            "reject: dynamic candidate risk cannot exceed 0.50% "
+            f"(hard cap {MAX_OVERRIDE_RISK:.1%})"
+        )
+
+
 def serialize_candidate(row: dict[str, Any]) -> dict[str, Any]:
-    """JSON-safe view for API/UI."""
+    """JSON-safe view for API/UI — derived labels never say bare 'approved'."""
     out: dict[str, Any] = {}
     for k, v in row.items():
         if isinstance(v, datetime):
@@ -239,12 +312,74 @@ def serialize_candidate(row: dict[str, Any]) -> dict[str, Any]:
             out[k] = copy.deepcopy(v)
         else:
             out[k] = v
-    out["telegram_eligible"] = False if out.get("telegram_eligible") is None else bool(
-        out["telegram_eligible"]
+    out["telegram_eligible"] = False
+    out["production_approved"] = False
+    out["strategy_id"] = STRATEGY_ID
+    out["combo_version"] = COMBO_VERSION
+
+    report = out.get("portfolio_report") if isinstance(out.get("portfolio_report"), dict) else {}
+    base_el = report.get("base_eligibility") if isinstance(report, dict) else None
+    oos_conds = report.get("oos_conditions") if isinstance(report, dict) else None
+
+    state = str(out.get("state") or "").upper()
+    bt = str(out.get("backtest_status") or "").upper()
+    oos = str(out.get("oos_status") or "").upper()
+
+    out["research_tier"] = research_tier_for_row(out)
+    out["operational_state"] = operational_state_for_row(out)
+    out["operator_paper_approval"] = operator_paper_approval_label(out)
+    out["production_approval"] = production_approval_label(out)
+    out["telegram_eligibility"] = telegram_eligibility_label(out)
+    out["portfolio_status"] = portfolio_status_for_row(out)
+    out["safety_badges"] = safety_badges_for_row(out)
+    out["badge"] = badge_for_state(
+        state,
+        state_reason=str(out.get("state_reason") or ""),
     )
-    # Hard invariant for API consumers
-    if str(out.get("strategy_id") or "") == STRATEGY_ID:
-        out["telegram_eligible"] = False
+    out["base_research_status"] = (
+        (base_el or {}).get("tier")
+        if isinstance(base_el, dict)
+        else out.get("backtest_tier")
+    )
+    # Explicit display statuses for UI (never bare lifecycle labels as pass/fail).
+    out["base_backtest_status"] = "PASS" if bt in BACKTEST_PASS_STATUSES else (bt or None)
+    out["oos_display_status"] = "PASS" if oos in OOS_PASS_STATUSES else (oos or None)
+    out["oos_pass"] = oos in OOS_PASS_STATUSES
+    out["eligibility_reasons"] = (
+        (base_el or {}).get("reasons") if isinstance(base_el, dict) else []
+    )
+    out["oos_rule_reasons"] = oos_conds if isinstance(oos_conds, list) else []
+    # Never expose a generic "approved" flag name to the UI.
+    out["experimental_paper_approved"] = bool(out.get("operator_approved"))
+    out["blocked_reason"] = (
+        report.get("last_block_reason")
+        if isinstance(report, dict)
+        else None
+    )
+    # Paper-validating rows execute under the v2 watcher source identity.
+    if state == "PAPER_VALIDATING" or bool(out.get("operator_approved")):
+        out["source"] = SOURCE_WATCHER
+    else:
+        out["source"] = out.get("source") or SOURCE_PIPELINE
+    return out
+
+
+def serialize_audit(entry: dict[str, Any]) -> dict[str, Any]:
+    """Audit view with contract aliases (old_state/operator/reason/risk_*/timestamp)."""
+    out: dict[str, Any] = {}
+    for k, v in entry.items():
+        if isinstance(v, datetime):
+            out[k] = _iso(v)
+        elif isinstance(v, dict):
+            out[k] = copy.deepcopy(v)
+        else:
+            out[k] = v
+    out["old_state"] = out.get("previous_state")
+    out["operator"] = out.get("actor")
+    out["reason"] = out.get("note")
+    out["risk_before"] = out.get("previous_risk")
+    out["risk_after"] = out.get("new_risk")
+    out["timestamp"] = out.get("created_at_utc") or out.get("timestamp")
     return out
 
 
@@ -311,8 +446,15 @@ class StrategyCandidateRegistry:
                 "previous_risk": previous_risk,
                 "new_risk": new_risk,
                 "note": note,
-                "payload": payload or {},
+                "payload": copy.deepcopy(payload or {}),
                 "created_at_utc": _utc_now(),
+                # Contract aliases
+                "old_state": previous_state,
+                "operator": actor,
+                "reason": note,
+                "risk_before": previous_risk,
+                "risk_after": new_risk,
+                "timestamp": _utc_now(),
             }
         )
 
@@ -393,6 +535,61 @@ class StrategyCandidateRegistry:
             result = await conn.execute(sql, params)
             return [dict(r) for r in result.mappings().all()]
 
+    async def count_by_state(self) -> dict[str, int]:
+        """Return raw state → count for all COMBO_02_V2_RESEARCH rows."""
+        if not self.use_db:
+            with self._lock:
+                rows = list(self._memory.values())
+            out: dict[str, int] = {}
+            for r in rows:
+                st = str(r.get("state") or "").upper()
+                if not st:
+                    continue
+                out[st] = out.get(st, 0) + 1
+            return out
+
+        assert db_manager.engine is not None
+        sql = text(
+            """
+            SELECT state, COUNT(*)::int AS n
+            FROM strategy_candidate_registry
+            WHERE strategy_id = :sid
+            GROUP BY state
+            """
+        )
+        async with db_manager.engine.connect() as conn:
+            result = await conn.execute(sql, {"sid": STRATEGY_ID})
+            return {
+                str(r["state"]).upper(): int(r["n"])
+                for r in result.mappings().all()
+            }
+
+    async def registry_summary(self) -> dict[str, int]:
+        """Operator-facing registry totals (not this-run counters).
+
+        ``backtest_completed`` = PROMISING + OOS_PENDING (passed research gate,
+        OOS not finished). ``production_approved`` maps to APPROVED state —
+        still never Telegram / never v1.
+        """
+        by_state = await self.count_by_state()
+
+        def _n(*states: str) -> int:
+            return sum(int(by_state.get(s, 0)) for s in states)
+
+        return {
+            "discovered": _n("DISCOVERED"),
+            "data_pending": _n("DATA_PENDING"),
+            "data_ready": _n("DATA_READY"),
+            "backtest_completed": _n("PROMISING", "OOS_PENDING"),
+            "research_rejected": _n("RESEARCH_REJECTED"),
+            "oos_failed": _n("OOS_FAILED"),
+            "v2_paper_candidate": _n("V2_PAPER_CANDIDATE"),
+            "paper_validating": _n("PAPER_VALIDATING"),
+            "experimental_paper_candidates": _n("PAPER_VALIDATING"),
+            "production_approved": _n("APPROVED"),
+            "suspended": _n("SUSPENDED"),
+        }
+
     async def list_paper_validating(self) -> list[dict[str, Any]]:
         """Rows the v2 watcher is allowed to consider (still gated further)."""
         rows = await self.list_candidates(states=["PAPER_VALIDATING"], limit=500)
@@ -405,8 +602,11 @@ class StrategyCandidateRegistry:
             if bool(r.get("telegram_eligible")):
                 # Fail closed: never trade a row that somehow became telegram-eligible.
                 continue
+            if bool(r.get("production_approved")):
+                # Dynamic candidates are never production-approved; fail closed.
+                continue
             risk = float(r.get("risk_percent") or 0)
-            if risk <= 0 or risk > 0.005:
+            if risk <= 0 or risk > MAX_OVERRIDE_RISK + 1e-15:
                 continue
             out.append(r)
         return out
@@ -464,6 +664,7 @@ class StrategyCandidateRegistry:
         existing["updated_at_utc"] = now
         # Safety invariants
         existing["telegram_eligible"] = False
+        existing["production_approved"] = False
         existing["strategy_id"] = STRATEGY_ID
         existing["combo_version"] = COMBO_VERSION
         existing["source"] = SOURCE_PIPELINE
@@ -499,6 +700,22 @@ class StrategyCandidateRegistry:
         assert_transition_allowed(
             cur, nxt, operator_approved_action=operator_approved_action
         )
+        # Dynamic candidates cannot become production-approved via this pipeline.
+        if nxt == "APPROVED":
+            raise PermissionError(
+                "reject: dynamic candidates cannot become production-approved"
+            )
+        # PAPER_VALIDATING only from V2_PAPER_CANDIDATE with explicit pass criteria.
+        if nxt == "PAPER_VALIDATING":
+            if cur != "V2_PAPER_CANDIDATE":
+                raise PermissionError(
+                    f"reject: only V2_PAPER_CANDIDATE → PAPER_VALIDATING, got {cur}"
+                )
+            if not can_approve_for_paper(row):
+                raise PermissionError(
+                    "reject: explicit base/OOS/health/portfolio pass required "
+                    "for PAPER_VALIDATING"
+                )
         now = _utc_now()
         prev_risk = float(row.get("risk_percent") or 0)
         row["state"] = nxt
@@ -515,11 +732,20 @@ class StrategyCandidateRegistry:
         row["telegram_eligible"] = False
         if extra_fields:
             for k, v in extra_fields.items():
-                if k in ("telegram_eligible",):
+                if k in ("telegram_eligible", "production_approved"):
                     continue  # ignore attempts to flip via extra_fields
                 if k == "risk_percent" and not operator_approved_action:
                     continue
+                if k == "risk_percent" and operator_approved_action:
+                    r = float(v or 0)
+                    if r <= 0 or r > MAX_OVERRIDE_RISK + 1e-15:
+                        raise PermissionError(
+                            "reject: dynamic candidate risk cannot exceed 0.50%"
+                        )
                 row[k] = v
+        row["production_approved"] = False
+        if nxt == "PAPER_VALIDATING":
+            row["source"] = SOURCE_WATCHER
         await self._persist(row)
         await self.append_audit(
             candidate_id=str(row["id"]),
@@ -531,7 +757,16 @@ class StrategyCandidateRegistry:
             previous_risk=prev_risk,
             new_risk=float(row.get("risk_percent") or 0),
             note=reason,
-            payload={"operator_approved_action": operator_approved_action},
+            payload={
+                "operator_approved_action": operator_approved_action,
+                "old_state": cur,
+                "new_state": nxt,
+                "operator": actor,
+                "reason": reason,
+                "risk_before": prev_risk,
+                "risk_after": float(row.get("risk_percent") or 0),
+                "timestamp": _iso(now),
+            },
         )
         return row
 
@@ -549,17 +784,33 @@ class StrategyCandidateRegistry:
         blocked = {
             "state",
             "telegram_eligible",
+            "production_approved",
             "operator_approved",
             "strategy_id",
             "combo_version",
             "source",
             "id",
         }
+        if "risk_percent" in fields and fields["risk_percent"] is not None:
+            r = float(fields["risk_percent"])
+            if r < 0:
+                raise PermissionError("reject: risk_percent cannot be negative")
+            if r > MAX_OVERRIDE_RISK + 1e-15:
+                raise PermissionError(
+                    "reject: dynamic candidate risk cannot exceed 0.50%"
+                )
+            # Raising above default must go through approve_paper (override gate).
+            current = float(row.get("risk_percent") or 0)
+            if r > MAX_DEFAULT_RISK + 1e-15 and r > current + 1e-15:
+                raise PermissionError(
+                    "reject: risk above 0.25% requires approve_paper with explicit override"
+                )
         for k, v in fields.items():
             if k in blocked:
                 continue
             row[k] = v
         row["telegram_eligible"] = False
+        row["production_approved"] = False
         row["updated_at_utc"] = _utc_now()
         await self._persist(row)
         await self.append_audit(
@@ -585,39 +836,76 @@ class StrategyCandidateRegistry:
         requested_risk_percent: float,
         actor: str,
         risk_override_above_half_pct: bool = False,
+        risk_override_above_default: bool | None = None,
     ) -> dict[str, Any]:
-        """Explicit operator gate: V2_PAPER_CANDIDATE → PAPER_VALIDATING."""
+        """Explicit operator gate: V2_PAPER_CANDIDATE → PAPER_VALIDATING.
+
+        Never enables Telegram, never joins v1, never sets production_approved.
+        Requires explicit base/OOS/health/portfolio pass values — not mere artifacts.
+        """
         if not confirm:
             raise PermissionError("confirm must be true")
         row = await self.get_by_symbol(symbol)
         if row is None:
             raise KeyError(f"candidate not found: {symbol}")
-        if str(row.get("state") or "") != "V2_PAPER_CANDIDATE":
+
+        state = str(row.get("state") or "").upper()
+        if state == "RESEARCH_REJECTED":
+            raise PermissionError("reject: RESEARCH_REJECTED cannot be paper-approved")
+        if state == "OOS_FAILED":
+            raise PermissionError("reject: OOS_FAILED cannot be paper-approved")
+        if state == "PROMISING":
+            raise PermissionError(
+                "reject: PROMISING cannot be paper-approved without OOS pass"
+            )
+        if state != "V2_PAPER_CANDIDATE":
             raise PermissionError(
                 f"reject: state must be V2_PAPER_CANDIDATE, got {row.get('state')}"
             )
-        # Require research artifacts
-        missing: list[str] = []
-        if not row.get("backtest_status"):
-            missing.append("base_backtest")
-        if not row.get("oos_status"):
-            missing.append("oos_report")
-        if not row.get("portfolio_report"):
-            missing.append("portfolio_report")
-        if row.get("ohlcv_1h_completeness") is None or row.get("ohlcv_4h_completeness") is None:
-            missing.append("data_health")
-        if missing:
-            raise PermissionError(f"reject: missing reports: {', '.join(missing)}")
+
+        bt = str(row.get("backtest_status") or "").upper()
+        if bt not in BACKTEST_PASS_STATUSES:
+            raise PermissionError(
+                f"reject: backtest_status must be COMPLETED/PASS, got {row.get('backtest_status')}"
+            )
+        tier = str(row.get("backtest_tier") or "").upper()
+        if tier != "PROMISING":
+            raise PermissionError(
+                f"reject: base research must be PROMISING, got {row.get('backtest_tier')}"
+            )
+        oos = str(row.get("oos_status") or "").upper()
+        if oos not in OOS_PASS_STATUSES:
+            raise PermissionError(
+                f"reject: OOS must PASS (got {row.get('oos_status')})"
+            )
+        c1 = float(row.get("ohlcv_1h_completeness") or 0)
+        c4 = float(row.get("ohlcv_4h_completeness") or 0)
+        if c1 < 0.99 or c4 < 0.99 or row.get("data_health_block_reason"):
+            raise PermissionError(
+                "reject: data health completeness must be >= 0.99 on 1h and 4h"
+            )
+        port = row.get("portfolio_report") or {}
+        if not isinstance(port, dict) or not port:
+            raise PermissionError("reject: portfolio checks not completed")
+        if port.get("portfolio_fail"):
+            raise PermissionError("reject: portfolio checks failed")
+        port_status = portfolio_status_for_row(row)
+        if port_status not in PORTFOLIO_PASS_STATUSES:
+            raise PermissionError(
+                f"reject: portfolio_status must be PASS/REVIEWED_PASS, got {port_status}"
+            )
+        if not can_approve_for_paper(row):
+            raise PermissionError(
+                "reject: candidate does not meet explicit paper-approval pass criteria"
+            )
 
         risk = float(requested_risk_percent)
-        if risk <= 0:
-            raise PermissionError("reject: requested_risk_percent must be > 0")
-        if risk > 0.005 and not risk_override_above_half_pct:
-            raise PermissionError(
-                "reject: risk > 0.5% requires risk_override_above_half_pct=true"
-            )
-        if risk > 0.02:
-            raise PermissionError("reject: risk_percent hard cap 2%")
+        override = bool(risk_override_above_half_pct) or bool(risk_override_above_default)
+        validate_requested_risk(
+            risk,
+            risk_override_above_half_pct=risk_override_above_half_pct,
+            risk_override_above_default=risk_override_above_default,
+        )
 
         now = _utc_now()
         prev = str(row.get("state"))
@@ -625,7 +913,7 @@ class StrategyCandidateRegistry:
         row = await self.transition(
             symbol,
             "PAPER_VALIDATING",
-            reason=approval_note or "operator_approved_paper",
+            reason=approval_note or "operator_experimental_paper_approved",
             actor=actor,
             operator_approved_action=True,
             extra_fields={
@@ -635,15 +923,23 @@ class StrategyCandidateRegistry:
                 "approval_note": approval_note,
                 "risk_percent": risk,
                 "telegram_eligible": False,
+                "production_approved": False,
+                "strategy_id": STRATEGY_ID,
+                "combo_version": COMBO_VERSION,
+                "source": SOURCE_WATCHER,
             },
         )
-        # transition() strips telegram via invariant; reaffirm risk/approval
+        # transition() strips telegram/production via invariant; reaffirm risk/approval
         row["operator_approved"] = True
         row["operator_approved_by"] = actor
         row["operator_approved_at_utc"] = now
         row["approval_note"] = approval_note
         row["risk_percent"] = risk
         row["telegram_eligible"] = False
+        row["production_approved"] = False
+        row["strategy_id"] = STRATEGY_ID
+        row["combo_version"] = COMBO_VERSION
+        row["source"] = SOURCE_WATCHER
         await self._persist(row)
         await self.append_audit(
             candidate_id=str(row["id"]),
@@ -656,8 +952,20 @@ class StrategyCandidateRegistry:
             new_risk=risk,
             note=approval_note,
             payload={
+                "risk_override_above_default": override,
                 "risk_override_above_half_pct": risk_override_above_half_pct,
                 "telegram_eligible": False,
+                "production_approved": False,
+                "strategy_id": STRATEGY_ID,
+                "combo_version": COMBO_VERSION,
+                "source": SOURCE_WATCHER,
+                "old_state": prev,
+                "new_state": "PAPER_VALIDATING",
+                "operator": actor,
+                "reason": approval_note,
+                "risk_before": prev_risk,
+                "risk_after": risk,
+                "timestamp": _iso(now),
             },
         )
         return row
@@ -727,7 +1035,7 @@ class StrategyCandidateRegistry:
         if not self.use_db:
             with self._lock:
                 rows = [a for a in self._audit if a["symbol"] == sym]
-            return [serialize_candidate(r) for r in reversed(rows[-limit:])]
+            return [serialize_audit(r) for r in reversed(rows[-limit:])]
         assert db_manager.engine is not None
         sql = text(
             """
@@ -739,13 +1047,18 @@ class StrategyCandidateRegistry:
         )
         async with db_manager.engine.connect() as conn:
             result = await conn.execute(sql, {"sym": sym, "lim": int(limit)})
-            return [serialize_candidate(dict(r)) for r in result.mappings().all()]
+            return [serialize_audit(dict(r)) for r in result.mappings().all()]
 
     async def _persist(self, row: dict[str, Any]) -> None:
         row["telegram_eligible"] = False
+        row["production_approved"] = False
         row["strategy_id"] = STRATEGY_ID
         row["combo_version"] = COMBO_VERSION
-        row["source"] = SOURCE_PIPELINE
+        state = str(row.get("state") or "").upper()
+        if state == "PAPER_VALIDATING" or bool(row.get("operator_approved")):
+            row["source"] = SOURCE_WATCHER
+        else:
+            row["source"] = SOURCE_PIPELINE
         row["updated_at_utc"] = _utc_now()
         if not self.use_db:
             with self._lock:
@@ -813,6 +1126,7 @@ class StrategyCandidateRegistry:
             "combo_version",
             "source",
             "telegram_eligible",
+            "production_approved",
             "created_at_utc",
             "updated_at_utc",
         ]

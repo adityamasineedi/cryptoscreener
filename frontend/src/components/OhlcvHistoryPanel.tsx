@@ -1,33 +1,86 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { fetchResearchOhlcvRange, type OhlcvRangeRow } from "../api/client";
+import {
+  mergeSymbols,
+  parseSymbolList,
+  RESEARCH_SYMBOL_PRESETS,
+} from "../research/symbols";
 import { useOhlcvExpandStore } from "../store/ohlcvExpandStore";
 
-const SYMBOL_OPTIONS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"] as const;
+const SYMBOL_OPTIONS = RESEARCH_SYMBOL_PRESETS;
 const TF_OPTIONS = ["5m", "15m", "1h", "4h", "1d"] as const;
+const TF_MS: Record<string, number> = {
+  "5m": 5 * 60_000,
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+  "4h": 4 * 60 * 60_000,
+  "1d": 24 * 60 * 60_000,
+};
 const UNTIL_PRESETS = [
-  { id: "2023", until: "2023-01-01", label: "Back to 2023" },
-  { id: "2024", until: "2024-01-01", label: "Back to 2024" },
-  { id: "2025", until: "2025-01-01", label: "Back to 2025" },
-  { id: "2026", until: "2026-01-01", label: "Back to 2026" },
+  { id: "2023", until: "2023-01-01", label: "From 2023" },
+  { id: "2024", until: "2024-01-01", label: "From 2024" },
+  { id: "2025", until: "2025-01-01", label: "From 2025" },
+  { id: "2026", until: "2026-01-01", label: "From 2026" },
 ] as const;
+
+/** True when Postgres tip is more than ~2 bars behind now (or empty). */
+function isTipStale(end: string | null | undefined, timeframe: string): boolean {
+  if (!end) return true;
+  const endMs = Date.parse(end);
+  if (!Number.isFinite(endMs)) return true;
+  const step = TF_MS[timeframe] ?? 60_000;
+  return Date.now() - endMs > step * 2;
+}
+
+function formatCoverageTs(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return String(raw).slice(0, 19);
+  return d.toISOString().replace("T", " ").slice(0, 19) + "Z";
+}
+
+/** How much older history is still missing vs the backfill-from target. */
+function remainingBackLabel(
+  start: string | null | undefined,
+  until: string
+): string {
+  if (!until) return "—";
+  if (!start) return `need all → ${until}`;
+  const startDay = start.slice(0, 10);
+  if (startDay <= until) return "complete";
+  const days = Math.round(
+    (Date.parse(`${startDay}T00:00:00Z`) - Date.parse(`${until}T00:00:00Z`)) /
+      86_400_000
+  );
+  if (!Number.isFinite(days) || days <= 0) return "complete";
+  return `~${days.toLocaleString()}d left → ${until}`;
+}
+
+/** How far the DB tip lags behind the latest closed bar / now. */
+function behindNowLabel(
+  end: string | null | undefined,
+  timeframe: string
+): { text: string; stale: boolean } {
+  if (!end) return { text: "empty — sync tip", stale: true };
+  const endMs = Date.parse(end);
+  if (!Number.isFinite(endMs)) return { text: "?", stale: true };
+  const lagMs = Date.now() - endMs;
+  const step = TF_MS[timeframe] ?? 60_000;
+  if (lagMs <= step * 2) {
+    return { text: `current (${formatCoverageTs(end)})`, stale: false };
+  }
+  const hours = lagMs / 3_600_000;
+  if (hours < 48) {
+    return { text: `${hours.toFixed(1)}h behind`, stale: true };
+  }
+  return { text: `${(hours / 24).toFixed(1)}d behind`, stale: true };
+}
 
 function toggleInList<T extends string>(list: T[], value: T): T[] {
   return list.includes(value)
     ? list.filter((x) => x !== value)
     : [...list, value];
-}
-
-function parseListParam(raw: string | null, allowed: readonly string[]): string[] {
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((s) => s.trim().toUpperCase())
-    .filter((s) => allowed.map((a) => a.toUpperCase()).includes(s))
-    .map((s) => {
-      const hit = allowed.find((a) => a.toUpperCase() === s);
-      return hit || s;
-    });
 }
 
 function parseTfParam(raw: string | null, allowed: readonly string[]): string[] {
@@ -41,7 +94,7 @@ function parseTfParam(raw: string | null, allowed: readonly string[]): string[] 
 export function OhlcvHistoryPanel() {
   const [searchParams] = useSearchParams();
   const initialSymbols = useMemo(() => {
-    const fromUrl = parseListParam(searchParams.get("symbols"), SYMBOL_OPTIONS);
+    const fromUrl = parseSymbolList(searchParams.get("symbols"));
     return fromUrl.length ? fromUrl : ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
   }, [searchParams]);
   const initialTfs = useMemo(() => {
@@ -51,11 +104,12 @@ export function OhlcvHistoryPanel() {
   const initialUntil = searchParams.get("until") || "2023-01-01";
 
   const [symbols, setSymbols] = useState<string[]>(initialSymbols);
+  const [customSymbols, setCustomSymbols] = useState("");
   const [timeframes, setTimeframes] = useState<string[]>(initialTfs);
   const [until, setUntil] = useState(initialUntil);
-  const [refreshTip, setRefreshTip] = useState(true);
   const [maxPages, setMaxPages] = useState(200);
   const [coverage, setCoverage] = useState<OhlcvRangeRow[]>([]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const job = useOhlcvExpandStore((s) => s.job);
   const error = useOhlcvExpandStore((s) => s.error);
@@ -65,30 +119,95 @@ export function OhlcvHistoryPanel() {
   const setError = useOhlcvExpandStore((s) => s.setError);
 
   const running = job?.status === "running" || active;
+  const autoTipKeyRef = useRef<string>("");
+  const [autoTipNote, setAutoTipNote] = useState<string | null>(null);
+
+  // Keep "behind now" labels live while viewing the page.
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const refreshCoverage = useCallback(async () => {
     if (!symbols.length || !timeframes.length) {
       setCoverage([]);
-      return;
+      return [];
     }
     try {
       const r = await fetchResearchOhlcvRange({ symbols, timeframes });
-      setCoverage(r.rows || []);
+      const rows = r.rows || [];
+      setCoverage(rows);
+      return rows;
     } catch {
       setCoverage([]);
+      return [];
     }
   }, [symbols, timeframes]);
 
-  useEffect(() => {
-    void refreshCoverage();
-  }, [refreshCoverage]);
+  const syncTipToNow = useCallback(
+    async (rows?: OhlcvRangeRow[], { quiet = false } = {}) => {
+      if (!symbols.length || !timeframes.length) {
+        if (!quiet) setError("Pick at least one symbol and timeframe");
+        return;
+      }
+      if (running) return;
+      const staleTfs = timeframes.filter((tf) => {
+        const matching = (rows ?? coverage).filter((r) => r.timeframe === tf);
+        if (!matching.length) return true;
+        return matching.some((r) => isTipStale(r.end, tf));
+      });
+      const tfs = staleTfs.length ? staleTfs : timeframes;
+      if (!quiet) setAutoTipNote(null);
+      await startJob({
+        symbols,
+        timeframes: tfs,
+        refresh_tip: true,
+        max_pages: Math.min(40, maxPages),
+        // omit until → tip-only forward fill to current closed bars
+      });
+    },
+    [symbols, timeframes, coverage, running, maxPages, startJob, setError]
+  );
 
-  // When a background job finishes, refresh DB coverage on this tab.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const rows = await refreshCoverage();
+      if (cancelled) return;
+      const key = `${symbols.join(",")}|${timeframes.join(",")}`;
+      if (autoTipKeyRef.current === key) return;
+      const store = useOhlcvExpandStore.getState();
+      if (store.active || store.job?.status === "running") return;
+      const stale =
+        rows.length === 0 ||
+        rows.some((r) => isTipStale(r.end, r.timeframe));
+      if (!stale) {
+        autoTipKeyRef.current = key;
+        setAutoTipNote(null);
+        return;
+      }
+      autoTipKeyRef.current = key;
+      setAutoTipNote("Syncing DB tip to now…");
+      await syncTipToNow(rows, { quiet: true });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbols, timeframes]);
+
   useEffect(() => {
     if (job?.status === "done" || job?.status === "cancelled") {
       void refreshCoverage();
+      if (job?.status === "done") {
+        setAutoTipNote(
+          job.until
+            ? "Backfill finished · tip filled to latest closed bars"
+            : "Tip synced to latest closed bars"
+        );
+      }
     }
-  }, [job?.status, job?.finished_at, refreshCoverage]);
+  }, [job?.status, job?.finished_at, job?.until, refreshCoverage]);
 
   const start = useCallback(async () => {
     if (!symbols.length || !timeframes.length) {
@@ -96,24 +215,30 @@ export function OhlcvHistoryPanel() {
       return;
     }
     if (!until) {
-      setError("Pick an Until date (UTC day to walk history back to)");
+      setError("Pick a history-from date (UTC day to walk older bars back to)");
       return;
     }
+    setAutoTipNote(null);
     await startJob({
       symbols,
       timeframes,
       until,
-      refresh_tip: refreshTip,
+      // Always fill forward to the latest closed bar — Until is only the back target.
+      refresh_tip: true,
       max_pages: maxPages,
     });
-  }, [symbols, timeframes, until, refreshTip, maxPages, startJob, setError]);
+  }, [symbols, timeframes, until, maxPages, startJob, setError]);
 
-  /** Keep one decimal under 10% so early page pulls are not stuck showing 0%. */
   const progressPct = Math.min(100, Number(job?.pct ?? 0));
   const progressLabel =
     progressPct > 0 && progressPct < 10
       ? progressPct.toFixed(1)
       : String(Math.round(progressPct));
+
+  const nowLabel = useMemo(
+    () => new Date(nowMs).toISOString().replace("T", " ").slice(0, 19) + "Z",
+    [nowMs]
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 term-md:p-6">
@@ -122,8 +247,10 @@ export function OhlcvHistoryPanel() {
           OHLCV History
         </div>
         <div className="mt-1 text-sm text-terminal-muted">
-          Fetch Binance Futures candles for the selected symbols/timeframes and store them in
-          Postgres. Jobs keep running if you switch pages — progress stays in the top banner.
+          Coverage always shows the full DB range (start → tip). Fetch only pulls{" "}
+          <em>missing</em> gaps (older than DB start, or tip behind now). Series that
+          already cover your History-from date and tip are skipped instantly. Now:{" "}
+          <span className="font-mono text-terminal-text">{nowLabel}</span>.
         </div>
         <div className="mt-1 text-[11px] text-terminal-muted">
           Real exchange data only · same engine as{" "}
@@ -160,6 +287,50 @@ export function OhlcvHistoryPanel() {
                   </button>
                 );
               })}
+              {symbols
+                .filter((s) => !(SYMBOL_OPTIONS as readonly string[]).includes(s))
+                .map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={running}
+                    title={`Remove ${s}`}
+                    onClick={() => setSymbols((prev) => prev.filter((x) => x !== s))}
+                    className="rounded border border-terminal-accent bg-terminal-accent/15 px-2 py-1 font-mono text-xs text-terminal-accent disabled:opacity-50"
+                  >
+                    {s.replace("USDT", "")} ×
+                  </button>
+                ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <input
+                value={customSymbols}
+                disabled={running}
+                onChange={(e) => setCustomSymbols(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const added = parseSymbolList(customSymbols);
+                  if (!added.length) return;
+                  setSymbols((prev) => mergeSymbols(prev, added));
+                  setCustomSymbols("");
+                }}
+                placeholder="Add: INJUSDT, PEPEUSDT…"
+                className="min-w-[12rem] flex-1 rounded border border-terminal-border bg-transparent px-2 py-1 font-mono text-xs focus:border-terminal-accent focus:outline-none disabled:opacity-50"
+              />
+              <button
+                type="button"
+                disabled={running}
+                onClick={() => {
+                  const added = parseSymbolList(customSymbols);
+                  if (!added.length) return;
+                  setSymbols((prev) => mergeSymbols(prev, added));
+                  setCustomSymbols("");
+                }}
+                className="rounded border border-terminal-border px-2 py-1 text-xs text-terminal-muted hover:text-terminal-text disabled:opacity-50"
+              >
+                Add
+              </button>
             </div>
           </div>
 
@@ -191,7 +362,11 @@ export function OhlcvHistoryPanel() {
 
           <div>
             <div className="mb-1 text-[11px] uppercase tracking-wide text-terminal-muted">
-              Until (UTC day)
+              History from (UTC day)
+            </div>
+            <div className="mb-1 text-[10px] text-terminal-muted">
+              Walk <em>older</em> bars back to this day. Does not truncate the tip —
+              DB end stays at the latest closed candle.
             </div>
             <div className="mb-2 flex flex-wrap gap-1">
               {UNTIL_PRESETS.map((p) => (
@@ -220,15 +395,13 @@ export function OhlcvHistoryPanel() {
           </div>
 
           <div className="flex flex-col gap-2 text-xs">
-            <label className="flex items-center gap-2 text-terminal-muted">
-              <input
-                type="checkbox"
-                disabled={running}
-                checked={refreshTip}
-                onChange={(e) => setRefreshTip(e.target.checked)}
-              />
-              Also refresh tip to now
-            </label>
+            <div className="rounded border border-terminal-border/70 bg-black/20 px-2 py-1.5 text-terminal-muted">
+              Tip fill: <span className="text-emerald-300">always on</span>
+              <div className="mt-0.5 text-[10px]">
+                Every Fetch also pulls forward to the latest closed bar (
+                {nowLabel}).
+              </div>
+            </div>
             <label>
               <span className="mb-1 block text-terminal-muted">Max REST pages / series</span>
               <input
@@ -251,7 +424,17 @@ export function OhlcvHistoryPanel() {
             onClick={() => void start()}
             className="rounded border border-terminal-accent bg-terminal-accent/15 px-4 py-1.5 text-sm text-terminal-accent disabled:opacity-50"
           >
-            {running ? `Fetching… ${progressLabel}%` : "Fetch & store in DB"}
+            {running
+              ? `Fetching… ${progressLabel}%`
+              : `Fetch ${until} → now`}
+          </button>
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => void syncTipToNow()}
+            className="rounded border border-terminal-border px-3 py-1.5 text-sm text-terminal-text hover:border-terminal-accent disabled:opacity-50"
+          >
+            Sync tip to now only
           </button>
           {running ? (
             <button
@@ -272,6 +455,12 @@ export function OhlcvHistoryPanel() {
           </button>
         </div>
 
+        {autoTipNote ? (
+          <div className="mt-3 rounded border border-terminal-accent/30 bg-terminal-accent/10 px-3 py-2 text-[11px] text-terminal-accent">
+            {autoTipNote}
+          </div>
+        ) : null}
+
         {error ? (
           <div className="mt-3 rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100">
             {error}
@@ -283,6 +472,7 @@ export function OhlcvHistoryPanel() {
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
               <span className="text-terminal-accent">
                 {job.status.toUpperCase()}
+                {job.until ? ` · from ${job.until} → tip` : " · tip only"}
                 {job.total_cells
                   ? ` · ${job.done_cells ?? 0}/${job.total_cells} cells · ${progressLabel}%`
                   : ""}
@@ -312,21 +502,23 @@ export function OhlcvHistoryPanel() {
       </div>
 
       <div className="mt-4 overflow-x-auto rounded border border-terminal-border">
-        <table className="w-full min-w-[640px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[880px] border-collapse text-left text-xs">
           <thead className="bg-black/30 font-mono text-[11px] uppercase tracking-wide text-terminal-muted">
             <tr>
               <th className="px-3 py-2">Symbol</th>
               <th className="px-3 py-2">TF</th>
               <th className="px-3 py-2">Bars</th>
               <th className="px-3 py-2">DB start</th>
-              <th className="px-3 py-2">DB end</th>
+              <th className="px-3 py-2">DB end (UTC)</th>
+              <th className="px-3 py-2">Still missing back</th>
+              <th className="px-3 py-2">Tip vs now</th>
               <th className="px-3 py-2">Last job</th>
             </tr>
           </thead>
           <tbody>
             {coverage.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-4 text-terminal-muted">
+                <td colSpan={8} className="px-3 py-4 text-terminal-muted">
                   No coverage yet — pick symbols/TFs or run a fetch.
                 </td>
               </tr>
@@ -335,6 +527,8 @@ export function OhlcvHistoryPanel() {
                 const jr = job?.results?.find(
                   (r) => r.symbol === row.symbol && r.timeframe === row.timeframe
                 );
+                const back = remainingBackLabel(row.start, until);
+                const tip = behindNowLabel(row.end, row.timeframe);
                 return (
                   <tr
                     key={`${row.symbol}-${row.timeframe}`}
@@ -345,17 +539,31 @@ export function OhlcvHistoryPanel() {
                     </td>
                     <td className="px-3 py-2 text-terminal-muted">{row.timeframe}</td>
                     <td className="px-3 py-2">{row.bars?.toLocaleString() ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      {row.start ? row.start.slice(0, 10) : "—"}
+                    <td className="px-3 py-2">{formatCoverageTs(row.start)}</td>
+                    <td className="px-3 py-2">{formatCoverageTs(row.end)}</td>
+                    <td
+                      className={`px-3 py-2 ${
+                        back === "complete"
+                          ? "text-emerald-300"
+                          : "text-amber-300"
+                      }`}
+                    >
+                      {back}
                     </td>
-                    <td className="px-3 py-2">
-                      {row.end ? row.end.slice(0, 10) : "—"}
+                    <td
+                      className={`px-3 py-2 ${
+                        tip.stale ? "text-amber-300" : "text-emerald-300"
+                      }`}
+                    >
+                      {tip.text}
                     </td>
                     <td className="px-3 py-2 text-terminal-muted">
                       {jr
                         ? jr.error
                           ? `error: ${jr.error}`
-                          : `+${jr.written} (${jr.direction || "—"})`
+                          : jr.direction === "already_complete"
+                            ? "already complete (0 new)"
+                            : `+${jr.written} (${jr.direction || "—"})`
                         : "—"}
                     </td>
                   </tr>

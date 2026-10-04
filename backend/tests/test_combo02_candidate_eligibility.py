@@ -127,7 +127,7 @@ def test_reject_negative_expectancy():
 
 
 def test_reject_severe_dd():
-    tier, reasons, _ = classify_eligibility(
+    tier, reasons, conds = classify_eligibility(
         trade_count=25,
         net_avg_r=0.5,
         net_pnl=50.0,
@@ -138,6 +138,41 @@ def test_reject_severe_dd():
     )
     assert tier == "REJECT"
     assert any("max_dd" in r for r in reasons)
+    dd_rule = next(c for c in conds if c["rule"] == "max_drawdown_le_10R")
+    assert dd_rule["passed"] is False
+    assert dd_rule["actual"] == 12.0
+    assert dd_rule["required"] == "<= 10.0"
+
+
+def test_eligibility_report_structured_and_deterministic():
+    from app.research.combo02_candidate_eligibility import eligibility_report
+
+    a = eligibility_report(
+        trade_count=25,
+        net_avg_r=-0.21,
+        net_pnl=-5.0,
+        profit_factor=0.73,
+        max_dd_r=13.69,
+        max_lose_streak=2,
+        fee_share=0.2,
+    )
+    b = eligibility_report(
+        trade_count=25,
+        net_avg_r=-0.21,
+        net_pnl=-5.0,
+        profit_factor=0.73,
+        max_dd_r=13.69,
+        max_lose_streak=2,
+        fee_share=0.2,
+    )
+    assert a == b
+    assert a["tier"] == "RESEARCH_REJECTED"
+    assert a["passed"] is False
+    by_rule = {r["rule"]: r for r in a["reasons"]}
+    assert by_rule["net_avg_r_gt_0"]["passed"] is False
+    assert by_rule["net_avg_r_gt_0"]["actual"] == -0.21
+    assert by_rule["profit_factor_gt_1"]["passed"] is False
+    assert by_rule["max_drawdown_le_10R"]["passed"] is False
 
 
 def test_promising():

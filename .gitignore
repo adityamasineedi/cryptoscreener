@@ -25,6 +25,8 @@ data/postgres/
 data/redis/
 data/diagnostics/
 .cache/
+backend/data/research_cache/
+backend/data/research_cache_benchmark/
 
 # Local research run outputs (regenerable)
 backend/scripts/_*.json

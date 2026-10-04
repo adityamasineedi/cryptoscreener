@@ -677,6 +677,7 @@ CREATE TABLE IF NOT EXISTS strategy_candidate_registry (
     combo_version               TEXT NOT NULL DEFAULT 'v2-research',
     source                      TEXT NOT NULL DEFAULT 'DYNAMIC_CANDIDATE_PIPELINE',
     telegram_eligible           BOOLEAN NOT NULL DEFAULT FALSE,
+    production_approved         BOOLEAN NOT NULL DEFAULT FALSE,
     created_at_utc              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at_utc              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (symbol, strategy_id)

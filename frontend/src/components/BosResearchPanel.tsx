@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   fetchBosCombinationDetail,
@@ -8,6 +8,10 @@ import {
   type BosCompareResponse,
   type OhlcvRangeRow,
 } from "../api/client";
+import {
+  normalizeResearchSymbol,
+  RESEARCH_SYMBOL_PRESETS,
+} from "../research/symbols";
 
 type CompareRow = {
   combination_id: string;
@@ -32,7 +36,7 @@ type LoadState = "LOADING" | "SUCCESS_WITH_DATA" | "SUCCESS_EMPTY" | "ERROR";
 
 const TIMEFRAMES = ["5m", "15m", "1h", "4h"] as const;
 const DIRECTIONS = ["ALL", "LONG", "SHORT"] as const;
-const SYMBOL_PRESETS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"] as const;
+const SYMBOL_PRESETS = RESEARCH_SYMBOL_PRESETS;
 
 function pct(v: number | null | undefined): string {
   if (v == null || Number.isNaN(v)) return "—";
@@ -149,6 +153,7 @@ export function BosResearchPanel() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [coverage, setCoverage] = useState<OhlcvRangeRow[]>([]);
   const [coverageReady, setCoverageReady] = useState(false);
+  const didInitDates = useRef(false);
 
   const activeCoverage = useMemo(
     () =>
@@ -160,48 +165,56 @@ export function BosResearchPanel() {
 
   const coverageOk = Boolean(activeCoverage && (activeCoverage.bars || 0) > 0);
 
-  // Load DB OHLCV availability for research symbols/TFs, then clamp dates.
+  // Load DB OHLCV availability for presets + the typed symbol, then clamp dates once.
   useEffect(() => {
     let alive = true;
+    const active = normalizeResearchSymbol(symbol);
+    const symbols = [
+      ...new Set([...SYMBOL_PRESETS, ...(active ? [active] : [])]),
+    ];
     setCoverageReady(false);
     fetchResearchOhlcvRange({
-      symbols: [...SYMBOL_PRESETS],
+      symbols,
       timeframes: [...TIMEFRAMES],
     })
       .then((r) => {
         if (!alive) return;
         const rowsCov = r.rows || [];
         setCoverage(rowsCov);
-        const hit =
-          rowsCov.find((c) => c.symbol === "BTCUSDT" && c.timeframe === "4h") ||
-          rowsCov.find((c) => c.symbol === "BTCUSDT" && c.timeframe === "1h") ||
-          rowsCov.find((c) => c.symbol === "BTCUSDT" && c.timeframe === "15m") ||
-          rowsCov.find((c) => (c.bars || 0) > 0) ||
-          null;
-        if (hit && (hit.bars || 0) > 0) {
-          setSymbol(hit.symbol);
-          setTimeframe(hit.timeframe as (typeof TIMEFRAMES)[number]);
-          // Prefer a recent window of available DB history (fast enough to compare).
-          // Full-range 15m years can take many minutes per run.
-          const endDay = hit.end?.slice(0, 10) || "";
-          let startDay = hit.start?.slice(0, 10) || "";
-          // Short recent window keeps compare responsive (~seconds–1 min).
-          const lookbackDays =
-            hit.timeframe === "5m"
-              ? 5
-              : hit.timeframe === "15m"
-                ? 14
-                : hit.timeframe === "1h"
-                  ? 30
-                  : 45;
-          if (endDay) {
-            const endDt = new Date(`${endDay}T00:00:00Z`);
-            const recent = new Date(endDt);
-            recent.setUTCDate(recent.getUTCDate() - lookbackDays);
-            const recentStr = recent.toISOString().slice(0, 10);
-            if (!startDay || startDay < recentStr) startDay = recentStr;
-            setStart(startDay);
-            setEnd(endDay);
+        // Only auto-pick symbol/window on first successful load.
+        if (!didInitDates.current) {
+          didInitDates.current = true;
+          const hit =
+            rowsCov.find((c) => c.symbol === "BTCUSDT" && c.timeframe === "4h") ||
+            rowsCov.find((c) => c.symbol === "BTCUSDT" && c.timeframe === "1h") ||
+            rowsCov.find((c) => c.symbol === "BTCUSDT" && c.timeframe === "15m") ||
+            rowsCov.find((c) => (c.bars || 0) > 0) ||
+            null;
+          if (hit && (hit.bars || 0) > 0) {
+            setSymbol(hit.symbol);
+            setTimeframe(hit.timeframe as (typeof TIMEFRAMES)[number]);
+            // Prefer a recent window of available DB history (fast enough to compare).
+            // Full-range 15m years can take many minutes per run.
+            const endDay = hit.end?.slice(0, 10) || "";
+            let startDay = hit.start?.slice(0, 10) || "";
+            // Short recent window keeps compare responsive (~seconds–1 min).
+            const lookbackDays =
+              hit.timeframe === "5m"
+                ? 5
+                : hit.timeframe === "15m"
+                  ? 14
+                  : hit.timeframe === "1h"
+                    ? 30
+                    : 45;
+            if (endDay) {
+              const endDt = new Date(`${endDay}T00:00:00Z`);
+              const recent = new Date(endDt);
+              recent.setUTCDate(recent.getUTCDate() - lookbackDays);
+              const recentStr = recent.toISOString().slice(0, 10);
+              if (!startDay || startDay < recentStr) startDay = recentStr;
+              setStart(startDay);
+              setEnd(endDay);
+            }
           }
         }
         setCoverageReady(true);
@@ -214,7 +227,7 @@ export function BosResearchPanel() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [symbol]);
 
   const loadCompare = useCallback(async () => {
     setLoadState("LOADING");

@@ -634,10 +634,15 @@ _SCHEMA_STATEMENTS = [
         combo_version               TEXT NOT NULL DEFAULT 'v2-research',
         source                      TEXT NOT NULL DEFAULT 'DYNAMIC_CANDIDATE_PIPELINE',
         telegram_eligible           BOOLEAN NOT NULL DEFAULT FALSE,
+        production_approved         BOOLEAN NOT NULL DEFAULT FALSE,
         created_at_utc              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at_utc              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (symbol, strategy_id)
     )
+    """,
+    """
+    ALTER TABLE strategy_candidate_registry
+        ADD COLUMN IF NOT EXISTS production_approved BOOLEAN NOT NULL DEFAULT FALSE
     """,
     """
     CREATE TABLE IF NOT EXISTS strategy_candidate_audit_log (
@@ -784,7 +789,7 @@ class DatabaseManager:
             )
             raise
 
-    async def connect(self, settings: Settings) -> None:
+    async def connect(self, settings: Settings, *, ensure_schema: bool = True) -> None:
         if not settings.database_enabled:
             self.status = "disabled"
             self.enabled = False
@@ -807,13 +812,23 @@ class DatabaseManager:
             )
             self.enabled = True
             self._stage_end("DB_CONNECT", t0, status="OK")
-            await self.ensure_schema()
-            self.status = "ok" if self.schema_ready else f"schema_incomplete:{self.last_schema_error or 'unknown'}"
+            if ensure_schema:
+                await self.ensure_schema()
+                self.status = (
+                    "ok"
+                    if self.schema_ready
+                    else f"schema_incomplete:{self.last_schema_error or 'unknown'}"
+                )
+            else:
+                # Research CLIs: skip DDL to avoid lock timeouts against a live API.
+                self.schema_ready = True
+                self.status = "ok"
             logger.info(
                 "database_connected",
                 timescale=self.timescale,
                 schema_ready=self.schema_ready,
                 status=self.status,
+                ensure_schema=ensure_schema,
             )
         except Exception as exc:  # noqa: BLE001
             self._stage_end(

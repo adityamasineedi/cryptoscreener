@@ -138,10 +138,12 @@ class OHLCVStore:
             key = (candle.symbol.upper(), normalize_timeframe(candle.timeframe))
             hist = self._closed[key]
             if hist and any(c.open_time == candle.open_time for c in hist):
-                # replace matching
+                # replace matching — still upsert to Postgres so tip repairs persist
                 for i, existing in enumerate(hist):
                     if existing.open_time == candle.open_time:
                         hist[i] = candle
+                        self._pending_db.append(candle)
+                        n += 1
                         break
             else:
                 hist.append(candle)

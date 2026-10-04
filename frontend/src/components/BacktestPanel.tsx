@@ -8,6 +8,11 @@ import {
   type StrategyTradeRow,
 } from "../api/client";
 import { tradeRowKey } from "../chart/backtestTradeOverlay";
+import {
+  mergeSymbols,
+  parseSymbolList,
+  RESEARCH_SYMBOL_PRESETS,
+} from "../research/symbols";
 import { useBacktestJobStore } from "../store/backtestJobStore";
 import { BacktestTradeChart } from "./BacktestTradeChart";
 import { CandidateResearchPanel } from "./CandidateResearchPanel";
@@ -22,7 +27,7 @@ const YEAR_PRESETS = [
   { id: "2026ytd", start: "2026-01-01", end: "", label: "2026 YTD" },
 ] as const;
 
-const SYMBOL_OPTIONS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"] as const;
+const SYMBOL_OPTIONS = RESEARCH_SYMBOL_PRESETS;
 const TF_OPTIONS = ["15m", "1h", "4h"] as const;
 
 /** COMBO_02 v1 production book labels (see docs/v1_production.md). */
@@ -143,6 +148,7 @@ function formatDuration(ms: number): string {
 
 export function BacktestPanel() {
   const [symbols, setSymbols] = useState<string[]>(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
+  const [customSymbols, setCustomSymbols] = useState("");
   const [timeframes, setTimeframes] = useState<string[]>(["1h"]);
   const [direction, setDirection] = useState<"LONG" | "SHORT">("LONG");
   const [lookbackId, setLookbackId] = useState<(typeof LOOKBACKS)[number]["id"]>("60d");
@@ -153,6 +159,7 @@ export function BacktestPanel() {
   const [principalUsd, setPrincipalUsd] = useState(1000);
   const [riskPct, setRiskPct] = useState(2);
   const [riskUsd, setRiskUsd] = useState(20);
+  const [leverage, setLeverage] = useState(2);
   const [takerFeePct, setTakerFeePct] = useState(0.04);
   const [makerFeePct, setMakerFeePct] = useState(0.02);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -352,6 +359,7 @@ export function BacktestPanel() {
       limit,
       risk_usd: riskUsd,
       principal_usd: principalUsd,
+      leverage,
       taker_fee_pct: takerFeePct,
       maker_fee_pct: makerFeePct,
       include_trades: true,
@@ -365,6 +373,7 @@ export function BacktestPanel() {
     limit,
     riskUsd,
     principalUsd,
+    leverage,
     takerFeePct,
     makerFeePct,
     periodMode,
@@ -470,7 +479,11 @@ export function BacktestPanel() {
               {SYMBOL_OPTIONS.map((s) => {
                 const on = symbols.includes(s);
                 const symTier =
-                  s === "BTCUSDT" ? "core" : ("secondary" as const);
+                  s === "BTCUSDT"
+                    ? "core"
+                    : s === "ETHUSDT" || s === "SOLUSDT"
+                      ? "secondary"
+                      : ("research" as const);
                 const badge = v1TierBadge(symTier);
                 return (
                   <button
@@ -485,12 +498,58 @@ export function BacktestPanel() {
                     }`}
                   >
                     {s.replace("USDT", "")}
-                    <span className={`ml-1 text-[9px] ${badge.className} rounded px-1`}>
-                      {badge.label}
-                    </span>
+                    {(s === "BTCUSDT" || s === "ETHUSDT" || s === "SOLUSDT") && (
+                      <span className={`ml-1 text-[9px] ${badge.className} rounded px-1`}>
+                        {badge.label}
+                      </span>
+                    )}
                   </button>
                 );
               })}
+              {symbols
+                .filter((s) => !(SYMBOL_OPTIONS as readonly string[]).includes(s))
+                .map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    title={`Remove ${s}`}
+                    onClick={() => setSymbols((prev) => prev.filter((x) => x !== s))}
+                    className="rounded border border-terminal-accent bg-terminal-accent/15 px-2 py-1 font-mono text-xs text-terminal-accent"
+                  >
+                    {s.replace("USDT", "")} ×
+                  </button>
+                ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <input
+                value={customSymbols}
+                onChange={(e) => setCustomSymbols(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const added = parseSymbolList(customSymbols);
+                  if (!added.length) return;
+                  setSymbols((prev) => mergeSymbols(prev, added));
+                  setCustomSymbols("");
+                }}
+                placeholder="Add: XRPUSDT, INJUSDT…"
+                className="min-w-[12rem] flex-1 rounded border border-terminal-border bg-transparent px-2 py-1 font-mono text-xs focus:border-terminal-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const added = parseSymbolList(customSymbols);
+                  if (!added.length) return;
+                  setSymbols((prev) => mergeSymbols(prev, added));
+                  setCustomSymbols("");
+                }}
+                className="rounded border border-terminal-border px-2 py-1 text-xs text-terminal-muted hover:text-terminal-text"
+              >
+                Add
+              </button>
+            </div>
+            <div className="mt-1 text-[10px] text-terminal-muted">
+              Fetch OHLCV first for new coins (History tab), then run backtest.
             </div>
           </div>
 
@@ -563,7 +622,7 @@ export function BacktestPanel() {
           </label>
         </div>
 
-        <div className="mt-3 grid gap-3 term-md:grid-cols-3">
+        <div className="mt-3 grid gap-3 term-md:grid-cols-4">
           <label className="text-xs">
             <span className="mb-1 block text-terminal-muted">Risk % of principal (1R)</span>
             <input
@@ -588,8 +647,20 @@ export function BacktestPanel() {
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
             />
           </label>
+          <label className="text-xs">
+            <span className="mb-1 block text-terminal-muted">Leverage (x)</span>
+            <input
+              type="number"
+              min={1}
+              max={125}
+              step={1}
+              value={leverage}
+              onChange={(e) => setLeverage(Math.max(1, Number(e.target.value) || 2))}
+              className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
+            />
+          </label>
           <div className="flex items-end text-[11px] text-terminal-muted">
-            Default: $1,000 principal · 2% risk = $20/R. Ending equity = principal + net profit.
+            Default: $1,000 · 2% risk = $20/R · {leverage}x margin. Qty from stop risk; leverage only sets margin = notional/lev.
           </div>
         </div>
 
@@ -621,7 +692,7 @@ export function BacktestPanel() {
             />
           </label>
           <div className="flex items-end text-[11px] text-terminal-muted">
-            Defaults: Binance USDT-M VIP0 (taker 0.04% / maker 0.02%). Qty sized so stop risk = Risk $.
+            Defaults: Binance USDT-M VIP0 (taker 0.04% / maker 0.02%). Qty sized so stop risk = Risk $. Leverage {leverage}x → margin = notional/{leverage}.
           </div>
         </div>
 
@@ -912,8 +983,8 @@ export function BacktestPanel() {
               <span className="text-terminal-muted">(@ ${riskUsd}/R before fees)</span>
             </div>
             <div>
-              Fees: taker {(takerFeePct).toFixed(2)}% / maker {(makerFeePct).toFixed(2)}% · click a
-              row for trade blotter
+              Fees: taker {(takerFeePct).toFixed(2)}% / maker {(makerFeePct).toFixed(2)}% · leverage{" "}
+              {(job?.leverage ?? leverage)}x · click a row for trade blotter
             </div>
             <div className="text-terminal-muted term-md:col-span-2">{result.disclaimer}</div>
           </div>
@@ -1114,7 +1185,7 @@ function SelectedDetail({
       ) : null}
 
       <div className="max-h-[420px] min-w-0 overflow-auto rounded border border-terminal-border/60">
-        <table className="w-full min-w-[1180px] border-collapse text-left text-[11px]">
+        <table className="w-full min-w-[1260px] border-collapse text-left text-[11px]">
           <thead className="sticky top-0 bg-black/80 text-[10px] uppercase tracking-wide text-terminal-muted">
             <tr>
               <th className="px-2 py-2">#</th>
@@ -1128,6 +1199,7 @@ function SelectedDetail({
               <th className="px-2 py-2">Outcome</th>
               <th className="px-2 py-2">Hold</th>
               <th className="px-2 py-2">Qty</th>
+              <th className="px-2 py-2">Margin</th>
               <th className="px-2 py-2">Type</th>
               <th className="px-2 py-2">Fees</th>
               <th className="px-2 py-2">Gross</th>
@@ -1205,6 +1277,16 @@ function TradeRow({
       <td className="px-2 py-1.5 font-mono">{t.outcome || "—"}</td>
       <td className="px-2 py-1.5 font-mono">{t.holding_bars ?? "—"}</td>
       <td className="px-2 py-1.5 font-mono">{num(t.qty, 4)}</td>
+      <td
+        className="px-2 py-1.5 font-mono text-terminal-muted"
+        title={
+          t.leverage != null
+            ? `${t.leverage}x · notional $${(t.notional_entry_usd ?? 0).toFixed(2)} · approx liq ${t.liquidation_price ?? "—"}`
+            : undefined
+        }
+      >
+        {t.margin_usd != null ? `$${t.margin_usd.toFixed(2)}` : "—"}
+      </td>
       <td className="px-2 py-1.5 font-mono text-terminal-muted">{t.entry_type || "—"}</td>
       <td className="px-2 py-1.5 font-mono text-terminal-muted">
         {money(-(t.fee_total_usd ?? 0)).replace("+", "-")}

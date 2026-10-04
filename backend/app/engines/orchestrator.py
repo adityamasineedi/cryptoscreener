@@ -56,8 +56,8 @@ class CalculationOrchestrator:
         cfg = settings.indicators_config
         market_cfg = settings.market_config
         ws_cfg = market_cfg.get("websocket") or {}
-        # Live WS uses a reduced TF set; 4h/1d stay on REST backfill
-        live_tfs = ws_cfg.get("kline_live_timeframes") or ["1m", "5m", "15m", "1h"]
+        # Live WS TF set from market.yaml kline_live_timeframes (include 1h/4h for v1).
+        live_tfs = ws_cfg.get("kline_live_timeframes") or ["1m", "5m", "15m", "1h", "4h"]
         max_streams = int(
             ws_cfg.get("max_streams_per_connection")
             or settings.max_ws_streams_per_connection
@@ -195,6 +195,11 @@ class CalculationOrchestrator:
                 emit_alerts=True,
                 paper_engine=paper,
             )
+            # Keep v1 books on live kline WS + tip REST forever.
+            try:
+                self.set_kline_focus([b.symbol for b in v1_watcher.books])
+            except Exception:  # noqa: BLE001
+                self.set_kline_focus(["BTCUSDT", "ETHUSDT", "SOLUSDT"])
             try:
                 seeded = v1_watcher.seed_from_store()
                 logger.info(
@@ -299,8 +304,15 @@ class CalculationOrchestrator:
         )
         focus = {s.upper() for s in self._kline_focus}
         visible = set(getattr(self.backfill, "_visible", set()) or set())
-        # Always keep focus/visible; fill remainder from sticky then volume rank
-        must = focus | visible
+        # Frozen COMBO_02 v1 books must always stay on live kline WS (1h/4h tips).
+        try:
+            from app.research.v1_production import V1_SYMBOLS
+
+            v1_must = {s for s in V1_SYMBOLS if s in set(uni) or True}
+        except Exception:  # noqa: BLE001
+            v1_must = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+        # Always keep focus/visible/v1; fill remainder from sticky then volume rank
+        must = focus | visible | v1_must
         sticky = set(self._kline_live_sticky)
         ranked_fill = [s for s in ranked if s not in must]
         sticky_keep = [s for s in ranked if s in sticky and s not in must]
@@ -368,7 +380,14 @@ class CalculationOrchestrator:
                 if not targets:
                     # Still refresh a few top-volume tips so paper/signals move
                     targets = self._select_kline_live_symbols()[:4]
-                tfs = list(self.kline_ws.timeframes)[:3] or ["15m", "5m", "1m"]
+                tfs = list(self.kline_ws.timeframes) or ["15m", "5m", "1m", "1h"]
+                # Always include v1 setup/HTF TFs even if WS list was truncated historically.
+                for extra in ("1h", "4h"):
+                    if extra not in tfs:
+                        tfs.append(extra)
+                # Prefer setup TFs for tip freshness when budget is tight
+                prefer = [t for t in ("1h", "15m", "4h", "5m", "1m") if t in tfs]
+                tfs = list(dict.fromkeys([*prefer, *tfs]))[:5]
                 rest = getattr(self.backfill, "rest", None)
                 if rest is None:
                     continue
@@ -592,6 +611,69 @@ class CalculationOrchestrator:
             try:
                 watcher = get_v1_paper_watcher()
                 paper = get_paper_trade_engine()
+                # Preferential REST tip catch-up for v1 books. Deep-fill thin
+                # series once; thereafter only tip-refresh.
+                if getattr(self, "backfill", None) is not None:
+                    from app.services.ohlcv_store import ohlcv_store
+
+                    if not hasattr(self, "_v1_deep_hydrated"):
+                        self._v1_deep_hydrated = set()
+                    for book in watcher.books:
+                        try:
+                            bars_1h = len(
+                                ohlcv_store.get_candles_for_engine(
+                                    book.symbol, "1h", include_open=False
+                                )
+                                or []
+                            )
+                            bars_4h = len(
+                                ohlcv_store.get_candles_for_engine(
+                                    book.symbol, "4h", include_open=False
+                                )
+                                or []
+                            )
+                            key = book.symbol.upper()
+                            need_deep = key not in self._v1_deep_hydrated and (
+                                bars_1h < 80 or bars_4h < 80
+                            )
+                            if need_deep:
+                                if bars_1h < 80:
+                                    await self.backfill._fetch_rest_tail(
+                                        book.symbol, "1h", limit=200
+                                    )
+                                if bars_4h < 80:
+                                    await self.backfill._fetch_rest_tail(
+                                        book.symbol, "4h", limit=200
+                                    )
+                                bars_1h = len(
+                                    ohlcv_store.get_candles_for_engine(
+                                        book.symbol, "1h", include_open=False
+                                    )
+                                    or []
+                                )
+                                bars_4h = len(
+                                    ohlcv_store.get_candles_for_engine(
+                                        book.symbol, "4h", include_open=False
+                                    )
+                                    or []
+                                )
+                                if bars_1h >= 80 and bars_4h >= 80:
+                                    self._v1_deep_hydrated.add(key)
+                            else:
+                                await self.backfill.ensure_series_fresh(
+                                    book.symbol, "1h", limit=80, force_tip=True
+                                )
+                                await self.backfill.ensure_series_fresh(
+                                    book.symbol, "4h", limit=80, force_tip=True
+                                )
+                                if bars_1h >= 80 and bars_4h >= 80:
+                                    self._v1_deep_hydrated.add(key)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "v1_watcher_tip_refresh_failed",
+                                symbol=book.symbol,
+                                error=str(exc),
+                            )
                 for book in watcher.books:
                     watcher.on_closed_1h(book.symbol)
                 await flush_paper_trade_persists(paper)

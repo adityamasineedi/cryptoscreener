@@ -40,6 +40,45 @@ UI: Backtest → **Dynamic Candidate Pipeline** → **Run research advance**.
 
 API: `POST /api/research/candidates/advance`
 
+Response splits **this run** from **registry totals** (do not conflate):
+
+```json
+{
+  "run_summary": {
+    "health_ready": 0,
+    "backtests_started": 0,
+    "oos_started": 0,
+    "rejected": 0,
+    "advanced": 0,
+    "errors": 0
+  },
+  "registry_summary": {
+    "discovered": 0,
+    "data_pending": 0,
+    "data_ready": 0,
+    "backtest_completed": 0,
+    "research_rejected": 0,
+    "oos_failed": 0,
+    "v2_paper_candidate": 0,
+    "paper_validating": 0,
+    "production_approved": 0,
+    "suspended": 0
+  }
+}
+```
+
+`run_summary` counts only work performed in that invocation. `registry_summary`
+is durable state counts across the registry (`backtest_completed` =
+`PROMISING` + `OOS_PENDING`; `production_approved` = `APPROVED` state, still
+never Telegram / never v1).
+
+UI tip: *Current run counts only transitions from this action. Registry totals
+counts all persisted candidate records.*
+
+Approve-paper risk: default cap **0.25%**; higher up to **0.5%** requires
+`risk_override_above_default=true`. This endpoint never sets
+`production_approved` or `telegram_eligible`.
+
 ## Config (defaults fail closed)
 
 ```

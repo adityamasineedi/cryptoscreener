@@ -286,6 +286,7 @@ export function PaperTradePanel() {
         monitor={monitor}
         watcher={watcher}
         telegram={telegram}
+        status={status}
       />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
@@ -296,11 +297,15 @@ export function PaperTradePanel() {
           tone={(status?.realized_pnl_usd ?? 0) >= 0 ? "up" : "down"}
         />
         <Stat label="Open" value={String(status?.open_count ?? 0)} />
+        <Stat
+          label="Open risk $"
+          value={`$${fmt(status?.open_risk_usd)}`}
+          title="Sum of open position risk_usd (v1 books: BTC 1.5% / ETH·SOL 0.5% of equity)"
+        />
         <Stat label="Ready" value={String(oppMeta.ready)} tone={oppMeta.ready > 0 ? "up" : undefined} />
         <Stat label="Near" value={String(oppMeta.near)} />
         <Stat label="Forming" value={String(oppMeta.forming)} />
         <Stat label="Waiting" value={String(oppMeta.waiting)} />
-        <Stat label="Watch/Block" value={String(oppMeta.watch + oppMeta.blocked)} />
       </div>
 
       <section>
@@ -381,15 +386,23 @@ function MonitorPanel({
   monitor,
   watcher,
   telegram,
+  status,
 }: {
   autoOn: boolean;
   monitor: PaperStatus["monitor"];
   watcher: PaperStatus["v1_watcher"];
   telegram: PaperStatus["telegram"];
+  status: PaperStatus | null;
 }) {
   const books = watcher?.live?.length ? watcher.live : watcher?.books || [];
   const tgReady = Boolean(telegram?.ready);
   const tgReason = telegram?.reason || null;
+  const bookRisk =
+    status?.v1_book_risk && Object.keys(status.v1_book_risk).length
+      ? Object.entries(status.v1_book_risk)
+          .map(([sym, row]) => `${sym.replace("USDT", "")} ${row.risk_pct_display || fmtPct(row.risk_percent)}`)
+          .join(" · ")
+      : "BTC 1.5% · ETH/SOL 0.5%";
   return (
     <section className="rounded border border-terminal-border bg-terminal-panel/40 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -416,6 +429,18 @@ function MonitorPanel({
             </span>
             <span className="rounded border border-terminal-border bg-white/5 px-1.5 py-0.5 text-terminal-muted">
               TF {watcher?.timeframe || "1h"} · path {watcher?.path || "A"}
+            </span>
+            <span
+              className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-200"
+              title="COMBO_02 v1 watcher position sizing"
+            >
+              v1 risk {bookRisk}
+            </span>
+            <span
+              className="rounded border border-terminal-border bg-white/5 px-1.5 py-0.5 text-terminal-muted"
+              title={status?.risk_percent_label || "RESEARCH_15M default only"}
+            >
+              research default {fmtPct(status?.risk_percent_legacy_research_15m ?? status?.risk_percent)}
             </span>
             {watcher?.last_skip ? (
               <span
@@ -531,15 +556,20 @@ function Stat({
   label,
   value,
   tone,
+  title,
 }: {
   label: string;
   value: string;
   tone?: "up" | "down";
+  title?: string;
 }) {
   const color =
     tone === "up" ? "text-emerald-300" : tone === "down" ? "text-rose-300" : "text-terminal-text";
   return (
-    <div className="rounded border border-terminal-border bg-terminal-panel/60 px-3 py-2">
+    <div
+      className="rounded border border-terminal-border bg-terminal-panel/60 px-3 py-2"
+      title={title}
+    >
       <div className="text-[10px] uppercase tracking-wide text-terminal-muted">{label}</div>
       <div className={`mt-1 font-mono text-sm ${color}`}>{value}</div>
     </div>
@@ -665,6 +695,7 @@ function TradeTable({
                 <th className="px-2 py-1.5">Entry</th>
                 <th className="px-2 py-1.5">Stop</th>
                 <th className="px-2 py-1.5">TP1</th>
+                <th className="px-2 py-1.5">Risk</th>
                 <th className="px-2 py-1.5">Qty</th>
                 {mode === "open" ? (
                   <>
@@ -690,6 +721,11 @@ function TradeTable({
             const snippet = (r.signal_snippet || {}) as Record<string, unknown>;
             const path = String(snippet.path || "—");
             const ver = String(snippet.combo_version || "—");
+            const riskPct = snippet.risk_percent as number | null | undefined;
+            const riskLabel =
+              riskPct != null
+                ? `${fmtPct(riskPct)} / $${fmt(r.risk_usd)}`
+                : `$${fmt(r.risk_usd)}`;
             return (
             <tr key={r.id} className="border-t border-terminal-border/70">
               <td className="px-2 py-1.5 text-terminal-text">{r.symbol}</td>
@@ -718,6 +754,9 @@ function TradeTable({
                   <td className="px-2 py-1.5">{fmt(r.entry_price, 4)}</td>
                   <td className="px-2 py-1.5">{fmt(r.stop_price, 4)}</td>
                   <td className="px-2 py-1.5">{fmt(r.tp1_price, 4)}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap" title={riskLabel}>
+                    {riskLabel}
+                  </td>
                   <td className="px-2 py-1.5">{fmt(r.quantity, 4)}</td>
                   {mode === "open" ? (
                     <>

@@ -13,7 +13,7 @@ def test_long_taker_round_trip_fees():
     }
     # risk $20 → qty = 20 / 1 = 20
     row = enrich_trade_execution(
-        trade, risk_usd=20.0, taker_fee=0.0004, maker_fee=0.0002
+        trade, risk_usd=20.0, taker_fee=0.0004, maker_fee=0.0002, leverage=2.0
     )
     assert row["qty"] == 20.0
     assert row["gross_pnl_usd"] == 40.0  # 20 * (102-100)
@@ -22,6 +22,10 @@ def test_long_taker_round_trip_fees():
     assert abs(row["fee_exit_usd"] - 0.816) < 1e-9
     assert abs(row["net_pnl_usd"] - (40.0 - 0.8 - 0.816)) < 1e-9
     assert abs(row["r_net"] - row["net_pnl_usd"] / 20.0) < 1e-9
+    assert row["leverage"] == 2.0
+    assert abs(row["notional_entry_usd"] - 2000.0) < 1e-9
+    assert abs(row["margin_usd"] - 1000.0) < 1e-9  # 2000 / 2x
+    assert abs(row["liquidation_price"] - 50.0) < 1e-9  # 100 * (1 - 1/2)
 
 
 def test_limit_retest_uses_maker_on_entry():
@@ -38,3 +42,4 @@ def test_limit_retest_uses_maker_on_entry():
     )
     assert row["fee_entry_rate"] == 0.0002
     assert row["fee_exit_rate"] == 0.0004
+    assert row["leverage"] == 2.0

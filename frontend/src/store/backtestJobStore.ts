@@ -26,6 +26,7 @@ type BacktestStore = {
     limit?: number;
     risk_usd?: number;
     principal_usd?: number;
+    leverage?: number;
     taker_fee_pct?: number;
     maker_fee_pct?: number;
     include_trades?: boolean;
@@ -43,6 +44,7 @@ function optimisticJob(body: {
   limit?: number;
   risk_usd?: number;
   principal_usd?: number;
+  leverage?: number;
   taker_fee_pct?: number;
   maker_fee_pct?: number;
   include_trades?: boolean;
@@ -58,6 +60,8 @@ function optimisticJob(body: {
     combination_id: body.combination_id,
     limit: body.limit,
     risk_usd: body.risk_usd,
+    principal_usd: body.principal_usd,
+    leverage: body.leverage,
     taker_fee_pct: body.taker_fee_pct,
     maker_fee_pct: body.maker_fee_pct,
     include_trades: body.include_trades,
@@ -153,8 +157,13 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
       }
     } catch (e) {
       if (get()._gen !== gen) return;
+      const raw = e instanceof Error ? e.message : "Failed to start backtest";
+      const msg =
+        /failed to fetch|networkerror|load failed/i.test(raw)
+          ? "Backend unreachable (Failed to fetch). Restart API on :8000 and retry."
+          : raw;
       set({
-        error: e instanceof Error ? e.message : "Failed to start backtest",
+        error: msg,
         active: false,
         starting: false,
       });
