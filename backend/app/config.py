@@ -118,8 +118,8 @@ class Settings(BaseSettings):
     paper_risk_pct_mid: float = Field(default=0.01, alias="PAPER_RISK_PCT_MID")
     paper_risk_pct_small: float = Field(default=0.005, alias="PAPER_RISK_PCT_SMALL")
     paper_risk_pct_unknown: float = Field(default=0.005, alias="PAPER_RISK_PCT_UNKNOWN")
-    paper_max_open_positions: int = Field(default=5, alias="PAPER_MAX_OPEN_POSITIONS")
-    paper_max_open_risk_pct: float = Field(default=0.10, alias="PAPER_MAX_OPEN_RISK_PCT")
+    paper_max_open_positions: int = Field(default=15, alias="PAPER_MAX_OPEN_POSITIONS")
+    paper_max_open_risk_pct: float = Field(default=0.30, alias="PAPER_MAX_OPEN_RISK_PCT")
     paper_liq_gate_enabled: bool = Field(default=True, alias="PAPER_LIQ_GATE_ENABLED")
     paper_liq_min_long_notional_5m: float = Field(
         default=25_000.0, alias="PAPER_LIQ_MIN_LONG_NOTIONAL_5M"

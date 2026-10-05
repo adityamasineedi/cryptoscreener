@@ -125,7 +125,7 @@ def test_v1_watcher_trade_classified_telegram_eligible(monkeypatch):
         risk_policy=PaperRiskPolicy(enabled=False),
         v1_profile_enabled=True,
     )
-    book = V1Book("BTCUSDT", "1h", "core", 0.015, True)
+    book = V1Book("BTCUSDT", "1h", "core", 0.02, True)
     pos = eng.open_v1_combo_position(
         symbol="BTCUSDT",
         timeframe="1h",
@@ -346,7 +346,7 @@ def test_close_legacy_requires_confirm_and_skips_v1(monkeypatch):
     legacy = eng.on_setup_signal("ARBUSDT", _path_a_payload("ARBUSDT"))
     assert legacy is not None
 
-    book = V1Book("BTCUSDT", "1h", "core", 0.015, True)
+    book = V1Book("BTCUSDT", "1h", "core", 0.02, True)
     v1 = eng.open_v1_combo_position(
         symbol="BTCUSDT",
         timeframe="1h",

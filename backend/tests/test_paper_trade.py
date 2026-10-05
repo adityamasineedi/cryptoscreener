@@ -254,34 +254,60 @@ def test_path_b_mode_skips_trend_bos_only():
 
 def test_stop_exit_fills_at_stop_about_minus_one_r(monkeypatch):
     import app.services.paper_trade as paper_mod
+    from app.services.paper_sizing import net_paper_pnl
 
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
     eng = PaperTradeEngine()
-    eng.on_setup_signal("BTCUSDT", _candidate(entry=100, stop=98, tp1=104, qty=10))
+    pos = eng.on_setup_signal("BTCUSDT", _candidate(entry=100, stop=98, tp1=104, qty=10))
+    assert pos is not None
     # Mark gaps through stop — paper fill stays at stop level
     closed = eng.tick({"BTCUSDT": 97.5})
     assert len(closed) == 1
     assert closed[0].exit_reason == "STOP"
     assert closed[0].status == "CLOSED"
     assert closed[0].exit_price == 98.0
-    assert closed[0].pnl_usd == pytest.approx(-20.0)
-    assert closed[0].r_multiple == pytest.approx(-1.0)
+    expected = net_paper_pnl(
+        entry_price=pos.entry_price,
+        exit_price=98.0,
+        quantity=pos.quantity,
+        risk_usd=pos.risk_usd,
+        entry_fee_usd=(pos.signal_snippet.get("paper_execution") or {}).get("entry_fee_usd"),
+        fee_rate=(pos.signal_snippet.get("paper_execution") or {}).get("fee_rate") or 0.0004,
+        slippage_rate=(pos.signal_snippet.get("paper_execution") or {}).get("slippage_rate")
+        or 0.0002,
+    )
+    assert closed[0].pnl_usd == pytest.approx(expected["pnl_usd"])
+    assert closed[0].pnl_usd < -20.0  # fees/slippage worsen the stop loss
+    assert closed[0].r_multiple == pytest.approx(expected["r_multiple"])
     assert eng.status()["open_count"] == 0
-    assert eng.realized_pnl == pytest.approx(-20.0)
+    assert eng.realized_pnl == pytest.approx(expected["pnl_usd"])
 
 
 def test_tp1_exit_fills_at_tp1(monkeypatch):
     import app.services.paper_trade as paper_mod
+    from app.services.paper_sizing import net_paper_pnl
 
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
     eng = PaperTradeEngine()
-    eng.on_setup_signal("BTCUSDT", _candidate(entry=100, stop=98, tp1=104, qty=10))
+    pos = eng.on_setup_signal("BTCUSDT", _candidate(entry=100, stop=98, tp1=104, qty=10))
+    assert pos is not None
     closed = eng.tick({"BTCUSDT": 105.0})
     assert len(closed) == 1
     assert closed[0].exit_reason == "TP1"
     assert closed[0].exit_price == 104.0
-    assert closed[0].pnl_usd == 40.0  # 10 * 4
-    assert eng.equity == 1040.0
+    expected = net_paper_pnl(
+        entry_price=pos.entry_price,
+        exit_price=104.0,
+        quantity=pos.quantity,
+        risk_usd=pos.risk_usd,
+        entry_fee_usd=(pos.signal_snippet.get("paper_execution") or {}).get("entry_fee_usd"),
+        fee_rate=(pos.signal_snippet.get("paper_execution") or {}).get("fee_rate") or 0.0004,
+        slippage_rate=(pos.signal_snippet.get("paper_execution") or {}).get("slippage_rate")
+        or 0.0002,
+    )
+    assert closed[0].pnl_usd == pytest.approx(expected["pnl_usd"])
+    assert closed[0].pnl_usd < 40.0  # fees/slippage reduce winner
+    assert eng.equity == pytest.approx(1000.0 + expected["pnl_usd"])
 
 
 def test_disabled_skips_open():

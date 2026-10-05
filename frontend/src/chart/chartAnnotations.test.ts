@@ -181,6 +181,22 @@ describe("auto-scale price range", () => {
     expect(r.chartMax).toBeGreaterThan(1.7);
     expect(r.chartMax).toBeLessThan(100);
   });
+
+  it("soft-filters far extras by default but forceExtraPrices keeps BUY/SELL/TP on screen", () => {
+    // Visible candles sit below entry/SL — same pattern as provisional short setups
+    const candles = [candle(1, 0.288, 0.292), candle(2, 0.289, 0.291)];
+    const extras = [0.2946, 0.29599, 0.2918, 0.289]; // SELL / SL / TP1 / near
+    const soft = computeChartPriceRange(candles, { extraPrices: extras });
+    // Default 25% slack of ~0.004 span ≈ 0.001 → entry/SL above 0.292+0.001 dropped
+    expect(soft.chartMax).toBeLessThan(0.2946);
+
+    const forced = computeChartPriceRange(candles, {
+      extraPrices: extras,
+      forceExtraPrices: true,
+    });
+    expect(forced.chartMax).toBeGreaterThan(0.29599);
+    expect(forced.chartMin).toBeLessThanOrEqual(0.288);
+  });
 });
 
 describe("viewport / zoom semantics", () => {
@@ -361,5 +377,25 @@ describe("timeframe snap + buy/sell markers", () => {
     for (const m of placed) {
       expect([100, 200]).toContain(m.time);
     }
+  });
+
+  it("pins BUY marker to tip bar when event time is outside the loaded window", () => {
+    const candles = [candle(1_000, 90, 110), candle(2_000, 95, 115)];
+    const placed = placeStructureMarkers(
+      [
+        {
+          kind: "SELL",
+          group: "trade_plan",
+          price: 100,
+          // Far outside candle window
+          time: "1970-01-01T12:00:00Z",
+          direction: "SHORT",
+        },
+      ],
+      candles,
+    );
+    expect(placed).toHaveLength(1);
+    expect(placed[0].text).toBe("SELL");
+    expect(placed[0].time).toBe(2_000);
   });
 });

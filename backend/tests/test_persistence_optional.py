@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 from app.config import Settings
 from app.services.database import DatabaseManager
@@ -36,3 +37,15 @@ def test_persistence_inactive_when_db_disabled():
     assert p.active is False
     n = asyncio.run(p.persist_ohlcv_batch([]))
     assert n == 0
+
+
+def test_as_utc_dt_parses_iso_strings_for_asyncpg():
+    """Paper persist must bind datetime objects, not ISO strings."""
+    p = PersistenceService()
+    dt = p._as_utc_dt("2026-10-04T17:00:20.356921+00:00")
+    assert isinstance(dt, datetime)
+    assert dt.tzinfo is not None
+    assert dt.year == 2026 and dt.month == 10 and dt.day == 4
+    assert p._as_utc_dt(None) is None
+    naive = p._as_utc_dt("2026-10-04T17:00:20")
+    assert naive is not None and naive.tzinfo == timezone.utc

@@ -44,12 +44,12 @@ describe("v1Config risk and identity display", () => {
 
   it("v1 risk at $1000 principal", () => {
     expect(v1RiskForSymbol("BTCUSDT", 1000)).toEqual({
-      riskPercent: 1.5,
-      riskUsd: 15,
+      riskPercent: 2,
+      riskUsd: 20,
       role: "core",
     });
-    expect(v1RiskForSymbol("ETHUSDT", 1000)?.riskUsd).toBe(5);
-    expect(v1RiskForSymbol("SOLUSDT", 1000)?.riskUsd).toBe(5);
+    expect(v1RiskForSymbol("ETHUSDT", 1000)?.riskUsd).toBe(20);
+    expect(v1RiskForSymbol("SOLUSDT", 1000)?.riskUsd).toBe(20);
   });
 
   it("exact frozen config is production-comparable", () => {

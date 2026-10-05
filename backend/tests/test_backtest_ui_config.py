@@ -42,38 +42,38 @@ def _resolve(**kwargs):
     return validate_backtest_request(**defaults)
 
 
-def test_btc_v1_uses_1_5_percent_risk():
+def test_btc_v1_uses_2_percent_risk():
     r = _resolve(symbols=["BTCUSDT"], risk_usd=20.0)
     cell = r.cells[0]
-    assert cell.effective_risk_percent == pytest.approx(0.015)
+    assert cell.effective_risk_percent == pytest.approx(0.02)
     assert cell.risk_source == "V1_PRODUCTION_PROFILE"
     assert cell.production_comparable is True
 
 
-def test_eth_v1_uses_0_5_percent_risk():
+def test_eth_v1_uses_2_percent_risk():
     r = _resolve(symbols=["ETHUSDT"], risk_usd=20.0)
     cell = r.cells[0]
-    assert cell.effective_risk_percent == pytest.approx(0.005)
-    assert cell.effective_risk_amount == pytest.approx(5.0)
+    assert cell.effective_risk_percent == pytest.approx(0.02)
+    assert cell.effective_risk_amount == pytest.approx(20.0)
 
 
-def test_sol_v1_uses_0_5_percent_risk():
+def test_sol_v1_uses_2_percent_risk():
     r = _resolve(symbols=["SOLUSDT"], risk_usd=20.0)
     cell = r.cells[0]
-    assert cell.effective_risk_percent == pytest.approx(0.005)
-    assert cell.effective_risk_amount == pytest.approx(5.0)
+    assert cell.effective_risk_percent == pytest.approx(0.02)
+    assert cell.effective_risk_amount == pytest.approx(20.0)
 
 
-def test_btc_risk_amount_15_at_1000_principal():
+def test_btc_risk_amount_20_at_1000_principal():
     r = _resolve(symbols=["BTCUSDT"], principal_usd=1000.0, risk_usd=20.0)
-    assert r.cells[0].effective_risk_amount == pytest.approx(15.0)
+    assert r.cells[0].effective_risk_amount == pytest.approx(20.0)
 
 
-def test_eth_sol_risk_amount_5_at_1000_principal():
+def test_eth_sol_risk_amount_20_at_1000_principal():
     r = _resolve(symbols=["ETHUSDT", "SOLUSDT"], principal_usd=1000.0)
     by_sym = {c.symbol: c for c in r.cells}
-    assert by_sym["ETHUSDT"].effective_risk_amount == pytest.approx(5.0)
-    assert by_sym["SOLUSDT"].effective_risk_amount == pytest.approx(5.0)
+    assert by_sym["ETHUSDT"].effective_risk_amount == pytest.approx(20.0)
+    assert by_sym["SOLUSDT"].effective_risk_amount == pytest.approx(20.0)
 
 
 def test_manual_2_percent_cannot_silently_be_production_comparable_under_override():
@@ -193,9 +193,9 @@ def test_exact_frozen_v1_config_is_production_comparable():
     assert r.production_comparable is True
     assert r.research_only is False
     by_sym = {c.symbol: c for c in r.cells}
-    assert by_sym["BTCUSDT"].effective_risk_percent == pytest.approx(0.015)
-    assert by_sym["ETHUSDT"].effective_risk_percent == pytest.approx(0.005)
-    assert by_sym["SOLUSDT"].effective_risk_percent == pytest.approx(0.005)
+    assert by_sym["BTCUSDT"].effective_risk_percent == pytest.approx(0.02)
+    assert by_sym["ETHUSDT"].effective_risk_percent == pytest.approx(0.02)
+    assert by_sym["SOLUSDT"].effective_risk_percent == pytest.approx(0.02)
 
 
 def test_mismatched_risk_timeframe_config_is_research_only():
@@ -234,12 +234,17 @@ def test_invalid_risk_rejected():
     assert ei.value.code == "invalid_risk"
 
 
-def test_v1_production_profile_ignores_configured_2_percent_for_effective_risk():
-    """Configured UI 2% must not become the effective v1 risk."""
-    r = _resolve(symbols=["BTCUSDT"], risk_usd=20.0, risk_mode="V1_PRODUCTION_PROFILE")
+def test_v1_production_profile_ignores_configured_5_percent_for_effective_risk():
+    """Configured UI risk must not become the effective v1 risk."""
+    r = _resolve(
+        symbols=["BTCUSDT"],
+        risk_usd=50.0,
+        principal_usd=1000.0,
+        risk_mode="V1_PRODUCTION_PROFILE",
+    )
     identity = job_identity_payload(r)
-    assert identity["configured_risk_percent"] == pytest.approx(0.02)
-    assert identity["effective_risk_percent"] == pytest.approx(0.015)
+    assert identity["configured_risk_percent"] == pytest.approx(0.05)
+    assert identity["effective_risk_percent"] == pytest.approx(0.02)
     assert identity["risk_source"] == "V1_PRODUCTION_PROFILE"
     assert identity["production_comparable"] is True
 
@@ -292,7 +297,7 @@ def test_job_start_long_v1_identity_and_no_side_effects():
                 risk_usd=20.0,
             )
             assert started["strategy_id"] == "COMBO_02_V1"
-            assert started["effective_risk_percent"] == pytest.approx(0.015)
+            assert started["effective_risk_percent"] == pytest.approx(0.02)
             assert started["paper_trade_created"] is False
             assert started["live_trade_created"] is False
             assert started["telegram_sent"] is False
@@ -304,7 +309,7 @@ def test_job_start_long_v1_identity_and_no_side_effects():
                 await asyncio.sleep(0.02)
             st = svc.status()
             assert st["status"] == "done"
-            assert st["rows"][0]["effective_risk_amount"] == pytest.approx(15.0)
+            assert st["rows"][0]["effective_risk_amount"] == pytest.approx(20.0)
             assert st["rows"][0]["risk_source"] == "V1_PRODUCTION_PROFILE"
             assert st["rows"][0]["paper_trade_created"] is False
             assert st["telegram_sent"] is False

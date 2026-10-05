@@ -21,7 +21,10 @@ class FakeRest:
                     "marginAsset": "USDT",
                     "pricePrecision": 2,
                     "quantityPrecision": 3,
-                    "filters": [],
+                    "filters": [
+                        {"filterType": "PRICE_FILTER", "tickSize": "0.10"},
+                        {"filterType": "LOT_SIZE", "stepSize": "0.001"},
+                    ],
                 },
                 {
                     "symbol": "ETHUSDT",
@@ -32,7 +35,10 @@ class FakeRest:
                     "marginAsset": "USDT",
                     "pricePrecision": 2,
                     "quantityPrecision": 3,
-                    "filters": [],
+                    "filters": [
+                        {"filterType": "PRICE_FILTER", "tickSize": "0.01"},
+                        {"filterType": "LOT_SIZE", "stepSize": "0.001"},
+                    ],
                 },
                 {
                     "symbol": "BTCUSD_PERP",
@@ -66,6 +72,9 @@ async def test_symbol_discovery_filters_usdt_perps():
     assert "BTCUSD_PERP" not in names
     assert "OLDUSDT" not in names
     assert len(store.symbols) == 2
+    btc = store.symbols["BTCUSDT"]
+    assert btc.tick_size == pytest.approx(0.10)
+    assert btc.step_size == pytest.approx(0.001)
 
 
 @pytest.mark.asyncio

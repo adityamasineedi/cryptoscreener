@@ -26,10 +26,10 @@ def test_classify_core_secondary_research():
 
 
 def test_recommended_risk_usd_at_1k():
-    assert recommended_risk_usd("BTCUSDT", "1h") == pytest.approx(15.0)
-    assert recommended_risk_usd("ETHUSDT", "1h") == pytest.approx(5.0)
-    assert recommended_risk_usd("SOLUSDT", "1h") == pytest.approx(5.0)
-    assert recommended_risk_usd("BTCUSDT", "4h") == pytest.approx(10.0)
+    assert recommended_risk_usd("BTCUSDT", "1h") == pytest.approx(20.0)
+    assert recommended_risk_usd("ETHUSDT", "1h") == pytest.approx(20.0)
+    assert recommended_risk_usd("SOLUSDT", "1h") == pytest.approx(20.0)
+    assert recommended_risk_usd("BTCUSDT", "4h") == pytest.approx(20.0)
     # Research books keep fallback (default $20)
     assert recommended_risk_usd("BTCUSDT", "15m") == pytest.approx(20.0)
 
@@ -39,9 +39,13 @@ def test_paper_universe_and_secondary_flag():
     assert ok and tier == "core"
     ok, tier = paper_symbol_allowed("ETHUSDT", secondary_enabled=True)
     assert ok and tier == "secondary"
+    ok, tier = paper_symbol_allowed("BNBUSDT", secondary_enabled=True)
+    assert ok and tier == "secondary"
     ok, reason = paper_symbol_allowed("ETHUSDT", secondary_enabled=False)
     assert not ok and reason == "secondary_disabled"
-    ok, reason = paper_symbol_allowed("DOGEUSDT")
+    ok, reason = paper_symbol_allowed("DOGEUSDT", secondary_enabled=False)
+    assert not ok and reason == "secondary_disabled"
+    ok, reason = paper_symbol_allowed("SOMEOBSCUREUSDT")
     assert not ok and reason == "outside_v1_universe"
 
 
@@ -121,7 +125,7 @@ def test_path_a_legacy_and_v1_coexist_on_same_symbol(monkeypatch):
     v1 = eng.open_v1_combo_position(
         symbol="BTCUSDT",
         timeframe="1h",
-        book=V1Book("BTCUSDT", "1h", "core", 0.015, True),
+        book=V1Book("BTCUSDT", "1h", "core", 0.02, True),
         eval_result={
             "status": "LONG_ENTRY_CANDIDATE",
             "entry_price": 100.0,
@@ -175,4 +179,4 @@ def test_path_a_legacy_may_open_btc_when_v1_profile_off():
     assert pos is not None
     assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
     assert pos.signal_snippet.get("telegram_eligible") is False
-    assert paper_risk_percent("ETHUSDT") == pytest.approx(0.005)
+    assert paper_risk_percent("ETHUSDT") == pytest.approx(0.02)

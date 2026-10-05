@@ -628,6 +628,11 @@ class PersistenceService:
         """Upsert one paper trade row (open or closed)."""
         if not self.active or not trade:
             return
+        # asyncpg binds TIMESTAMPTZ as datetime — ISO strings fail even with CAST().
+        opened_at = self._as_utc_dt(trade.get("opened_at")) or datetime.now(
+            timezone.utc
+        )
+        closed_at = self._as_utc_dt(trade.get("closed_at"))
         sql = text(
             """
             INSERT INTO paper_trades (
@@ -636,8 +641,8 @@ class PersistenceService:
                 pnl_usd, r_multiple, source_candle_ts, timeframe, signal_snippet, updated_at
             ) VALUES (
                 :id, :symbol, :side, :status, :entry_price, :stop_price, :tp1_price,
-                :quantity, :risk_usd, CAST(:opened_at AS TIMESTAMPTZ),
-                CAST(:closed_at AS TIMESTAMPTZ), :exit_price, :exit_reason,
+                :quantity, :risk_usd, :opened_at,
+                :closed_at, :exit_price, :exit_reason,
                 :pnl_usd, :r_multiple, :source_candle_ts, :timeframe,
                 CAST(:signal_snippet AS JSONB), NOW()
             )
@@ -666,9 +671,8 @@ class PersistenceService:
                         "tp1_price": trade.get("tp1_price"),
                         "quantity": float(trade.get("quantity") or 0),
                         "risk_usd": trade.get("risk_usd"),
-                        "opened_at": trade.get("opened_at")
-                        or datetime.now(timezone.utc).isoformat(),
-                        "closed_at": trade.get("closed_at"),
+                        "opened_at": opened_at,
+                        "closed_at": closed_at,
                         "exit_price": trade.get("exit_price"),
                         "exit_reason": trade.get("exit_reason"),
                         "pnl_usd": trade.get("pnl_usd"),

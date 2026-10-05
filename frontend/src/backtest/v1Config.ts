@@ -10,9 +10,9 @@ export const V1_PRODUCTION_RISK: Record<
   (typeof V1_SYMBOLS)[number],
   { role: "core" | "secondary"; riskPercent: number; riskUsdAt1k: number }
 > = {
-  BTCUSDT: { role: "core", riskPercent: 1.5, riskUsdAt1k: 15 },
-  ETHUSDT: { role: "secondary", riskPercent: 0.5, riskUsdAt1k: 5 },
-  SOLUSDT: { role: "secondary", riskPercent: 0.5, riskUsdAt1k: 5 },
+  BTCUSDT: { role: "core", riskPercent: 2, riskUsdAt1k: 20 },
+  ETHUSDT: { role: "secondary", riskPercent: 2, riskUsdAt1k: 20 },
+  SOLUSDT: { role: "secondary", riskPercent: 2, riskUsdAt1k: 20 },
 };
 
 const TF_MINUTES: Record<string, number> = {

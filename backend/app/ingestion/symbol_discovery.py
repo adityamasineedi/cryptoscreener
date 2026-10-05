@@ -23,6 +23,20 @@ def _precision_from_filter(filters: list[dict], filter_type: str, key: str) -> i
     return None
 
 
+def _float_from_filter(filters: list[dict], filter_type: str, key: str) -> float | None:
+    for f in filters:
+        if f.get("filterType") == filter_type:
+            raw = f.get(key)
+            if raw is None or raw == "":
+                return None
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                return None
+            return value if value > 0 else None
+    return None
+
+
 class SymbolDiscovery:
     """Dynamically discover active Binance symbols — never hardcode coin lists."""
 
@@ -66,6 +80,8 @@ class SymbolDiscovery:
                 if item.get("marginAsset") != "USDT":
                     continue
             filters = item.get("filters", [])
+            tick_size = _float_from_filter(filters, "PRICE_FILTER", "tickSize")
+            step_size = _float_from_filter(filters, "LOT_SIZE", "stepSize")
             out.append(
                 SymbolInfo(
                     symbol=item["symbol"],
@@ -79,6 +95,8 @@ class SymbolDiscovery:
                     or _precision_from_filter(filters, "PRICE_FILTER", "tickSize"),
                     qty_precision=item.get("quantityPrecision")
                     or _precision_from_filter(filters, "LOT_SIZE", "stepSize"),
+                    tick_size=tick_size,
+                    step_size=step_size,
                 )
             )
         return out

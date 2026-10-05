@@ -1,5 +1,17 @@
 # Changelog
 
+## Pre-research code freeze — 2026-10-05
+
+**Tag:** `pre-research-freeze-20261005`  
+**Doc:** [`docs/pre_research_freeze.md`](./docs/pre_research_freeze.md)
+
+Working baseline before new strategy research. HTF entry logic remains `v1-combo02-long-htf`.
+
+- Paper sizing module (`paper_sizing.py`) with tick/lot/leverage/fee realism
+- Paper risk defaults: max 15 open positions / 30% open risk
+- Extended COMBO_02 1h paper universe @ 2% (claim set still BTC/ETH/SOL)
+- Chart time-axis + annotation fixes; paper/backtest/v1 watcher UI sync
+
 ## COMBO_02 candidate eligibility pipeline — 2026-10-04
 
 **Research only — frozen v1 (BTC/ETH/SOL) unchanged**

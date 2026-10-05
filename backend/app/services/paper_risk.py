@@ -35,9 +35,9 @@ class PaperRiskPolicy:
     risk_pct_mid: float = 0.01
     risk_pct_small: float = 0.005
     risk_pct_unknown: float = 0.005
-    max_open_positions: int = 5
+    max_open_positions: int = 15
     # Max sum(open risk_usd) as fraction of equity
-    max_open_risk_pct: float = 0.10
+    max_open_risk_pct: float = 0.30
     liq_gate_enabled: bool = True
     # Only pause on meaningful long-liq pressure (not micro force-orders)
     liq_min_long_notional_5m: float = 25_000.0

@@ -19,7 +19,7 @@ export function V1WatcherPanel({ rows }: { rows: V1WatcherViewRow[] | null | und
 
   return (
     <section
-      className="border-b border-terminal-border/70 bg-terminal-panel/40 px-2 py-2"
+      className="shrink-0 border-b border-terminal-border/70 bg-terminal-panel/40 px-2 py-2"
       data-testid="v1-watcher-panel"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">

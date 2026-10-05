@@ -335,7 +335,12 @@ export function placeStructureMarkers(
       t = Number(candles[candles.length - 1].time);
     }
     if (t == null) continue;
-    const snapped = timeSet.has(t) ? t : snapTimeToCandle(t, candles);
+    let snapped = timeSet.has(t) ? t : snapTimeToCandle(t, candles);
+    if (snapped == null && isTradeMarker && candles.length) {
+      // Event outside loaded window (e.g. 15m BOS on a short 1m history) —
+      // still show the marker on the tip bar; price line already carries the level.
+      snapped = Number(candles[candles.length - 1].time);
+    }
     if (snapped == null) continue;
     const price = a.price != null ? Number(a.price) : NaN;
     if (!Number.isFinite(price)) continue;
@@ -605,11 +610,18 @@ export function thinCrowdedMarkers(
 export function computeChartPriceRange(
   candles: CandleLike[],
   options?: {
-    /** Extra prices (entry/SL/TP) included only if near the candle range */
+    /** Extra prices (entry/SL/TP) — trade-plan levels should use forceExtraPrices */
     extraPrices?: number[];
     padPct?: number;
-    /** Include extras within this multiple of candle span */
+    /** Include extras within this multiple of candle span (ignored when forceExtraPrices) */
     extraSlack?: number;
+    /**
+     * Always expand the Y range to fit extraPrices (BUY/SELL/SL/TP).
+     * Without this, trade-plan lines often sit just outside the visible candle
+     * span and disappear even though the price lines were created — backtest
+     * overlays never had this filter, so they stayed visible.
+     */
+    forceExtraPrices?: boolean;
   },
 ): { chartMin: number; chartMax: number; visibleHigh: number; visibleLow: number; padding: number } {
   if (candles.length === 0) {
@@ -623,11 +635,12 @@ export function computeChartPriceRange(
   const span0 = Math.max(hi - lo, 0);
   const slack = options?.extraSlack ?? 0.25;
   const baseSpan = span0 > 0 ? span0 : Math.max(Math.abs(hi) * 0.01, 1e-8);
+  const force = Boolean(options?.forceExtraPrices);
 
   for (const p of options?.extraPrices ?? []) {
     if (!Number.isFinite(p)) continue;
-    // Avoid exploding vertical range with far-away levels
-    if (p > hi + baseSpan * slack || p < lo - baseSpan * slack) continue;
+    // Soft filter only for non-trade extras (structure clutter). Trade plan must stay on-screen.
+    if (!force && (p > hi + baseSpan * slack || p < lo - baseSpan * slack)) continue;
     hi = Math.max(hi, p);
     lo = Math.min(lo, p);
   }

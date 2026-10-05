@@ -378,7 +378,11 @@ def test_candidate_modules_do_not_mutate_v1_symbols():
 
 
 def test_v1_universe_still_btc_eth_sol_only():
-    assert V1_SYMBOLS == frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
+    from app.research.v1_production import FROZEN_V1_SYMBOLS
+
+    assert FROZEN_V1_SYMBOLS == frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
+    assert FROZEN_V1_SYMBOLS <= V1_SYMBOLS
+    assert "BNBUSDT" in V1_SYMBOLS
 
 
 def test_thresholds_match_spec():

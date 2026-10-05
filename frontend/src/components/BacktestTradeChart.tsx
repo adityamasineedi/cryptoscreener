@@ -16,8 +16,10 @@ import {
   tradeRowKey,
 } from "../chart/backtestTradeOverlay";
 import {
+  chartTimeZoneLabel,
   ensureAscendingByTime,
   localizationForTimeframe,
+  readStoredChartTimeZone,
   timeScaleOptionsForTimeframe,
 } from "../chart/chartTimeAxis";
 
@@ -34,6 +36,7 @@ export function BacktestTradeChart({ trade }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const chartTimeZone = readStoredChartTimeZone();
   const [status, setStatus] = useState<"LOADING" | "OK" | "EMPTY" | "ERROR">(
     "LOADING",
   );
@@ -179,10 +182,10 @@ export function BacktestTradeChart({ trade }: Props) {
         );
 
         chart.applyOptions({
-          localization: localizationForTimeframe(trade.timeframe),
+          localization: localizationForTimeframe(trade.timeframe, chartTimeZone),
         });
         chart.timeScale().applyOptions({
-          ...timeScaleOptionsForTimeframe(trade.timeframe),
+          ...timeScaleOptionsForTimeframe(trade.timeframe, chartTimeZone),
         });
 
         if (overlay.focusFrom != null && overlay.focusTo != null) {
@@ -236,7 +239,7 @@ export function BacktestTradeChart({ trade }: Props) {
       </div>
       <div ref={hostRef} className="h-[320px] w-full" />
       <div className="border-t border-terminal-border/40 px-3 py-1.5 font-mono text-[10px] text-terminal-muted">
-        key={tradeRowKey(trade)} · green=entry · red=SL · blue=TP1 · markers from blotter times
+        key={tradeRowKey(trade)} · green=entry · red=SL · blue=TP1 · markers from blotter times · axis {chartTimeZoneLabel(chartTimeZone)}
       </div>
     </div>
   );

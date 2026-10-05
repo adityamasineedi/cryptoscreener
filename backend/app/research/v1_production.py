@@ -18,10 +18,44 @@ COMBO_VERSION = "v1-combo02-long-htf"
 COMBO_ID = "COMBO_02"
 DEFAULT_PRINCIPAL_USD = 1000.0
 
-# Path A paper / research claim universe (Binance USDT-M).
-V1_SYMBOLS = frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
+# Frozen evidence claim set (backtest "production-comparable" identity).
+FROZEN_V1_SYMBOLS = frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
 CORE_SYMBOLS = frozenset({"BTCUSDT"})
-SECONDARY_SYMBOLS = frozenset({"ETHUSDT", "SOLUSDT"})
+
+# Extended liquid majors — same COMBO_02 1h paper path @ 2% (operator request).
+# Not part of the original freeze evidence window; paper + Telegram watch with core/secondary.
+EXTENDED_PAPER_SYMBOLS = frozenset(
+    {
+        "BNBUSDT",
+        "XRPUSDT",
+        "DOGEUSDT",
+        "ADAUSDT",
+        "AVAXUSDT",
+        "LINKUSDT",
+        "DOTUSDT",
+        "LTCUSDT",
+        "NEARUSDT",
+        "ATOMUSDT",
+        "APTUSDT",
+        "ARBUSDT",
+        "OPUSDT",
+        "SUIUSDT",
+        "INJUSDT",
+        "AAVEUSDT",
+        "UNIUSDT",
+        "FILUSDT",
+        "TONUSDT",
+        "TRXUSDT",
+        "BCHUSDT",
+        "ETCUSDT",
+        "ICPUSDT",
+        "RENDERUSDT",
+    }
+)
+
+SECONDARY_SYMBOLS = frozenset({"ETHUSDT", "SOLUSDT"}) | EXTENDED_PAPER_SYMBOLS
+# Full auto-paper watch universe (1h COMBO_02 watcher books).
+V1_SYMBOLS = FROZEN_V1_SYMBOLS | EXTENDED_PAPER_SYMBOLS
 
 # Production books (setup TF). 15m is research-only.
 CORE_TIMEFRAMES = frozenset({"1h"})
@@ -36,18 +70,32 @@ class V1Book:
     symbol: str
     timeframe: str
     tier: Tier
-    risk_percent: float  # fraction of equity per trade (0.015 = 1.5%)
+    risk_percent: float  # fraction of equity per trade (0.02 = 2%)
     enabled_by_default: bool
     notes: str = ""
 
 
-# Concrete v1 books — conservative vs backtest evidence.
+def _extended_1h_books() -> tuple[V1Book, ...]:
+    return tuple(
+        V1Book(
+            sym,
+            "1h",
+            "secondary",
+            0.02,
+            True,
+            "Extended liquid major — COMBO_02 1h paper @ 2% (outside original freeze sample)",
+        )
+        for sym in sorted(EXTENDED_PAPER_SYMBOLS)
+    )
+
+
+# Concrete books — frozen trio + extended majors, all sized at 2%.
 V1_BOOKS: tuple[V1Book, ...] = (
     V1Book(
         "BTCUSDT",
         "1h",
         "core",
-        0.015,
+        0.02,
         True,
         "Best risk-adjusted: ~56% WR, avgR~+0.66, maxDD~2.5R, streak≤2",
     ),
@@ -55,7 +103,7 @@ V1_BOOKS: tuple[V1Book, ...] = (
         "ETHUSDT",
         "1h",
         "secondary",
-        0.005,
+        0.02,
         True,
         "Positive but noisy: ~38% WR, avgR~+0.12, maxDD~10–11R, streak~10",
     ),
@@ -63,15 +111,16 @@ V1_BOOKS: tuple[V1Book, ...] = (
         "SOLUSDT",
         "1h",
         "secondary",
-        0.005,
+        0.02,
         True,
-        "Thin sample / modest edge — optional secondary at half-core risk",
+        "Thin sample / modest edge — optional secondary; same 2% risk as core",
     ),
+    *_extended_1h_books(),
     V1Book(
         "BTCUSDT",
         "4h",
         "secondary",
-        0.010,
+        0.02,
         False,
         "Swing book: solid avgR, low n — enable explicitly",
     ),
@@ -79,7 +128,7 @@ V1_BOOKS: tuple[V1Book, ...] = (
         "ETHUSDT",
         "4h",
         "secondary",
-        0.005,
+        0.02,
         False,
         "Swing book: positive but higher DD — enable explicitly",
     ),
@@ -114,11 +163,8 @@ _BOOK_INDEX: dict[tuple[str, str], V1Book] = {
 }
 
 # Symbol-level Path A paper risk when live setup TF ≠ research TF (mtf_setup).
-# Maps research claim risk onto paper sizing by symbol only.
 V1_PAPER_RISK_BY_SYMBOL: dict[str, float] = {
-    "BTCUSDT": 0.015,  # core
-    "ETHUSDT": 0.005,  # secondary
-    "SOLUSDT": 0.005,  # secondary optional
+    **{sym: 0.02 for sym in sorted(V1_SYMBOLS)},
 }
 
 # Weekly review thresholds (manual or script) vs backtest ranges.
@@ -340,6 +386,6 @@ def profile_summary() -> dict[str, Any]:
             "Weaken HTF or promote COMBO_02_LOCAL / Path B as v1",
             "Add 15m (or sub-hour) as a live production timeframe",
             "Curve-fit ETH/SOL parameters to chase more trades",
-            "Raise ETH 1h risk toward BTC levels without a new evidence window",
+            "Treat extended majors as freeze-evidence without a new validation window",
         ],
     }

@@ -213,7 +213,7 @@ def test_path_a_15m_opens_in_parallel_with_v1_on_same_symbol(monkeypatch):
     v1 = paper.open_v1_combo_position(
         symbol="BTCUSDT",
         timeframe="1h",
-        book=V1Book("BTCUSDT", "1h", "core", 0.015, True),
+        book=V1Book("BTCUSDT", "1h", "core", 0.02, True),
         eval_result={
             "status": "LONG_ENTRY_CANDIDATE",
             "entry_price": 100.0,

@@ -703,7 +703,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
       {domain === "Futures" && (
         <>
           <div
-            className="border-b border-amber-500/30 bg-amber-500/5 px-2 py-2"
+            className="shrink-0 border-b border-amber-500/30 bg-amber-500/5 px-2 py-2"
             data-testid="general-screener-banner"
           >
             <div className="font-mono text-[12px] font-semibold tracking-wide text-amber-100">
@@ -745,7 +745,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
             ) : null}
           </div>
           <V1WatcherPanel rows={screenMeta?.v1_watcher_view} />
-          <div className="flex flex-col gap-1 border-b border-terminal-border/60 px-2 py-1.5 text-[10px] text-terminal-muted">
+          <div className="flex shrink-0 flex-col gap-1 border-b border-terminal-border/60 px-2 py-1.5 text-[10px] text-terminal-muted">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <div className="font-mono text-[11px] text-terminal-text" data-testid="screen-universe-label">
               <span className="text-terminal-muted">SCREEN</span>{" "}

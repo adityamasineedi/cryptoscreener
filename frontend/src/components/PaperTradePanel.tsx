@@ -224,10 +224,10 @@ export function PaperTradePanel() {
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
             <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-300">
-              v1 core: BTC @ 1.5%
+              v1 core: BTC @ 2%
             </span>
             <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-amber-200">
-              v1 secondary: ETH/SOL @ 0.5%
+              paper universe: ETH/SOL + liquid majors @ 2%
             </span>
             <span className="rounded border border-terminal-border bg-white/5 px-1.5 py-0.5 text-terminal-muted">
               research: 15m RESEARCH_15M stream
@@ -303,7 +303,7 @@ export function PaperTradePanel() {
         <Stat
           label="Open risk $"
           value={`$${fmt(status?.open_risk_usd)}`}
-          title="Sum of open position risk_usd (v1 books: BTC 1.5% / ETH·SOL 0.5% of equity)"
+          title="Sum of open position risk_usd (v1 books: BTC/ETH/SOL 2% of equity)"
         />
         <Stat label="Ready" value={String(oppMeta.ready)} tone={oppMeta.ready > 0 ? "up" : undefined} />
         <Stat label="Near" value={String(oppMeta.near)} />
@@ -407,7 +407,7 @@ function MonitorPanel({
       ? Object.entries(status.v1_book_risk)
           .map(([sym, row]) => `${sym.replace("USDT", "")} ${row.risk_pct_display || fmtPct(row.risk_percent)}`)
           .join(" · ")
-      : "BTC 1.5% · ETH/SOL 0.5%";
+      : "BTC/ETH/SOL 2%";
   return (
     <section className="rounded border border-terminal-border bg-terminal-panel/40 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">

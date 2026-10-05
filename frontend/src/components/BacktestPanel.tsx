@@ -171,8 +171,8 @@ export function BacktestPanel() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [principalUsd, setPrincipalUsd] = useState(1000);
-  const [riskPct, setRiskPct] = useState(1.5);
-  const [riskUsd, setRiskUsd] = useState(15);
+  const [riskPct, setRiskPct] = useState(2);
+  const [riskUsd, setRiskUsd] = useState(20);
   const [researchRiskOverride, setResearchRiskOverride] = useState(false);
   const [shortNotice, setShortNotice] = useState<string | null>(null);
   const [leverage, setLeverage] = useState(2);
@@ -775,13 +775,13 @@ export function BacktestPanel() {
             Effective production risk
           </div>
           <div className="font-mono text-[11px] text-terminal-text">
-            BTCUSDT core — 1.5% / ${Math.round((principalUsd * 1.5) / 100)}
+            BTCUSDT core — 2% / ${Math.round((principalUsd * 2) / 100)}
           </div>
           <div className="font-mono text-[11px] text-terminal-text">
-            ETHUSDT secondary — 0.5% / ${Math.round((principalUsd * 0.5) / 100)}
+            ETHUSDT secondary — 2% / ${Math.round((principalUsd * 2) / 100)}
           </div>
           <div className="font-mono text-[11px] text-terminal-text">
-            SOLUSDT secondary — 0.5% / ${Math.round((principalUsd * 0.5) / 100)}
+            SOLUSDT secondary — 2% / ${Math.round((principalUsd * 2) / 100)}
           </div>
         </div>
 

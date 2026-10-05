@@ -128,11 +128,11 @@ describe("BacktestPanel interaction paths", () => {
       const riskUsd = root.getByLabelText(/Risk \$ per trade/i) as HTMLInputElement;
       expect(riskPct.disabled).toBe(true);
       expect(riskUsd.disabled).toBe(true);
-      expect(Number(riskPct.value)).toBeCloseTo(1.5);
-      expect(Number(riskUsd.value)).toBe(15);
+      expect(Number(riskPct.value)).toBeCloseTo(2);
+      expect(Number(riskUsd.value)).toBe(20);
     });
 
-    expect(root.getByText(/BTCUSDT core — 1\.5% \/ \$15/i)).toBeTruthy();
+    expect(root.getByText(/BTCUSDT core — 2% \/ \$20/i)).toBeTruthy();
     expect(root.getAllByText(/BTCUSDT — v1 CORE/i).length).toBeGreaterThan(0);
     expect(container.textContent).toMatch(/Production comparable:\s*YES/);
     expect(container.textContent).toMatch(/Risk source:\s*V1 production profile/);
@@ -147,12 +147,12 @@ describe("BacktestPanel interaction paths", () => {
     await waitFor(() => {
       const riskPct = root.getByLabelText(/Risk % of principal/i) as HTMLInputElement;
       const riskUsd = root.getByLabelText(/Risk \$ per trade/i) as HTMLInputElement;
-      expect(Number(riskPct.value)).toBeCloseTo(0.5);
-      expect(Number(riskUsd.value)).toBe(5);
+      expect(Number(riskPct.value)).toBeCloseTo(2);
+      expect(Number(riskUsd.value)).toBe(20);
       expect(riskPct.disabled).toBe(true);
     });
     expect(root.getAllByText(/ETHUSDT — v1 SECONDARY/i).length).toBeGreaterThan(0);
-    expect(root.getByText(/ETHUSDT secondary — 0\.5% \/ \$5/i)).toBeTruthy();
+    expect(root.getByText(/ETHUSDT secondary — 2% \/ \$20/i)).toBeTruthy();
   });
 
   it("3. SOL v1 risk rendering", async () => {
@@ -164,11 +164,11 @@ describe("BacktestPanel interaction paths", () => {
     await waitFor(() => {
       const riskPct = root.getByLabelText(/Risk % of principal/i) as HTMLInputElement;
       const riskUsd = root.getByLabelText(/Risk \$ per trade/i) as HTMLInputElement;
-      expect(Number(riskPct.value)).toBeCloseTo(0.5);
-      expect(Number(riskUsd.value)).toBe(5);
+      expect(Number(riskPct.value)).toBeCloseTo(2);
+      expect(Number(riskUsd.value)).toBe(20);
     });
     expect(root.getAllByText(/SOLUSDT — v1 SECONDARY/i).length).toBeGreaterThan(0);
-    expect(root.getByText(/SOLUSDT secondary — 0\.5% \/ \$5/i)).toBeTruthy();
+    expect(root.getByText(/SOLUSDT secondary — 2% \/ \$20/i)).toBeTruthy();
   });
 
   it("4. Research override banner", async () => {
@@ -387,8 +387,8 @@ describe("BacktestPanel interaction paths", () => {
         htf_timeframes: ["1h", "4h"],
         htf_alignment: "BULLISH",
         risk_source: "V1_PRODUCTION_PROFILE",
-        effective_risk_percent: 0.015,
-        effective_risk_amount: 15,
+        effective_risk_percent: 0.02,
+        effective_risk_amount: 20,
         production_comparable: true,
         research_only: false,
         short_status: "PAUSED",
@@ -399,7 +399,7 @@ describe("BacktestPanel interaction paths", () => {
         live_trade_created: false,
         telegram_sent: false,
         limit: 5760,
-        risk_usd: 15,
+        risk_usd: 20,
         principal_usd: 1000,
         leverage: 2,
         rows: [
@@ -413,9 +413,9 @@ describe("BacktestPanel interaction paths", () => {
             period_start: "2025-01-01T00:00:00+00:00",
             period_end: "2025-08-29T00:00:00+00:00",
             bars_loaded: 5760,
-            risk_usd: 15,
-            effective_risk_percent: 0.015,
-            effective_risk_amount: 15,
+            risk_usd: 20,
+            effective_risk_percent: 0.02,
+            effective_risk_amount: 20,
             risk_source: "V1_PRODUCTION_PROFILE",
             production_comparable: true,
             research_only: false,
@@ -442,7 +442,7 @@ describe("BacktestPanel interaction paths", () => {
     expect(root.getAllByText(/Symbol role:/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/BTCUSDT — v1 CORE/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/Effective risk:/i).length).toBeGreaterThan(0);
-    expect(root.getByText(/1\.50% \/ \$15/i)).toBeTruthy();
+    expect(root.getByText(/2\.00% \/ \$20/i)).toBeTruthy();
     expect(root.getAllByText(/Risk source:/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/V1_PRODUCTION_PROFILE/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/Setup timeframe:/i).length).toBeGreaterThan(0);

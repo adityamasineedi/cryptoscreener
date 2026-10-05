@@ -70,6 +70,9 @@ class SymbolInfo(BaseModel):
     contract_type: str | None = None
     price_precision: int | None = None
     qty_precision: int | None = None
+    # Exchange filter values when discovery provides them (preferred over precision).
+    tick_size: float | None = None
+    step_size: float | None = None
 
 
 class TickerUpdate(BaseModel):

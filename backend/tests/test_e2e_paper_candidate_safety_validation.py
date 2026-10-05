@@ -29,7 +29,7 @@ from app.research.strategy_candidate_registry import (
     serialize_candidate,
     strategy_candidate_registry,
 )
-from app.research.v1_production import V1_SYMBOLS, enabled_v1_books
+from app.research.v1_production import FROZEN_V1_SYMBOLS, V1_SYMBOLS, enabled_v1_books
 from app.services.paper_trade import PaperTradeEngine
 from app.services.telegram_alerts import is_v1_paper_alert
 from app.services.v2_candidate_paper_watcher import (
@@ -730,8 +730,11 @@ def test_validation_static_safety_invariants():
 
     books = enabled_v1_books()
     by_sym = {b.symbol: b for b in books if b.timeframe == "1h"}
-    assert set(by_sym) == {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
-    assert by_sym["BTCUSDT"].risk_percent == 0.015
-    assert by_sym["ETHUSDT"].risk_percent == 0.005
-    assert by_sym["SOLUSDT"].risk_percent == 0.005
-    assert V1_SYMBOLS == frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
+    assert FROZEN_V1_SYMBOLS <= set(by_sym)
+    assert "BNBUSDT" in by_sym and "LINKUSDT" in by_sym
+    assert by_sym["BTCUSDT"].risk_percent == 0.02
+    assert by_sym["ETHUSDT"].risk_percent == 0.02
+    assert by_sym["SOLUSDT"].risk_percent == 0.02
+    assert by_sym["BNBUSDT"].risk_percent == 0.02
+    assert FROZEN_V1_SYMBOLS <= V1_SYMBOLS
+    assert "BNBUSDT" in V1_SYMBOLS

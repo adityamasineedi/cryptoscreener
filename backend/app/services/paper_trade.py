@@ -18,7 +18,14 @@ from typing import Any, Callable, Awaitable
 
 from app.core.logging import get_logger
 from app.services.paper_risk import PaperRiskPolicy, evaluate_paper_entry_risk, policy_from_settings
-from app.signals.risk_engine import position_size
+from app.services.paper_sizing import (
+    DEFAULT_PAPER_LEVERAGE,
+    net_paper_pnl,
+    paper_execution_snippet,
+    resolve_symbol_filters,
+    round_price_to_tick,
+    size_paper_long,
+)
 from app.signals.schemas import SignalStatus
 
 logger = get_logger("paper_trade")
@@ -88,6 +95,7 @@ class PaperTradeEngine:
         v1_profile_enabled: bool = False,
         v1_universe_only: bool = True,
         v1_secondary_enabled: bool = True,
+        max_leverage: float = DEFAULT_PAPER_LEVERAGE,
     ) -> None:
         self.starting_equity = float(starting_equity)
         self.risk_percent = float(risk_percent)
@@ -101,6 +109,7 @@ class PaperTradeEngine:
         self.v1_profile_enabled = bool(v1_profile_enabled)
         self.v1_universe_only = bool(v1_universe_only)
         self.v1_secondary_enabled = bool(v1_secondary_enabled)
+        self.max_leverage = max(1.0, float(max_leverage or DEFAULT_PAPER_LEVERAGE))
         # When True, COMBO_02 v1 entries come only from V1PaperWatcher (1h combo eval).
         # Legacy 15m Path A on_setup_signal must not open/label v1 trades.
         self.v1_watcher_owns_entries = False
@@ -338,12 +347,12 @@ class PaperTradeEngine:
                 "closed_count": len(self._closed),
                 "open_risk_usd": round(open_risk, 4),
                 # Legacy RESEARCH_15M default only — COMBO_02 v1 opens use book risk
-                # (BTC 1.5%, ETH/SOL 0.5%), not this field.
+                # (BTC/ETH/SOL 2%), not this field.
                 "risk_percent": self.risk_percent,
                 "risk_percent_legacy_research_15m": self.risk_percent,
                 "risk_percent_label": (
                     f"legacy RESEARCH_15M default {self.risk_percent * 100:g}% "
-                    "(v1 books: BTC 1.5% / ETH/SOL 0.5%)"
+                    "(v1 books: BTC/ETH/SOL 2%)"
                 ),
                 "entry_mode": self.entry_mode,
                 "entry_mode_label": (
@@ -592,24 +601,30 @@ class PaperTradeEngine:
                 )
                 if v1_pct > 0:
                     eff_risk_pct = float(v1_pct)
-        # v1/legacy paper path is LONG-only; pass direction explicitly (not a silent default).
-        sized = position_size(
+        # Legacy: optional setup qty hint when gates off (still tick/lot/leverage capped).
+        preferred_qty = None
+        if not self.risk_policy.enabled and not (
+            path_a and self.v1_profile_enabled
+        ):
+            setup_qty = _f(risk.get("final_quantity")) or 0.0
+            if setup_qty > 0:
+                preferred_qty = setup_qty
+        sized = size_paper_long(
+            symbol=sym,
             account_equity=self.equity,
             risk_percent=eff_risk_pct,
             entry=entry_price,
             stop=stop_price,
-            direction="LONG",
+            leverage=self.max_leverage,
+            preferred_quantity=preferred_qty,
         )
-        qty = float(sized.get("final_quantity") or 0.0)
-        risk_usd = float(sized.get("max_risk_amount") or 0.0)
-        if not self.risk_policy.enabled and not (
-            path_a and self.v1_profile_enabled
-        ):
-            # Legacy: allow setup-provided quantity when gates disabled
-            setup_qty = _f(risk.get("final_quantity")) or 0.0
-            if setup_qty > 0:
-                qty = setup_qty
-                risk_usd = abs(entry_price - stop_price) * qty
+        entry_price = float(sized["entry_price"])
+        stop_price = float(sized["stop_price"])
+        qty = float(sized.get("quantity") or 0.0)
+        risk_usd = float(sized.get("risk_usd") or 0.0)
+        if tp1 is not None:
+            # Keep TP on the same tick grid after entry rounding.
+            tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
 
         if qty <= 0:
             logger.info("paper_skip_zero_qty", symbol=sym)
@@ -675,6 +690,7 @@ class PaperTradeEngine:
                     "trend_4h": trend_4h or None,
                     "htf_alignment": htf_alignment,
                     "legacy_entry_mode": path_label,
+                    "paper_execution": paper_execution_snippet(sized),
                 },
             )
             pos = PaperPosition(
@@ -821,15 +837,20 @@ class PaperTradeEngine:
             qv = None
 
         # Frozen COMBO_02 v1 opener: LONG-only by contract.
-        sized = position_size(
+        sized = size_paper_long(
+            symbol=sym,
             account_equity=self.equity,
             risk_percent=risk_pct,
             entry=entry_price,
             stop=stop_price,
-            direction="LONG",
+            leverage=self.max_leverage,
         )
-        qty = float(sized.get("final_quantity") or 0.0)
-        risk_usd = float(sized.get("max_risk_amount") or 0.0)
+        entry_price = float(sized["entry_price"])
+        stop_price = float(sized["stop_price"])
+        qty = float(sized.get("quantity") or 0.0)
+        risk_usd = float(sized.get("risk_usd") or 0.0)
+        if tp1 is not None:
+            tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
         if qty <= 0:
             self._last_skip_reason = f"{sym}:v1_zero_qty"
             return None
@@ -872,6 +893,7 @@ class PaperTradeEngine:
                     "quote_volume_24h": qv,
                     "status": str(eval_result.get("status") or ""),
                     "direction": "LONG",
+                    "paper_execution": paper_execution_snippet(sized),
                 },
             )
             pos = PaperPosition(
@@ -1006,17 +1028,21 @@ class PaperTradeEngine:
                 return None
 
         # V2 experimental paper still uses LONG-only openers in this phase.
-        # Fill price remains strategy entry (unchanged). Triad recorded separately.
-        paper_fill = float(entry_price)
-        sized = position_size(
+        # Fill uses rounded paper entry; triad still records backtest vs live vs paper.
+        sized = size_paper_long(
+            symbol=sym,
             account_equity=self.equity,
             risk_percent=risk_pct,
-            entry=paper_fill,
+            entry=entry_price,
             stop=stop_price,
-            direction="LONG",
+            leverage=self.max_leverage,
         )
-        qty = float(sized.get("final_quantity") or 0.0)
-        risk_usd = float(sized.get("max_risk_amount") or 0.0)
+        paper_fill = float(sized["entry_price"])
+        stop_price = float(sized["stop_price"])
+        qty = float(sized.get("quantity") or 0.0)
+        risk_usd = float(sized.get("risk_usd") or 0.0)
+        if tp1 is not None:
+            tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
         if qty <= 0:
             self._last_skip_reason = f"{sym}:v2_zero_qty"
             return None
@@ -1028,6 +1054,7 @@ class PaperTradeEngine:
         snip["live_signal_price"] = live_signal_price
         snip["paper_entry"] = paper_fill
         snip["price_source"] = live_price_source
+        snip["paper_execution"] = paper_execution_snippet(sized)
         if live_signal_price is not None and backtest_entry != 0:
             snip["entry_deviation_pct"] = (
                 abs(live_signal_price - backtest_entry) / backtest_entry * 100.0
@@ -1230,18 +1257,45 @@ class PaperTradeEngine:
         }
 
     def _close_locked(self, pos: PaperPosition, exit_price: float, reason: str) -> PaperPosition:
-        risk_per = abs(pos.entry_price - pos.stop_price)
-        pnl = (exit_price - pos.entry_price) * pos.quantity
-        r_mult = (pnl / pos.risk_usd) if pos.risk_usd > 0 else (
-            ((exit_price - pos.entry_price) / risk_per) if risk_per > 0 else 0.0
+        snip = pos.signal_snippet if isinstance(pos.signal_snippet, dict) else {}
+        exec_meta = snip.get("paper_execution") if isinstance(snip, dict) else None
+        if not isinstance(exec_meta, dict):
+            exec_meta = {}
+
+        tick = _f(exec_meta.get("tick_size"))
+        if tick is None or tick <= 0:
+            tick, _step, _src = resolve_symbol_filters(pos.symbol)
+        exit_px = round_price_to_tick(float(exit_price), float(tick), mode="nearest")
+        settled = net_paper_pnl(
+            entry_price=pos.entry_price,
+            exit_price=exit_px,
+            quantity=pos.quantity,
+            risk_usd=pos.risk_usd,
+            side=pos.side,
+            entry_fee_usd=_f(exec_meta.get("entry_fee_usd")),
+            fee_rate=float(exec_meta.get("fee_rate") or 0.0004),
+            slippage_rate=float(exec_meta.get("slippage_rate") or 0.0002),
         )
+        pnl = float(settled["pnl_usd"])
+        r_mult = float(settled["r_multiple"])
+        if isinstance(pos.signal_snippet, dict):
+            pos.signal_snippet = {
+                **pos.signal_snippet,
+                "paper_execution": {
+                    **exec_meta,
+                    "exit_fee_usd": settled["exit_fee_usd"],
+                    "slippage_usd": settled["slippage_usd"],
+                    "gross_pnl_usd": settled["gross_pnl_usd"],
+                    "total_cost_usd": settled["total_cost_usd"],
+                },
+            }
         pos.status = "CLOSED"
         pos.closed_at = datetime.now(timezone.utc).isoformat()
-        pos.exit_price = exit_price
+        pos.exit_price = exit_px
         pos.exit_reason = reason
         pos.pnl_usd = pnl
         pos.r_multiple = r_mult
-        pos.mark_price = exit_price
+        pos.mark_price = exit_px
         pos.unrealized_pnl_usd = 0.0
         pos.unrealized_r = 0.0
         self._open.pop(self._key_for(pos), None)
@@ -1254,9 +1308,10 @@ class PaperTradeEngine:
             symbol=pos.symbol,
             stream=self.stream_of(pos),
             reason=reason,
-            exit=exit_price,
+            exit=exit_px,
             pnl=round(pnl, 4),
             r=round(r_mult, 4),
+            gross_pnl=round(float(settled["gross_pnl_usd"]), 4),
         )
         try:
             from app.services.alerts import get_alert_feed

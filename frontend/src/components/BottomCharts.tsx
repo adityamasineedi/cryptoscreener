@@ -34,10 +34,14 @@ import {
   colorForKind,
 } from "../chart/chartAnnotations";
 import {
+  type ChartTimeZone,
+  chartTimeZoneLabel,
   isIntradayTimeframe,
   localizationForTimeframe,
   ensureAscendingByTime,
+  readStoredChartTimeZone,
   timeScaleOptionsForTimeframe,
+  writeStoredChartTimeZone,
 } from "../chart/chartTimeAxis";
 
 const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
@@ -101,7 +105,15 @@ export function BottomCharts({
     signal: true,
   });
   const [autoFollow, setAutoFollow] = useState(false);
+  const [chartTimeZone, setChartTimeZone] = useState<ChartTimeZone>(() =>
+    readStoredChartTimeZone(),
+  );
   const [liqCompact, setLiqCompact] = useState(true);
+
+  function setAndPersistChartTimeZone(tz: ChartTimeZone) {
+    writeStoredChartTimeZone(tz);
+    setChartTimeZone(tz);
+  }
 
   function toggle(key: keyof AnnToggle) {
     setAnn((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -223,6 +235,25 @@ export function BottomCharts({
             />
             Follow
           </label>
+          <div
+            className="inline-flex items-center gap-0.5 rounded border border-terminal-border p-0.5"
+            title="Chart axis / crosshair timezone (candle data stays UTC)"
+          >
+            {(["IST", "UTC"] as const).map((tz) => (
+              <button
+                key={tz}
+                type="button"
+                onClick={() => setAndPersistChartTimeZone(tz)}
+                className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+                  chartTimeZone === tz
+                    ? "bg-white/10 text-terminal-text"
+                    : "text-terminal-muted hover:text-terminal-text"
+                }`}
+              >
+                {tz}
+              </button>
+            ))}
+          </div>
           {variant === "docked" && showSizeToggle ? (
             <button
               type="button"
@@ -245,6 +276,7 @@ export function BottomCharts({
           timeframe={tf}
           ann={ann}
           autoFollow={autoFollow}
+          chartTimeZone={chartTimeZone}
         />
         <LiqChart symbol={selected} onCompactChange={setLiqCompact} />
       </div>
@@ -340,11 +372,13 @@ function PriceVolumeChart({
   timeframe,
   ann,
   autoFollow,
+  chartTimeZone,
 }: {
   symbol: string | null;
   timeframe: string;
   ann: AnnToggle;
   autoFollow: boolean;
+  chartTimeZone: ChartTimeZone;
 }) {
   const [status, setStatus] = useState("WAITING");
   const [candles, setCandles] = useState<CandlestickData[]>([]);
@@ -404,7 +438,10 @@ function PriceVolumeChart({
       .filter((a) => a.group === "trade_plan" && annRef.current.tradePlan)
       .map((a) => Number(a.price))
       .filter((p) => Number.isFinite(p));
-    const range = computeChartPriceRange(visible, { extraPrices: extras });
+    const range = computeChartPriceRange(visible, {
+      extraPrices: extras,
+      forceExtraPrices: true,
+    });
     priceRangeRef.current = { min: range.chartMin, max: range.chartMax };
     series.applyOptions({
       autoscaleInfoProvider: () => {
@@ -436,7 +473,7 @@ function PriceVolumeChart({
         low: c.low,
         close: c.close,
       })),
-      { extraPrices: extras },
+      { extraPrices: extras, forceExtraPrices: true },
     );
     priceRangeRef.current = { min: seed.chartMin, max: seed.chartMax };
 
@@ -469,12 +506,12 @@ function PriceVolumeChart({
     volSeries.setData(ensureAscendingByTime(volumes));
 
     chart.applyOptions({
-      localization: localizationForTimeframe(timeframe),
+      localization: localizationForTimeframe(timeframe, chartTimeZone),
     });
     chart.timeScale().applyOptions({
       rightOffset: CHART_RIGHT_OFFSET_BARS,
       shiftVisibleRangeOnNewBar: false,
-      ...timeScaleOptionsForTimeframe(timeframe),
+      ...timeScaleOptionsForTimeframe(timeframe, chartTimeZone),
     });
 
     chart.timeScale().fitContent();
@@ -510,13 +547,13 @@ function PriceVolumeChart({
     const key = `${symbol}|${timeframe}`;
     const isNewViewport = fitKeyRef.current !== key;
     chartRef.current.applyOptions({
-      localization: localizationForTimeframe(timeframe),
+      localization: localizationForTimeframe(timeframe, chartTimeZone),
     });
     chartRef.current.timeScale().applyOptions({
       rightOffset: CHART_RIGHT_OFFSET_BARS,
       // Only shift on new bars when the user explicitly enables Follow
       shiftVisibleRangeOnNewBar: autoFollow,
-      ...timeScaleOptionsForTimeframe(timeframe),
+      ...timeScaleOptionsForTimeframe(timeframe, chartTimeZone),
     });
 
     // Fit once on symbol/timeframe change — never on routine live candle polls
@@ -525,7 +562,7 @@ function PriceVolumeChart({
       fitKeyRef.current = key;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, volumes, hasData, chartRef, symbol, timeframe, autoFollow]);
+  }, [candles, volumes, hasData, chartRef, symbol, timeframe, autoFollow, chartTimeZone]);
 
   useEffect(() => {
     const series = candleRef.current;
@@ -683,7 +720,9 @@ function PriceVolumeChart({
       <div ref={containerRef} className="chart-canvas" />
       <div className="pointer-events-none absolute left-2 top-5 z-10 max-w-[70%] text-[9px] text-terminal-muted">
         OHLCV candle close — may differ from Coin Detail ticker/mark
-        {isIntradayTimeframe(timeframe) ? " · axis times UTC" : ""}
+        {isIntradayTimeframe(timeframe)
+          ? ` · axis times ${chartTimeZoneLabel(chartTimeZone)}`
+          : ""}
       </div>
       {/* Keep volume note above the time axis so tick labels stay readable */}
       <div className="pointer-events-none absolute bottom-7 right-14 z-10 max-w-[45%] text-right text-[9px] uppercase tracking-wide text-terminal-muted/80">

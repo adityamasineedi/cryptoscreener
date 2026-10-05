@@ -373,9 +373,13 @@ def test_v2_watcher_fails_closed_without_4h():
 
 
 def test_v1_universe_unchanged():
-    assert V1_SYMBOLS == frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
+    from app.research.v1_production import FROZEN_V1_SYMBOLS
+
+    assert FROZEN_V1_SYMBOLS == frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
+    assert FROZEN_V1_SYMBOLS <= V1_SYMBOLS
     books = enabled_v1_books()
-    assert {b.symbol for b in books} == {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+    assert FROZEN_V1_SYMBOLS <= {b.symbol for b in books}
+    assert "BNBUSDT" in {b.symbol for b in books}
     # v1_production.py must not reference dynamic pipeline
     root = Path(__file__).resolve().parents[1]
     v1 = (root / "app" / "research" / "v1_production.py").read_text(encoding="utf-8")

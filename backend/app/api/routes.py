@@ -2392,7 +2392,7 @@ def _enrich_paper_status(status: dict[str, Any]) -> dict[str, Any]:
                     wstatus["live_error"] = str(exc)
             out["v1_watcher"] = wstatus
             # Clarify risk: engine.risk_percent is legacy RESEARCH_15M default;
-            # v1 opens size from book.risk_percent (BTC 1.5%, ETH/SOL 0.5%).
+            # v1 opens size from book.risk_percent (BTC/ETH/SOL 2%).
             out["risk_percent_legacy_research_15m"] = out.get("risk_percent")
             out["v1_book_risk"] = {
                 str(b.get("symbol")): {

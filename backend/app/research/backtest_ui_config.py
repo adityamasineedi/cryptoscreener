@@ -16,6 +16,7 @@ from app.research.v1_production import (
     COMBO_ID,
     CORE_SYMBOLS,
     DEFAULT_PRINCIPAL_USD,
+    FROZEN_V1_SYMBOLS,
     SECONDARY_SYMBOLS,
     V1_PAPER_RISK_BY_SYMBOL,
     V1_SYMBOLS,
@@ -109,9 +110,9 @@ def production_risk_table(principal_usd: float = DEFAULT_PRINCIPAL_USD) -> list[
     principal = max(1.0, float(principal_usd))
     rows: list[dict[str, Any]] = []
     for sym, pct in (
-        ("BTCUSDT", 0.015),
-        ("ETHUSDT", 0.005),
-        ("SOLUSDT", 0.005),
+        ("BTCUSDT", 0.02),
+        ("ETHUSDT", 0.02),
+        ("SOLUSDT", 0.02),
     ):
         role = "core" if sym == "BTCUSDT" else "secondary"
         rows.append(
@@ -346,7 +347,8 @@ def validate_backtest_request(
             mismatch.append("setup_timeframe_mismatch")
 
     for sym in syms:
-        if sym not in V1_SYMBOLS:
+        # Production-comparable freeze remains BTC/ETH/SOL only.
+        if sym not in FROZEN_V1_SYMBOLS:
             mismatch.append("non_v1_symbol")
 
     # HTF is fixed for COMBO_02 v1 — any non-LONG or non-COMBO_02 already mismatched.
@@ -379,7 +381,7 @@ def validate_backtest_request(
                 src: RiskSource = "V1_PRODUCTION_PROFILE"
                 cell_ok = (
                     tf == V1_SETUP_TIMEFRAME
-                    and sym in V1_SYMBOLS
+                    and sym in FROZEN_V1_SYMBOLS
                     and abs(eff_pct - float(V1_PAPER_RISK_BY_SYMBOL.get(sym, -1))) < 1e-12
                 )
             elif mode == "RESEARCH_OVERRIDE":
