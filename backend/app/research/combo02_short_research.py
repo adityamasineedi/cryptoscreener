@@ -663,6 +663,7 @@ async def run_short_symbol_backtest(
         direction="SHORT",
         limit=20000,
         risk_usd=float(risk_usd if risk_usd is not None else window.risk_usd),
+        principal_usd=float(getattr(window, "principal_usd", 1000.0) or 1000.0),
         start_date=start,
         end_date=end,
         taker_fee=DEFAULT_TAKER_FEE,

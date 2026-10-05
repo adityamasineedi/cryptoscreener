@@ -20,10 +20,10 @@ websocket:
   ping_interval_seconds: 20
   stale_ticker_seconds: 15
   unavailable_after_seconds: 60
-  # Live kline WS — do NOT subscribe full 528×6 (kills the socket).
-  # History for other symbols/TFs still comes from REST backfill.
+  # Live kline WS — do NOT subscribe full discovery×TFs (kills the socket).
+  # History for other symbols/TFs still comes from REST backfill (active universe).
   # Include 1h (+4h) so COMBO_02 v1 watcher tips do not freeze when REST is busy.
-  kline_live_max_symbols: 60
+  kline_live_max_symbols: 50
   kline_live_timeframes:
     - 1m
     - 5m
@@ -44,9 +44,11 @@ open_interest:
   cache_ttl_seconds: 90
   min_token_headroom: 80
 backfill:
-  # Progressive universe coverage; priority from live quote volume (not hardcoded)
-  tier1_count: 40
-  tier2_count: 150
+  # Active compute universe = V1 paper symbols (always) + top volume fill.
+  # Screener still discovers all USDT perps; only this set is backfilled/warmed.
+  tier1_count: 30
+  tier2_count: 80
+  active_universe_count: 80
   candles_per_request: 200
   min_token_headroom: 100
   request_pause_seconds: 0.35
@@ -54,8 +56,20 @@ backfill:
   min_concurrency: 1
   max_concurrency: 3
   gap_fill_enabled: true
-  # 1m: rolling top-volume + visible only (never unlimited for all 527)
-  m1_rolling_universe: 60
+  # Startup burst control (scheduling only — does not change strategy math).
+  # Spreads initial enqueue/REST so health/screener/charts are not starved.
+  startup_window_seconds: 90
+  startup_enqueue_batch_size: 8
+  startup_enqueue_rate_per_second: 5
+  startup_max_queue_depth: 32
+  startup_max_active_rest_jobs: 1
+  startup_rest_refill_per_second: 1.0
+  startup_batch_yield_seconds: 0.08
+  startup_request_pause_seconds: 0.75
+  defer_gap_repair_during_startup: true
+  max_queue_size: 800
+  # 1m: rolling top-volume + visible only (never full discovery set)
+  m1_rolling_universe: 40
   m1_retention_candles: 200
   # P0: 1d/4h/1h → P1: 15m/5m → P2: 1m
   timeframes_priority:

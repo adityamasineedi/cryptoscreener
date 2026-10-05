@@ -1,0 +1,40 @@
+{
+  "backlog_state": "STABLE_BACKLOG",
+  "gap_backlog_count": 42155,
+  "oldest_gap_age_seconds": 377560.2,
+  "newest_gap_age_seconds": 3760.2,
+  "enqueue_rate_per_minute": 31.0,
+  "completion_rate_per_minute": 38.0,
+  "failed_gap_count": 1,
+  "retry_count": 2,
+  "estimated_completion_seconds": 318.9,
+  "active_backfill_jobs": 0,
+  "cooldown_suppressed_count": 106,
+  "duplicate_suppressed_count": 92,
+  "queue_size": 200,
+  "priority_policy": {
+    "1": "user_requested_chart_research",
+    "2": "active_universe_freshness",
+    "3": "historical_gap_repair",
+    "4": "inactive_symbol_repair",
+    "note": "Historical gap repair must not starve health/screener/charts; concurrency is adaptive but never auto-raised beyond max_concurrency."
+  },
+  "running": 0,
+  "retry_wait": 2,
+  "failed": 1,
+  "recorded_at": "2026-10-05T13:02:41Z",
+  "event_loop": {
+    "event_loop_lag_ms": 1549.44,
+    "event_loop_lag_p50_ms": 11.03,
+    "event_loop_lag_p95_ms": 97.36,
+    "event_loop_lag_max_ms": 1688.17,
+    "samples": 240
+  },
+  "process": {
+    "pid": 6384,
+    "uptime_seconds": 224.9,
+    "cpu_percent": 0.0,
+    "rss_mb": 557.35,
+    "psutil": true
+  }
+}

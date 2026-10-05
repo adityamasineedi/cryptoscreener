@@ -1,0 +1,71 @@
+{
+  "symbol": "BTCUSDT",
+  "timezone": "UTC",
+  "same_as_prior_sandbox": "strategy_discovery_20261005T124726Z",
+  "fingerprint_assert_identical": true,
+  "prior_fingerprints": {
+    "1h": "0839f0c52cec2c5da2110b7305d004ad0649e65a732bb81f3fbbe6e4f10ff993",
+    "4h": "c27cd5fde0a7f932fe237deab9064a855ab289fba2f7225fe6ff138011f7645c"
+  },
+  "current_fingerprints": {
+    "1h": "0839f0c52cec2c5da2110b7305d004ad0649e65a732bb81f3fbbe6e4f10ff993",
+    "4h": "c27cd5fde0a7f932fe237deab9064a855ab289fba2f7225fe6ff138011f7645c"
+  },
+  "datasets": [
+    {
+      "timeframe": "1h",
+      "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+      "manifest": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+      "first_timestamp": "2022-10-06T08:00:00+00:00",
+      "last_timestamp": "2026-10-05T06:00:00+00:00",
+      "row_count": 35039,
+      "missing_bars": 0,
+      "duplicate_bars": 0,
+      "dataset_fingerprint": "0839f0c52cec2c5da2110b7305d004ad0649e65a732bb81f3fbbe6e4f10ff993",
+      "quality": {
+        "name": "BTCUSDT_1h",
+        "row_count": 35039,
+        "first_timestamp": "2022-10-06T08:00:00+00:00",
+        "last_timestamp": "2026-10-05T06:00:00+00:00",
+        "timezone": "UTC",
+        "tz_aware_utc": true,
+        "ordered": true,
+        "duplicate_bars": 0,
+        "out_of_order_bars": 0,
+        "invalid_ohlc_rows": 0,
+        "expected_step_seconds": 3600,
+        "gap_count": 0,
+        "max_gap_bars": 0,
+        "status": "DATA_OK"
+      }
+    },
+    {
+      "timeframe": "4h",
+      "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+      "manifest": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+      "first_timestamp": "2022-10-06T00:00:00+00:00",
+      "last_timestamp": "2026-10-05T00:00:00+00:00",
+      "row_count": 8761,
+      "missing_bars": 0,
+      "duplicate_bars": 0,
+      "dataset_fingerprint": "c27cd5fde0a7f932fe237deab9064a855ab289fba2f7225fe6ff138011f7645c",
+      "quality": {
+        "name": "BTCUSDT_4h",
+        "row_count": 8761,
+        "first_timestamp": "2022-10-06T00:00:00+00:00",
+        "last_timestamp": "2026-10-05T00:00:00+00:00",
+        "timezone": "UTC",
+        "tz_aware_utc": true,
+        "ordered": true,
+        "duplicate_bars": 0,
+        "out_of_order_bars": 0,
+        "invalid_ohlc_rows": 0,
+        "expected_step_seconds": 14400,
+        "gap_count": 0,
+        "max_gap_bars": 0,
+        "status": "DATA_OK"
+      }
+    }
+  ],
+  "overall_quality": "DATA_OK"
+}

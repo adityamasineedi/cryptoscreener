@@ -9,6 +9,7 @@ import {
   type ShortResearchCandidate,
   type ShortResearchListResponse,
 } from "../api/client";
+import { dedupedPanelFetch } from "../lib/researchPanelCache";
 
 function num(v: number | null | undefined, digits = 2): string {
   if (v == null || Number.isNaN(v) || !Number.isFinite(Number(v))) return "—";
@@ -218,7 +219,11 @@ export function ShortResearchPanel() {
 
   const reload = () => {
     setLoading(true);
-    fetchShortResearchCandidates()
+    return dedupedPanelFetch(
+      "latest",
+      "short",
+      (signal) => fetchShortResearchCandidates({ signal }),
+    )
       .then((payload) => {
         setData(payload);
         setError(null);
@@ -228,7 +233,33 @@ export function ShortResearchPanel() {
   };
 
   useEffect(() => {
-    reload();
+    const ac = new AbortController();
+    let cancelled = false;
+    setLoading(true);
+    dedupedPanelFetch(
+      "latest",
+      "short",
+      (signal) => fetchShortResearchCandidates({ signal }),
+      ac.signal,
+    )
+      .then((payload) => {
+        if (!cancelled) {
+          setData(payload);
+          setError(null);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled && (e as Error)?.name !== "AbortError") {
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
   }, []);
 
   const rows = data?.candidates || [];

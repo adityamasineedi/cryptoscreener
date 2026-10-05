@@ -15,6 +15,7 @@ from app.engines.supply_demand.engine import SupplyDemandEngine
 from app.research.bos_combinations import CombinationDefinition, get_combination
 from app.research.bos_strategy_comparison.htf import (
     build_htf_as_of_index_map,
+    build_htf_as_of_index_map_fully_closed,
     precompute_htf_trend_cache,
 )
 from app.research.combination_engine import (
@@ -441,6 +442,7 @@ def run_combination_backtest(
     if combo.require_htf_alignment and (htf_1h is not None or htf_4h is not None):
         t_htf = time.perf_counter()
         _progress(HTF_PRECOMPUTE_START, bars=0, total=walk_total, trades_n=0)
+        closed_htf = bool(getattr(combo, "htf_require_fully_closed", False))
         with research_stage_profiler.time("htf_precompute"):
             if htf_1h:
                 precompute_htf_trend_cache(
@@ -450,7 +452,15 @@ def run_combination_backtest(
                     config=local_cfg,
                     cache=htf_trend_cache,
                 )
-                htf_idx_1h_map = build_htf_as_of_index_map(series, htf_1h)
+                if closed_htf:
+                    htf_idx_1h_map = build_htf_as_of_index_map_fully_closed(
+                        series,
+                        htf_1h,
+                        setup_timeframe=timeframe,
+                        htf_timeframe="1h",
+                    )
+                else:
+                    htf_idx_1h_map = build_htf_as_of_index_map(series, htf_1h)
             if htf_4h:
                 precompute_htf_trend_cache(
                     htf_4h,
@@ -459,7 +469,15 @@ def run_combination_backtest(
                     config=local_cfg,
                     cache=htf_trend_cache,
                 )
-                htf_idx_4h_map = build_htf_as_of_index_map(series, htf_4h)
+                if closed_htf:
+                    htf_idx_4h_map = build_htf_as_of_index_map_fully_closed(
+                        series,
+                        htf_4h,
+                        setup_timeframe=timeframe,
+                        htf_timeframe="4h",
+                    )
+                else:
+                    htf_idx_4h_map = build_htf_as_of_index_map(series, htf_4h)
         htf_precompute_seconds = time.perf_counter() - t_htf
         _progress(
             HTF_PRECOMPUTE_END,
@@ -468,6 +486,7 @@ def run_combination_backtest(
             trades_n=0,
             htf_cache_entries=len(htf_trend_cache),
             htf_precompute_seconds=round(htf_precompute_seconds, 6),
+            htf_require_fully_closed=closed_htf,
         )
 
     last_hb = time.perf_counter()
@@ -663,6 +682,9 @@ def run_combination_backtest(
                         "htf_alignment": (setup.get("htf") or {}).get("htf_alignment"),
                         "trend_4h": (setup.get("htf") or {}).get("trend_4h"),
                         "trend_1h": (setup.get("htf") or {}).get("trend_1h"),
+                        "htf_require_fully_closed": bool(
+                            getattr(combo, "htf_require_fully_closed", False)
+                        ),
                     }
                     if combo.require_htf_alignment
                     else {}

@@ -100,6 +100,7 @@ async def _load_research_candles(
     start_date: str | None = None,
     end_date: str | None = None,
     warmup_bars: int = 100,
+    use_research_cache: bool = True,
 ) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     """Load OHLCV for BOS combination research from PostgreSQL when available.
 
@@ -107,7 +108,9 @@ async def _load_research_candles(
     Warmup bars precede start so structure/gates can form before evaluation.
 
     When ``RESEARCH_CACHE_ENABLED=true`` and date bounds are set, prefers the
-    research Parquet cache (bulk PG on miss). Live trading paths do not use this.
+    research Parquet cache (bulk PG on miss) unless ``use_research_cache=False``
+    (UI backtest hot path — direct SQL range/tail, same class as DB-tail mode).
+    Live trading paths do not use this.
     """
     from app.services.database import db_manager
     from app.research.postgres_ohlcv import (
@@ -122,31 +125,34 @@ async def _load_research_candles(
     raw: list[dict[str, Any]] = []
 
     # Research-only cache path (optional). Never used by live signal engines.
-    try:
-        from app.research.data_cache.config import load_research_cache_config
+    # UI long-strategy jobs set use_research_cache=False to avoid Parquet miss
+    # cost (bulk PG + write + sha256 + re-read) on every new calendar window.
+    if use_research_cache:
+        try:
+            from app.research.data_cache.config import load_research_cache_config
 
-        cache_cfg = load_research_cache_config()
-        if (
-            cache_cfg.enabled
-            and (bounds["start"] is not None or bounds["end_exclusive"] is not None)
-            and db_manager.enabled
-            and db_manager.engine is not None
-        ):
-            from app.research.data_cache.cache_manager import get_research_cache
+            cache_cfg = load_research_cache_config()
+            if (
+                cache_cfg.enabled
+                and (bounds["start"] is not None or bounds["end_exclusive"] is not None)
+                and db_manager.enabled
+                and db_manager.engine is not None
+            ):
+                from app.research.data_cache.cache_manager import get_research_cache
 
-            start_s = start_date[:10] if start_date else None
-            end_s = end_date[:10] if end_date else None
-            ds = await get_research_cache(cache_cfg).load(
-                symbol=sym,
-                timeframe=tf,
-                start=start_s,
-                end=end_s,
-            )
-            raw = ds.as_candles()
-            source = f"research_parquet_cache:{ds.source}"
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("research_cache_load_failed", error=str(exc))
-        raw = []
+                start_s = start_date[:10] if start_date else None
+                end_s = end_date[:10] if end_date else None
+                ds = await get_research_cache(cache_cfg).load(
+                    symbol=sym,
+                    timeframe=tf,
+                    start=start_s,
+                    end=end_s,
+                )
+                raw = ds.as_candles()
+                source = f"research_parquet_cache:{ds.source}"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("research_cache_load_failed", error=str(exc))
+            raw = []
 
     try:
         if not raw and db_manager.enabled and db_manager.engine is not None:
@@ -212,6 +218,7 @@ async def _load_htf_candles_for_combo(
     start_date: str | None,
     end_date: str | None,
     warmup_bars: int,
+    use_research_cache: bool = True,
 ) -> tuple[list[dict[str, Any]] | None, list[dict[str, Any]] | None]:
     """Load 1h/4h series for combo HTF gate. Returns (None, None) when not required."""
     if not require_htf:
@@ -219,7 +226,10 @@ async def _load_htf_candles_for_combo(
     tf = normalize_research_timeframe(setup_timeframe)
     # Cover the same calendar window as setup; size HTF tails for swing history.
     lim_1h = max(int(limit), 500) if tf == "1h" else max(int(limit) // 4 + 200, 500)
-    lim_4h = max(int(limit), 200) if tf == "4h" else max(int(limit) // 16 + 100, 200)
+    # 4h bars are 4× longer than 1h: need limit//4 (+warmup) to span the same
+    # lookback. Using //16 left ~70% of 1h bars without a 4h as-of index on
+    # limit=8640 tails (COMBO_02_V1 funnel audit 2026-10-05).
+    lim_4h = max(int(limit), 200) if tf == "4h" else max(int(limit) // 4 + 100, 200)
     c1h: list[dict[str, Any]] | None = None
     c4h: list[dict[str, Any]] | None = None
     if tf != "1h":
@@ -230,6 +240,7 @@ async def _load_htf_candles_for_combo(
             start_date=start_date,
             end_date=end_date,
             warmup_bars=warmup_bars,
+            use_research_cache=use_research_cache,
         )
     if tf != "4h":
         c4h, _, _ = await _load_research_candles(
@@ -239,6 +250,7 @@ async def _load_htf_candles_for_combo(
             start_date=start_date,
             end_date=end_date,
             warmup_bars=max(warmup_bars // 4, 50),
+            use_research_cache=use_research_cache,
         )
     return c1h, c4h
 
@@ -255,7 +267,7 @@ def _load_htf_candles_sync(
         return None, None
     tf = normalize_research_timeframe(setup_timeframe)
     lim_1h = max(int(limit), 500) if tf == "1h" else max(int(limit) // 4 + 200, 500)
-    lim_4h = max(int(limit), 200) if tf == "4h" else max(int(limit) // 16 + 100, 200)
+    lim_4h = max(int(limit), 200) if tf == "4h" else max(int(limit) // 4 + 100, 200)
     c1h = None if tf == "1h" else _load_candles(symbol, "1h", lim_1h)
     c4h = None if tf == "4h" else _load_candles(symbol, "4h", lim_4h)
     return c1h, c4h
@@ -890,6 +902,7 @@ class BosResearchService:
         direction: str = "LONG",
         limit: int = 1200,
         risk_usd: float = 20.0,
+        principal_usd: float = 1000.0,
         start_date: str | None = None,
         end_date: str | None = None,
         taker_fee: float = DEFAULT_TAKER_FEE,
@@ -899,11 +912,22 @@ class BosResearchService:
         should_cancel: Any | None = None,
         progress_callback: Any | None = None,
         job_id: str | None = None,
+        use_research_cache: bool = False,
+        cancel_event: Any | None = None,
     ) -> dict[str, Any]:
-        """Lean multi-symbol/TF backtest for the UI Backtest tab (no OOS/WF)."""
+        """Lean multi-symbol/TF backtest for the UI Backtest tab (no OOS/WF).
+
+        Defaults to direct Postgres loads (``use_research_cache=False``) so
+        calendar-mode UI runs stay in the same speed class as DB-tail mode.
+        Offline scripts may pass ``use_research_cache=True`` to reuse Parquet.
+
+        CPU-bound combination walks run in a bounded process pool so the
+        FastAPI event loop is not GIL-starved (strategy math unchanged).
+        """
         from app.research.trade_fees import DEFAULT_LEVERAGE
 
         lev = max(1.0, float(leverage or DEFAULT_LEVERAGE))
+        principal = max(100.0, min(float(principal_usd or 1000.0), 10_000_000.0))
         clear_candle_cache()
         t0 = time.perf_counter()
         timing: dict[str, Any] = {}
@@ -965,6 +989,7 @@ class BosResearchService:
                     start_date=start_date,
                     end_date=end_date,
                     warmup_bars=warmup,
+                    use_research_cache=use_research_cache,
                 )
                 db_seconds = time.perf_counter() - t_db
                 timing["db_query_seconds"] = round(db_seconds, 6)
@@ -1033,6 +1058,7 @@ class BosResearchService:
                     start_date=start_date,
                     end_date=end_date,
                     warmup_bars=warmup,
+                    use_research_cache=use_research_cache,
                 )
                 htf_seconds = time.perf_counter() - t_htf
                 timing["htf_load_seconds"] = round(htf_seconds, 6)
@@ -1047,33 +1073,37 @@ class BosResearchService:
                     htf_4h_rows=timing["htf_4h_rows"],
                     timing={"htf_load_seconds": timing["htf_load_seconds"]},
                 )
-                # CPU-heavy sync path — run in a thread so the API event loop
-                # (health, progress cell requests) is not blocked for minutes.
+                # CPU-heavy sync path — bounded process pool (not to_thread).
+                # Pure-Python strategy walks hold the GIL; a thread still starves
+                # the asyncio event loop. Process isolation keeps health/screener
+                # responsive. Strategy code is unchanged.
+                from app.research.backtest_cpu_pool import (
+                    run_combination_backtest_isolated,
+                )
+
                 scfg = _signal_config()
                 mcap = _market_cap(load_meta["symbol"])
                 sym_u = load_meta["symbol"]
                 tf_u = load_meta["timeframe"]
                 idx0 = eval_start if eval_start > 0 else None
 
-                def _run_bt() -> dict[str, Any]:
-                    return run_combination_backtest(
-                        sym_u,
-                        tf_u,
-                        candles,
-                        combo,
-                        signal_config=scfg,
-                        research_config=rcfg,
-                        market_cap=mcap,
-                        direction_filter=direction_u,
-                        index_start=idx0,
-                        should_cancel=should_cancel,
-                        candles_1h=c1h,
-                        candles_4h=c4h,
-                        progress_callback=progress_callback,
-                        job_id=job_id,
-                    )
-
-                out = await asyncio.to_thread(_run_bt)
+                out = await run_combination_backtest_isolated(
+                    symbol=sym_u,
+                    timeframe=tf_u,
+                    candles=candles,
+                    combination_id=str(combo.combination_id),
+                    signal_config=scfg,
+                    research_config=rcfg,
+                    market_cap=mcap,
+                    direction_filter=direction_u,
+                    index_start=idx0,
+                    should_cancel=should_cancel,
+                    candles_1h=c1h,
+                    candles_4h=c4h,
+                    progress_callback=progress_callback,
+                    job_id=job_id,
+                    cancel_event=cancel_event,
+                )
                 timing["backtest_seconds"] = round(
                     float(out.get("elapsed_seconds") or 0), 6
                 )
@@ -1088,71 +1118,127 @@ class BosResearchService:
                         "rows": rows,
                         "elapsed_seconds": round(time.perf_counter() - t0, 3),
                     }
-                r = out.get("result") or {}
-                n = int(out.get("sample_size") or r.get("sample_size") or 0)
-                trades = enrich_trades(
-                    out.get("trades") or [],
-                    risk_usd=risk_usd,
-                    taker_fee=taker_fee,
-                    maker_fee=maker_fee,
-                    leverage=lev,
-                    closed_only=True,
-                ) if include_trades else []
-                net_pnls = [
-                    float(t["net_pnl_usd"])
-                    for t in trades
-                    if t.get("net_pnl_usd") is not None
-                ]
-                pnl_gross = (
-                    float(r["average_R"]) * n * float(risk_usd)
-                    if r.get("average_R") is not None and n
-                    else None
+
+                # Fee enrich + market-structure attach are also CPU-heavy —
+                # keep them off the interactive event loop (same bounded pool).
+                from app.config import get_settings
+                from app.research.backtest_cpu_pool import (
+                    run_matrix_postprocess_isolated,
                 )
-                pnl_net = sum(net_pnls) if net_pnls else None
-                avg_r_net = (
-                    (sum(float(t["r_net"]) for t in trades if t.get("r_net") is not None) / n)
-                    if n and trades
-                    else None
+                from app.research.market_structure import resolve_analytics_flags
+                from app.research.market_structure.config import (
+                    assert_regime_filtering_safe,
                 )
-                fee_total = sum(float(t.get("fee_total_usd") or 0) for t in trades)
-                structure = (
-                    "HL (bullish HH+HL)"
-                    if direction_u == "LONG"
-                    else "LH (bearish LH+LL)"
+
+                settings = get_settings()
+                analytics_on, regime_filter = resolve_analytics_flags(settings)
+                assert_regime_filtering_safe(
+                    enable_regime_filtering=regime_filter,
+                    research_only=False if regime_filter else True,
                 )
-                rows.append(
-                    {
+
+                c15m: list[dict[str, Any]] | None = None
+                if analytics_on:
+                    _notify("ANALYTICS_LOAD_START", symbol=sym, timeframe="15m")
+                    try:
+                        c15m, _, _ = await _load_research_candles(
+                            sym,
+                            "15m",
+                            limit=max(int(limit) * 4, 500),
+                            start_date=start_date,
+                            end_date=end_date,
+                            warmup_bars=warmup,
+                            use_research_cache=use_research_cache,
+                        )
+                    except Exception:  # noqa: BLE001
+                        c15m = None
+                    _notify(
+                        "ANALYTICS_LOAD_END",
+                        symbol=sym,
+                        timeframe="15m",
+                        rows_loaded=len(c15m or []),
+                    )
+
+                try:
+                    row_payload = await run_matrix_postprocess_isolated(
+                        {
+                            "backtest_out": out,
+                            "risk_usd": risk_usd,
+                            "taker_fee": taker_fee,
+                            "maker_fee": maker_fee,
+                            "leverage": lev,
+                            "principal": principal,
+                            "include_trades": include_trades,
+                            "direction": direction_u,
+                            "combination_id": combination_id,
+                            "combination_name": combo.name,
+                            "load_meta": load_meta,
+                            "candles": candles,
+                            "candles_1h": c1h,
+                            "candles_4h": c4h,
+                            "candles_15m": c15m,
+                            "index_start": idx0,
+                            "job_id": job_id,
+                            "analytics_on": analytics_on,
+                            "write_artifacts": True,
+                        },
+                        progress_callback=progress_callback,
+                    )
+                    ms = row_payload.get("market_structure") or {}
+                    if analytics_on:
+                        timing["analytics_runtime_seconds"] = ms.get(
+                            "analytics_runtime_seconds"
+                        )
+                        timing["strategy_runtime_seconds"] = ms.get(
+                            "strategy_runtime_seconds"
+                        )
+                        timing["feature_config_fingerprint"] = ms.get(
+                            "feature_config_fingerprint"
+                        )
+                except ValueError:
+                    raise
+                except Exception as analytics_exc:  # noqa: BLE001
+                    logger.warning(
+                        "market_structure_analytics_failed",
+                        error=str(analytics_exc),
+                        symbol=sym_u,
+                        timeframe=tf_u,
+                    )
+                    # Fall back to strategy row without analytics rather than empty.
+                    from app.research.trade_fees import enrich_trades as _enrich
+
+                    enriched = _enrich(
+                        out.get("trades") or [],
+                        risk_usd=risk_usd,
+                        taker_fee=taker_fee,
+                        maker_fee=maker_fee,
+                        leverage=lev,
+                        account_equity=principal,
+                        closed_only=True,
+                    )
+                    r = out.get("result") or {}
+                    n = int(out.get("sample_size") or r.get("sample_size") or 0)
+                    row_payload = {
                         "combination_id": combination_id,
                         "name": combo.name,
                         "symbol": load_meta["symbol"],
                         "timeframe": load_meta["timeframe"],
                         "direction": direction_u,
-                        "structure": structure,
                         "sample_size": n,
                         "average_R": r.get("average_R"),
-                        "average_R_net": avg_r_net,
-                        "expectancy_R": r.get("expectancy_R"),
-                        "tp1_hit_rate": r.get("tp1_hit_rate"),
-                        "sl_rate": r.get("sl_rate"),
-                        "profit_factor": r.get("profit_factor"),
-                        "max_drawdown_R": r.get("max_drawdown_R"),
-                        "tp1_hits": r.get("tp1_hits"),
-                        "sl_hits": r.get("sl_hits"),
-                        "period_start": r.get("period_start"),
-                        "period_end": r.get("period_end"),
-                        "r_values": r.get("r_values") or [],
-                        "equity_curve_r": r.get("equity_curve_r") or [],
-                        "pnl_usd": pnl_gross,
-                        "pnl_usd_net": pnl_net,
-                        "fees_usd": fee_total,
-                        "risk_usd": risk_usd,
-                        "leverage": lev,
-                        "bars_loaded": len(candles),
-                        "candle_source": load_meta.get("candle_source"),
-                        "trades": trades,
+                        "trades": enriched if include_trades else [],
                         "status": out.get("status") or ("OK" if n else "SUCCESS_EMPTY"),
+                        "market_structure": {
+                            "analytics_enabled": False,
+                            "status": "ERROR",
+                            "error": str(analytics_exc),
+                            "disclaimer": (
+                                "Analytics only — does not affect strategy decisions"
+                            ),
+                        },
                     }
-                )
+
+                rows.append(row_payload)
         return {
             "status": "OK",
             "label": "LONG_STRATEGY_BACKTEST"

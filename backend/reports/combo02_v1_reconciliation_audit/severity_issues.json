@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-10-05T10:20:00Z",
+  "disclaimer": "Historical research reconciliation only. Not a profitability claim. No strategy parameters changed.",
+  "issues": [
+    {
+      "id": "GROSS_VS_NET_UI_CONFUSION",
+      "severity": "MEDIUM",
+      "title": "Visible ~+$231.28 vs report +$274.04 is gross vs net, not a ledger bug",
+      "detail": "On DB-tail 12,200 bars (fingerprint e3e4c05faf4454ec), report pnl_usd (Gross PnL) = +274.0452 and pnl_usd_net = +231.2394. Summing blotter Net columns reproduces +231.24; summing Gross reproduces +274.05. Fees = -42.8058. Identity gross + fees = net holds exactly.",
+      "evidence": "tail_12200.json; frontend matrix columns Gross PnL / Net PnL; blotter Gross/Net columns"
+    },
+    {
+      "id": "FINGERPRINT_OMITS_LIMIT",
+      "severity": "MEDIUM",
+      "title": "Configuration fingerprint ignores DB-tail bar limit",
+      "detail": "e3e4c05faf4454ec is shared by limit=8640 (19 trades) and limit=12200 (33 trades). Fingerprint payload in backtest_ui_config.configuration_fingerprint does not include limit, so two different datasets collide under one fingerprint.",
+      "evidence": "validate_backtest_request fingerprint payload; resolved_config_diff.json"
+    },
+    {
+      "id": "AVG_R_TIMES_RISK_OVERSTATES_USD",
+      "severity": "LOW",
+      "title": "average_R * n * risk_usd does not equal sized gross PnL when leverage-capped",
+      "detail": "On the 33-trade run, sum(r_multiple)*20 = 300.26 while sized gross PnL = 274.05 (18/33 trades capped_by_leverage). Summary correctly uses sized gross_pnl_usd sums; naive R*$risk is not the report Gross PnL.",
+      "evidence": "tail_12200.json capped_by_leverage counts"
+    },
+    {
+      "id": "OPEN_TRADES_EXCLUDED",
+      "severity": "INFO",
+      "title": "Open trades are excluded from summary and blotter enrichment",
+      "detail": "enrich_trades(closed_only=True) drops outcome=OPEN. sample_size counts closed only. No open trade was present in the 33-trade dump.",
+      "evidence": "trade_fees.enrich_trades; combination_backtest.compute_metrics"
+    },
+    {
+      "id": "NO_CALENDAR_TO_TAIL_SILENT_CONVERT",
+      "severity": "INFO",
+      "title": "No silent calendar→DB-tail conversion on audited calendar runs",
+      "detail": "2e654bef (2026-01-01→2026-10-05) and 31b236ff (2026-02-01→2026-04-30) both report period_mode=CALENDAR_RANGE with actual first/last candles inside the requested UTC dates. The 33-trade +$274 run is an explicit DB_TAIL max lookback, not a mislabeled calendar request.",
+      "evidence": "requested_range vs actual_range in dump JSONs"
+    },
+    {
+      "id": "HTF_FORMING_ON_ALL_THREE",
+      "severity": "INFO",
+      "title": "All three fingerprints use forming HTF (not fully closed)",
+      "detail": "htf_require_fully_closed=false on every trade condition_snapshot. 4h coverage formula is limit//4 + 100 (8640→2260, 12200→3150).",
+      "evidence": "condition_snapshot; app.research.service lim_4h"
+    },
+    {
+      "id": "LEDGER_SUMMARY_MATCH",
+      "severity": "INFO",
+      "title": "No missing/duplicated trades; summary recomputes from ledger with zero delta",
+      "detail": "Across four dumps, trade_id / entry_index / (signal_time, exit_time) are unique; sample_size equals closed row count; gross/net/fees/avg R/PF/max DD R deltas are 0.",
+      "evidence": "reconciliation_report.json; test_combo02_v1_ledger_reconciliation.py"
+    }
+  ]
+}

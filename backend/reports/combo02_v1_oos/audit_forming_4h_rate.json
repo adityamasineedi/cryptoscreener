@@ -1,0 +1,25 @@
+{
+  "n": 105,
+  "forming_4h_at_decision": 76,
+  "fully_closed_4h_at_decision": 29,
+  "forming_pct": 72.38,
+  "by_symbol": {
+    "forming": {
+      "BTCUSDT": 21,
+      "ETHUSDT": 33,
+      "SOLUSDT": 22
+    },
+    "closed": {
+      "BTCUSDT": 6,
+      "ETHUSDT": 16,
+      "SOLUSDT": 7
+    }
+  },
+  "signal_hour_mod4": {
+    "2": 25,
+    "3": 29,
+    "0": 28,
+    "1": 23
+  },
+  "note": "hour%4==3 means 1h is last hour of 4h so forming==fully closed at 1h close. Other hours use unfinished 4h final OHLC from history = lookahead."
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Any
@@ -162,21 +163,23 @@ class OHLCVStore:
         timeframes: list[str] | None = None,
         limit_per_series: int = 500,
     ) -> int:
-        """Hydrate closed candles from Timescale/Postgres when DATABASE_ENABLED."""
+        """Hydrate closed candles from Timescale/Postgres when DATABASE_ENABLED.
+
+        Loads series cooperatively (yields between symbol/TF pairs) so FastAPI
+        can keep serving /api/health and charts during multi-minute hydrates.
+        """
         if not db_manager.enabled or db_manager.engine is None:
             return 0
         tfs = [normalize_timeframe(t) for t in (timeframes or ["1d", "15m", "1h", "4h", "5m", "1m"])]
         loaded = 0
         try:
-            async with db_manager.engine.begin() as conn:
-                if symbols:
-                    for sym in symbols:
-                        for tf in tfs:
-                            loaded += await self._load_series(
-                                conn, sym.upper(), tf, limit_per_series
-                            )
-                else:
-                    # Distinct symbol/tf pairs present in DB
+            pairs: list[tuple[str, str]] = []
+            if symbols:
+                for sym in symbols:
+                    for tf in tfs:
+                        pairs.append((sym.upper(), tf))
+            else:
+                async with db_manager.engine.connect() as conn:
                     result = await conn.execute(
                         text(
                             "SELECT DISTINCT symbol, timeframe FROM ohlcv "
@@ -184,12 +187,25 @@ class OHLCVStore:
                         ),
                         {"tfs": tfs},
                     )
-                    pairs = result.fetchall()
-                    for sym, tf in pairs:
-                        loaded += await self._load_series(
-                            conn, str(sym).upper(), normalize_timeframe(str(tf)), limit_per_series
-                        )
-            logger.info("ohlcv_hydrated_from_db", candles=loaded)
+                    pairs = [
+                        (str(sym).upper(), normalize_timeframe(str(tf)))
+                        for sym, tf in result.fetchall()
+                    ]
+
+            # Prefer majors / paper first so UI charts recover before long-tail.
+            prefer = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+            pairs.sort(key=lambda p: (0 if p[0] in prefer else 1, p[0], tfs.index(p[1]) if p[1] in tfs else 99))
+
+            async with db_manager.engine.connect() as conn:
+                for i, (sym, tf) in enumerate(pairs):
+                    loaded += await self._load_series(conn, sym, tf, limit_per_series)
+                    # Cooperative multitasking: do not starve HTTP/WS for minutes.
+                    # sleep(0) alone is insufficient under heavy CPU; slice ~10ms.
+                    if i % 3 == 2:
+                        await asyncio.sleep(0.01)
+                    else:
+                        await asyncio.sleep(0)
+            logger.info("ohlcv_hydrated_from_db", candles=loaded, series=len(pairs))
             return loaded
         except Exception as exc:  # noqa: BLE001
             logger.warning("ohlcv_hydrate_failed", error=str(exc))
@@ -240,13 +256,15 @@ class OHLCVStore:
             )
         # Ingest without re-queueing DB writes for already-persisted rows
         n = 0
+        key = (symbol.upper(), normalize_timeframe(timeframe))
+        self._live_symbols.add(key[0])
+        hist = self._closed[key]
+        existing_times = {c.open_time for c in hist}
         for candle in candles:
-            key = (candle.symbol.upper(), normalize_timeframe(candle.timeframe))
-            self._live_symbols.add(key[0])
-            hist = self._closed[key]
-            if hist and any(c.open_time == candle.open_time for c in hist):
+            if candle.open_time in existing_times:
                 continue
             hist.append(candle)
+            existing_times.add(candle.open_time)
             self._closed_count += 1
             n += 1
         return n
@@ -299,25 +317,28 @@ class OHLCVStore:
         )
         try:
             async with db_manager.engine.begin() as conn:
+                ohlcv_rows = []
+                vol_rows = []
+                price_rows = []
                 for c in batch:
-                    params = {
-                        "time": c.open_time,
-                        "symbol": c.symbol,
-                        "timeframe": c.timeframe,
-                        "open": c.open,
-                        "high": c.high,
-                        "low": c.low,
-                        "close": c.close,
-                        "volume": c.volume,
-                        "quote_volume": c.quote_volume,
-                        "trade_count": c.trade_count,
-                        "taker_buy_base": c.taker_buy_volume,
-                        "taker_buy_quote": c.taker_buy_quote_volume,
-                        "source": c.source,
-                    }
-                    await conn.execute(sql, params)
-                    await conn.execute(
-                        vol_sql,
+                    ohlcv_rows.append(
+                        {
+                            "time": c.open_time,
+                            "symbol": c.symbol,
+                            "timeframe": c.timeframe,
+                            "open": c.open,
+                            "high": c.high,
+                            "low": c.low,
+                            "close": c.close,
+                            "volume": c.volume,
+                            "quote_volume": c.quote_volume,
+                            "trade_count": c.trade_count,
+                            "taker_buy_base": c.taker_buy_volume,
+                            "taker_buy_quote": c.taker_buy_quote_volume,
+                            "source": c.source,
+                        }
+                    )
+                    vol_rows.append(
                         {
                             "time": c.open_time,
                             "symbol": c.symbol,
@@ -325,18 +346,23 @@ class OHLCVStore:
                             "volume": c.volume,
                             "quote_volume": c.quote_volume,
                             "source": c.source,
-                        },
+                        }
                     )
                     if c.timeframe in ("1m", "1h", "1d"):
-                        await conn.execute(
-                            price_sql,
+                        price_rows.append(
                             {
                                 "time": c.open_time,
                                 "symbol": c.symbol,
                                 "price": c.close,
                                 "source": c.source,
-                            },
+                            }
                         )
+                if ohlcv_rows:
+                    await conn.execute(sql, ohlcv_rows)
+                if vol_rows:
+                    await conn.execute(vol_sql, vol_rows)
+                if price_rows:
+                    await conn.execute(price_sql, price_rows)
             self._db_writes += len(batch)
             return len(batch)
         except Exception as exc:  # noqa: BLE001

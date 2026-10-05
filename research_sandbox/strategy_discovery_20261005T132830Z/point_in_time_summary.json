@@ -1,0 +1,10 @@
+{
+  "decision_rows": 35039,
+  "candidate_rows": 35039,
+  "lookahead_passes": 35039,
+  "lookahead_failures": 0,
+  "future_feature_violations": 0,
+  "missing_4h_mappings": 0,
+  "unfinished_4h_mappings": 0,
+  "trade_rows": 632
+}

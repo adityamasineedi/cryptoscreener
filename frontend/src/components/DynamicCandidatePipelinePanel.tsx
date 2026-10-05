@@ -12,6 +12,7 @@ import {
   type DynamicCandidatesResponse,
   type DynamicEligibilityReason,
 } from "../api/client";
+import { dedupedPanelFetch } from "../lib/researchPanelCache";
 
 function num(v: number | null | undefined, digits = 2): string {
   if (v == null || Number.isNaN(v) || !Number.isFinite(v)) return "—";
@@ -317,7 +318,11 @@ export function DynamicCandidatePipelinePanel() {
 
   const reload = useCallback(() => {
     setLoading(true);
-    return fetchDynamicCandidates()
+    return dedupedPanelFetch(
+      "latest",
+      "dynamic",
+      (signal) => fetchDynamicCandidates(undefined, { signal }),
+    )
       .then((payload) => {
         setData(payload);
         setError(null);
@@ -329,9 +334,15 @@ export function DynamicCandidatePipelinePanel() {
   }, []);
 
   useEffect(() => {
+    const ac = new AbortController();
     let cancelled = false;
     setLoading(true);
-    fetchDynamicCandidates()
+    dedupedPanelFetch(
+      "latest",
+      "dynamic",
+      (signal) => fetchDynamicCandidates(undefined, { signal }),
+      ac.signal,
+    )
       .then((payload) => {
         if (!cancelled) {
           setData(payload);
@@ -339,7 +350,7 @@ export function DynamicCandidatePipelinePanel() {
         }
       })
       .catch((e) => {
-        if (!cancelled) {
+        if (!cancelled && (e as Error)?.name !== "AbortError") {
           setError(e instanceof Error ? e.message : String(e));
         }
       })
@@ -348,10 +359,12 @@ export function DynamicCandidatePipelinePanel() {
       });
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, []);
 
   async function loadDetail(symbol: string) {
+    const ac = new AbortController();
     setDetailLoading((prev) => ({ ...prev, [symbol]: true }));
     setDetailError((prev) => {
       const next = { ...prev };
@@ -359,7 +372,9 @@ export function DynamicCandidatePipelinePanel() {
       return next;
     });
     try {
-      const payload = await fetchDynamicCandidateDetail(symbol);
+      const payload = await fetchDynamicCandidateDetail(symbol, {
+        signal: ac.signal,
+      });
       if (payload.status === "OK" && payload.candidate) {
         setDetailBySymbol((prev) => ({ ...prev, [symbol]: payload.candidate! }));
       } else {

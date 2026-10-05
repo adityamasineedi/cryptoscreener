@@ -3,6 +3,13 @@ import { fetchFuturesScreener, wsUrl } from "../api/client";
 import { useMarketStore } from "../store/marketStore";
 import type { ScreenerRow } from "../types/market";
 
+/** True when REST owns membership (search / cap preset / screen filter). */
+function filtersActive(): boolean {
+  const st = useMarketStore.getState();
+  const filt = (st.screenFilter || "ALL_ELIGIBLE").toUpperCase();
+  return Boolean(st.search?.trim()) || Boolean(st.preset) || filt !== "ALL_ELIGIBLE";
+}
+
 export function useMarketStream() {
   const setSnapshot = useMarketStore((s) => s.setSnapshot);
   const applyBatch = useMarketStore((s) => s.applyBatch);
@@ -44,6 +51,9 @@ export function useMarketStream() {
         if (!cancelled) {
           setSnapshot(data.rows, data.total, data.ingestion, {
             total_universe: data.total_universe,
+            discovered_universe: data.discovered_universe,
+            active_universe: data.active_universe,
+            active_universe_cap: data.active_universe_cap,
             eligible_count: data.eligible_count,
             returned_count: data.returned_count,
             limit: data.limit,
@@ -120,7 +130,7 @@ export function useMarketStream() {
     };
   }, [applyBatch, setConnected]);
 
-  // Screener incremental patches (≤100 screen universe)
+  // Screener WS: unfiltered snapshots must not wipe search/preset REST membership.
   useEffect(() => {
     let stopped = false;
     let retry = 0;
@@ -135,28 +145,52 @@ export function useMarketStream() {
         try {
           const msg = JSON.parse(ev.data as string);
           if (msg.type === "screener_snapshot" && Array.isArray(msg.rows)) {
-            setSnapshot(msg.rows as ScreenerRow[], msg.total ?? msg.rows.length, msg.ingestion ?? "", {
-              total_universe: msg.total_universe,
-              eligible_count: msg.eligible_count,
-              returned_count: msg.returned_count ?? msg.rows.length,
-              limit: msg.limit,
-              selection_updated_at: msg.selection_updated_at,
-              excluded: msg.excluded,
-              search_mode: msg.search_mode,
-              screen_filter: msg.screen_filter,
-              screen_timeframe: msg.screen_timeframe,
-              screener_identity: msg.screener_identity,
-              v1_watcher_view: msg.v1_watcher_view,
-            });
+            if (filtersActive()) {
+              // Keep REST-filtered row list; refresh fields for visible symbols only.
+              for (const row of msg.rows as ScreenerRow[]) {
+                if (!row?.symbol) continue;
+                if (!useMarketStore.getState().rows[row.symbol]) continue;
+                applyRowPatch(row.symbol, row);
+              }
+              return;
+            }
+            setSnapshot(
+              msg.rows as ScreenerRow[],
+              msg.total ?? msg.rows.length,
+              msg.ingestion ?? "",
+              {
+                total_universe: msg.total_universe,
+                discovered_universe: msg.discovered_universe,
+                active_universe: msg.active_universe,
+                active_universe_cap: msg.active_universe_cap,
+                eligible_count: msg.eligible_count,
+                returned_count: msg.returned_count ?? msg.rows.length,
+                limit: msg.limit,
+                selection_updated_at: msg.selection_updated_at,
+                excluded: msg.excluded,
+                search_mode: msg.search_mode,
+                screen_filter: msg.screen_filter,
+                screen_timeframe: msg.screen_timeframe,
+                screener_identity: msg.screener_identity,
+                v1_watcher_view: msg.v1_watcher_view,
+              }
+            );
           } else if (msg.type === "row_patch" && msg.symbol && msg.changes) {
             applyRowPatch(msg.symbol as string, msg.changes as Partial<ScreenerRow>);
           } else if (msg.type === "screener_heartbeat") {
+            if (filtersActive()) return;
             const cur = useMarketStore.getState().screenMeta;
             if (cur && (msg.total_universe != null || msg.eligible_count != null)) {
               useMarketStore.setState({
                 screenMeta: {
                   ...cur,
                   total_universe: Number(msg.total_universe ?? cur.total_universe),
+                  discovered_universe: Number(
+                    msg.discovered_universe ?? cur.discovered_universe ?? 0
+                  ),
+                  active_universe: Number(
+                    msg.active_universe ?? msg.total_universe ?? cur.active_universe
+                  ),
                   eligible_count: Number(msg.eligible_count ?? cur.eligible_count),
                   returned_count: Number(msg.returned_count ?? cur.returned_count),
                 },

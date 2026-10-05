@@ -1,0 +1,11 @@
+run_id,dataset_fingerprint,configuration_fingerprint,bar_count,trade_count,analytics_enabled,profiler_enabled,cache_state,strategy_runtime_seconds,total_runtime_seconds,rss_mb
+cold_1,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_cold_disk_warm,17.595,17.755,102.0
+cold_2,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_cold_disk_warm,14.628,14.685,107.5
+cold_3,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_cold_disk_warm,13.491,13.549,109.6
+cold_4,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_cold_disk_warm,14.767,14.831,110.3
+cold_5,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_cold_disk_warm,13.832,13.897,110.4
+warm_1,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_warm,13.582,13.644,110.9
+warm_2,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_warm,17.442,17.519,110.6
+warm_3,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_warm,13.613,13.671,109.4
+warm_4,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_warm,13.392,13.453,110.9
+warm_5,d50be10398eddd0764f09db63b4b36b7,COMBO_02,10968,66,False,False,process_warm,14.803,14.865,110.7

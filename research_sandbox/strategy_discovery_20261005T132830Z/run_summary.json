@@ -1,0 +1,149 @@
+{
+  "verdict": "EXPLORATORY ONLY",
+  "pit": {
+    "decision_rows": 35039,
+    "candidate_rows": 35039,
+    "lookahead_passes": 35039,
+    "lookahead_failures": 0,
+    "future_feature_violations": 0,
+    "missing_4h_mappings": 0,
+    "unfinished_4h_mappings": 0
+  },
+  "counts_a0": {
+    "candidate_count": 632,
+    "long_candidates": 343,
+    "short_candidates": 289,
+    "missing_htf": 0,
+    "lookahead_fail": 0
+  },
+  "combined": {
+    "trade_count": 632,
+    "wins": 268,
+    "losses": 364,
+    "win_rate": 0.4240506329113924,
+    "gross_R": 100.32187249257474,
+    "fees_R": 35.47121263484093,
+    "net_R": 64.85065985773382,
+    "average_R": 0.10261180357236363,
+    "median_R": -0.6386536825044722,
+    "profit_factor": 1.1886202105096861,
+    "maximum_drawdown_R": 15.951672145484672,
+    "longest_losing_streak": 11,
+    "average_hold_bars": 33.44462025316456,
+    "average_hold_hours": 33.44462025316456,
+    "sample_size_label": "STRONGER_RESEARCH_EVIDENCE"
+  },
+  "long": {
+    "trade_count": 343,
+    "wins": 155,
+    "losses": 188,
+    "win_rate": 0.4518950437317784,
+    "gross_R": 81.598891234246,
+    "fees_R": 19.354746293418113,
+    "net_R": 62.24414494082789,
+    "average_R": 0.18146981032311338,
+    "median_R": -0.3536566745953305,
+    "profit_factor": 1.3482422866079762,
+    "maximum_drawdown_R": 10.551480045757282,
+    "longest_losing_streak": 7,
+    "average_hold_bars": 33.011661807580175,
+    "average_hold_hours": 33.011661807580175,
+    "sample_size_label": "STRONGER_RESEARCH_EVIDENCE"
+  },
+  "short": {
+    "trade_count": 289,
+    "wins": 113,
+    "losses": 176,
+    "win_rate": 0.39100346020761245,
+    "gross_R": 18.722981258328744,
+    "fees_R": 16.116466341422818,
+    "net_R": 2.606514916905926,
+    "average_R": 0.009019082757459952,
+    "median_R": -1.0129894634942207,
+    "profit_factor": 1.0157895932050949,
+    "maximum_drawdown_R": 16.965368549512668,
+    "longest_losing_streak": 9,
+    "average_hold_bars": 33.95847750865052,
+    "average_hold_hours": 33.95847750865052,
+    "sample_size_label": "STRONGER_RESEARCH_EVIDENCE"
+  },
+  "oos_combined": {
+    "trade_count": 133,
+    "wins": 59,
+    "losses": 74,
+    "win_rate": 0.44360902255639095,
+    "gross_R": 38.251373484323466,
+    "fees_R": 7.910310031640118,
+    "net_R": 30.34106345268335,
+    "average_R": 0.2281282966367169,
+    "median_R": -0.18183860279665492,
+    "profit_factor": 1.4506426116039333,
+    "maximum_drawdown_R": 7.689642141984423,
+    "longest_losing_streak": 6,
+    "average_hold_bars": 31.721804511278197,
+    "average_hold_hours": 31.721804511278197,
+    "sample_size_label": "STRONGER_RESEARCH_EVIDENCE"
+  },
+  "oos_long": {
+    "trade_count": 64,
+    "wins": 32,
+    "losses": 32,
+    "win_rate": 0.5,
+    "gross_R": 28.553787178231083,
+    "fees_R": 4.281391541563881,
+    "net_R": 24.272395636667202,
+    "average_R": 0.37925618182292503,
+    "median_R": 0.08911060044178479,
+    "profit_factor": 1.835372469552981,
+    "maximum_drawdown_R": 5.7050604378388865,
+    "longest_losing_streak": 5,
+    "average_hold_bars": 30.53125,
+    "average_hold_hours": 30.53125,
+    "sample_size_label": "PRELIMINARY"
+  },
+  "oos_short": {
+    "trade_count": 69,
+    "wins": 27,
+    "losses": 42,
+    "win_rate": 0.391304347826087,
+    "gross_R": 9.697586306092385,
+    "fees_R": 3.628918490076236,
+    "net_R": 6.0686678160161485,
+    "average_R": 0.0879517074784949,
+    "median_R": -0.8225712168114102,
+    "profit_factor": 1.158564036086014,
+    "maximum_drawdown_R": 7.778939449493633,
+    "longest_losing_streak": 8,
+    "average_hold_bars": 32.82608695652174,
+    "average_hold_hours": 32.82608695652174,
+    "sample_size_label": "PRELIMINARY"
+  },
+  "partitions": {
+    "TRAIN": {
+      "start": "2022-10-06T08:00:00+00:00",
+      "end": "2025-02-28T06:00:00+00:00",
+      "1h_rows": 21023
+    },
+    "VALIDATION": {
+      "start": "2025-02-28T07:00:00+00:00",
+      "end": "2025-12-17T06:00:00+00:00",
+      "1h_rows": 7008
+    },
+    "OOS": {
+      "start": "2025-12-17T07:00:00+00:00",
+      "end": "2026-10-05T06:00:00+00:00",
+      "1h_rows": 7008
+    }
+  },
+  "reconciliation": {
+    "unique_ids": true,
+    "long_plus_short": true,
+    "net_R": true,
+    "fees_R": true,
+    "wins": true,
+    "losses": true,
+    "all_lookahead_pass": true
+  },
+  "sensitivity_class": "STABLE",
+  "verdict_reason": "OOS combined avg_R>0 with n=133, but VALIDATION combined avg_R<0 (PF<1). Do not promote on OOS alone. Full-sample median_R negative; max DD ~16R."
+}

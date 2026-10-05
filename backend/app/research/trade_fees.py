@@ -5,7 +5,8 @@ Canonical fee model (research):
 - fee_basis = EXECUTED_NOTIONAL (abs(price * quantity))
 - entry: TAKER for MARKET, MAKER for LIMIT_RETEST
 - exit: TAKER (MARKET)
-- leverage affects margin only; never multiplies fee notional
+- leverage caps entry notional at account_equity * leverage (same as paper)
+- leverage never multiplies fee notional
 
 net_pnl = gross_pnl + total_fee  (total_fee <= 0)
 """
@@ -129,9 +130,15 @@ def enrich_trade_execution(
     maker_fee: float = DEFAULT_MAKER_FEE,
     exit_fee: float | None = None,
     leverage: float = DEFAULT_LEVERAGE,
+    account_equity: float | None = None,
     fee_sign: str = FEE_SIGN_NEGATIVE_COST,
 ) -> dict[str, Any]:
-    """Attach qty, gross/net PnL, fee, and margin fields for one research trade."""
+    """Attach qty, gross/net PnL, fee, and margin fields for one research trade.
+
+    Position size is ``risk_usd / |entry-stop|``, then capped so entry notional
+    does not exceed ``account_equity * leverage`` (paper parity). When capped,
+    ``risk_usd`` is recomputed as ``|entry-stop| * qty``.
+    """
     entry = float(trade.get("entry_price") or 0.0)
     stop = float(trade.get("stop_price") or 0.0)
     exit_px = trade.get("exit_price")
@@ -144,8 +151,24 @@ def enrich_trade_execution(
     if entry_type_s not in ("MARKET", "LIMIT_RETEST"):
         entry_type_s = "MARKET"
 
+    requested_risk = float(risk_usd)
     risk_per_unit = abs(entry - stop)
-    qty = (float(risk_usd) / risk_per_unit) if risk_per_unit > 0 else 0.0
+    raw_qty = (requested_risk / risk_per_unit) if risk_per_unit > 0 else 0.0
+
+    lev = max(1.0, float(leverage or DEFAULT_LEVERAGE))
+    if account_equity is not None and float(account_equity) > 0:
+        equity = float(account_equity)
+    elif requested_risk > 0:
+        # Implied equity at 2% risk-per-trade (default research book).
+        equity = requested_risk / 0.02
+    else:
+        equity = 0.0
+
+    max_notional = equity * lev if equity > 0 else 0.0
+    max_qty = (max_notional / entry) if entry > 0 and max_notional > 0 else 0.0
+    capped = bool(max_qty > 0 and raw_qty > max_qty + 1e-15)
+    qty = min(raw_qty, max_qty) if max_qty > 0 else 0.0
+    actual_risk = (risk_per_unit * qty) if qty > 0 and risk_per_unit > 0 else 0.0
 
     entry_fee_type = fee_type_for_entry(entry_type_s)
     exit_fee_type = FEE_TYPE_TAKER
@@ -214,11 +237,10 @@ def enrich_trade_execution(
             net_pnl = float(gross_pnl) - total_fee
         else:
             net_pnl = float(gross_pnl) + total_fee
-        if float(risk_usd) > 0:
-            r_net = net_pnl / float(risk_usd)
+        if actual_risk > 0:
+            r_net = net_pnl / actual_risk
 
     total_fee = fee_entry + fee_exit
-    lev = max(1.0, float(leverage or DEFAULT_LEVERAGE))
     margin_usd = (notional_entry / lev) if lev > 0 else None
     liquidation_price = None
     if entry > 0 and lev > 0:
@@ -240,9 +262,14 @@ def enrich_trade_execution(
         "entry_type": entry_type_s,
         "qty": qty,
         "quantity": qty,
-        "risk_usd": float(risk_usd),
+        "risk_usd": float(actual_risk),
+        "requested_risk_usd": requested_risk,
         "risk_per_unit": risk_per_unit if risk_per_unit else None,
         "leverage": lev,
+        "account_equity": equity,
+        "capped_by_leverage": capped,
+        "raw_risk_quantity": raw_qty,
+        "max_leverage_quantity": max_qty,
         "notional": notional_entry,
         "notional_entry_usd": notional_entry,
         "notional_exit_usd": notional_exit,
@@ -281,6 +308,7 @@ def enrich_trades(
     maker_fee: float = DEFAULT_MAKER_FEE,
     exit_fee: float | None = None,
     leverage: float = DEFAULT_LEVERAGE,
+    account_equity: float | None = None,
     closed_only: bool = True,
     fee_sign: str = FEE_SIGN_NEGATIVE_COST,
 ) -> list[dict[str, Any]]:
@@ -296,6 +324,7 @@ def enrich_trades(
             maker_fee=maker_fee,
             exit_fee=exit_fee,
             leverage=leverage,
+            account_equity=account_equity,
             fee_sign=fee_sign,
         )
         row["trade_no"] = len(out) + 1

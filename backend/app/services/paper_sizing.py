@@ -21,6 +21,9 @@ DEFAULT_PAPER_SLIPPAGE_RATE = 0.0002
 # importing backtest_ui_config here — it pulls heavy research package deps).
 DEFAULT_PAPER_LEVERAGE = 2.0
 
+# Binance USDT-M typical min notional fallback when exchange filters absent.
+_DEFAULT_MIN_NOTIONAL = 5.0
+
 # Sensible fallbacks when discovery / market_store has no filters yet.
 _SYMBOL_FILTER_DEFAULTS: dict[str, tuple[float, float]] = {
     "SOLUSDT": (0.01, 0.1),
@@ -29,6 +32,24 @@ _SYMBOL_FILTER_DEFAULTS: dict[str, tuple[float, float]] = {
 }
 _GENERIC_TICK = 0.01
 _GENERIC_STEP = 0.001
+
+
+def resolve_min_notional(symbol: str) -> tuple[float, str]:
+    """Return (min_notional_usd, source). Fail-closed uses exchange filter or default."""
+    sym = str(symbol or "").upper()
+    try:
+        from app.services.market_store import market_store
+
+        info = market_store.symbols.get(sym)
+        if info is not None:
+            raw = getattr(info, "min_notional", None)
+            if raw is None:
+                raw = getattr(info, "minNotional", None)
+            if raw is not None and float(raw) > 0:
+                return float(raw), "market_store"
+    except Exception:  # noqa: BLE001
+        pass
+    return float(_DEFAULT_MIN_NOTIONAL), "default"
 
 
 def _precision_to_step(precision: int | None) -> float | None:
@@ -187,6 +208,28 @@ def size_paper_long(
 
     risk_per = entry_r - stop_r
     risk_usd = risk_per * qty if qty > 0 else 0.0
+    notional = qty * entry_r
+    min_notional, min_notional_source = resolve_min_notional(symbol)
+    if qty > 0 and notional + 1e-12 < float(min_notional):
+        # Fail closed — never upsize beyond 2% risk to meet exchange minima.
+        return {
+            "entry_price": entry_r,
+            "stop_price": stop_r,
+            "quantity": 0.0,
+            "risk_usd": 0.0,
+            "notional": 0.0,
+            "leverage": lev,
+            "tick_size": tick,
+            "lot_step": step,
+            "filter_source": filter_source,
+            "capped_by_leverage": False,
+            "entry_fee_usd": 0.0,
+            "slippage_rate": float(slippage_rate),
+            "fee_rate": float(fee_rate),
+            "min_notional": float(min_notional),
+            "min_notional_source": min_notional_source,
+            "reason": "notional_below_min",
+        }
     notional = qty * entry_r
     entry_fee = 0.0
     if qty > 0 and entry_r > 0:

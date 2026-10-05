@@ -94,13 +94,16 @@ export function TopNav({
           <span className="hidden whitespace-nowrap term-md:inline">
             Ingestion: {health?.ingestion ?? "—"}
           </span>
-          <span className="whitespace-nowrap" title="Live tickers / full backend universe">
+          <span
+            className="whitespace-nowrap"
+            title="Live tickers / active screen+compute universe (V1 paper + top volume)"
+          >
             {health?.tickers ?? 0}/{health?.symbols ?? 0}
           </span>
           {health?.screenUniverse != null && health.screenReturned != null ? (
             <span
               className="hidden whitespace-nowrap term-md:inline"
-              title="Main screener display vs full monitored universe"
+              title="Screener rows shown vs active universe"
             >
               Screen {health.screenReturned}/{health.screenUniverse}
             </span>

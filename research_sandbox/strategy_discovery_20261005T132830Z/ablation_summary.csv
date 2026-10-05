@@ -1,0 +1,4 @@
+ablation,note,trade_count,average_R,net_R,profit_factor,maximum_drawdown_R,OOS_trade_count,OOS_average_R,OOS_net_R,sample_size_label,candidate_count
+A0,HTF trend + 1h pullback + continuation,632,0.10261180357236363,64.85065985773382,1.1886202105096861,15.951672145484672,133,0.2281282966367169,30.34106345268335,STRONGER_RESEARCH_EVIDENCE,632
+A1,"A0 + ATR percentile <= 50 descriptive volatility gate (predeclared, not optimized)",423,0.08018216655863353,33.917056454301985,1.1319354741533825,16.882506671358755,87,0.24950255542260413,21.70672232176656,STRONGER_RESEARCH_EVIDENCE,423
+A2,UNAVAILABLE WITHOUT ENGINE CHANGE — causal retest after continuation not in base S1 engine without new fill model,,,,,,,,,UNAVAILABLE WITHOUT ENGINE CHANGE,

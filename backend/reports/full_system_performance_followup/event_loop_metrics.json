@@ -1,0 +1,18 @@
+{
+  "window": "last_12_ok_samples",
+  "n": 12,
+  "health_ms_avg": 37.9,
+  "health_ms_p95": 55.1,
+  "health_ms_max": 74.4,
+  "event_loop_lag_ms_avg": 32.03,
+  "event_loop_lag_ms_max": 271.79,
+  "queue_min": 289,
+  "queue_max": 290,
+  "queue_end": 290,
+  "trailing_stale_delta": 1,
+  "gap_delta": 0,
+  "blocked_queued_end": 443,
+  "blocked_cooldown_end": 644,
+  "rest_rpm_end": 225,
+  "screener_ms_avg": 1740.8
+}

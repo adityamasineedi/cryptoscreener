@@ -1,0 +1,4 @@
+mtf_alignment,bars,accepted_signals,avg_mtf_score,avg_R_accepted,win_rate_accepted
+INSUFFICIENT_DATA,23,0,0.0,,
+TIMEFRAME_CONFLICT,809,2,0.0,0.5,0.5
+VOLATILITY_ALIGNED,268,1,0.0,2.0,1.0

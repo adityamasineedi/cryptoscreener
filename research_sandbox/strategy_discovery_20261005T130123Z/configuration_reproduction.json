@@ -1,0 +1,108 @@
+{
+  "frozen_from": [
+    "research_sandbox/strategy_discovery_20261005T124726Z/config.json",
+    "research_sandbox/strategy_discovery_20261005T124726Z/feature_definition.json",
+    "research_sandbox/strategy_discovery_20261005T125552Z/ (SHORT analysis method)"
+  ],
+  "a3_definition": "A0 + retest within max_retest_bars after breakout",
+  "predeclared_features": {
+    "compression_definition": "ATR(14) percentile within trailing lookback <= threshold",
+    "atr_period": 14,
+    "atr_percentile_lookback": 100,
+    "compression_threshold": 20.0,
+    "range_lookback_bars": 20,
+    "breakout_buffer_frac": 0.0005,
+    "note": "All thresholds declared before any OOS inspection. No post-hoc optimization."
+  },
+  "retest": {
+    "max_retest_bars": 6,
+    "definition": "After breakout, wait for a later closed bar that trades back to breakout_level then closes again in breakout direction"
+  },
+  "entry_mode": "E1",
+  "stop": "S1",
+  "target_R": 2.0,
+  "fees": {
+    "taker_fee_rate_per_leg": 0.0004,
+    "legs": 2,
+    "slippage": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "funding": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "source": "documented research DEFAULT_TAKER_FEE (read-only reference, not imported)"
+  },
+  "intrabar_ambiguity_rule": "STOP_FIRST when both stop and target touched in same candle",
+  "partitions": {
+    "method": "chronological_fraction",
+    "train_frac": 0.6,
+    "validation_frac": 0.2,
+    "oos_frac": 0.2,
+    "note": "No repository S3 partition exists; defined once before run."
+  },
+  "cooldown_bars_after_exit": 1,
+  "max_hold_bars": 72,
+  "feature_definition_snapshot": {
+    "compression": {
+      "compression_definition": "ATR(14) percentile within trailing lookback <= threshold",
+      "atr_period": 14,
+      "atr_percentile_lookback": 100,
+      "compression_threshold": 20.0,
+      "range_lookback_bars": 20,
+      "breakout_buffer_frac": 0.0005,
+      "note": "All thresholds declared before any OOS inspection. No post-hoc optimization."
+    },
+    "range": {
+      "definition": "max(high)/min(low) over prior completed range_lookback bars excluding decision bar",
+      "range_lookback_bars": 20
+    },
+    "breakout": {
+      "long": "close > range_high + breakout_buffer_frac * close",
+      "short": "close < range_low - breakout_buffer_frac * close",
+      "breakout_buffer_frac": 0.0005
+    },
+    "htf": {
+      "rule": "selected_4h_close_time <= decision_time (1h open + 1h)",
+      "forming_forbidden": true
+    },
+    "entry": {
+      "E1": "market_at_confirmed_breakout_close",
+      "E2": "next_1h_open"
+    },
+    "stops": {
+      "S1": "opposite_range_boundary",
+      "S2": "ATR_multiple",
+      "atr_stop_multiple": 1.5
+    },
+    "targets_R": [
+      1.5,
+      2.0,
+      2.5
+    ],
+    "fees": {
+      "taker_fee_rate_per_leg": 0.0004,
+      "legs": 2,
+      "slippage": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+      "funding": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+      "source": "documented research DEFAULT_TAKER_FEE (read-only reference, not imported)"
+    },
+    "intrabar_ambiguity_rule": "STOP_FIRST when both stop and target touched in same candle",
+    "declared_before_oos": true
+  },
+  "direction_mode": "A3 combined run then analysis-only SHORT filter (matches BTC direction-split)",
+  "no_parameter_retune": true,
+  "btc_calendar": "2022-10-06 \u2192 2026-10-05",
+  "eth_sol_calendar_policy": "Concatenate contiguous DATA_OK shards 2024-01-01\u21922026-09-30; symbol-specific 60/20/20",
+  "comparability": "NOT_STRICTLY_COMPARABLE_TO_BTC_CALENDAR",
+  "btc_reference": {
+    "label": "INSUFFICIENT_SAMPLE",
+    "note": "Frozen reference from strategy_discovery_20261005T125552Z; not re-run",
+    "total_trades": 56,
+    "total_average_R": 0.407,
+    "total_net_R": 22.82,
+    "total_PF": 1.98,
+    "total_max_DD": 12.31,
+    "oos_trades": 13,
+    "oos_average_R": 0.673,
+    "oos_net_R": 8.75,
+    "oos_PF": 3.83,
+    "oos_max_DD": 1.05,
+    "calendar": "2022-10-06 \u2192 2026-10-05 UTC"
+  }
+}

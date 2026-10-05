@@ -1,0 +1,22 @@
+{
+  "recorded_at": "2026-10-05T12:39:44Z",
+  "method": "vitest RequestCancellation.test.tsx + LazyResearchMount.test.tsx",
+  "panels_covered": [
+    "candidate",
+    "short",
+    "dynamic"
+  ],
+  "results": {
+    "abort_signal_reaches_fetch": true,
+    "collapse_aborts_inflight": true,
+    "stale_run_not_shown_after_invalidate": true,
+    "lazy_panels_no_fetch_before_expand": true
+  },
+  "events_validated": [
+    "request_started",
+    "request_aborted",
+    "stale_response_discarded",
+    "visible_result_run_id"
+  ],
+  "note": "Network abort verified via AbortSignal on fetch helpers and AbortController on LazyResearchMount unmount; Candidate/Short/Dynamic pass signal into dedupedPanelFetch."
+}

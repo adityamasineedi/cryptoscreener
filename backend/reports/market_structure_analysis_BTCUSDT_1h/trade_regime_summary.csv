@@ -1,0 +1,16 @@
+regime,timeframe,total_trades,wins,losses,win_rate,sum_R,average_R,median_R,profit_factor,gross_pnl,fees,net_pnl,max_drawdown,average_holding_time,group_key
+BULL_TREND,4h,2,1,1,0.5,1.0,0.5,0.5,2.0,20.0,2.0,18.0,1.0,,regime_4h
+HIGH_VOLATILITY_TREND,4h,1,1,0,1.0,2.0,2.0,2.0,,40.0,1.0,39.0,0.0,,regime_4h
+HIGH_VOLATILITY_TREND,1h,3,2,1,0.6666666666666666,3.0,1.0,2.0,4.0,60.0,3.0,57.0,1.0,,regime_1h
+HIGH_VOLATILITY_TREND,15m,3,2,1,0.6666666666666666,3.0,1.0,2.0,4.0,60.0,3.0,57.0,1.0,,regime_15m
+TIMEFRAME_CONFLICT,mtf,2,1,1,0.5,1.0,0.5,0.5,2.0,20.0,2.0,18.0,1.0,,mtf_alignment
+VOLATILITY_ALIGNED,mtf,1,1,0,1.0,2.0,2.0,2.0,,40.0,1.0,39.0,0.0,,mtf_alignment
+HIGH,volatility,3,2,1,0.6666666666666666,3.0,1.0,2.0,4.0,60.0,3.0,57.0,1.0,,volatility_state
+NO_CONFIRMED_BOS,bos_1h,3,2,1,0.6666666666666666,3.0,1.0,2.0,4.0,60.0,3.0,57.0,1.0,,bos_1h
+LOSS,outcome,1,0,1,0.0,-1.0,-1.0,-1.0,0.0,-20.0,1.0,-21.0,1.0,,win_loss
+WIN,outcome,2,2,0,1.0,4.0,2.0,2.0,,80.0,2.0,78.0,0.0,,win_loss
+accepted_signal,signal_stage,3,2,1,0.6666666666666666,3.0,1.0,2.0,4.0,60.0,3.0,57.0,1.0,,signal_stage
+NON_TRANSITION,transition,3,2,1,0.6666666666666666,3.0,1.0,2.0,4.0,,,,1.0,,transition_state
+2026-08,month,1,1,0,1.0,2.0,2.0,2.0,,,,,0.0,,month
+2026-09,month,2,1,1,0.5,1.0,0.5,0.5,2.0,,,,1.0,,month
+2026,year,3,2,1,0.6666666666666666,3.0,1.0,2.0,4.0,,,,1.0,,year

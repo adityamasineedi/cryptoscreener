@@ -78,11 +78,11 @@ function ScreenerPage() {
         health={{
           connected,
           ingestion: health?.ingestion ?? ingestion,
-          // Data Health / nav: full backend universe (not screen top-100)
+          // Data Health / nav: active screen+compute universe (not full Binance discovery)
           symbols: health?.symbols_loaded ?? screenMeta?.total_universe ?? total,
           tickers: health?.tickers_live ?? tickerCount,
           screenReturned: screenMeta?.returned_count,
-          screenUniverse: screenMeta?.total_universe ?? health?.symbols_loaded,
+          screenUniverse: screenMeta?.active_universe ?? screenMeta?.total_universe ?? health?.symbols_loaded,
         }}
         detailToggle={
           isNarrow

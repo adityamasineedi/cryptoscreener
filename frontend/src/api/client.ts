@@ -8,8 +8,13 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`);
+async function getJson<T>(
+  path: string,
+  opts?: { signal?: AbortSignal },
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    signal: opts?.signal,
+  });
   if (!res.ok) {
     throw new Error(`API ${path} failed: ${res.status}`);
   }
@@ -206,8 +211,9 @@ export type StrategyCatalogItem = {
     display?: string;
     example_equity_usd?: number;
     example_risk_usd?: number;
+    risk_percent_by_symbol?: Record<string, number>;
   };
-  where_to_run?: Array<{ label: string; path: string }>;
+  where_to_run?: Array<{ label: string; path: string; kind?: string }>;
   do_not?: string[];
   example?: Record<string, unknown>;
   combo_definition?: Record<string, unknown>;
@@ -463,6 +469,104 @@ export type StrategyMatrixRow = {
   paper_trade_created?: boolean;
   live_trade_created?: boolean;
   telegram_sent?: boolean;
+  market_structure?: MarketStructureAnalytics | null;
+};
+
+export type MarketStructureTableRow = {
+  decision_time?: string | null;
+  trade_id?: string | number | null;
+  trade_status?: string | null;
+  entry?: string | null;
+  direction?: string | null;
+  regime_4h?: string | null;
+  trend_4h?: string | null;
+  structure_4h?: string | null;
+  bos_4h?: string | null;
+  regime_1h?: string | null;
+  trend_1h?: string | null;
+  structure_1h?: string | null;
+  bos_1h?: string | null;
+  regime_15m?: string | null;
+  trend_15m?: string | null;
+  structure_15m?: string | null;
+  bos_15m?: string | null;
+  mtf_alignment?: string | null;
+  mtf_score?: number | null;
+  volatility_state?: string | null;
+  choppiness_state?: string | null;
+  signal_stage?: string | null;
+  final_strategy_decision?: string | null;
+  rejection_reason?: string | null;
+  win_loss?: string | null;
+  r_multiple?: number | null;
+  market_regime?: string | null;
+  regime_confidence?: number | null;
+  research_label?: string | null;
+  "15m_status"?: string | null;
+};
+
+export type MarketStructureAnalytics = {
+  status?: string;
+  analytics_enabled?: boolean;
+  analytics_version?: string;
+  analytics_runtime_seconds?: number;
+  strategy_runtime_seconds?: number | null;
+  feature_config_fingerprint?: string;
+  feature_config?: Record<string, unknown>;
+  "15m_status"?: string;
+  closed_candle_policy?: string;
+  metadata?: Record<string, unknown>;
+  by_bar?: Record<string, unknown>[];
+  table_rows?: MarketStructureTableRow[];
+  trade_regime_summary?: {
+    regime?: string;
+    timeframe?: string;
+    group_key?: string;
+    total_trades?: number;
+    wins?: number;
+    losses?: number;
+    win_rate?: number | null;
+    sum_R?: number | null;
+    average_R?: number | null;
+    median_R?: number | null;
+    profit_factor?: number | null;
+    gross_pnl?: number | null;
+    fees?: number | null;
+    net_pnl?: number | null;
+    max_drawdown?: number | null;
+    average_holding_time?: number | null;
+  }[];
+  regime_opportunity_summary?: {
+    regime?: string;
+    bars_in_regime?: number;
+    accepted_signals?: number;
+    rejected_signals?: number;
+    trades_executed?: number;
+    signal_rate?: number | null;
+    trade_rate?: number | null;
+  }[];
+  mtf_alignment_summary?: {
+    mtf_alignment?: string;
+    bars?: number;
+    accepted_signals?: number;
+    avg_mtf_score?: number | null;
+    avg_R_accepted?: number | null;
+    win_rate_accepted?: number | null;
+  }[];
+  quality_report?: {
+    total_1h_decision_bars?: number;
+    bars_with_4h_features?: number;
+    bars_with_1h_features?: number;
+    bars_with_15m_features?: number;
+    bars_with_future_feature_violation?: number;
+    bars_with_missing_feature_data?: number;
+    bars_with_unknown_regime?: number;
+    bars_with_timestamp_mismatch?: number;
+    bars_with_duplicate_feature_rows?: number;
+  };
+  artifact_paths?: Record<string, string>;
+  error?: string;
+  disclaimer?: string;
 };
 
 export type StrategyMatrixResponse = {
@@ -693,12 +797,16 @@ export type Combo02CandidateResultsResponse = {
 };
 
 /** Read-only candidate research report (no promote / Telegram / paper actions). */
-export function fetchCombo02CandidateResults(stamp?: string) {
+export function fetchCombo02CandidateResults(
+  stamp?: string,
+  opts?: { signal?: AbortSignal },
+) {
   const q = new URLSearchParams();
   if (stamp) q.set("stamp", stamp);
   const qs = q.toString();
   return getJson<Combo02CandidateResultsResponse>(
-    `/api/research/combo02-candidate-results${qs ? `?${qs}` : ""}`
+    `/api/research/combo02-candidate-results${qs ? `?${qs}` : ""}`,
+    opts,
   );
 }
 
@@ -769,15 +877,21 @@ export type ShortResearchListResponse = {
 };
 
 /** Read-only SHORT research candidates (never paper / Telegram / production). */
-export function fetchShortResearchCandidates() {
-  return getJson<ShortResearchListResponse>("/api/research/short-candidates");
+export function fetchShortResearchCandidates(opts?: { signal?: AbortSignal }) {
+  return getJson<ShortResearchListResponse>(
+    "/api/research/short-candidates",
+    opts,
+  );
 }
 
-export function fetchShortResearchCandidate(symbol: string) {
+export function fetchShortResearchCandidate(
+  symbol: string,
+  opts?: { signal?: AbortSignal },
+) {
   return getJson<{
     status?: string;
     candidate?: ShortResearchCandidate;
-  }>(`/api/research/short-candidates/${encodeURIComponent(symbol)}`);
+  }>(`/api/research/short-candidates/${encodeURIComponent(symbol)}`, opts);
 }
 
 /** Starts SHORT research batch only — never opens paper/live trades. */
@@ -889,12 +1003,16 @@ export type DynamicCandidatesResponse = {
 };
 
 /** Read-only dynamic v2 candidate registry (no enable-for-v1). */
-export function fetchDynamicCandidates(state?: string) {
+export function fetchDynamicCandidates(
+  state?: string,
+  opts?: { signal?: AbortSignal },
+) {
   const q = new URLSearchParams();
   if (state) q.set("state", state);
   const qs = q.toString();
   return getJson<DynamicCandidatesResponse>(
-    `/api/research/candidates${qs ? `?${qs}` : ""}`
+    `/api/research/candidates${qs ? `?${qs}` : ""}`,
+    opts,
   );
 }
 
@@ -909,9 +1027,13 @@ export type DynamicCandidateDetailResponse = {
 };
 
 /** Persisted registry detail for one symbol (expand/drawer). */
-export function fetchDynamicCandidateDetail(symbol: string) {
+export function fetchDynamicCandidateDetail(
+  symbol: string,
+  opts?: { signal?: AbortSignal },
+) {
   return getJson<DynamicCandidateDetailResponse>(
-    `/api/research/candidates/${encodeURIComponent(symbol)}`
+    `/api/research/candidates/${encodeURIComponent(symbol)}`,
+    opts,
   );
 }
 

@@ -24,6 +24,9 @@ class CombinationDefinition:
     # Hard 4h+1h structure alignment (fail closed). Independent of live
     # SignalConfig.require_mtf_alignment — research must pass HTF candles.
     require_htf_alignment: bool = False
+    # When True with HTF: as-of uses last HTF bar whose close time <= setup
+    # bar close (no forming HTF OHLC). Default False preserves COMBO_02 v1.
+    htf_require_fully_closed: bool = False
     conditions: tuple[str, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
@@ -39,6 +42,7 @@ class CombinationDefinition:
             "require_sd": self.require_sd,
             "require_rr": self.require_rr,
             "require_htf_alignment": self.require_htf_alignment,
+            "htf_require_fully_closed": self.htf_require_fully_closed,
             "conditions": list(self.conditions),
             "gates": {
                 "BOS": self.require_bos,
@@ -49,10 +53,12 @@ class CombinationDefinition:
                 "S/D": self.require_sd,
                 "R:R": self.require_rr,
                 "HTF": self.require_htf_alignment,
+                "HTF_FULLY_CLOSED": self.htf_require_fully_closed,
             },
             "direction_filter_notes": {
                 "setup_tf_only": not self.require_htf_alignment,
                 "htf_hard_gate": self.require_htf_alignment,
+                "htf_fully_closed_bars": self.htf_require_fully_closed,
             },
         }
 
@@ -98,6 +104,27 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
             "BOS confirmed",
             "Trend agrees with BOS direction",
             "Setup-TF only (HTF not required) — not v1 production",
+        ),
+    ),
+    # Separate version: same COMBO_02 gates, but HTF trends from fully closed
+    # HTF candles only (no forming-4h OHLC at 1h decision time).
+    "COMBO_02_CLOSED_HTF": CombinationDefinition(
+        combination_id="COMBO_02_CLOSED_HTF",
+        name="TREND_BOS_CLOSED_HTF",
+        description=(
+            "COMBO_02 gates with closed-bar HTF as-of: 4h/1h trends use the last "
+            "HTF candle whose close time is <= setup bar close (no forming HTF). "
+            "Versioned as COMBO_02_V1_CLOSED_HTF — does not mutate COMBO_02 v1."
+        ),
+        require_bos=True,
+        require_trend=True,
+        require_htf_alignment=True,
+        htf_require_fully_closed=True,
+        conditions=(
+            "BOS confirmed",
+            "Trend agrees with BOS direction",
+            "4h+1h HTF structure aligned (hard gate)",
+            "HTF candles fully closed at setup bar close",
         ),
     ),
     "COMBO_03": CombinationDefinition(

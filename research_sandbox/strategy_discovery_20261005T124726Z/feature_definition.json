@@ -1,0 +1,47 @@
+{
+  "compression": {
+    "compression_definition": "ATR(14) percentile within trailing lookback <= threshold",
+    "atr_period": 14,
+    "atr_percentile_lookback": 100,
+    "compression_threshold": 20.0,
+    "range_lookback_bars": 20,
+    "breakout_buffer_frac": 0.0005,
+    "note": "All thresholds declared before any OOS inspection. No post-hoc optimization."
+  },
+  "range": {
+    "definition": "max(high)/min(low) over prior completed range_lookback bars excluding decision bar",
+    "range_lookback_bars": 20
+  },
+  "breakout": {
+    "long": "close > range_high + breakout_buffer_frac * close",
+    "short": "close < range_low - breakout_buffer_frac * close",
+    "breakout_buffer_frac": 0.0005
+  },
+  "htf": {
+    "rule": "selected_4h_close_time <= decision_time (1h open + 1h)",
+    "forming_forbidden": true
+  },
+  "entry": {
+    "E1": "market_at_confirmed_breakout_close",
+    "E2": "next_1h_open"
+  },
+  "stops": {
+    "S1": "opposite_range_boundary",
+    "S2": "ATR_multiple",
+    "atr_stop_multiple": 1.5
+  },
+  "targets_R": [
+    1.5,
+    2.0,
+    2.5
+  ],
+  "fees": {
+    "taker_fee_rate_per_leg": 0.0004,
+    "legs": 2,
+    "slippage": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "funding": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "source": "documented research DEFAULT_TAKER_FEE (read-only reference, not imported)"
+  },
+  "intrabar_ambiguity_rule": "STOP_FIRST when both stop and target touched in same candle",
+  "declared_before_oos": true
+}

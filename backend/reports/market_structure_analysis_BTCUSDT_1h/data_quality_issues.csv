@@ -1,0 +1,10 @@
+check,count,severity
+duplicate_execution_entries_per_trade,0,PASS
+trades_without_execution_row,0,PASS
+execution_rows_without_trade_id,0,PASS
+unknown_15m_feature_rows,0,PASS
+missing_4h_feature_rows,23,WARN
+missing_1h_feature_rows,0,PASS
+unmatched_trade_context_rows,0,PASS
+ambiguous_trade_context_rows,0,PASS
+bars_with_future_feature_violation,0,PASS

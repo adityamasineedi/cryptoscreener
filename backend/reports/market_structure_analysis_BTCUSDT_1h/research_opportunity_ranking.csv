@@ -1,0 +1,4 @@
+research_label,bars,percentage_of_dataset,actual_trades,recommended_next_step,note
+TIMEFRAME_CONFLICT_AVOID,805,73.1818,2,DESCRIPTIVE_ONLY,Hypothesis only — not a strategy gate
+NONE,291,26.4545,1,DESCRIPTIVE_ONLY,Hypothesis only — not a strategy gate
+BREAKOUT_CANDIDATE,4,0.3636,0,DESCRIPTIVE_ONLY,Hypothesis only — not a strategy gate

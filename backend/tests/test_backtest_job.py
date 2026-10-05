@@ -68,6 +68,41 @@ def test_idle_status():
     st = svc.status()
     assert st["status"] == "idle"
     assert st["job_id"] is None
+    assert svc.is_running() is False
+
+
+def test_is_running_only_while_status_running():
+    svc = BacktestJobService()
+    svc._job = BacktestJob(  # noqa: SLF001
+        job_id="run1",
+        status="running",
+        symbols=["BTCUSDT"],
+        timeframes=["1h"],
+        total_cells=1,
+    )
+    assert svc.is_running() is True
+    svc._job.status = "done"  # noqa: SLF001
+    assert svc.is_running() is False
+
+
+def test_elapsed_seconds_frozen_after_terminal_status():
+    import time
+
+    job = BacktestJob(
+        job_id="bt-elapsed",
+        status="running",
+        total_cells=1,
+        done_cells=1,
+        _t0=time.perf_counter() - 1.25,
+    )
+    job.status = "done"
+    job.snapshot_elapsed()
+    first = job.to_dict()["elapsed_seconds"]
+    assert first is not None
+    assert 1.0 <= float(first) <= 2.5
+    time.sleep(0.05)
+    second = job.to_dict()["elapsed_seconds"]
+    assert second == first
 
 
 def test_backtest_job_pct_from_cells():

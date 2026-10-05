@@ -1,0 +1,19 @@
+Metric,original,corrected,final
+4h coverage,limit//16 + 100,limit//4 + 100,limit//4 + 100
+HTF rule,forming: largest 4h with open_time <= setup_open_time,forming: largest 4h with open_time <= setup_open_time,closed: latest 4h with close_time <= setup_close_time
+1h bars evaluated,8590,8590,8590
+4h bars loaded,640,2260,2260
+Missing HTF mappings,6027,0,0
+Total entries,7,20,21
+Closed trades,6,19,20
+Open trades,1,1,1
+Wins,4,7,8
+Losses,2,12,12
+Win rate,0.6666666666666666,0.3684210526315789,0.4
+Net PnL,121.99200926525978,76.78422500274542,119.81619248138978
+Average R,1.0322651873048827,0.1723452780322453,0.27360455762724395
+Profit factor,4.096795561914648,1.2728800235510551,1.4560075960454066
+Maximum drawdown,1.0,6.27398687964981,5.27398687964981
+HTF rejections,111,98,97
+Dataset fingerprint,9bea71bc993dd841566be38813210af0a25b1f019edae3269809ceec6689913c,2c450d9cdb6d3c62f7909f207ff3d5730bf9e6b6827f2adce6ca9c6720e1b8e8,2c450d9cdb6d3c62f7909f207ff3d5730bf9e6b6827f2adce6ca9c6720e1b8e8
+Configuration fingerprint,e3e4c05faf4454ec,e3e4c05faf4454ec,85805c66169b34d4

@@ -1,0 +1,29 @@
+{
+  "load_s": 0.181,
+  "off": {
+    "analytics": false,
+    "runtime_s": 47.501,
+    "bars": 10968,
+    "trade_count": 66,
+    "kwargs_used": {
+      "symbol": "BTCUSDT",
+      "timeframe": "1h"
+    },
+    "fingerprint": null,
+    "top_functions_note": "see companion .txt profile"
+  },
+  "on": {
+    "analytics": true,
+    "runtime_s": 41.039,
+    "bars": 10968,
+    "trade_count": 66,
+    "kwargs_used": {
+      "symbol": "BTCUSDT",
+      "timeframe": "1h"
+    },
+    "fingerprint": null,
+    "top_functions_note": "see companion .txt profile"
+  },
+  "analytics_overhead_s": -6.462,
+  "trade_count_equal": true
+}

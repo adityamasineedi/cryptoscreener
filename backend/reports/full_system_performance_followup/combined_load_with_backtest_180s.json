@@ -1,0 +1,212 @@
+{
+  "summary": {
+    "duration_s": 180,
+    "recorded_at": "2026-10-05T12:55:58Z",
+    "endpoints": {
+      "health": {
+        "n": 2,
+        "p50_ms": 550.24,
+        "p95_ms": 550.24,
+        "max_ms": 10023.63,
+        "avg_ms": 5286.93,
+        "errors": 15,
+        "timeouts": 15
+      },
+      "screener": {
+        "n": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null,
+        "avg_ms": null,
+        "errors": 3,
+        "timeouts": 3
+      },
+      "chart_15m": {
+        "n": 1,
+        "p50_ms": 5898.89,
+        "p95_ms": 5898.89,
+        "max_ms": 5898.89,
+        "avg_ms": 5898.89,
+        "errors": 2,
+        "timeouts": 2
+      },
+      "chart_1h": {
+        "n": 1,
+        "p50_ms": 2585.91,
+        "p95_ms": 2585.91,
+        "max_ms": 2585.91,
+        "avg_ms": 2585.91,
+        "errors": 1,
+        "timeouts": 1
+      },
+      "coin": {
+        "n": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null,
+        "avg_ms": null,
+        "errors": 3,
+        "timeouts": 3
+      }
+    },
+    "health_p95_ok": false,
+    "health_timeouts": 15,
+    "chart_silent_empty": 0,
+    "queue_start": 240,
+    "queue_end": 237,
+    "queue_max": 240,
+    "queue_min": 237,
+    "backtest": {
+      "error": null,
+      "job_id": null,
+      "status": null
+    },
+    "acceptance": {
+      "health_p95_lt_500": false,
+      "no_health_timeout": false,
+      "no_silent_empty_charts": true
+    }
+  },
+  "timeseries": [
+    {
+      "t": 0.0,
+      "health_last_ms": null,
+      "screener_last_ms": null,
+      "chart_15m_last_ms": null,
+      "chart_1h_last_ms": null,
+      "coin_last_ms": null,
+      "event_loop_lag_ms": 0.0,
+      "event_loop_lag_p95_ms": 19.41,
+      "backfill_queue": 240,
+      "backfill_running": 0,
+      "backfill_retry": 1,
+      "backlog_state": "BLOCKED",
+      "gap_backlog_count": 46489,
+      "rest_rpm": 213,
+      "cpu_percent": 77.1,
+      "rss_mb": 566.15,
+      "hydrate_active": false,
+      "perf_err": null,
+      "bf_err": null,
+      "errors": {
+        "health": 0,
+        "screener": 0,
+        "chart_15m": 0,
+        "chart_1h": 0,
+        "coin": 0
+      },
+      "timeouts": {
+        "health": 0,
+        "screener": 0,
+        "chart_15m": 0,
+        "chart_1h": 0,
+        "coin": 0
+      }
+    },
+    {
+      "t": 11.8,
+      "health_last_ms": 10023.63239999977,
+      "screener_last_ms": null,
+      "chart_15m_last_ms": 5898.885900001915,
+      "chart_1h_last_ms": 2585.906200001773,
+      "coin_last_ms": null,
+      "event_loop_lag_ms": 2849.24,
+      "event_loop_lag_p95_ms": 32.08,
+      "backfill_queue": 237,
+      "backfill_running": 3,
+      "backfill_retry": 0,
+      "backlog_state": "BLOCKED",
+      "gap_backlog_count": 46489,
+      "rest_rpm": 165,
+      "cpu_percent": 96.6,
+      "rss_mb": 580.27,
+      "hydrate_active": false,
+      "perf_err": null,
+      "bf_err": null,
+      "errors": {
+        "health": 0,
+        "screener": 0,
+        "chart_15m": 0,
+        "chart_1h": 0,
+        "coin": 0
+      },
+      "timeouts": {
+        "health": 0,
+        "screener": 0,
+        "chart_15m": 0,
+        "chart_1h": 0,
+        "coin": 0
+      }
+    },
+    {
+      "t": 24.5,
+      "health_last_ms": 550.2350000024308,
+      "screener_last_ms": null,
+      "chart_15m_last_ms": 5898.885900001915,
+      "chart_1h_last_ms": 2585.906200001773,
+      "coin_last_ms": null,
+      "event_loop_lag_ms": null,
+      "event_loop_lag_p95_ms": null,
+      "backfill_queue": null,
+      "backfill_running": null,
+      "backfill_retry": null,
+      "backlog_state": null,
+      "gap_backlog_count": null,
+      "rest_rpm": null,
+      "cpu_percent": null,
+      "rss_mb": null,
+      "hydrate_active": null,
+      "perf_err": "timed out",
+      "bf_err": "timed out",
+      "errors": {
+        "health": 7,
+        "screener": 1,
+        "chart_15m": 1,
+        "chart_1h": 0,
+        "coin": 1
+      },
+      "timeouts": {
+        "health": 7,
+        "screener": 1,
+        "chart_15m": 1,
+        "chart_1h": 0,
+        "coin": 1
+      }
+    },
+    {
+      "t": 109.5,
+      "health_last_ms": 550.2350000024308,
+      "screener_last_ms": null,
+      "chart_15m_last_ms": 5898.885900001915,
+      "chart_1h_last_ms": 2585.906200001773,
+      "coin_last_ms": null,
+      "event_loop_lag_ms": null,
+      "event_loop_lag_p95_ms": null,
+      "backfill_queue": null,
+      "backfill_running": null,
+      "backfill_retry": null,
+      "backlog_state": null,
+      "gap_backlog_count": null,
+      "rest_rpm": null,
+      "cpu_percent": null,
+      "rss_mb": null,
+      "hydrate_active": null,
+      "perf_err": "timed out",
+      "bf_err": "timed out",
+      "errors": {
+        "health": 14,
+        "screener": 3,
+        "chart_15m": 2,
+        "chart_1h": 1,
+        "coin": 3
+      },
+      "timeouts": {
+        "health": 14,
+        "screener": 3,
+        "chart_15m": 2,
+        "chart_1h": 1,
+        "coin": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+regime,definition,bar_count,percentage,symbol,note
+COMPRESSED,atr_pct<=threshold,9668,27.59211164702189,BTCUSDT,Sandbox compression proxy — not production market_structure regime
+NOT_COMPRESSED,atr_pct>threshold,25259,72.08824452752647,BTCUSDT,Sandbox compression proxy — not production market_structure regime

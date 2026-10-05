@@ -223,6 +223,9 @@ class HealthResponse(BaseModel):
     database: str
     ingestion: str
     symbols_loaded: int
+    discovered_symbols: int = 0
+    active_universe: int = 0
+    active_universe_cap: int = 0
     tickers_live: int
     rate_limiters: list[dict[str, Any]] = Field(default_factory=list)
     timestamp: datetime

@@ -682,7 +682,8 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
     }
   }, [data.length, domain, mode]);
 
-  const universe = screenMeta?.total_universe ?? 0;
+  const universe = screenMeta?.active_universe ?? screenMeta?.total_universe ?? 0;
+  const discovered = screenMeta?.discovered_universe ?? 0;
   const shown = screenMeta?.returned_count ?? data.length;
   const eligible = screenMeta?.eligible_count ?? shown;
   const excluded = screenMeta?.excluded || {};
@@ -748,15 +749,20 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
           <div className="flex shrink-0 flex-col gap-1 border-b border-terminal-border/60 px-2 py-1.5 text-[10px] text-terminal-muted">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <div className="font-mono text-[11px] text-terminal-text" data-testid="screen-universe-label">
-              <span className="text-terminal-muted">SCREEN</span>{" "}
+              <span className="text-terminal-muted">ACTIVE</span>{" "}
               <span className="text-terminal-accent">{shown}</span>
               {" / "}
               {universe || "—"} symbols
+              {discovered > 0 && discovered !== universe ? (
+                <span className="ml-2 text-terminal-muted">
+                  (discovered {discovered})
+                </span>
+              ) : null}
               {screenMeta?.search_mode ? (
                 <span className="ml-2 text-amber-300">search result</span>
               ) : (
                 <span className="ml-2 text-terminal-muted">
-                  {shown} of {eligible} eligible · SCREEN TOP 100
+                  {shown} of {eligible} eligible · V1 paper + top volume
                 </span>
               )}
             </div>
@@ -836,7 +842,7 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
               missing OHLCV: {excluded.excluded_missing_ohlcv ?? 0} · screen filter:{" "}
               {excluded.excluded_screen_filter ?? 0}
               <span className="ml-2 opacity-70">
-                (backend still monitors full universe; WATCHLIST is separate when enabled)
+                (active universe = V1 paper + top volume; long-tail discovery is hidden)
               </span>
             </div>
           ) : null}

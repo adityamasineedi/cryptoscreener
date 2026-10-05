@@ -31,13 +31,20 @@ async def health() -> HealthResponse:
     settings = get_settings()
     redis_h = await redis_manager.health()
     db_h = await db_manager.health()
+    from app.services.active_universe import active_universe_meta
+
+    uni = active_universe_meta()
     return HealthResponse(
         status="ok",
         use_real_data=settings.use_real_data,
         redis=redis_h.get("status", "unknown"),
         database=db_h.get("status", "unknown"),
         ingestion=market_store.ingestion_status,
-        symbols_loaded=len(market_store.symbols),
+        # Nav/screens show active compute universe (not full Binance discovery).
+        symbols_loaded=int(uni["active_universe"]),
+        discovered_symbols=int(uni["discovered_universe"]),
+        active_universe=int(uni["active_universe"]),
+        active_universe_cap=int(uni["active_universe_cap"]),
         tickers_live=market_store.live_ticker_count(),
         rate_limiters=rate_limiters.all_snapshots(),
         timestamp=datetime.now(timezone.utc),
@@ -126,6 +133,9 @@ async def health_providers() -> dict[str, Any]:
         if orch is not None and getattr(orch, "sentiment", None) is not None
         else get_sentiment_provider(settings)
     )
+    from app.services.active_universe import list_active_symbols
+
+    _active_n = len(list_active_symbols())
     if not onchain.configured:
         await provider_health.mark_disabled("onchain")
     if not sentiment.configured:
@@ -223,13 +233,9 @@ async def health_providers() -> dict[str, Any]:
         "liquidations": liq,
         "onchain": onchain.status(),
         "sentiment": sentiment.status(),
-        "free_social": sentiment.diagnostic(
-            universe_size=len(market_store.list_symbols(market_type="futures_perp"))
-        ),
+        "free_social": sentiment.diagnostic(universe_size=_active_n),
         "lunarcrush": (
-            sentiment.diagnostic(
-                universe_size=len(market_store.list_symbols(market_type="futures_perp"))
-            )
+            sentiment.diagnostic(universe_size=_active_n)
             if str(sentiment.status().get("provider") or "") == "lunarcrush"
             else {"provider": "lunarcrush", "enabled": False, "status": "DISABLED"}
         ),
@@ -246,13 +252,14 @@ async def sentiment_diagnostic() -> dict[str, Any]:
     """LunarCrush / sentiment provider diagnostic — never exposes API keys."""
     orch = get_orchestrator()
     from app.ingestion.providers.sentiment import get_sentiment_provider
+    from app.services.active_universe import list_active_symbols
 
     sentiment = (
         orch.sentiment
         if orch is not None and getattr(orch, "sentiment", None) is not None
         else get_sentiment_provider(get_settings())
     )
-    universe = [s.symbol for s in market_store.list_symbols(market_type="futures_perp")]
+    universe = list_active_symbols()
     client = getattr(sentiment, "client", None)
     if client is not None and sentiment.configured:
         try:
@@ -270,11 +277,31 @@ async def sentiment_diagnostic() -> dict[str, Any]:
 @router.get("/symbols")
 async def list_symbols(
     market_type: str | None = Query(default="futures_perp"),
+    scope: str = Query(
+        default="active",
+        description="active = screen/compute universe; discovered = full Binance list",
+    ),
 ) -> dict[str, Any]:
-    symbols = market_store.list_symbols(market_type=market_type)
+    from app.services.active_universe import (
+        active_universe_meta,
+        list_active_symbols,
+    )
+
+    discovered = market_store.list_symbols(market_type=market_type)
+    scope_l = (scope or "active").strip().lower()
+    if scope_l in {"discovered", "all", "full"}:
+        symbols = discovered
+    else:
+        active = set(list_active_symbols([s.symbol for s in discovered]))
+        symbols = [s for s in discovered if s.symbol.upper() in active]
+    uni = active_universe_meta([s.symbol for s in discovered])
     return {
         "count": len(symbols),
         "symbols": [s.model_dump() for s in symbols],
+        "scope": "discovered" if scope_l in {"discovered", "all", "full"} else "active",
+        "discovered_universe": uni["discovered_universe"],
+        "active_universe": uni["active_universe"],
+        "active_universe_cap": uni["active_universe_cap"],
         "source": "binance_exchange_info",
         "status": "LIVE" if symbols else "WAITING",
     }
@@ -313,6 +340,9 @@ def _screener_response(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         # Screen-universe metadata (presentation selection — not strategy scores)
         "total_universe": meta.get("total_universe"),
+        "discovered_universe": meta.get("discovered_universe"),
+        "active_universe": meta.get("active_universe"),
+        "active_universe_cap": meta.get("active_universe_cap"),
         "eligible_count": meta.get("eligible_count"),
         "returned_count": meta.get("returned_count", len(payload_rows)),
         "selection_updated_at": meta.get("selection_updated_at"),
@@ -320,7 +350,7 @@ def _screener_response(
         "search_mode": bool(meta.get("search_mode")),
         "screen_filter": meta.get("screen_filter"),
         "max_screen_symbols": meta.get("max_screen_symbols", 100),
-        "screen_label": "SCREEN TOP 100",
+        "screen_label": "ACTIVE UNIVERSE",
     }
     # Presentation-only enrichment (v1 labels / potential levels). Never opens trades.
     try:
@@ -385,7 +415,10 @@ async def screener_futures(
         orch.oi.set_visible_symbols(visible)
         if getattr(orch, "backfill", None) is not None:
             orch.backfill.set_visible_symbols(visible)
-        # Eagerly fill setup for THIS page only (cap sync work; rest via ensure queue)
+        # Eagerly fill setup for THIS page only (cap sync work; rest via ensure queue).
+        # Tip REST refreshes previously ran sequentially (≤12 symbols × 4 TFs) and
+        # dominated screener latency; refresh in parallel then compute/persist once.
+        from app.ingestion.klines import is_trailing_stale
         from app.services.engine_store import engine_store as es
         from app.services.setup_signals import get_setup_signal_service
 
@@ -393,52 +426,70 @@ async def screener_futures(
         sync_budget = 12
         cfg = setup_svc.config
         mtf = [cfg.mtf_major, cfg.mtf_primary, cfg.mtf_setup, cfg.mtf_entry]
+        sync_jobs: list[tuple[int, Any, bool]] = []
+        deferred: list[str] = []
         for i, row in enumerate(rows):
             cached = es.get_setup_signal(row.symbol)
             needs = setup_svc.setup_ohlcv_ready(row.symbol) and (
                 not cached or setup_svc.is_stale(cached, row.symbol)
             )
-            # Also refresh when OHLCV tip itself is behind (WS silent)
-            from app.ingestion.klines import is_trailing_stale
-
             tip = ohlcv_store.get_closed(row.symbol, cfg.mtf_setup)
             tip_stale = bool(tip) and is_trailing_stale(tip, cfg.mtf_setup)
             if not needs and not tip_stale:
                 continue
-            if sync_budget > 0:
+            if len(sync_jobs) < sync_budget:
+                sync_jobs.append((i, row, tip_stale))
+            else:
+                deferred.append(row.symbol)
+
+        if sync_jobs and getattr(orch, "backfill", None) is not None:
+
+            async def _refresh_one(sym: str) -> None:
                 try:
                     await orch.backfill.ensure_setup_mtf_fresh(
-                        row.symbol,
+                        sym,
                         mtf,
                         force_setup_tip=True,
                         setup_tf=cfg.mtf_setup,
                     )
                 except Exception:  # noqa: BLE001
                     pass
-                setup_svc.ensure_computed(row.symbol, force=tip_stale)
-                try:
-                    from app.services.paper_trade import (
-                        flush_paper_trade_persists,
-                        get_paper_trade_engine,
-                    )
-                    from app.services.engine_store import engine_store as es2
 
-                    eng = get_paper_trade_engine()
-                    eng.on_setup_signal(
-                        row.symbol, es2.get_setup_signal(row.symbol)
-                    )
-                    await flush_paper_trade_persists(eng)
-                except Exception:  # noqa: BLE001
-                    pass
-                info = market_store.symbols.get(row.symbol)
-                if info is not None:
-                    rows[i] = svc.build_row(info, rank=row.rank)
-                    # Preserve presentation fields from selection
-                    rows[i].screen_priority_score = row.screen_priority_score
-                    rows[i].screen_priority_reason = row.screen_priority_reason
-                sync_budget -= 1
-            else:
-                setup_svc.enqueue_ensure([row.symbol])
+            await asyncio.gather(
+                *[_refresh_one(row.symbol) for _, row, _ in sync_jobs]
+            )
+
+        paper_touched = False
+        for i, row, tip_stale in sync_jobs:
+            setup_svc.ensure_computed(row.symbol, force=tip_stale)
+            try:
+                from app.services.paper_trade import get_paper_trade_engine
+                from app.services.engine_store import engine_store as es2
+
+                eng = get_paper_trade_engine()
+                eng.on_setup_signal(row.symbol, es2.get_setup_signal(row.symbol))
+                paper_touched = True
+            except Exception:  # noqa: BLE001
+                pass
+            info = market_store.symbols.get(row.symbol)
+            if info is not None:
+                rows[i] = svc.build_row(info, rank=row.rank)
+                rows[i].screen_priority_score = row.screen_priority_score
+                rows[i].screen_priority_reason = row.screen_priority_reason
+
+        if paper_touched:
+            try:
+                from app.services.paper_trade import (
+                    flush_paper_trade_persists,
+                    get_paper_trade_engine,
+                )
+
+                await flush_paper_trade_persists(get_paper_trade_engine())
+            except Exception:  # noqa: BLE001
+                pass
+
+        if deferred:
+            setup_svc.enqueue_ensure(deferred)
     payload = _screener_response(
         rows=rows,
         total=total,
@@ -779,30 +830,43 @@ async def research_ohlcv_range(
             "rows": [],
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+    # One grouped scan instead of N×M sequential COUNT/MIN/MAX round-trips.
     rows: list[dict[str, Any]] = []
+    found: dict[tuple[str, str], dict[str, Any]] = {}
     async with db_manager.engine.begin() as conn:
-        for sym in syms:
-            for tf in tfs:
-                r = await conn.execute(
-                    text(
-                        """
-                        SELECT COUNT(*), MIN(time), MAX(time)
-                        FROM ohlcv
-                        WHERE symbol = :s AND timeframe = :tf
-                        """
-                    ),
-                    {"s": sym, "tf": tf},
-                )
-                n, t0, t1 = r.fetchone()
-                rows.append(
+        r = await conn.execute(
+            text(
+                """
+                SELECT symbol, timeframe, COUNT(*), MIN(time), MAX(time)
+                FROM ohlcv
+                WHERE symbol = ANY(:syms) AND timeframe = ANY(:tfs)
+                GROUP BY symbol, timeframe
+                """
+            ),
+            {"syms": syms, "tfs": tfs},
+        )
+        for sym, tf, n, t0, t1 in r.fetchall():
+            found[(str(sym).upper(), str(tf))] = {
+                "symbol": str(sym).upper(),
+                "timeframe": str(tf),
+                "bars": int(n or 0),
+                "start": t0.isoformat() if t0 else None,
+                "end": t1.isoformat() if t1 else None,
+            }
+    for sym in syms:
+        for tf in tfs:
+            rows.append(
+                found.get(
+                    (sym, tf),
                     {
                         "symbol": sym,
                         "timeframe": tf,
-                        "bars": int(n or 0),
-                        "start": t0.isoformat() if t0 else None,
-                        "end": t1.isoformat() if t1 else None,
-                    }
+                        "bars": 0,
+                        "start": None,
+                        "end": None,
+                    },
                 )
+            )
     return {
         "status": "OK",
         "rows": rows,
@@ -1733,6 +1797,7 @@ async def research_long_strategy_backtest(
                 direction=resolved.direction,
                 limit=limit,
                 risk_usd=cell_risk,
+                principal_usd=principal_usd,
                 start_date=start_date,
                 end_date=end_date,
                 taker_fee=taker_fee_pct / 100.0,
@@ -2667,6 +2732,9 @@ async def chart_ohlcv(
 
     sym = symbol.upper()
     orch = get_orchestrator()
+    source_used = "memory"
+    fallback_used = False
+    chart_error: str | None = None
     # Serve in-memory tip immediately. REST catch-up runs in the background so
     # chart polls never queue behind the universe backfill (can take 60s+).
     if orch is not None and getattr(orch, "backfill", None) is not None:
@@ -2703,6 +2771,52 @@ async def chart_ohlcv(
     candles = ohlcv_store.get_closed(sym, timeframe, limit=limit)
     open_c = ohlcv_store.get_open(sym, timeframe)
 
+    # Cold memory after restart: hydrate this series from Postgres before REST.
+    # Keeps chart usable while universe backfill is still walking hundreds of pairs.
+    if len(candles) < max(20, min(limit, 80)):
+        try:
+            from app.models.ohlcv import Candle as DbCandle
+            from app.models.schemas import DataStatus as DbStatus
+            from app.research.postgres_ohlcv import load_ohlcv_series_tail
+
+            raw = await load_ohlcv_series_tail(sym, timeframe, limit=limit)
+            if raw:
+                batch: list[Any] = []
+                for c in raw:
+                    ot = c["time"]
+                    if getattr(ot, "tzinfo", None) is None:
+                        ot = ot.replace(tzinfo=timezone.utc)
+                    batch.append(
+                        DbCandle(
+                            symbol=sym,
+                            timeframe=normalize_timeframe(timeframe),
+                            open_time=ot,
+                            close_time=ot,
+                            open=float(c["open"]),
+                            high=float(c["high"]),
+                            low=float(c["low"]),
+                            close=float(c["close"]),
+                            volume=float(c.get("volume") or 0),
+                            is_closed=True,
+                            timestamp=ot,
+                            source="db_chart_hydrate",
+                            status=DbStatus.CACHED,
+                        )
+                    )
+                if batch:
+                    try:
+                        await ohlcv_store.ingest_history(batch)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    # Prefer store view; fall back to direct batch if ingest no-ops.
+                    stored = ohlcv_store.get_closed(sym, timeframe, limit=limit)
+                    candles = stored if len(stored) >= len(batch) else batch
+                    open_c = ohlcv_store.get_open(sym, timeframe)
+                    source_used = "postgres"
+                    fallback_used = True
+        except Exception as exc:  # noqa: BLE001
+            chart_error = f"postgres_fallback:{exc.__class__.__name__}"
+
     # Cold or stale tip: short direct kline pull (not the backfill worker queue)
     from app.ingestion.klines import BINANCE_INTERVAL, is_trailing_stale, normalize_rest_kline
 
@@ -2735,10 +2849,12 @@ async def chart_ohlcv(
                     await ohlcv_store.upsert_candle(open_new)
                 candles = ohlcv_store.get_closed(sym, timeframe, limit=limit)
                 open_c = ohlcv_store.get_open(sym, timeframe)
-            except Exception:  # noqa: BLE001
-                pass
+                source_used = "rest"
+                fallback_used = True
+            except Exception as exc:  # noqa: BLE001
+                chart_error = f"rest_fallback:{exc.__class__.__name__}:{exc}"
 
-    rows = [c.model_dump(mode="json") for c in candles]
+    rows = [c.model_dump(mode="json") if hasattr(c, "model_dump") else dict(c) for c in candles]
 
     # Snap forming candle to live mark/ticker so tip matches Binance price
     live_px: float | None = None
@@ -2785,14 +2901,55 @@ async def chart_ohlcv(
         except Exception:  # noqa: BLE001
             pass
 
+    # Deduplicate by open_time (keep last) and sort ascending — display hygiene only.
+    by_ot: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        ot = r.get("open_time")
+        key = ot if isinstance(ot, str) else (ot.isoformat() if ot is not None else "")
+        by_ot[key] = r
+    deduped = list(by_ot.values())
+    deduplicated = len(deduped) != len(rows)
+
+    def _ot_key(r: dict[str, Any]) -> str:
+        ot = r.get("open_time")
+        if isinstance(ot, str):
+            return ot
+        if ot is None:
+            return ""
+        return ot.isoformat()
+
+    sorted_rows = sorted(deduped, key=_ot_key)
+    rows = sorted_rows
+
+    first_ts = rows[0].get("open_time") if rows else None
+    last_ts = rows[-1].get("open_time") if rows else None
+    closed_count = sum(1 for r in rows if r.get("is_closed", True))
+    open_included = any(not r.get("is_closed", True) for r in rows)
+    # Contract: ``limit`` applies to closed bars. The forming/open candle may be
+    # appended (+1) so charts can paint the live tip. Do not treat returned_count
+    # == limit+1 as an off-by-one bug when open_included is true.
     status = "LIVE" if rows else "WAITING"
     return {
         "symbol": sym,
         "timeframe": timeframe,
         "candles": rows,
         "count": len(rows),
+        "returned_count": len(rows),
+        "requested_limit": limit,
+        "closed_count": closed_count,
+        "open_included": open_included,
+        "limit_applies_to": "closed_candles",
+        "contract_note": (
+            "requested_limit counts closed candles; an open/forming tip may add +1"
+        ),
         "status": status,
-        "source": "ohlcv_store",
+        "source": source_used,
+        "fallback_used": fallback_used,
+        "deduplicated": deduplicated,
+        "sorted": True,
+        "first_timestamp": first_ts,
+        "last_timestamp": last_ts,
+        "error": chart_error,
         "live_price": live_px,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -3044,6 +3201,9 @@ async def ws_screener(websocket: WebSocket) -> None:
             "ingestion": market_store.ingestion_status,
             "source": "memory",
             "total_universe": meta.get("total_universe"),
+            "discovered_universe": meta.get("discovered_universe"),
+            "active_universe": meta.get("active_universe"),
+            "active_universe_cap": meta.get("active_universe_cap"),
             "eligible_count": meta.get("eligible_count"),
             "returned_count": meta.get("returned_count"),
             "limit": meta.get("limit"),

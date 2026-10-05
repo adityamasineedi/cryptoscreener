@@ -1,0 +1,280 @@
+{
+  "label": "COMBO_02_BTCUSDT_10968_runtime_reconciliation",
+  "prior_audit_seconds": 32.8,
+  "prior_profile_seconds": 47.0,
+  "bar_count_expected": 10968,
+  "analytics_enabled": false,
+  "profiler_enabled": false,
+  "cold": {
+    "average": 14.863,
+    "p50": 14.628,
+    "p95": 14.767,
+    "minimum": 13.491,
+    "maximum": 17.595,
+    "n": 5
+  },
+  "warm": {
+    "average": 14.566,
+    "p50": 13.613,
+    "p95": 14.803,
+    "minimum": 13.392,
+    "maximum": 17.442,
+    "n": 5
+  },
+  "warm_total": {
+    "average": 14.63,
+    "p50": 13.671,
+    "p95": 14.865,
+    "minimum": 13.453,
+    "maximum": 17.519,
+    "n": 5
+  },
+  "fingerprints_stable": true,
+  "trade_counts": [
+    66
+  ],
+  "trade_digests": [
+    "8f92c0dd0771cc2db072b8c8"
+  ],
+  "bar_counts": [
+    10968
+  ],
+  "reconciliation_notes": [
+    "32.8s audit was combination_backtest wall without cProfile on medium case",
+    "47s figure included cProfile instrumentation overhead (~same bar count)",
+    "This harness disables profiler; warm strategy_runtime is the comparable metric",
+    "Disk parquet cache is warm across cold-ish process runs in this harness"
+  ],
+  "runs": [
+    {
+      "run_id": "cold_1",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_cold_disk_warm",
+      "load_seconds": 0.16,
+      "strategy_runtime_seconds": 17.595,
+      "total_runtime_seconds": 17.755,
+      "rss_mb": 102.0
+    },
+    {
+      "run_id": "cold_2",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_cold_disk_warm",
+      "load_seconds": 0.058,
+      "strategy_runtime_seconds": 14.628,
+      "total_runtime_seconds": 14.685,
+      "rss_mb": 107.5
+    },
+    {
+      "run_id": "cold_3",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_cold_disk_warm",
+      "load_seconds": 0.058,
+      "strategy_runtime_seconds": 13.491,
+      "total_runtime_seconds": 13.549,
+      "rss_mb": 109.6
+    },
+    {
+      "run_id": "cold_4",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_cold_disk_warm",
+      "load_seconds": 0.064,
+      "strategy_runtime_seconds": 14.767,
+      "total_runtime_seconds": 14.831,
+      "rss_mb": 110.3
+    },
+    {
+      "run_id": "cold_5",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_cold_disk_warm",
+      "load_seconds": 0.064,
+      "strategy_runtime_seconds": 13.832,
+      "total_runtime_seconds": 13.897,
+      "rss_mb": 110.4
+    },
+    {
+      "run_id": "warm_1",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_warm",
+      "load_seconds": 0.062,
+      "strategy_runtime_seconds": 13.582,
+      "total_runtime_seconds": 13.644,
+      "rss_mb": 110.9
+    },
+    {
+      "run_id": "warm_2",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_warm",
+      "load_seconds": 0.077,
+      "strategy_runtime_seconds": 17.442,
+      "total_runtime_seconds": 17.519,
+      "rss_mb": 110.6
+    },
+    {
+      "run_id": "warm_3",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_warm",
+      "load_seconds": 0.057,
+      "strategy_runtime_seconds": 13.613,
+      "total_runtime_seconds": 13.671,
+      "rss_mb": 109.4
+    },
+    {
+      "run_id": "warm_4",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_warm",
+      "load_seconds": 0.061,
+      "strategy_runtime_seconds": 13.392,
+      "total_runtime_seconds": 13.453,
+      "rss_mb": 110.9
+    },
+    {
+      "run_id": "warm_5",
+      "dataset_fingerprint": "d50be10398eddd0764f09db63b4b36b7",
+      "configuration_fingerprint": "COMBO_02",
+      "requested_range": "2025-07-01..2026-09-30",
+      "actual_range": {
+        "1h_first": null,
+        "1h_last": null,
+        "src_1h": "research_parquet_cache:parquet_cache",
+        "src_4h": "research_parquet_cache:parquet_cache"
+      },
+      "bar_count": 10968,
+      "bar_count_4h": 2742,
+      "trade_count": 66,
+      "trade_digest": "8f92c0dd0771cc2db072b8c8",
+      "analytics_enabled": false,
+      "profiler_enabled": false,
+      "cache_state": "process_warm",
+      "load_seconds": 0.062,
+      "strategy_runtime_seconds": 14.803,
+      "total_runtime_seconds": 14.865,
+      "rss_mb": 110.7
+    }
+  ]
+}

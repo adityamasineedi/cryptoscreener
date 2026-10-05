@@ -1,0 +1,15 @@
+metric,value
+raw_decision_rows,1100
+unique_trade_count,3
+unique_executed_trades,3
+signal_row_count,3
+execution_row_count,3
+position_active_row_count,18
+no_trade_row_count,1079
+unknown_row_count,0
+ledger_trade_count,3
+15m_source_available_rows,1100
+15m_feature_available_rows,1100
+15m_unknown_rows,0
+duplicate_execution_entries_per_trade,0
+strategy_trades_unchanged,True

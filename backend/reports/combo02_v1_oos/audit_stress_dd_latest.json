@@ -1,0 +1,104 @@
+{
+  "scenarios": {
+    "baseline_file_order": {
+      "n": 105,
+      "net": 40.0129,
+      "avg": 0.3811,
+      "wr": 0.4571,
+      "pf": 1.6391,
+      "dd": 7.9975,
+      "streak": 5
+    },
+    "baseline_chrono_exit": {
+      "n": 105,
+      "net": 40.0129,
+      "avg": 0.3811,
+      "wr": 0.4571,
+      "pf": 1.6391,
+      "dd": 8.6241,
+      "streak": 7
+    },
+    "conservative_slip_4bps_rt": {
+      "n": 105,
+      "net": 35.518,
+      "avg": 0.3383,
+      "wr": 0.4571,
+      "pf": 1.543,
+      "dd": 9.9798,
+      "streak": 7
+    },
+    "conservative_slip_10bps_rt": {
+      "n": 105,
+      "net": 28.7756,
+      "avg": 0.2741,
+      "wr": 0.4571,
+      "pf": 1.4134,
+      "dd": 12.0133,
+      "streak": 7
+    },
+    "funding_1bp_per_8h": {
+      "n": 105,
+      "net": 38.2613,
+      "avg": 0.3644,
+      "wr": 0.4571,
+      "pf": 1.6031,
+      "dd": 8.8492,
+      "streak": 7
+    },
+    "funding_3bp_per_8h": {
+      "n": 105,
+      "net": 34.7582,
+      "avg": 0.331,
+      "wr": 0.4571,
+      "pf": 1.5338,
+      "dd": 9.2993,
+      "streak": 7
+    },
+    "tp_haircut_0.05R": {
+      "n": 105,
+      "net": 37.6129,
+      "avg": 0.3582,
+      "wr": 0.4571,
+      "pf": 1.6008,
+      "dd": 8.9241,
+      "streak": 7
+    },
+    "combined_slip4_fund1_tp005": {
+      "n": 105,
+      "net": 31.3664,
+      "avg": 0.2987,
+      "wr": 0.4571,
+      "pf": 1.4735,
+      "dd": 10.5049,
+      "streak": 7
+    },
+    "combined_slip10_fund3_tp01": {
+      "n": 105,
+      "net": 18.7209,
+      "avg": 0.1783,
+      "wr": 0.4571,
+      "pf": 1.2596,
+      "dd": 13.5523,
+      "streak": 7
+    }
+  },
+  "portfolio_chrono_max_dd": 8.6241,
+  "dd_peak_equity_r": 25.8755,
+  "dd_trough_equity_r": 17.2514,
+  "dd_peak_exit": "2026-01-05T01:00:00+00:00",
+  "dd_trough_exit": "2026-05-05T16:00:00+00:00",
+  "dd_segment_n": 25,
+  "dd_segment_symbols": {
+    "SOLUSDT": 5,
+    "BTCUSDT": 10,
+    "ETHUSDT": 10
+  },
+  "dd_segment_net_r": -8.6241,
+  "days_multi_symbol_losses": 7,
+  "multi_symbol_loss_days_sum_r": -16.4134,
+  "ambiguous_count": 0,
+  "entry_types": {
+    "MARKET": 105
+  },
+  "note": "baseline_file_order matches OOS script (symbol-concatenated). baseline_chrono_exit is true calendar portfolio order. Funding/slippage stresses are ledger overlays [Inference], not engine re-runs."
+}

@@ -1,0 +1,44 @@
+{
+  "declared_before_oos": true,
+  "differs_from_production_structure_logic": true,
+  "independent_of_COMBO_02": true,
+  "htf_trend": {
+    "definition": "On each fully closed 4h candle: EMA(50) of 4h close. BULL if close>EMA50 and EMA50>EMA50_prev; BEAR if close<EMA50 and EMA50<EMA50_prev; else NEUTRAL. Mapped to 1h decision via selected_4h_close_time <= decision_time.",
+    "ema_period": 50
+  },
+  "setup_pullback": {
+    "definition": "Window of prior 8 completed 1h bars. LONG: 4h BULL AND at least one window low <= EMA(20) at that bar AND decision close > window max high AND decision close > EMA(20). SHORT: 4h BEAR AND at least one window high >= EMA(20) AND decision close < window min low AND decision close < EMA(20).",
+    "setup_ema_period": 20,
+    "pullback_window_bars": 8
+  },
+  "continuation": {
+    "LONG": "1h close breaks above max high of the completed pullback window",
+    "SHORT": "1h close breaks below min low of the completed pullback window",
+    "causal": true
+  },
+  "entry": {
+    "mode": "E1",
+    "fill": "confirmation bar close"
+  },
+  "stop": {
+    "LONG": "pullback_window min low - stop_buffer_frac * close",
+    "SHORT": "pullback_window max high + stop_buffer_frac * close",
+    "stop_buffer_frac": 0.0005
+  },
+  "target": {
+    "R": 2.0
+  },
+  "fees": {
+    "taker_per_leg": 0.0004,
+    "legs": 2,
+    "conversion": "fees_R = 2 * fee * entry / |entry-stop|"
+  },
+  "slippage": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+  "funding": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+  "intrabar_ambiguity": "STOP_FIRST",
+  "ablations": {
+    "A0": "HTF trend + 1h pullback + continuation",
+    "A1": "A0 + ATR percentile <= 50 descriptive volatility gate (predeclared, not optimized)",
+    "A2": "UNAVAILABLE WITHOUT ENGINE CHANGE \u2014 causal retest after continuation not in base S1 engine without new fill model"
+  }
+}

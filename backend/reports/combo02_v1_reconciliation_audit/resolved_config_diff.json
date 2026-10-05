@@ -1,0 +1,164 @@
+{
+  "resolved": {
+    "e3e4c05faf4454ec": {
+      "configuration_fingerprint": "e3e4c05faf4454ec",
+      "period_mode": "DB_TAIL",
+      "start_date": null,
+      "end_date": null,
+      "strategy_id": "COMBO_02_V1",
+      "combo_version": "v1",
+      "direction": "LONG",
+      "setup_timeframe": "1h",
+      "htf_timeframes": [
+        "1h",
+        "4h"
+      ],
+      "htf_alignment": "BULLISH",
+      "htf_require_fully_closed": false,
+      "require_htf_alignment": true,
+      "risk_mode": "V1_PRODUCTION_PROFILE",
+      "leverage": 2.0,
+      "production_comparable": true,
+      "principal_usd": 1000.0,
+      "cells": [
+        {
+          "symbol": "BTCUSDT",
+          "effective_risk_amount": 20.0,
+          "effective_risk_percent": 0.02,
+          "risk_source": "V1_PRODUCTION_PROFILE",
+          "production_comparable": true
+        }
+      ],
+      "fee_metadata": {
+        "entry_type": "MARKET or LIMIT_RETEST",
+        "entry_fee_type": "Market entry -> taker; Limit retest entry -> maker",
+        "exit_type": "MARKET",
+        "exit_fee_type": "Market exit -> taker",
+        "fee_basis": "executed notional",
+        "fee_convention": "negative cost",
+        "taker_fee_pct": 0.04,
+        "maker_fee_pct": 0.02,
+        "examples": [
+          "Market entry -> taker fee",
+          "Limit retest entry -> maker fee",
+          "Market exit -> taker fee",
+          "Fee basis -> executed notional"
+        ]
+      }
+    },
+    "2e654bef298db484": {
+      "configuration_fingerprint": "2e654bef298db484",
+      "period_mode": "CALENDAR_RANGE",
+      "start_date": "2026-01-01",
+      "end_date": "2026-10-05",
+      "strategy_id": "COMBO_02_V1",
+      "combo_version": "v1",
+      "direction": "LONG",
+      "setup_timeframe": "1h",
+      "htf_timeframes": [
+        "1h",
+        "4h"
+      ],
+      "htf_alignment": "BULLISH",
+      "htf_require_fully_closed": false,
+      "require_htf_alignment": true,
+      "risk_mode": "V1_PRODUCTION_PROFILE",
+      "leverage": 2.0,
+      "production_comparable": true,
+      "principal_usd": 1000.0,
+      "cells": [
+        {
+          "symbol": "BTCUSDT",
+          "effective_risk_amount": 20.0,
+          "effective_risk_percent": 0.02,
+          "risk_source": "V1_PRODUCTION_PROFILE",
+          "production_comparable": true
+        }
+      ],
+      "fee_metadata": {
+        "entry_type": "MARKET or LIMIT_RETEST",
+        "entry_fee_type": "Market entry -> taker; Limit retest entry -> maker",
+        "exit_type": "MARKET",
+        "exit_fee_type": "Market exit -> taker",
+        "fee_basis": "executed notional",
+        "fee_convention": "negative cost",
+        "taker_fee_pct": 0.04,
+        "maker_fee_pct": 0.02,
+        "examples": [
+          "Market entry -> taker fee",
+          "Limit retest entry -> maker fee",
+          "Market exit -> taker fee",
+          "Fee basis -> executed notional"
+        ]
+      }
+    },
+    "31b236ff74e99ba6": {
+      "configuration_fingerprint": "31b236ff74e99ba6",
+      "period_mode": "CALENDAR_RANGE",
+      "start_date": "2026-02-01",
+      "end_date": "2026-04-30",
+      "strategy_id": "COMBO_02_V1",
+      "combo_version": "v1",
+      "direction": "LONG",
+      "setup_timeframe": "1h",
+      "htf_timeframes": [
+        "1h",
+        "4h"
+      ],
+      "htf_alignment": "BULLISH",
+      "htf_require_fully_closed": false,
+      "require_htf_alignment": true,
+      "risk_mode": "V1_PRODUCTION_PROFILE",
+      "leverage": 2.0,
+      "production_comparable": true,
+      "principal_usd": 1000.0,
+      "cells": [
+        {
+          "symbol": "BTCUSDT",
+          "effective_risk_amount": 20.0,
+          "effective_risk_percent": 0.02,
+          "risk_source": "V1_PRODUCTION_PROFILE",
+          "production_comparable": true
+        }
+      ],
+      "fee_metadata": {
+        "entry_type": "MARKET or LIMIT_RETEST",
+        "entry_fee_type": "Market entry -> taker; Limit retest entry -> maker",
+        "exit_type": "MARKET",
+        "exit_fee_type": "Market exit -> taker",
+        "fee_basis": "executed notional",
+        "fee_convention": "negative cost",
+        "taker_fee_pct": 0.04,
+        "maker_fee_pct": 0.02,
+        "examples": [
+          "Market entry -> taker fee",
+          "Limit retest entry -> maker fee",
+          "Market exit -> taker fee",
+          "Fee basis -> executed notional"
+        ]
+      }
+    }
+  },
+  "differing_fields": {
+    "configuration_fingerprint": {
+      "e3e4c05faf4454ec": "e3e4c05faf4454ec",
+      "2e654bef298db484": "2e654bef298db484",
+      "31b236ff74e99ba6": "31b236ff74e99ba6"
+    },
+    "end_date": {
+      "e3e4c05faf4454ec": null,
+      "2e654bef298db484": "2026-10-05",
+      "31b236ff74e99ba6": "2026-04-30"
+    },
+    "period_mode": {
+      "e3e4c05faf4454ec": "DB_TAIL",
+      "2e654bef298db484": "CALENDAR_RANGE",
+      "31b236ff74e99ba6": "CALENDAR_RANGE"
+    },
+    "start_date": {
+      "e3e4c05faf4454ec": null,
+      "2e654bef298db484": "2026-01-01",
+      "31b236ff74e99ba6": "2026-02-01"
+    }
+  }
+}

@@ -234,6 +234,7 @@ async def backtest_symbol(
             direction=window.direction,
             limit=20000,
             risk_usd=window.risk_usd,
+            principal_usd=float(getattr(window, "principal_usd", 1000.0) or 1000.0),
             start_date=start,
             end_date=end,
             taker_fee=DEFAULT_TAKER_FEE,

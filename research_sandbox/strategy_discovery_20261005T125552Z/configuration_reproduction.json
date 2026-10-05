@@ -1,0 +1,55 @@
+{
+  "parent_sandbox": "strategy_discovery_20261005T124726Z",
+  "frozen_from": "research_sandbox/strategy_discovery_20261005T124726Z/config.json",
+  "a3_definition": "A0 + retest within max_retest_bars after breakout",
+  "retest": {
+    "max_retest_bars": 6,
+    "definition": "After breakout, wait for a later closed bar that trades back to breakout_level then closes again in breakout direction"
+  },
+  "predeclared_features": {
+    "compression_definition": "ATR(14) percentile within trailing lookback <= threshold",
+    "atr_period": 14,
+    "atr_percentile_lookback": 100,
+    "compression_threshold": 20.0,
+    "range_lookback_bars": 20,
+    "breakout_buffer_frac": 0.0005,
+    "note": "All thresholds declared before any OOS inspection. No post-hoc optimization."
+  },
+  "entry_mode": "E1",
+  "stop": "S1",
+  "target_R": 2.0,
+  "fees": {
+    "taker_fee_rate_per_leg": 0.0004,
+    "legs": 2,
+    "slippage": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "funding": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "source": "documented research DEFAULT_TAKER_FEE (read-only reference, not imported)"
+  },
+  "intrabar_ambiguity_rule": "STOP_FIRST when both stop and target touched in same candle",
+  "partitions": {
+    "method": "chronological_fraction",
+    "train_frac": 0.6,
+    "validation_frac": 0.2,
+    "oos_frac": 0.2,
+    "note": "No repository S3 partition exists; defined once before run."
+  },
+  "cooldown_bars_after_exit": 1,
+  "max_hold_bars": 72,
+  "data": {
+    "parquet_1h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+    "manifest_1h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+    "parquet_4h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+    "manifest_4h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+    "timezone": "UTC"
+  },
+  "prior_a3_reference": {
+    "trade_count": "149",
+    "average_R": "0.12257170603554839",
+    "OOS_trade_count": "38",
+    "OOS_average_R": "0.055419759864436126",
+    "OOS_net_R": "2.1059508748485727"
+  },
+  "direction_filter_mode": "analysis_only_post_hoc_split_of_combined_A3_ledger",
+  "no_parameter_changes": true,
+  "oos_not_used_to_select_direction": true
+}

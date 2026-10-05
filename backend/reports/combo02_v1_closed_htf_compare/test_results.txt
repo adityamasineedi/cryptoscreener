@@ -1,0 +1,6 @@
+﻿test command: .\.venv\Scripts\python.exe -m pytest tests/test_combo02_v1_closed_htf.py tests/test_combo02_htf_gate.py tests/test_strategy_catalog.py -q --tb=line
+tests passed: 38 (prior full suite including deleted funnel audit test)
+tests failed: 0
+warnings: none recorded
+comparison: .\.venv\Scripts\python.exe scripts\compare_combo02_v1_closed_htf.py
+final_fully_closed_ok: true

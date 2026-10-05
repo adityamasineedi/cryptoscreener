@@ -1,0 +1,49 @@
+# S3-A3 Direction Split — Research Report
+
+Generated: 2026-10-05T12:58:09.080148+00:00
+Parent: `strategy_discovery_20261005T124726Z`
+Independent of COMBO_02. Analysis-only direction split of frozen A3.
+Not a profitability claim.
+
+## Reproduction
+
+- Prior A3 trades: 149 → reproduced: 149
+- Prior OOS trades: 38 → reproduced: 38
+- Prior OOS net_R: 2.1059508748485727 → reproduced: 2.1059508748485727
+- Fingerprints identical: YES (0839f0c52cec2c5d… / c27cd5fde0a7f932…)
+
+## Point-in-time
+
+- candidate rows: 35039
+- lookahead pass: 35039
+- lookahead fail: 0
+- future violations: 0
+- missing HTF: 0
+
+## Direction comparison (full sample)
+
+- COMBINED: n=149 avg_R=0.12257170603554839 net_R=18.26318419929671 PF=1.2357426725303198 DD=11.16341564547939
+- LONG: n=93 avg_R=-0.04899140968490234 net_R=-4.556201100695918 PF=0.9159158702449555 DD=12.18434309021406
+- SHORT: n=56 avg_R=0.4074890232141541 net_R=22.81938529999263 PF=1.9800193921005742 DD=12.313930094203704
+
+## OOS
+
+- COMBINED: n=38 avg_R=0.055419759864436126 net_R=2.1059508748485727 PF=1.1055340288472129
+- LONG: n=25 avg_R=-0.26557721839458265 net_R=-6.639430459864567 PF=0.6063143954878556
+- SHORT: n=13 avg_R=0.6727216411317799 net_R=8.745381334713139 PF=3.829873031606647
+
+## Verdict: `MIXED_DIRECTION_ARTIFACT`
+Secondary: ['TIME-PERIOD-SPECIFIC']
+
+## Safety
+
+```text
+READ ONLY
+NO EXISTING CODE MODIFIED
+NO EXISTING REPORTS OVERWRITTEN
+NO DATABASE DATA MODIFIED
+NO STRATEGY MODIFIED
+NO LIVE/PAPER EXECUTION
+NO DEPLOYMENT
+```
+

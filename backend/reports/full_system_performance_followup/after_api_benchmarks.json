@@ -1,0 +1,526 @@
+{
+  "recorded_at": "2026-10-05T11:56:06Z",
+  "n_per_endpoint": 10,
+  "screener": {
+    "path": "/api/screener/futures?limit=50",
+    "summary": {
+      "n": 10,
+      "ok": 10,
+      "error_count": 0,
+      "average_ms": 2851.09,
+      "p50_ms": 2680.93,
+      "p95_ms": 5979.2,
+      "p99_ms": 6403.63,
+      "maximum_ms": 6509.74,
+      "payload_bytes_avg": 545360,
+      "errors": []
+    },
+    "samples": [
+      {
+        "i": 0,
+        "ms": 6509.74,
+        "status": 200,
+        "bytes": 243719,
+        "error": null
+      },
+      {
+        "i": 1,
+        "ms": 3945.76,
+        "status": 200,
+        "bytes": 487168,
+        "error": null
+      },
+      {
+        "i": 2,
+        "ms": 667.27,
+        "status": 200,
+        "bytes": 590188,
+        "error": null
+      },
+      {
+        "i": 3,
+        "ms": 981.48,
+        "status": 200,
+        "bytes": 590204,
+        "error": null
+      },
+      {
+        "i": 4,
+        "ms": 3042.12,
+        "status": 200,
+        "bytes": 590215,
+        "error": null
+      },
+      {
+        "i": 5,
+        "ms": 987.94,
+        "status": 200,
+        "bytes": 590187,
+        "error": null
+      },
+      {
+        "i": 6,
+        "ms": 1466.5,
+        "status": 200,
+        "bytes": 590210,
+        "error": null
+      },
+      {
+        "i": 7,
+        "ms": 3259.6,
+        "status": 200,
+        "bytes": 590580,
+        "error": null
+      },
+      {
+        "i": 8,
+        "ms": 2319.74,
+        "status": 200,
+        "bytes": 590372,
+        "error": null
+      },
+      {
+        "i": 9,
+        "ms": 5330.77,
+        "status": 200,
+        "bytes": 590762,
+        "error": null
+      }
+    ]
+  },
+  "health": {
+    "path": "/api/health",
+    "summary": {
+      "n": 10,
+      "ok": 10,
+      "error_count": 0,
+      "average_ms": 605.01,
+      "p50_ms": 267.79,
+      "p95_ms": 1653.3,
+      "p99_ms": 1746.83,
+      "maximum_ms": 1770.21,
+      "payload_bytes_avg": 987,
+      "errors": []
+    },
+    "samples": [
+      {
+        "i": 0,
+        "ms": 95.78,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 1,
+        "ms": 1011.38,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 2,
+        "ms": 123.77,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 3,
+        "ms": 105.38,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 4,
+        "ms": 133.54,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 5,
+        "ms": 147.6,
+        "status": 200,
+        "bytes": 987,
+        "error": null
+      },
+      {
+        "i": 6,
+        "ms": 387.98,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 7,
+        "ms": 1770.21,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 8,
+        "ms": 764.09,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      },
+      {
+        "i": 9,
+        "ms": 1510.4,
+        "status": 200,
+        "bytes": 988,
+        "error": null
+      }
+    ]
+  },
+  "chart_15m": {
+    "path": "/api/charts/BTCUSDT/ohlcv?timeframe=15m&limit=200",
+    "summary": {
+      "n": 10,
+      "ok": 10,
+      "error_count": 0,
+      "average_ms": 151.21,
+      "p50_ms": 87.16,
+      "p95_ms": 421.05,
+      "p99_ms": 466.17,
+      "maximum_ms": 477.45,
+      "payload_bytes_avg": 77913,
+      "errors": []
+    },
+    "samples": [
+      {
+        "i": 0,
+        "ms": 71.46,
+        "status": 200,
+        "bytes": 77915,
+        "error": null
+      },
+      {
+        "i": 1,
+        "ms": 91.44,
+        "status": 200,
+        "bytes": 77915,
+        "error": null
+      },
+      {
+        "i": 2,
+        "ms": 79.14,
+        "status": 200,
+        "bytes": 77915,
+        "error": null
+      },
+      {
+        "i": 3,
+        "ms": 82.89,
+        "status": 200,
+        "bytes": 77915,
+        "error": null
+      },
+      {
+        "i": 4,
+        "ms": 75.69,
+        "status": 200,
+        "bytes": 77913,
+        "error": null
+      },
+      {
+        "i": 5,
+        "ms": 73.4,
+        "status": 200,
+        "bytes": 77913,
+        "error": null
+      },
+      {
+        "i": 6,
+        "ms": 93.37,
+        "status": 200,
+        "bytes": 77913,
+        "error": null
+      },
+      {
+        "i": 7,
+        "ms": 477.45,
+        "status": 200,
+        "bytes": 77918,
+        "error": null
+      },
+      {
+        "i": 8,
+        "ms": 352.11,
+        "status": 200,
+        "bytes": 77911,
+        "error": null
+      },
+      {
+        "i": 9,
+        "ms": 115.17,
+        "status": 200,
+        "bytes": 77911,
+        "error": null
+      }
+    ]
+  },
+  "chart_1h": {
+    "path": "/api/charts/BTCUSDT/ohlcv?timeframe=1h&limit=200",
+    "summary": {
+      "n": 10,
+      "ok": 10,
+      "error_count": 0,
+      "average_ms": 152.66,
+      "p50_ms": 111.84,
+      "p95_ms": 402.08,
+      "p99_ms": 532.54,
+      "maximum_ms": 565.16,
+      "payload_bytes_avg": 77945,
+      "errors": []
+    },
+    "samples": [
+      {
+        "i": 0,
+        "ms": 60.97,
+        "status": 200,
+        "bytes": 77949,
+        "error": null
+      },
+      {
+        "i": 1,
+        "ms": 186.54,
+        "status": 200,
+        "bytes": 77954,
+        "error": null
+      },
+      {
+        "i": 2,
+        "ms": 202.75,
+        "status": 200,
+        "bytes": 77942,
+        "error": null
+      },
+      {
+        "i": 3,
+        "ms": 107.8,
+        "status": 200,
+        "bytes": 77941,
+        "error": null
+      },
+      {
+        "i": 4,
+        "ms": 115.87,
+        "status": 200,
+        "bytes": 77941,
+        "error": null
+      },
+      {
+        "i": 5,
+        "ms": 136.6,
+        "status": 200,
+        "bytes": 77942,
+        "error": null
+      },
+      {
+        "i": 6,
+        "ms": 95.6,
+        "status": 200,
+        "bytes": 77942,
+        "error": null
+      },
+      {
+        "i": 7,
+        "ms": 565.16,
+        "status": 200,
+        "bytes": 77947,
+        "error": null
+      },
+      {
+        "i": 8,
+        "ms": 26.33,
+        "status": 200,
+        "bytes": 77947,
+        "error": null
+      },
+      {
+        "i": 9,
+        "ms": 28.99,
+        "status": 200,
+        "bytes": 77947,
+        "error": null
+      }
+    ]
+  },
+  "coin": {
+    "path": "/api/coin/BTCUSDT",
+    "summary": {
+      "n": 10,
+      "ok": 10,
+      "error_count": 0,
+      "average_ms": 182.06,
+      "p50_ms": 176.41,
+      "p95_ms": 316.87,
+      "p99_ms": 366.43,
+      "maximum_ms": 378.82,
+      "payload_bytes_avg": 320364,
+      "errors": []
+    },
+    "samples": [
+      {
+        "i": 0,
+        "ms": 87.42,
+        "status": 200,
+        "bytes": 320363,
+        "error": null
+      },
+      {
+        "i": 1,
+        "ms": 103.23,
+        "status": 200,
+        "bytes": 320363,
+        "error": null
+      },
+      {
+        "i": 2,
+        "ms": 213.55,
+        "status": 200,
+        "bytes": 320368,
+        "error": null
+      },
+      {
+        "i": 3,
+        "ms": 107.56,
+        "status": 200,
+        "bytes": 320368,
+        "error": null
+      },
+      {
+        "i": 4,
+        "ms": 211.04,
+        "status": 200,
+        "bytes": 320362,
+        "error": null
+      },
+      {
+        "i": 5,
+        "ms": 378.82,
+        "status": 200,
+        "bytes": 320364,
+        "error": null
+      },
+      {
+        "i": 6,
+        "ms": 241.16,
+        "status": 200,
+        "bytes": 320361,
+        "error": null
+      },
+      {
+        "i": 7,
+        "ms": 166.67,
+        "status": 200,
+        "bytes": 320364,
+        "error": null
+      },
+      {
+        "i": 8,
+        "ms": 186.16,
+        "status": 200,
+        "bytes": 320365,
+        "error": null
+      },
+      {
+        "i": 9,
+        "ms": 125.0,
+        "status": 200,
+        "bytes": 320365,
+        "error": null
+      }
+    ]
+  },
+  "ohlcv_range": {
+    "path": "/api/research/ohlcv-range?symbols=BTCUSDT,ETHUSDT,SOLUSDT&timeframes=1h,4h",
+    "summary": {
+      "n": 10,
+      "ok": 10,
+      "error_count": 0,
+      "average_ms": 711.14,
+      "p50_ms": 745.58,
+      "p95_ms": 1196.12,
+      "p99_ms": 1228.62,
+      "maximum_ms": 1236.75,
+      "payload_bytes_avg": 797,
+      "errors": []
+    },
+    "samples": [
+      {
+        "i": 0,
+        "ms": 1035.67,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 1,
+        "ms": 233.81,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 2,
+        "ms": 1236.75,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 3,
+        "ms": 234.04,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 4,
+        "ms": 1054.48,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 5,
+        "ms": 258.02,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 6,
+        "ms": 494.8,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 7,
+        "ms": 996.36,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 8,
+        "ms": 1146.46,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      },
+      {
+        "i": 9,
+        "ms": 421.05,
+        "status": 200,
+        "bytes": 797,
+        "error": null
+      }
+    ]
+  }
+}

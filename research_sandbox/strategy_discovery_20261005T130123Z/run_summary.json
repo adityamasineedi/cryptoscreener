@@ -1,0 +1,224 @@
+{
+  "classifications": [
+    "INSUFFICIENT_SAMPLE",
+    "NOT_STRICTLY_COMPARABLE",
+    "TIME_PERIOD_SPECIFIC"
+  ],
+  "point_in_time": {
+    "total_decision_rows": 48192,
+    "candidate_rows": 48192,
+    "trade_rows": 92,
+    "lookahead_pass_rows": 48186,
+    "lookahead_fail_rows": 0,
+    "future_feature_violations": 0,
+    "missing_4h_mappings": 6,
+    "unfinished_4h_mappings": 0
+  },
+  "symbol_results": {
+    "ETHUSDT": {
+      "available_start": "2024-01-01T00:00:00+00:00",
+      "available_end": "2026-09-30T23:00:00+00:00",
+      "usable_start": "2024-01-01T00:00:00+00:00",
+      "usable_end": "2026-09-30T23:00:00+00:00",
+      "warmup_rows": 100,
+      "partitions": {
+        "TRAIN": {
+          "start": "2024-01-01T00:00:00+00:00",
+          "end": "2025-08-25T08:00:00+00:00",
+          "1h_rows": 14457
+        },
+        "VALIDATION": {
+          "start": "2025-08-25T09:00:00+00:00",
+          "end": "2026-03-14T03:00:00+00:00",
+          "1h_rows": 4819
+        },
+        "OOS": {
+          "start": "2026-03-14T04:00:00+00:00",
+          "end": "2026-09-30T23:00:00+00:00",
+          "1h_rows": 4820
+        }
+      },
+      "a3_combined_trade_count": 109,
+      "short_trade_count": 39,
+      "signal_counts": {
+        "compression_signal_count": 4443,
+        "breakout_signal_count": 180,
+        "retest_signal_count": 109,
+        "missing_htf_skipped": 0,
+        "lookahead_fail_skipped": 0
+      },
+      "all": {
+        "trade_count": 39,
+        "wins": 16,
+        "losses": 23,
+        "win_rate": 0.41025641025641024,
+        "gross_R": 3.803423314755654,
+        "fees_R": 1.2462035793168178,
+        "net_R": 2.5572197354388364,
+        "average_R": 0.065569736806124,
+        "median_R": -0.9014312718577193,
+        "profit_factor": 1.1190417544396154,
+        "maximum_drawdown_R": 3.863687313208117,
+        "longest_losing_streak": 3,
+        "average_hold_bars": 34.1025641025641,
+        "average_hold_hours": 34.1025641025641,
+        "sample_size_label": "EXPLORATORY_ONLY"
+      },
+      "oos": {
+        "trade_count": 6,
+        "wins": 2,
+        "losses": 4,
+        "win_rate": 0.3333333333333333,
+        "gross_R": -1.957673568818511,
+        "fees_R": 0.226043719369048,
+        "net_R": -2.183717288187559,
+        "average_R": -0.36395288136459314,
+        "median_R": -1.0336078982300965,
+        "profit_factor": 0.47328562779992117,
+        "maximum_drawdown_R": 2.1837172881875584,
+        "longest_losing_streak": 2,
+        "average_hold_bars": 42.5,
+        "average_hold_hours": 42.5,
+        "sample_size_label": "INSUFFICIENT_SAMPLE"
+      },
+      "reconciliation": {
+        "unique": true,
+        "net_match": true,
+        "fees_match": true,
+        "wins_match": true,
+        "losses_match": true
+      },
+      "comparability": "NOT_STRICTLY_COMPARABLE_TO_BTC_CALENDAR"
+    },
+    "SOLUSDT": {
+      "available_start": "2024-01-01T00:00:00+00:00",
+      "available_end": "2026-09-30T23:00:00+00:00",
+      "usable_start": "2024-01-01T00:00:00+00:00",
+      "usable_end": "2026-09-30T23:00:00+00:00",
+      "warmup_rows": 100,
+      "partitions": {
+        "TRAIN": {
+          "start": "2024-01-01T00:00:00+00:00",
+          "end": "2025-08-25T08:00:00+00:00",
+          "1h_rows": 14457
+        },
+        "VALIDATION": {
+          "start": "2025-08-25T09:00:00+00:00",
+          "end": "2026-03-14T03:00:00+00:00",
+          "1h_rows": 4819
+        },
+        "OOS": {
+          "start": "2026-03-14T04:00:00+00:00",
+          "end": "2026-09-30T23:00:00+00:00",
+          "1h_rows": 4820
+        }
+      },
+      "a3_combined_trade_count": 120,
+      "short_trade_count": 53,
+      "signal_counts": {
+        "compression_signal_count": 3677,
+        "breakout_signal_count": 207,
+        "retest_signal_count": 120,
+        "missing_htf_skipped": 0,
+        "lookahead_fail_skipped": 0
+      },
+      "all": {
+        "trade_count": 53,
+        "wins": 28,
+        "losses": 25,
+        "win_rate": 0.5283018867924528,
+        "gross_R": 10.282911547955157,
+        "fees_R": 1.307777434338356,
+        "net_R": 8.9751341136168,
+        "average_R": 0.16934215308710943,
+        "median_R": 0.044652242744063035,
+        "profit_factor": 1.376098078698966,
+        "maximum_drawdown_R": 5.273504373089741,
+        "longest_losing_streak": 4,
+        "average_hold_bars": 46.264150943396224,
+        "average_hold_hours": 46.264150943396224,
+        "sample_size_label": "PRELIMINARY"
+      },
+      "oos": {
+        "trade_count": 7,
+        "wins": 2,
+        "losses": 5,
+        "win_rate": 0.2857142857142857,
+        "gross_R": -1.3330402320128327,
+        "fees_R": 0.234517931204392,
+        "net_R": -1.5675581632172249,
+        "average_R": -0.22393688045960355,
+        "median_R": -0.6027123287671212,
+        "profit_factor": 0.6051836721565228,
+        "maximum_drawdown_R": 1.8959426572322282,
+        "longest_losing_streak": 3,
+        "average_hold_bars": 54.42857142857143,
+        "average_hold_hours": 54.42857142857143,
+        "sample_size_label": "INSUFFICIENT_SAMPLE"
+      },
+      "reconciliation": {
+        "unique": true,
+        "net_match": true,
+        "fees_match": true,
+        "wins_match": true,
+        "losses_match": true
+      },
+      "comparability": "NOT_STRICTLY_COMPARABLE_TO_BTC_CALENDAR"
+    }
+  },
+  "pooled": {
+    "all": {
+      "trade_count": 92,
+      "wins": 44,
+      "losses": 48,
+      "win_rate": 0.4782608695652174,
+      "gross_R": 14.08633486271081,
+      "fees_R": 2.5539810136551737,
+      "net_R": 11.532353849055637,
+      "average_R": 0.12535167227234387,
+      "median_R": -0.20030603211203385,
+      "profit_factor": 1.254321809023805,
+      "maximum_drawdown_R": 5.273504373089741,
+      "longest_losing_streak": 4,
+      "average_hold_bars": 41.108695652173914,
+      "average_hold_hours": 41.108695652173914,
+      "sample_size_label": "PRELIMINARY"
+    },
+    "oos": {
+      "trade_count": 13,
+      "wins": 4,
+      "losses": 9,
+      "win_rate": 0.3076923076923077,
+      "gross_R": -3.2907138008313437,
+      "fees_R": 0.46056165057343995,
+      "net_R": -3.7512754514047835,
+      "average_R": -0.2885596501080603,
+      "median_R": -1.0102182890855458,
+      "profit_factor": 0.5378080076243155,
+      "maximum_drawdown_R": 3.8202820169704825,
+      "longest_losing_streak": 3,
+      "average_hold_bars": 48.92307692307692,
+      "average_hold_hours": 48.92307692307692,
+      "sample_size_label": "INSUFFICIENT_SAMPLE"
+    }
+  },
+  "btc_reference": {
+    "label": "INSUFFICIENT_SAMPLE",
+    "note": "Frozen reference from strategy_discovery_20261005T125552Z; not re-run",
+    "total_trades": 56,
+    "total_average_R": 0.407,
+    "total_net_R": 22.82,
+    "total_PF": 1.98,
+    "total_max_DD": 12.31,
+    "oos_trades": 13,
+    "oos_average_R": 0.673,
+    "oos_net_R": 8.75,
+    "oos_PF": 3.83,
+    "oos_max_DD": 1.05,
+    "calendar": "2022-10-06 \u2192 2026-10-05 UTC"
+  },
+  "time_period_specific_symbols": [
+    "ETHUSDT",
+    "SOLUSDT"
+  ]
+}

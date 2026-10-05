@@ -1,0 +1,88 @@
+{
+  "feature_config": {
+    "analytics_version": "market_structure_v1_1",
+    "adx_period": 14,
+    "adx_trending_threshold": 25.0,
+    "adx_ranging_threshold": 20.0,
+    "atr_period": 14,
+    "atr_percentile_lookback": 100,
+    "atr_high_percentile": 80.0,
+    "atr_low_percentile": 20.0,
+    "efficiency_lookback": 20,
+    "efficiency_trending_threshold": 0.5,
+    "efficiency_choppy_threshold": 0.3,
+    "choppiness_lookback": 14,
+    "choppiness_high_threshold": 61.8,
+    "choppiness_low_threshold": 38.2,
+    "ema_fast": 20,
+    "ema_mid": 50,
+    "ema_slow": 200,
+    "slope_lookback": 20,
+    "momentum_lookback": 14,
+    "rsi_period": 14,
+    "range_lookback": 40,
+    "direction_change_lookback": 20,
+    "trend_vote_required": 2,
+    "swing_left": 2,
+    "swing_right": 2,
+    "bos_lookback_bars": 30,
+    "pullback_atr_shallow": 1.0,
+    "pullback_atr_deep": 2.5,
+    "min_bars_basic": 30,
+    "min_bars_adx": 30,
+    "min_bars_ema_slow": 200
+  },
+  "feature_config_fingerprint": "5d500a381259dbf2",
+  "analytics_version": "market_structure_v1_1",
+  "metadata": {
+    "strategy_id": "",
+    "combo_id": "COMBO_02",
+    "symbol": "BTCUSDT",
+    "setup_timeframe": "1h",
+    "dataset_fingerprint": null,
+    "configuration_fingerprint": null,
+    "feature_config_fingerprint": "5d500a381259dbf2",
+    "requested_range": {},
+    "actual_range": {
+      "period_start": "2026-08-16T16:00:00+00:00",
+      "period_end": "2026-10-05T15:00:00+00:00",
+      "bars_loaded": 1200
+    },
+    "timeframes_used": {
+      "4h": true,
+      "1h": true,
+      "15m": true
+    },
+    "data_sources": {
+      "4h": "ohlcv",
+      "1h": "ohlcv",
+      "15m": "ohlcv"
+    },
+    "closed_candle_policy": "4h_close_time <= setup_candle_close_time",
+    "analytics_version": "market_structure_v1_1",
+    "run_id": "077cf01f66b0",
+    "disclaimer": "Analytics only \u2014 does not affect strategy decisions"
+  },
+  "closed_candle_policy": "fully_closed_asof_for_analytics",
+  "15m_status": "OK",
+  "15m_source_available": true,
+  "15m_source_available_rows": 1200,
+  "15m_feature_available_rows": 1193,
+  "15m_unknown_rows": 7,
+  "15m_status_distribution": {
+    "INSUFFICIENT_HISTORY": 7,
+    "OK": 1193
+  },
+  "row_counts": {
+    "raw_decision_rows": 1200,
+    "unique_trade_count": 5,
+    "unique_executed_trades": 5,
+    "signal_row_count": 5,
+    "execution_row_count": 5,
+    "position_active_row_count": 252,
+    "no_trade_row_count": 943,
+    "unknown_row_count": 0,
+    "ledger_trade_count": 5
+  },
+  "disclaimer": "Analytics only \u2014 does not affect strategy decisions"
+}

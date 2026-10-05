@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   fetchResearchOhlcvRange,
   type OhlcvRangeRow,
@@ -29,6 +30,8 @@ import { useBacktestJobStore } from "../store/backtestJobStore";
 import { BacktestTradeChart } from "./BacktestTradeChart";
 import { CandidateResearchPanel } from "./CandidateResearchPanel";
 import { DynamicCandidatePipelinePanel } from "./DynamicCandidatePipelinePanel";
+import { LazyResearchMount } from "./LazyResearchMount";
+import { MarketStructurePanel } from "./MarketStructurePanel";
 import { ShortResearchPanel } from "./ShortResearchPanel";
 
 type PeriodMode = "lookback" | "dates";
@@ -1529,9 +1532,15 @@ export function BacktestPanel() {
         />
       ) : null}
 
-      <CandidateResearchPanel />
-      <ShortResearchPanel />
-      <DynamicCandidatePipelinePanel />
+      <LazyResearchMount panelId="candidate" label="COMBO_02 Candidate Research">
+        <CandidateResearchPanel />
+      </LazyResearchMount>
+      <LazyResearchMount panelId="short" label="COMBO_02 SHORT Research">
+        <ShortResearchPanel />
+      </LazyResearchMount>
+      <LazyResearchMount panelId="dynamic" label="Dynamic Candidate Pipeline">
+        <DynamicCandidatePipelinePanel />
+      </LazyResearchMount>
     </div>
   );
 }
@@ -1556,6 +1565,13 @@ function SelectedDetail({
     return { t, equity: running };
   });
   const ending = principalUsd + Number(row.pnl_usd_net || 0);
+  const blotterScrollRef = useRef<HTMLDivElement | null>(null);
+  const blotterVirtualizer = useVirtualizer({
+    count: withEquity.length,
+    getScrollElement: () => blotterScrollRef.current,
+    estimateSize: () => 28,
+    overscan: 16,
+  });
   return (
     <section className="mt-4 rounded border border-terminal-border/80 p-3">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -1602,9 +1618,13 @@ function SelectedDetail({
         </div>
       ) : null}
 
-      <div className="max-h-[420px] min-w-0 overflow-auto rounded border border-terminal-border/60">
+      <div
+        ref={blotterScrollRef}
+        className="max-h-[420px] min-w-0 overflow-auto rounded border border-terminal-border/60"
+        data-testid="backtest-trade-blotter"
+      >
         <table className="w-full min-w-[1260px] border-collapse text-left text-[11px]">
-          <thead className="sticky top-0 bg-black/80 text-[10px] uppercase tracking-wide text-terminal-muted">
+          <thead className="sticky top-0 z-10 bg-black/80 text-[10px] uppercase tracking-wide text-terminal-muted">
             <tr>
               <th className="px-2 py-2">#</th>
               <th className="px-2 py-2">Entry time</th>
@@ -1629,26 +1649,57 @@ function SelectedDetail({
           <tbody>
             {!trades.length ? (
               <tr>
-                <td colSpan={17} className="px-3 py-6 text-center text-terminal-muted">
+                <td colSpan={18} className="px-3 py-6 text-center text-terminal-muted">
                   No closed trades for this cell
                 </td>
               </tr>
-            ) : null}
-            {withEquity.map(({ t, equity }) => {
-              const key = tradeRowKey(t);
-              return (
-                <TradeRow
-                  key={`${t.signal_time}-${t.entry_price}-${t.trade_no}`}
-                  t={t}
-                  equityUsd={equity}
-                  selected={key === selectedTradeKey}
-                  onSelect={() => setSelectedTradeKey(key)}
-                />
-              );
-            })}
+            ) : (
+              <>
+                {blotterVirtualizer.getVirtualItems().length > 0 ? (
+                  <tr aria-hidden style={{ height: blotterVirtualizer.getVirtualItems()[0]?.start ?? 0 }}>
+                    <td colSpan={18} />
+                  </tr>
+                ) : null}
+                {blotterVirtualizer.getVirtualItems().map((vRow) => {
+                  const { t, equity } = withEquity[vRow.index];
+                  const key = tradeRowKey(t);
+                  return (
+                    <TradeRow
+                      key={`${t.signal_time}-${t.entry_price}-${t.trade_no}`}
+                      t={t}
+                      equityUsd={equity}
+                      selected={key === selectedTradeKey}
+                      onSelect={() => setSelectedTradeKey(key)}
+                    />
+                  );
+                })}
+                {blotterVirtualizer.getVirtualItems().length > 0 ? (
+                  <tr
+                    aria-hidden
+                    style={{
+                      height: Math.max(
+                        0,
+                        blotterVirtualizer.getTotalSize() -
+                          (blotterVirtualizer.getVirtualItems().at(-1)?.end ?? 0),
+                      ),
+                    }}
+                  >
+                    <td colSpan={18} />
+                  </tr>
+                ) : null}
+              </>
+            )}
           </tbody>
         </table>
       </div>
+
+      <LazyResearchMount panelId="market-structure" label="Market Structure & Regime">
+        <MarketStructurePanel
+          analytics={row.market_structure}
+          symbol={row.symbol}
+          timeframe={row.timeframe}
+        />
+      </LazyResearchMount>
     </section>
   );
 }

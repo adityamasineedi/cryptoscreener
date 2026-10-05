@@ -103,10 +103,18 @@ class BacktestJob:
     rows_loaded: int = 0
     load_meta: dict[str, Any] = field(default_factory=dict)
     timing: dict[str, Any] = field(default_factory=dict)
+    elapsed_seconds: float | None = None
     _resolved: ResolvedBacktestConfig | None = field(default=None, repr=False)
     _t0: float = field(default=0.0, repr=False)
     _cancel: bool = field(default=False, repr=False)
     _hb_mono: float = field(default=0.0, repr=False)
+    _cancel_event: Any = field(default=None, repr=False)
+
+    def snapshot_elapsed(self) -> float | None:
+        """Freeze wall-clock elapsed at terminal status (status polls stay stable)."""
+        if self._t0:
+            self.elapsed_seconds = round(time.perf_counter() - self._t0, 3)
+        return self.elapsed_seconds
 
     def heartbeat(
         self,
@@ -153,9 +161,15 @@ class BacktestJob:
         return round(100.0 * min(1.0, cell_base + intra), 1)
 
     def to_dict(self) -> dict[str, Any]:
-        elapsed = (
-            round(time.perf_counter() - self._t0, 3) if self._t0 else None
-        )
+        if self.status in ("done", "error", "cancelled", "stalled"):
+            elapsed = self.elapsed_seconds
+            if elapsed is None and self._t0:
+                elapsed = round(time.perf_counter() - self._t0, 3)
+                self.elapsed_seconds = elapsed
+        else:
+            elapsed = (
+                round(time.perf_counter() - self._t0, 3) if self._t0 else None
+            )
         identity = dict(self.identity or {})
         out: dict[str, Any] = {
             "job_id": self.job_id,
@@ -199,6 +213,7 @@ class BacktestJob:
             "disclaimer": self.disclaimer,
             "resolved_cells": self.resolved_cells,
             "dataset_fingerprint": self.dataset_fingerprint,
+            "execution_isolation": "process_pool",
             "requested_range": {
                 "mode": identity.get("period_mode"),
                 "start_date": self.start_date,
@@ -220,9 +235,23 @@ class BacktestJobService:
         self._lock = asyncio.Lock()
 
     def status(self) -> dict[str, Any]:
+        from app.research.backtest_cpu_pool import pool_stats
+
         if self._job is None:
-            return {"status": "idle", "job_id": None, "rows": []}
-        return self._job.to_dict()
+            return {
+                "status": "idle",
+                "job_id": None,
+                "rows": [],
+                "execution_isolation": "process_pool",
+                "cpu_pool": pool_stats(),
+            }
+        out = self._job.to_dict()
+        out["cpu_pool"] = pool_stats()
+        return out
+
+    def is_running(self) -> bool:
+        """True while a UI backtest job is actively executing (not terminal)."""
+        return self._job is not None and self._job.status == "running"
 
     async def start(
         self,
@@ -298,6 +327,8 @@ class BacktestJobService:
                 raise RuntimeError(
                     f"Backtest already running (job_id={self._job.job_id})"
                 )
+            from app.research.backtest_cpu_pool import new_cancel_event
+
             job = BacktestJob(
                 job_id=uuid.uuid4().hex[:12],
                 status="running",
@@ -333,6 +364,7 @@ class BacktestJobService:
                 ],
                 _resolved=resolved,
                 _t0=time.perf_counter(),
+                _cancel_event=new_cancel_event(),
             )
             job.heartbeat(phase=JOB_CREATED)
             emit_phase(
@@ -356,9 +388,15 @@ class BacktestJobService:
             if job is None or job.status != "running":
                 return self.status()
             job._cancel = True
+            if job._cancel_event is not None:
+                try:
+                    job._cancel_event.set()
+                except Exception:  # noqa: BLE001
+                    pass
             job.status = "cancelled"
             job.phase = JOB_CANCELLED
             job.finished_at = datetime.now(timezone.utc).isoformat()
+            job.snapshot_elapsed()
             job.heartbeat(phase=JOB_CANCELLED)
             emit_phase(JOB_CANCELLED, job_id=job.job_id)
             return job.to_dict()
@@ -373,11 +411,17 @@ class BacktestJobService:
                 now = time.perf_counter()
                 if job._t0 and job_timeout > 0 and (now - job._t0) > job_timeout:
                     job._cancel = True
+                    if job._cancel_event is not None:
+                        try:
+                            job._cancel_event.set()
+                        except Exception:  # noqa: BLE001
+                            pass
                     job.status = "error"
                     job.error = f"Job exceeded timeout ({job_timeout:.0f}s)"
                     job.error_code = "job_timeout"
                     job.phase = JOB_FAILED
                     job.finished_at = datetime.now(timezone.utc).isoformat()
+                    job.snapshot_elapsed()
                     emit_phase(
                         JOB_FAILED,
                         job_id=job.job_id,
@@ -391,11 +435,17 @@ class BacktestJobService:
                     and (now - job._hb_mono) > hb_timeout
                 ):
                     job._cancel = True
+                    if job._cancel_event is not None:
+                        try:
+                            job._cancel_event.set()
+                        except Exception:  # noqa: BLE001
+                            pass
                     job.status = "stalled"
                     job.error = f"No heartbeat for {hb_timeout:.0f}s"
                     job.error_code = "NO_HEARTBEAT"
                     job.phase = JOB_STALLED
                     job.finished_at = datetime.now(timezone.utc).isoformat()
+                    job.snapshot_elapsed()
                     emit_phase(
                         JOB_STALLED,
                         job_id=job.job_id,
@@ -421,6 +471,7 @@ class BacktestJobService:
                     job.status = "cancelled"
                     job.phase = JOB_CANCELLED
                     job.finished_at = datetime.now(timezone.utc).isoformat()
+                    job.snapshot_elapsed()
                     job.current = ""
                     return
                 # Publish current cell before the long await so UI polls show
@@ -487,6 +538,7 @@ class BacktestJobService:
                     direction=job.direction,
                     limit=job.limit,
                     risk_usd=cell_risk,
+                    principal_usd=float(job.principal_usd),
                     start_date=job.start_date,
                     end_date=job.end_date,
                     taker_fee=job.taker_fee_pct / 100.0,
@@ -496,11 +548,14 @@ class BacktestJobService:
                     should_cancel=lambda: job._cancel,
                     progress_callback=_on_progress,
                     job_id=job.job_id,
+                    use_research_cache=False,
+                    cancel_event=job._cancel_event,
                 )
                 if payload.get("status") == "CANCELLED":
                     job.status = "cancelled"
                     job.phase = JOB_CANCELLED
                     job.finished_at = datetime.now(timezone.utc).isoformat()
+                    job.snapshot_elapsed()
                     job.current = ""
                     return
                 if payload.get("status") == "NOT_FOUND":
@@ -512,6 +567,7 @@ class BacktestJobService:
                     job.error_code = "not_found"
                     job.phase = JOB_FAILED
                     job.finished_at = datetime.now(timezone.utc).isoformat()
+                    job.snapshot_elapsed()
                     job.current = ""
                     emit_phase(JOB_FAILED, job_id=job.job_id, reason=job.error)
                     return
@@ -521,6 +577,7 @@ class BacktestJobService:
                     job.error_code = "cell_error"
                     job.phase = JOB_FAILED
                     job.finished_at = datetime.now(timezone.utc).isoformat()
+                    job.snapshot_elapsed()
                     job.current = ""
                     emit_phase(JOB_FAILED, job_id=job.job_id, reason=job.error)
                     return
@@ -581,12 +638,14 @@ class BacktestJobService:
                 )
             job.current = ""
             job.finished_at = datetime.now(timezone.utc).isoformat()
+            job.snapshot_elapsed()
         except Exception as exc:  # noqa: BLE001
             job.status = "error"
             job.error = str(exc)
             job.error_code = "runtime_error"
             job.phase = JOB_FAILED
             job.finished_at = datetime.now(timezone.utc).isoformat()
+            job.snapshot_elapsed()
             job.current = ""
             emit_phase(JOB_FAILED, job_id=job.job_id, reason=str(exc))
         finally:

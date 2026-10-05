@@ -25,6 +25,16 @@ function statusClass(status: string): string {
   }
 }
 
+/** In-app React routes only — repo paths / docs files are shown as references. */
+function isInAppRoute(path: string, kind?: string): boolean {
+  if (kind === "repo_path") return false;
+  if (!path.startsWith("/")) return false;
+  if (path.includes(".") || path.startsWith("/docs/") || path.startsWith("/backend/")) {
+    return false;
+  }
+  return true;
+}
+
 function StrategyCard({
   item,
   selected,
@@ -322,7 +332,7 @@ export function StrategiesPanel() {
                       </div>
                     ) : null}
 
-                    {selected.risk ? (
+                    {selected.risk?.display ? (
                       <div className="mt-3 rounded border border-terminal-border/50 bg-black/20 px-2 py-1.5 text-[11px]">
                         <span className="text-terminal-muted">Risk: </span>
                         <span className="text-terminal-text">
@@ -340,15 +350,27 @@ export function StrategiesPanel() {
 
                     {selected.where_to_run?.length ? (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {selected.where_to_run.map((link) => (
-                          <Link
-                            key={link.path + link.label}
-                            to={link.path}
-                            className="rounded border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-300 hover:bg-sky-500/20"
-                          >
-                            {link.label} →
-                          </Link>
-                        ))}
+                        {selected.where_to_run.map((link) =>
+                          isInAppRoute(link.path, link.kind) ? (
+                            <Link
+                              key={link.path + link.label}
+                              to={link.path}
+                              className="rounded border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] text-sky-300 hover:bg-sky-500/20"
+                            >
+                              {link.label} →
+                            </Link>
+                          ) : (
+                            <span
+                              key={link.path + link.label}
+                              title={link.path}
+                              className="rounded border border-terminal-border/60 bg-black/20 px-2.5 py-1 font-mono text-[10px] text-terminal-muted"
+                            >
+                              <span className="text-terminal-text">{link.label}</span>
+                              {": "}
+                              {link.path}
+                            </span>
+                          )
+                        )}
                       </div>
                     ) : null}
 

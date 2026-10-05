@@ -1,0 +1,4 @@
+phase,n,p95_ms,max_ms
+startup,18,1282.36,1288.46
+steady_state,20,39.0,55.52
+overall,38,1194.95,1288.46

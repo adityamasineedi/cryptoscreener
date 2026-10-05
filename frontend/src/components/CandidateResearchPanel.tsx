@@ -7,6 +7,7 @@ import {
   fetchCombo02CandidateResults,
   type Combo02CandidateResultsResponse,
 } from "../api/client";
+import { dedupedPanelFetch } from "../lib/researchPanelCache";
 
 function num(v: number | null | undefined, digits = 2): string {
   if (v == null || Number.isNaN(v) || !Number.isFinite(v)) return "—";
@@ -34,9 +35,15 @@ export function CandidateResearchPanel() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const ac = new AbortController();
     let cancelled = false;
     setLoading(true);
-    fetchCombo02CandidateResults()
+    dedupedPanelFetch(
+      "latest",
+      "candidate",
+      (signal) => fetchCombo02CandidateResults(undefined, { signal }),
+      ac.signal,
+    )
       .then((payload) => {
         if (!cancelled) {
           setData(payload);
@@ -44,7 +51,7 @@ export function CandidateResearchPanel() {
         }
       })
       .catch((e) => {
-        if (!cancelled) {
+        if (!cancelled && (e as Error)?.name !== "AbortError") {
           setError(e instanceof Error ? e.message : String(e));
         }
       })
@@ -53,6 +60,7 @@ export function CandidateResearchPanel() {
       });
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, []);
 

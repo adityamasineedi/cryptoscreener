@@ -24,8 +24,8 @@ def _v1_open_payload(**overrides):
         "entry_price": 100_000.0,
         "stop_price": 98_000.0,
         "tp1_price": 104_000.0,
-        "quantity": 0.0075,
-        "risk_usd": 15.0,
+        "quantity": 0.01,
+        "risk_usd": 20.0,
         "timeframe": "1h",
         "signal_snippet": {
             "strategy_id": "COMBO_02_V1",
@@ -34,7 +34,7 @@ def _v1_open_payload(**overrides):
             "combo_id": "COMBO_02",
             "combo_version": "v1-combo02-long-htf",
             "v1_tier": "core",
-            "risk_percent": 0.015,
+            "risk_percent": 0.02,
             "symbol": "BTCUSDT",
             "timeframe": "1h",
             "trend_4h": "BULLISH",
@@ -106,9 +106,9 @@ def test_format_entry_message():
     assert "Entry: 100,000" in text
     assert "Stop: 98,000" in text
     assert "TP1: 104,000" in text
-    assert "Qty: 0.0075 BTC" in text
-    assert "(~$750.00)" in text
-    assert "Risk: $15.00 (1.5% of $1000.00)" in text
+    assert "Qty: 0.01 BTC" in text
+    assert "(~$1000.00)" in text
+    assert "Risk: $20.00 (2% of $1000.00)" in text
     assert "HTF: 4h=BULLISH, 1h=BULLISH, HTF_ALIGNED" in text
     assert "R: 2.00R" in text
 
@@ -123,8 +123,8 @@ def test_format_entry_message_sol_includes_qty_and_distances():
             entry_price=120.09,
             stop_price=118.9719,
             tp1_price=123.36,
-            quantity=4.471,
-            risk_usd=5.0,
+            quantity=17.884,
+            risk_usd=20.0,
             signal_snippet={
                 "strategy_id": "COMBO_02_V1",
                 "source": "V1_PAPER_WATCHER",
@@ -132,7 +132,7 @@ def test_format_entry_message_sol_includes_qty_and_distances():
                 "combo_id": "COMBO_02",
                 "combo_version": "v1-combo02-long-htf",
                 "v1_tier": "secondary",
-                "risk_percent": 0.005,
+                "risk_percent": 0.02,
                 "symbol": "SOLUSDT",
                 "timeframe": "1h",
                 "trend_4h": "BULLISH",
@@ -144,10 +144,10 @@ def test_format_entry_message_sol_includes_qty_and_distances():
     }
     text = format_telegram_message(alert)
     assert text is not None
-    assert "Qty: 4.471 SOL" in text
+    assert "Qty: 17.884 SOL" in text
     assert "Stop: 118.9719 (−1.1181 / −0.93%)" in text
     assert "TP1: 123.36 (+3.27 / +2.72%)" in text
-    assert "Risk: $5.00 (0.5% of $1000.00)" in text
+    assert "Risk: $20.00 (2% of $1000.00)" in text
 
 
 def test_format_exit_maps_stop_to_sl():

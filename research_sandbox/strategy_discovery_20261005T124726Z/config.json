@@ -1,0 +1,74 @@
+{
+  "experiment_id": "S3_COMPRESSION_BREAKOUT",
+  "symbol": "BTCUSDT",
+  "setup_timeframe": "1h",
+  "htf_timeframe": "4h",
+  "htf_rule": "fully_closed_only",
+  "independent_of": "COMBO_02",
+  "sandbox_dir": "research_sandbox/strategy_discovery_20261005T124726Z",
+  "data": {
+    "parquet_1h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+    "manifest_1h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+    "parquet_4h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+    "manifest_4h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+    "timezone": "UTC"
+  },
+  "predeclared_features": {
+    "compression_definition": "ATR(14) percentile within trailing lookback <= threshold",
+    "atr_period": 14,
+    "atr_percentile_lookback": 100,
+    "compression_threshold": 20.0,
+    "range_lookback_bars": 20,
+    "breakout_buffer_frac": 0.0005,
+    "note": "All thresholds declared before any OOS inspection. No post-hoc optimization."
+  },
+  "entry_modes": {
+    "E1": "market_at_confirmed_breakout_close",
+    "E2": "next_1h_open"
+  },
+  "primary_reporting": {
+    "entry_mode": "E1",
+    "stop": "S1_opposite_range_boundary",
+    "target": "T2_2R",
+    "ablation": "A0"
+  },
+  "stops": {
+    "S1": "opposite_range_boundary",
+    "S2": "ATR_multiple",
+    "atr_stop_multiple": 1.5
+  },
+  "targets_R": [1.5, 2.0, 2.5],
+  "fees": {
+    "taker_fee_rate_per_leg": 0.0004,
+    "legs": 2,
+    "slippage": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "funding": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+    "source": "documented research DEFAULT_TAKER_FEE (read-only reference, not imported)"
+  },
+  "intrabar_ambiguity_rule": "STOP_FIRST when both stop and target touched in same candle",
+  "partitions": {
+    "method": "chronological_fraction",
+    "train_frac": 0.60,
+    "validation_frac": 0.20,
+    "oos_frac": 0.20,
+    "note": "No repository S3 partition exists; defined once before run."
+  },
+  "ablations": {
+    "A0": "compression + range + breakout",
+    "A1": "A0 + closed 4h directional context (close > open for long / close < open for short)",
+    "A2": "UNAVAILABLE WITHOUT ENGINE CHANGE — production BOS not used (COMBO_02 independence + no production import)",
+    "A3": "A0 + retest within max_retest_bars after breakout"
+  },
+  "retest": {
+    "max_retest_bars": 6,
+    "definition": "After breakout, wait for a later closed bar that trades back to breakout_level then closes again in breakout direction"
+  },
+  "sensitivity": {
+    "compression_thresholds": [15.0, 20.0, 25.0],
+    "range_lookbacks": [15, 20, 30],
+    "breakout_buffers": [0.00025, 0.0005, 0.001],
+    "min_trades_to_run": 20
+  },
+  "cooldown_bars_after_exit": 1,
+  "max_hold_bars": 72
+}

@@ -180,6 +180,9 @@ export type ScreenFilter =
 
 export interface ScreenerMeta {
   total_universe: number;
+  discovered_universe?: number;
+  active_universe?: number;
+  active_universe_cap?: number;
   eligible_count: number;
   returned_count: number;
   limit: number;
@@ -206,6 +209,9 @@ export interface HealthResponse {
   database: string;
   ingestion: string;
   symbols_loaded: number;
+  discovered_symbols?: number;
+  active_universe?: number;
+  active_universe_cap?: number;
   tickers_live: number;
   timestamp: string;
 }

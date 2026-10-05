@@ -1,0 +1,76 @@
+{
+  "ETHUSDT": {
+    "1h": {
+      "name": "ETHUSDT",
+      "row_count": 24096,
+      "first_timestamp": "2024-01-01T00:00:00+00:00",
+      "last_timestamp": "2026-09-30T23:00:00+00:00",
+      "timezone": "UTC",
+      "tz_aware_utc": true,
+      "ordered": true,
+      "duplicate_bars": 0,
+      "out_of_order_bars": 0,
+      "invalid_ohlc_rows": 0,
+      "expected_step_seconds": 3600,
+      "gap_count": 0,
+      "max_gap_bars": 0,
+      "status": "DATA_OK",
+      "dropped_duplicate_timestamps_on_merge": 0
+    },
+    "4h": {
+      "name": "ETHUSDT",
+      "row_count": 6024,
+      "first_timestamp": "2024-01-01T00:00:00+00:00",
+      "last_timestamp": "2026-09-30T20:00:00+00:00",
+      "timezone": "UTC",
+      "tz_aware_utc": true,
+      "ordered": true,
+      "duplicate_bars": 0,
+      "out_of_order_bars": 0,
+      "invalid_ohlc_rows": 0,
+      "expected_step_seconds": 14400,
+      "gap_count": 0,
+      "max_gap_bars": 0,
+      "status": "DATA_OK",
+      "dropped_duplicate_timestamps_on_merge": 0
+    },
+    "overall": "DATA_OK"
+  },
+  "SOLUSDT": {
+    "1h": {
+      "name": "SOLUSDT",
+      "row_count": 24096,
+      "first_timestamp": "2024-01-01T00:00:00+00:00",
+      "last_timestamp": "2026-09-30T23:00:00+00:00",
+      "timezone": "UTC",
+      "tz_aware_utc": true,
+      "ordered": true,
+      "duplicate_bars": 0,
+      "out_of_order_bars": 0,
+      "invalid_ohlc_rows": 0,
+      "expected_step_seconds": 3600,
+      "gap_count": 0,
+      "max_gap_bars": 0,
+      "status": "DATA_OK",
+      "dropped_duplicate_timestamps_on_merge": 0
+    },
+    "4h": {
+      "name": "SOLUSDT",
+      "row_count": 6024,
+      "first_timestamp": "2024-01-01T00:00:00+00:00",
+      "last_timestamp": "2026-09-30T20:00:00+00:00",
+      "timezone": "UTC",
+      "tz_aware_utc": true,
+      "ordered": true,
+      "duplicate_bars": 0,
+      "out_of_order_bars": 0,
+      "invalid_ohlc_rows": 0,
+      "expected_step_seconds": 14400,
+      "gap_count": 0,
+      "max_gap_bars": 0,
+      "status": "DATA_OK",
+      "dropped_duplicate_timestamps_on_merge": 0
+    },
+    "overall": "DATA_OK"
+  }
+}

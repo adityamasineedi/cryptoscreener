@@ -1,0 +1,10 @@
+{
+  "total_decision_rows": 48192,
+  "candidate_rows": 48192,
+  "trade_rows": 92,
+  "lookahead_pass_rows": 48186,
+  "lookahead_fail_rows": 0,
+  "future_feature_violations": 0,
+  "missing_4h_mappings": 6,
+  "unfinished_4h_mappings": 0
+}

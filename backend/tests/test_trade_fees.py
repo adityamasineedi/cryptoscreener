@@ -254,10 +254,66 @@ def test_19_leverage_does_not_multiply_fees():
         "outcome": "TP1",
         "condition_snapshot": {"entry_type": "MARKET"},
     }
-    a = enrich_trade_execution(trade, risk_usd=20.0, leverage=2.0)
-    b = enrich_trade_execution(trade, risk_usd=20.0, leverage=10.0)
+    # Wide enough stop that both leverages stay under the notional cap.
+    a = enrich_trade_execution(
+        trade, risk_usd=20.0, leverage=2.0, account_equity=1000.0
+    )
+    b = enrich_trade_execution(
+        trade, risk_usd=20.0, leverage=10.0, account_equity=1000.0
+    )
+    assert a["capped_by_leverage"] is False
+    assert b["capped_by_leverage"] is False
+    assert a["qty"] == pytest.approx(b["qty"])
     assert a["total_fee"] == pytest.approx(b["total_fee"])
     assert a["margin_usd"] != b["margin_usd"]
+
+
+def test_leverage_cap_reduces_tight_stop_qty():
+    """BTC-like tight stop must not exceed equity × leverage notional."""
+    trade = {
+        "direction": "LONG",
+        "entry_price": 78246.8,
+        "stop_price": 77973.88016131721,
+        "exit_price": 77973.88016131721,
+        "outcome": "SL",
+        "r_multiple": -1.0,
+        "condition_snapshot": {"entry_type": "MARKET"},
+    }
+    row = enrich_trade_execution(
+        trade,
+        risk_usd=20.0,
+        leverage=2.0,
+        account_equity=1000.0,
+        taker_fee=0.0004,
+        maker_fee=0.0002,
+    )
+    assert row["capped_by_leverage"] is True
+    assert row["notional"] == pytest.approx(2000.0)
+    assert row["margin_usd"] == pytest.approx(1000.0)
+    assert row["qty"] == pytest.approx(2000.0 / 78246.8)
+    assert row["requested_risk_usd"] == pytest.approx(20.0)
+    assert row["risk_usd"] < 20.0
+    assert row["gross_pnl_usd"] == pytest.approx(-row["risk_usd"])
+    assert row["r_net"] < -1.0  # fees push below -1R on actual risk
+
+
+def test_leverage_cap_btc_wide_stop_uncapped():
+    trade = {
+        "direction": "LONG",
+        "entry_price": 80046.5,
+        "stop_price": 77817.98072682723,
+        "exit_price": 84503.53854634555,
+        "outcome": "TP1",
+        "r_multiple": 2.0,
+        "condition_snapshot": {"entry_type": "MARKET"},
+    }
+    row = enrich_trade_execution(
+        trade, risk_usd=20.0, leverage=2.0, account_equity=1000.0
+    )
+    assert row["capped_by_leverage"] is False
+    assert row["risk_usd"] == pytest.approx(20.0)
+    assert row["notional"] < 2000.0
+    assert row["gross_pnl_usd"] == pytest.approx(40.0)
 
 
 def test_20_fee_reconciliation_status_and_diagnostics_persisted():

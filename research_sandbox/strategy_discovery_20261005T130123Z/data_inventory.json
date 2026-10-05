@@ -1,0 +1,237 @@
+{
+  "symbols": {
+    "ETHUSDT": {
+      "1h_shards": [
+        {
+          "stem": "ETHUSDT_1h_2024-01-01_2025-06-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_1h_2024-01-01_2025-06-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_1h_2024-01-01_2025-06-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2025-06-30T23:00:00+00:00",
+          "row_count": 13128,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "284dd46f1397955860815e9dd3e0f783a8d1f7b68c25f7b6e9c746b2b26f2f37",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        },
+        {
+          "stem": "ETHUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2025-07-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T23:00:00+00:00",
+          "row_count": 10968,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "2d63ffb3bbf8babf5ac6f23a23f652a04097d23c33905f11dc2d8066ce614ea3",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        }
+      ],
+      "4h_shards": [
+        {
+          "stem": "ETHUSDT_4h_2024-01-01_2025-06-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_4h_2024-01-01_2025-06-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_4h_2024-01-01_2025-06-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2025-06-30T20:00:00+00:00",
+          "row_count": 3282,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "1a7e66bc1234b1229529447f1cf32aac6068ad23ce643efe4cccdbf6af314482",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        },
+        {
+          "stem": "ETHUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/ETHUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2025-07-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T20:00:00+00:00",
+          "row_count": 2742,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "4d1b83621a124f7fe3827850f0e264f3ab9ff6ad98a5609c4ab1c4689dc5970e",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        }
+      ],
+      "1h_concat": {
+        "first_timestamp": "2024-01-01T00:00:00+00:00",
+        "last_timestamp": "2026-09-30T23:00:00+00:00",
+        "row_count": 24096,
+        "quality": {
+          "name": "ETHUSDT",
+          "row_count": 24096,
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T23:00:00+00:00",
+          "timezone": "UTC",
+          "tz_aware_utc": true,
+          "ordered": true,
+          "duplicate_bars": 0,
+          "out_of_order_bars": 0,
+          "invalid_ohlc_rows": 0,
+          "expected_step_seconds": 3600,
+          "gap_count": 0,
+          "max_gap_bars": 0,
+          "status": "DATA_OK",
+          "dropped_duplicate_timestamps_on_merge": 0
+        }
+      },
+      "4h_concat": {
+        "first_timestamp": "2024-01-01T00:00:00+00:00",
+        "last_timestamp": "2026-09-30T20:00:00+00:00",
+        "row_count": 6024,
+        "quality": {
+          "name": "ETHUSDT",
+          "row_count": 6024,
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T20:00:00+00:00",
+          "timezone": "UTC",
+          "tz_aware_utc": true,
+          "ordered": true,
+          "duplicate_bars": 0,
+          "out_of_order_bars": 0,
+          "invalid_ohlc_rows": 0,
+          "expected_step_seconds": 14400,
+          "gap_count": 0,
+          "max_gap_bars": 0,
+          "status": "DATA_OK",
+          "dropped_duplicate_timestamps_on_merge": 0
+        }
+      }
+    },
+    "SOLUSDT": {
+      "1h_shards": [
+        {
+          "stem": "SOLUSDT_1h_2024-01-01_2025-06-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_1h_2024-01-01_2025-06-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_1h_2024-01-01_2025-06-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2025-06-30T23:00:00+00:00",
+          "row_count": 13128,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "a5e5e0a91cddd5ec8e2ac45b47b3c35e9e0567a0c62489125dd49fa1b101126b",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        },
+        {
+          "stem": "SOLUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2025-07-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T23:00:00+00:00",
+          "row_count": 10968,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "a83755fbda5aafb4f09776d4ef9893211145e259abb28582d9aee450ac776bc3",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        }
+      ],
+      "4h_shards": [
+        {
+          "stem": "SOLUSDT_4h_2024-01-01_2025-06-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_4h_2024-01-01_2025-06-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_4h_2024-01-01_2025-06-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2025-06-30T20:00:00+00:00",
+          "row_count": 3282,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "8c78afc2e1e58e2ead80a28dd41c20e92f92c91f00d2d4334ede48a3cde60fe3",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        },
+        {
+          "stem": "SOLUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1",
+          "source_file": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+          "manifest_path": "backend/data/research_cache/ohlcv/ohlcv_v1/SOLUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.manifest.json",
+          "first_timestamp": "2025-07-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T20:00:00+00:00",
+          "row_count": 2742,
+          "timezone": "UTC",
+          "missing_bars": 0,
+          "duplicate_bars": 0,
+          "out_of_order_rows": 0,
+          "invalid_ohlc_rows": 0,
+          "dataset_fingerprint": "a488a3e8d42b79ebff695c59f3103672d677b04d4afc35c99a1467b2e58677b2",
+          "manifest_status": "PASS",
+          "data_quality_status": "DATA_OK"
+        }
+      ],
+      "1h_concat": {
+        "first_timestamp": "2024-01-01T00:00:00+00:00",
+        "last_timestamp": "2026-09-30T23:00:00+00:00",
+        "row_count": 24096,
+        "quality": {
+          "name": "SOLUSDT",
+          "row_count": 24096,
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T23:00:00+00:00",
+          "timezone": "UTC",
+          "tz_aware_utc": true,
+          "ordered": true,
+          "duplicate_bars": 0,
+          "out_of_order_bars": 0,
+          "invalid_ohlc_rows": 0,
+          "expected_step_seconds": 3600,
+          "gap_count": 0,
+          "max_gap_bars": 0,
+          "status": "DATA_OK",
+          "dropped_duplicate_timestamps_on_merge": 0
+        }
+      },
+      "4h_concat": {
+        "first_timestamp": "2024-01-01T00:00:00+00:00",
+        "last_timestamp": "2026-09-30T20:00:00+00:00",
+        "row_count": 6024,
+        "quality": {
+          "name": "SOLUSDT",
+          "row_count": 6024,
+          "first_timestamp": "2024-01-01T00:00:00+00:00",
+          "last_timestamp": "2026-09-30T20:00:00+00:00",
+          "timezone": "UTC",
+          "tz_aware_utc": true,
+          "ordered": true,
+          "duplicate_bars": 0,
+          "out_of_order_bars": 0,
+          "invalid_ohlc_rows": 0,
+          "expected_step_seconds": 14400,
+          "gap_count": 0,
+          "max_gap_bars": 0,
+          "status": "DATA_OK",
+          "dropped_duplicate_timestamps_on_merge": 0
+        }
+      }
+    }
+  },
+  "overall_notes": [
+    "ETH/SOL usable continuous DATA_OK window is 2024-01-01 \u2192 2026-09-30; BTC was 2022-10-06 \u2192 2026-10-05."
+  ],
+  "btc_reference_calendar": "2022-10-06 \u2192 2026-10-05 UTC",
+  "comparability": "NOT_STRICTLY_COMPARABLE_TO_BTC_CALENDAR"
+}

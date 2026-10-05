@@ -398,10 +398,12 @@ class ScreenerService:
     ) -> tuple[list[ScreenerRow], int, dict[str, Any]]:
         """Build screener page.
 
-        Full data universe is still listed/built from market_store. The main
-        screener display is capped via screen_universe (max 100) using existing
-        row fields only — signal/structure/entry math is untouched.
+        Full Binance discovery still lives in market_store. The main screener
+        display is scoped to the active compute universe (V1 paper + top volume)
+        and then capped via screen_universe (max 100). Signal/structure/entry
+        math is untouched.
         """
+        from app.services.active_universe import list_active_symbols
         from app.services.screen_universe import (
             MAX_SCREEN_SYMBOLS,
             clamp_screen_limit,
@@ -411,19 +413,39 @@ class ScreenerService:
         )
         from app.services.setup_signals import get_setup_signal_service
 
-        symbols = self.store.list_symbols(market_type="futures_perp")
+        all_symbols = self.store.list_symbols(market_type="futures_perp")
+        discovered_universe = len(all_symbols)
+        active_set = set(
+            list_active_symbols([s.symbol for s in all_symbols])
+        )
+        symbols = [s for s in all_symbols if s.symbol.upper() in active_set]
         total_universe = len(symbols)
         search_q = (search or "").strip().upper() or None
 
-        # Search narrows the build set so any Binance symbol can be found even
-        # when it is outside the dynamic top-100 screen universe.
+        # Default view = active universe. Search may pull matches from full
+        # discovery (temporary — does not expand backfill permanently).
         build_symbols = symbols
         if search_q:
             build_symbols = [
                 s
-                for s in symbols
+                for s in all_symbols
                 if search_q in s.symbol or search_q in s.base_asset.upper()
             ]
+            # Cap search results so a 1-letter query cannot rebuild 500+ rows
+            if len(build_symbols) > MAX_SCREEN_SYMBOLS:
+                ranked = sorted(
+                    build_symbols,
+                    key=lambda s: float(
+                        getattr(
+                            self.store.tickers.get(s.symbol),
+                            "quote_volume_24h",
+                            0,
+                        )
+                        or 0
+                    ),
+                    reverse=True,
+                )
+                build_symbols = ranked[:MAX_SCREEN_SYMBOLS]
 
         rows = [self.build_row(s) for s in build_symbols]
 
@@ -515,6 +537,19 @@ class ScreenerService:
 
         meta: dict[str, Any] = {
             "total_universe": total_universe,
+            "discovered_universe": discovered_universe,
+            "active_universe": total_universe,
+            "active_universe_cap": (
+                int(
+                    (
+                        (self.settings.market_config or {}).get("backfill") or {}
+                    ).get("active_universe_count")
+                    or (
+                        (self.settings.market_config or {}).get("backfill") or {}
+                    ).get("tier2_count")
+                    or 80
+                )
+            ),
             "eligible_count": 0,
             "returned_count": 0,
             "limit": screen_limit,
@@ -541,6 +576,8 @@ class ScreenerService:
             meta.update(
                 {
                     "total_universe": selection.total_universe,
+                    "active_universe": selection.total_universe,
+                    "discovered_universe": discovered_universe,
                     "eligible_count": selection.eligible_count,
                     "returned_count": selection.returned_count,
                     "limit": selection.limit,
@@ -696,9 +733,17 @@ class ScreenerService:
         structure = engine_store.structure.get(sym)
         zones = engine_store.zones.get(sym)
 
-        holders = (await self.onchain.get_holder_metrics([sym])).get(sym) or {}
-        txs = (await self.onchain.get_transaction_metrics([sym])).get(sym) or {}
-        sent = (await self.sentiment.get_sentiment([sym])).get(sym) or {}
+        # Independent provider fetches — run concurrently (same results, lower latency).
+        import asyncio
+
+        holders_m, txs_m, sent_m = await asyncio.gather(
+            self.onchain.get_holder_metrics([sym]),
+            self.onchain.get_transaction_metrics([sym]),
+            self.sentiment.get_sentiment([sym]),
+        )
+        holders = (holders_m or {}).get(sym) or {}
+        txs = (txs_m or {}).get(sym) or {}
+        sent = (sent_m or {}).get(sym) or {}
 
         valuation = signals.get("valuation") or {
             k: v.model_dump(mode="json")

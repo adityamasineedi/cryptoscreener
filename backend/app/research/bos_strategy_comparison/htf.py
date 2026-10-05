@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from app.signals._candle_utils import candle_time, series_ohlcv
@@ -14,6 +14,27 @@ from app.signals.trend_engine import infer_trend
 HTF_ALIGNED = "HTF_ALIGNED"
 HTF_CONFLICT = "HTF_CONFLICT"
 HTF_NEUTRAL_UNAVAILABLE = "HTF_NEUTRAL_UNAVAILABLE"
+
+_TF_SECONDS: dict[str, int] = {
+    "1m": 60,
+    "3m": 180,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "2h": 7200,
+    "4h": 14400,
+    "6h": 21600,
+    "12h": 43200,
+    "1d": 86400,
+}
+
+
+def timeframe_seconds(timeframe: str) -> int:
+    key = (timeframe or "").lower().strip()
+    if key not in _TF_SECONDS:
+        raise ValueError(f"Unsupported timeframe for HTF duration: {timeframe!r}")
+    return _TF_SECONDS[key]
 
 
 def _aware(ts: datetime | None) -> datetime | None:
@@ -43,6 +64,52 @@ def as_of_index_at_or_before(
         else:
             break
     return best
+
+
+def as_of_index_fully_closed(
+    candles: Sequence[Mapping[str, Any]],
+    decision_ts: datetime | None,
+    *,
+    htf_duration_seconds: int,
+) -> int | None:
+    """Largest index where HTF bar close time <= decision_ts (fully closed).
+
+    Bar close = open_time + htf_duration_seconds. Never uses a forming HTF bar.
+    """
+    if not candles or decision_ts is None:
+        return None
+    decision_ts = _aware(decision_ts)
+    assert decision_ts is not None
+    dur = int(htf_duration_seconds)
+    if dur <= 0:
+        return None
+    best: int | None = None
+    for i, c in enumerate(candles):
+        t = _aware(candle_time(c))
+        if t is None:
+            continue
+        close_ts = t.timestamp() + dur
+        if close_ts <= decision_ts.timestamp():
+            best = i
+        else:
+            break
+    return best
+
+
+def decision_timestamp_for_setup_bar(
+    setup_candles: Sequence[Mapping[str, Any]],
+    as_of_index: int,
+    *,
+    setup_timeframe: str,
+) -> datetime | None:
+    """Setup bar close time = open_time + setup TF duration."""
+    end = min(int(as_of_index), len(setup_candles) - 1)
+    if end < 0:
+        return None
+    open_ts = _aware(candle_time(setup_candles[end]))
+    if open_ts is None:
+        return None
+    return open_ts + timedelta(seconds=timeframe_seconds(setup_timeframe))
 
 
 def _trend_label_from_infer(trend: Mapping[str, Any]) -> str:
@@ -131,6 +198,10 @@ def build_htf_as_of_index_map(
 
     Two-pointer O(n+m). Equivalent to ``as_of_index_at_or_before`` per bar when
     both series are time-sorted ascending.
+
+    Note: comparing HTF *open* time to setup *open* time can select a still-
+    forming HTF candle (e.g. 4h) whose final OHLC is not yet known at the 1h
+    decision. Use ``build_htf_as_of_index_map_fully_closed`` for closed-only.
     """
     if not setup_candles:
         return []
@@ -150,6 +221,47 @@ def build_htf_as_of_index_map(
                 j += 1
                 continue
             if ts <= as_of:
+                j += 1
+            else:
+                break
+        out[i] = j if j >= 0 else None
+    return out
+
+
+def build_htf_as_of_index_map_fully_closed(
+    setup_candles: Sequence[Mapping[str, Any]],
+    htf_candles: Sequence[Mapping[str, Any]],
+    *,
+    setup_timeframe: str,
+    htf_timeframe: str,
+) -> list[int | None]:
+    """For each setup bar, last HTF index whose bar is fully closed by setup close.
+
+    Decision time = setup open + setup TF duration.
+    HTF bar is eligible iff HTF open + HTF duration <= decision time.
+    """
+    if not setup_candles:
+        return []
+    if not htf_candles:
+        return [None] * len(setup_candles)
+    setup_dur = timeframe_seconds(setup_timeframe)
+    htf_dur = timeframe_seconds(htf_timeframe)
+    out: list[int | None] = [None] * len(setup_candles)
+    j = -1
+    n_htf = len(htf_candles)
+    for i, c in enumerate(setup_candles):
+        open_ts = _aware(candle_time(c))
+        if open_ts is None:
+            out[i] = j if j >= 0 else None
+            continue
+        decision = open_ts + timedelta(seconds=setup_dur)
+        while j + 1 < n_htf:
+            ts = _aware(candle_time(htf_candles[j + 1]))
+            if ts is None:
+                j += 1
+                continue
+            htf_close = ts + timedelta(seconds=htf_dur)
+            if htf_close <= decision:
                 j += 1
             else:
                 break
@@ -205,11 +317,20 @@ def htf_trends_for_setup_bar(
     include_5m: bool = False,
     idx_1h_map: Sequence[int | None] | None = None,
     idx_4h_map: Sequence[int | None] | None = None,
+    setup_timeframe: str = "15m",
+    htf_require_fully_closed: bool = False,
 ) -> dict[str, Any]:
     """Resolve 4H/1H/(optional 5M) trends as-of the setup bar timestamp."""
     cfg = config or SignalConfig()
     end = min(as_of_index, len(setup_candles) - 1)
     as_of_ts = candle_time(setup_candles[end]) if end >= 0 else None
+    decision_ts = (
+        decision_timestamp_for_setup_bar(
+            setup_candles, end, setup_timeframe=setup_timeframe
+        )
+        if htf_require_fully_closed
+        else None
+    )
 
     if trend_15m is None:
         trend_15m = trend_at_as_of(
@@ -223,10 +344,22 @@ def htf_trends_for_setup_bar(
 
     if idx_4h_map is not None and 0 <= end < len(idx_4h_map):
         idx_4h = idx_4h_map[end]
+    elif htf_require_fully_closed:
+        idx_4h = as_of_index_fully_closed(
+            candles_4h or [],
+            decision_ts,
+            htf_duration_seconds=timeframe_seconds("4h"),
+        )
     else:
         idx_4h = as_of_index_at_or_before(candles_4h or [], as_of_ts)
     if idx_1h_map is not None and 0 <= end < len(idx_1h_map):
         idx_1h = idx_1h_map[end]
+    elif htf_require_fully_closed:
+        idx_1h = as_of_index_fully_closed(
+            candles_1h or [],
+            decision_ts,
+            htf_duration_seconds=timeframe_seconds("1h"),
+        )
     else:
         idx_1h = as_of_index_at_or_before(candles_1h or [], as_of_ts)
     idx_5m = (
@@ -270,6 +403,8 @@ def htf_trends_for_setup_bar(
         "trend_15m": trend_15m,
         "trend_5m": trend_5m,
         "as_of_ts": as_of_ts.isoformat() if as_of_ts else None,
+        "decision_ts": decision_ts.isoformat() if decision_ts else None,
+        "htf_require_fully_closed": bool(htf_require_fully_closed),
         "idx_4h": idx_4h,
         "idx_1h": idx_1h,
         "idx_5m": idx_5m,

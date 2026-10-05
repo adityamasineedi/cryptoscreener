@@ -86,6 +86,15 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     const screenMeta: ScreenerMeta | null = meta
       ? {
           total_universe: Number(meta.total_universe ?? get().screenMeta?.total_universe ?? total),
+          discovered_universe: Number(
+            meta.discovered_universe ?? get().screenMeta?.discovered_universe ?? 0
+          ),
+          active_universe: Number(
+            meta.active_universe ?? meta.total_universe ?? get().screenMeta?.active_universe ?? total
+          ),
+          active_universe_cap: Number(
+            meta.active_universe_cap ?? get().screenMeta?.active_universe_cap ?? 80
+          ),
           eligible_count: Number(meta.eligible_count ?? total),
           returned_count: Number(meta.returned_count ?? rows.length),
           limit: Number(meta.limit ?? get().screenSize),

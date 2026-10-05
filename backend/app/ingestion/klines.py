@@ -188,6 +188,12 @@ def is_trailing_stale(
     the common failure mode where history looks COMPLETE but the tip is frozen
     because the kline websocket went silent.
 
+    Callers SHOULD include the forming/open candle in ``candles`` when present.
+    With only closed bars, a series past ~25% into the current interval looks
+    stale (lag > 1.25×step) — that is intentional so we pull the forming tip.
+    With the open candle included, tip.open_time is the current interval start
+    and lag stays < 1.0×step for the whole bar (hence not stale).
+
     Default 1.25 intervals: a closed tip must advance into the current bar
     (e.g. daily must pick up today's forming candle once the day opens).
     """
@@ -202,6 +208,12 @@ def is_trailing_stale(
     if tip_ot.tzinfo is None:
         tip_ot = tip_ot.replace(tzinfo=timezone.utc)
     wall = now or datetime.now(timezone.utc)
+    # Interval-boundary fast path: tip already covers the current open interval.
+    wall_ms = int(wall.timestamp() * 1000)
+    tip_ms = int(tip_ot.timestamp() * 1000)
+    current_open_ms = (wall_ms // step) * step
+    if tip_ms >= current_open_ms:
+        return False
     lag_ms = (wall - tip_ot).total_seconds() * 1000.0
     return lag_ms > step * max(max_lag_intervals, 1.0)
 

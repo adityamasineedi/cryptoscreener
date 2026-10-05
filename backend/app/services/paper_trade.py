@@ -18,6 +18,7 @@ from typing import Any, Callable, Awaitable
 
 from app.core.logging import get_logger
 from app.services.paper_risk import PaperRiskPolicy, evaluate_paper_entry_risk, policy_from_settings
+from app.research.combination_engine import revalidate_combo02_long_fill
 from app.services.paper_sizing import (
     DEFAULT_PAPER_LEVERAGE,
     net_paper_pnl,
@@ -116,6 +117,14 @@ class PaperTradeEngine:
         # Legacy setup→paper auto-entry (default OFF — research only when explicitly enabled).
         self.legacy_auto_entry_enabled = False
         self.realized_pnl = 0.0
+        # Runtime halt trackers (paper opens only)
+        self.peak_equity = float(starting_equity)
+        self._day_key: str | None = None
+        self._day_pnl_r: float = 0.0
+        self._consecutive_losses: int = 0
+        self._symbol_consecutive_losses: dict[str, int] = {}
+        self._strategy_equity_r: float = 0.0
+        self._strategy_peak_r: float = 0.0
         # Keyed by (SYMBOL, STREAM) so LEGACY + V1 + V2 can coexist on one symbol.
         self._open: dict[tuple[str, str], PaperPosition] = {}
         self._closed: list[PaperPosition] = []
@@ -124,6 +133,53 @@ class PaperTradeEngine:
         self._persist: PersistFn | None = None
         self._pending_persist: list[dict[str, Any]] = []
         self._last_skip_reason: str | None = None
+
+    def _halt_kwargs(self, symbol: str | None = None) -> dict[str, Any]:
+        """Snapshot for evaluate_paper_entry_risk kill switches."""
+        eq = float(self.equity)
+        if eq > self.peak_equity:
+            self.peak_equity = eq
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if self._day_key != today:
+            self._day_key = today
+            self._day_pnl_r = 0.0
+        strat_dd = self._strategy_equity_r - self._strategy_peak_r
+        sym = str(symbol or "").upper()
+        return {
+            "day_pnl_r": float(self._day_pnl_r),
+            "consecutive_losses": int(self._consecutive_losses),
+            "symbol_consecutive_losses": int(
+                self._symbol_consecutive_losses.get(sym, 0)
+            )
+            if sym
+            else None,
+            "peak_equity": float(self.peak_equity),
+            "strategy_drawdown_r": float(strat_dd),
+        }
+
+    def _note_close_for_halts(self, *, symbol: str, r_multiple: float | None) -> None:
+        """Update daily / streak / DD trackers after a closed paper trade."""
+        r = float(r_multiple or 0.0)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if self._day_key != today:
+            self._day_key = today
+            self._day_pnl_r = 0.0
+        self._day_pnl_r += r
+        self._strategy_equity_r += r
+        if self._strategy_equity_r > self._strategy_peak_r:
+            self._strategy_peak_r = self._strategy_equity_r
+        eq = float(self.equity)
+        if eq > self.peak_equity:
+            self.peak_equity = eq
+        sym = str(symbol or "").upper()
+        if r < 0:
+            self._consecutive_losses += 1
+            self._symbol_consecutive_losses[sym] = (
+                int(self._symbol_consecutive_losses.get(sym, 0)) + 1
+            )
+        else:
+            self._consecutive_losses = 0
+            self._symbol_consecutive_losses[sym] = 0
 
     @staticmethod
     def stream_of(pos: PaperPosition | dict[str, Any]) -> str:
@@ -564,6 +620,7 @@ class PaperTradeEngine:
             open_count=open_count,
             open_risk_usd=open_risk,
             equity=self.equity,
+            **self._halt_kwargs(sym),
         )
         if not gate.ok:
             self._last_skip_reason = f"{sym}:{gate.reason}"
@@ -638,6 +695,7 @@ class PaperTradeEngine:
             open_risk_usd=open_risk,
             equity=self.equity,
             planned_risk_usd=risk_usd,
+            **self._halt_kwargs(sym),
         )
         if not gate2.ok:
             self._last_skip_reason = f"{sym}:{gate2.reason}"
@@ -769,6 +827,11 @@ class PaperTradeEngine:
             self._last_skip_reason = f"{sym}:v1_zero_risk"
             return None
 
+        ok_fill, fill_reason = revalidate_combo02_long_fill(eval_result)
+        if not ok_fill:
+            self._last_skip_reason = f"{sym}:fill_revalidate:{fill_reason}"
+            return None
+
         entry_price = _f(eval_result.get("entry_price"))
         stop_price = _f(eval_result.get("stop_price"))
         tp1 = _f(eval_result.get("tp1"))
@@ -824,6 +887,7 @@ class PaperTradeEngine:
                 open_count=open_count,
                 open_risk_usd=open_risk,
                 equity=self.equity,
+                **self._halt_kwargs(sym),
             )
             if not gate.ok:
                 self._last_skip_reason = f"{sym}:{gate.reason}"
@@ -849,6 +913,9 @@ class PaperTradeEngine:
         stop_price = float(sized["stop_price"])
         qty = float(sized.get("quantity") or 0.0)
         risk_usd = float(sized.get("risk_usd") or 0.0)
+        if sized.get("reason"):
+            self._last_skip_reason = f"{sym}:{sized.get('reason')}"
+            return None
         if tp1 is not None:
             tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
         if qty <= 0:
@@ -863,6 +930,7 @@ class PaperTradeEngine:
                 open_risk_usd=open_risk,
                 equity=self.equity,
                 planned_risk_usd=risk_usd,
+                **self._halt_kwargs(sym),
             )
             if not gate2.ok:
                 self._last_skip_reason = f"{sym}:{gate2.reason}"
@@ -1300,6 +1368,7 @@ class PaperTradeEngine:
         pos.unrealized_r = 0.0
         self._open.pop(self._key_for(pos), None)
         self.realized_pnl += pnl
+        self._note_close_for_halts(symbol=pos.symbol, r_multiple=r_mult)
         self._closed.insert(0, pos)
         self._trim_closed()
         self._queue_persist(pos)

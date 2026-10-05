@@ -1,0 +1,14 @@
+{
+  "total_1h_decision_bars": 1200,
+  "bars_with_4h_features": 1200,
+  "bars_with_1h_features": 1200,
+  "bars_with_15m_features": 1200,
+  "bars_with_future_feature_violation": 0,
+  "bars_with_missing_feature_data": 0,
+  "bars_with_unknown_regime": 1,
+  "bars_with_timestamp_mismatch": 0,
+  "bars_with_duplicate_feature_rows": 0,
+  "offending_rows": [],
+  "invariant_bars_with_future_feature_violation_eq_0": true,
+  "analytics_version": "market_structure_v1"
+}

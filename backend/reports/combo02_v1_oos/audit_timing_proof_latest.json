@@ -1,0 +1,238 @@
+{
+  "n_proofs": 5,
+  "forming_4h_mismatch_count": 4,
+  "entry_close_mismatch_count": 0,
+  "proofs": [
+    {
+      "symbol": "BTCUSDT",
+      "signal_time_1h_open": "2025-08-10T23:00:00+00:00",
+      "decision_ts_inferred_bar_close": "2025-08-11T00:00:00+00:00",
+      "1h_OHLC": {
+        "open": 119046.7,
+        "high": 119291.9,
+        "low": 118812.8,
+        "close": 119255.3,
+        "open_time": "2025-08-10 23:00:00+00:00"
+      },
+      "entry_price_trade": 119255.3,
+      "entry_matches_1h_close": true,
+      "entry_type": "MARKET",
+      "4h_used_by_engine_open": "2025-08-10T20:00:00+00:00",
+      "4h_used_OHLC": {
+        "open": 118624.6,
+        "high": 119291.9,
+        "low": 118010.0,
+        "close": 119255.3,
+        "open_time": "2025-08-10 20:00:00+00:00"
+      },
+      "4h_engine_bar_close_time": "2025-08-11T00:00:00+00:00",
+      "4h_engine_bar_fully_closed_at_decision": true,
+      "4h_last_fully_closed_open": "2025-08-10T20:00:00+00:00",
+      "4h_strict_closed_OHLC": {
+        "open": 118624.6,
+        "high": 119291.9,
+        "low": 118010.0,
+        "close": 119255.3,
+        "open_time": "2025-08-10 20:00:00+00:00"
+      },
+      "forming_vs_strict_same_bar": true,
+      "stop": 118720.49378027018,
+      "tp1": 120799.0,
+      "exit_time": "2025-08-11T02:00:00+00:00",
+      "exit_reason": "TP1",
+      "r_net": 2.7069211738967267,
+      "snapshot_htf": {
+        "htf_alignment": "HTF_ALIGNED",
+        "trend_4h": "BULLISH",
+        "trend_1h": "BULLISH"
+      },
+      "parquet_1h": "BTCUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+      "parquet_4h": "BTCUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.parquet"
+    },
+    {
+      "symbol": "SOLUSDT",
+      "signal_time_1h_open": "2026-06-15T10:00:00+00:00",
+      "decision_ts_inferred_bar_close": "2026-06-15T11:00:00+00:00",
+      "1h_OHLC": {
+        "open": 71.18,
+        "high": 72.2,
+        "low": 71.14,
+        "close": 71.84,
+        "open_time": "2026-06-15 10:00:00+00:00"
+      },
+      "entry_price_trade": 71.84,
+      "entry_matches_1h_close": true,
+      "entry_type": "MARKET",
+      "4h_used_by_engine_open": "2026-06-15T08:00:00+00:00",
+      "4h_used_OHLC": {
+        "open": 71.23,
+        "high": 72.84,
+        "low": 70.72,
+        "close": 72.56,
+        "open_time": "2026-06-15 08:00:00+00:00"
+      },
+      "4h_engine_bar_close_time": "2026-06-15T12:00:00+00:00",
+      "4h_engine_bar_fully_closed_at_decision": false,
+      "4h_last_fully_closed_open": "2026-06-15T04:00:00+00:00",
+      "4h_strict_closed_OHLC": {
+        "open": 71.19,
+        "high": 71.48,
+        "low": 70.75,
+        "close": 71.23,
+        "open_time": "2026-06-15 04:00:00+00:00"
+      },
+      "forming_vs_strict_same_bar": false,
+      "stop": 71.01107717426878,
+      "tp1": 75.67,
+      "exit_time": "2026-06-15T15:00:00+00:00",
+      "exit_reason": "TP3",
+      "r_net": 3.929066646,
+      "snapshot_htf": {
+        "htf_alignment": "HTF_ALIGNED",
+        "trend_4h": "BULLISH",
+        "trend_1h": "BULLISH"
+      },
+      "parquet_1h": "SOLUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+      "parquet_4h": "SOLUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.parquet"
+    },
+    {
+      "symbol": "BTCUSDT",
+      "signal_time_1h_open": "2026-05-05T13:00:00+00:00",
+      "decision_ts_inferred_bar_close": "2026-05-05T14:00:00+00:00",
+      "1h_OHLC": {
+        "open": 81223.3,
+        "high": 81656.6,
+        "low": 81138.0,
+        "close": 81278.3,
+        "open_time": "2026-05-05 13:00:00+00:00"
+      },
+      "entry_price_trade": 81278.3,
+      "entry_matches_1h_close": true,
+      "entry_type": "MARKET",
+      "4h_used_by_engine_open": "2026-05-05T12:00:00+00:00",
+      "4h_used_OHLC": {
+        "open": 80973.1,
+        "high": 81656.6,
+        "low": 80879.5,
+        "close": 81488.7,
+        "open_time": "2026-05-05 12:00:00+00:00"
+      },
+      "4h_engine_bar_close_time": "2026-05-05T16:00:00+00:00",
+      "4h_engine_bar_fully_closed_at_decision": false,
+      "4h_last_fully_closed_open": "2026-05-05T08:00:00+00:00",
+      "4h_strict_closed_OHLC": {
+        "open": 80815.8,
+        "high": 81071.0,
+        "low": 80480.6,
+        "close": 80973.0,
+        "open_time": "2026-05-05 08:00:00+00:00"
+      },
+      "forming_vs_strict_same_bar": false,
+      "stop": 81051.41398229601,
+      "tp1": 83300.0,
+      "exit_time": "2026-05-05T14:00:00+00:00",
+      "exit_reason": "SL",
+      "r_net": -1.2861872509999999,
+      "snapshot_htf": {
+        "htf_alignment": "HTF_ALIGNED",
+        "trend_4h": "BULLISH",
+        "trend_1h": "BULLISH"
+      },
+      "parquet_1h": "BTCUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+      "parquet_4h": "BTCUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.parquet"
+    },
+    {
+      "symbol": "ETHUSDT",
+      "signal_time_1h_open": "2025-07-08T10:00:00+00:00",
+      "decision_ts_inferred_bar_close": "2025-07-08T11:00:00+00:00",
+      "1h_OHLC": {
+        "open": 2550.59,
+        "high": 2565.69,
+        "low": 2549.05,
+        "close": 2564.95,
+        "open_time": "2025-07-08 10:00:00+00:00"
+      },
+      "entry_price_trade": 2564.95,
+      "entry_matches_1h_close": true,
+      "entry_type": "MARKET",
+      "4h_used_by_engine_open": "2025-07-08T08:00:00+00:00",
+      "4h_used_OHLC": {
+        "open": 2552.16,
+        "high": 2584.99,
+        "low": 2542.0,
+        "close": 2573.88,
+        "open_time": "2025-07-08 08:00:00+00:00"
+      },
+      "4h_engine_bar_close_time": "2025-07-08T12:00:00+00:00",
+      "4h_engine_bar_fully_closed_at_decision": false,
+      "4h_last_fully_closed_open": "2025-07-08T04:00:00+00:00",
+      "4h_strict_closed_OHLC": {
+        "open": 2536.82,
+        "high": 2563.0,
+        "low": 2530.72,
+        "close": 2552.16,
+        "open_time": "2025-07-08 04:00:00+00:00"
+      },
+      "forming_vs_strict_same_bar": false,
+      "stop": 2545.7642297774855,
+      "tp1": 2607.08,
+      "exit_time": "2025-07-08T17:00:00+00:00",
+      "exit_reason": "TP1",
+      "r_net": 2.0880677467515776,
+      "snapshot_htf": {
+        "htf_alignment": "HTF_ALIGNED",
+        "trend_4h": "BULLISH",
+        "trend_1h": "BULLISH"
+      },
+      "parquet_1h": "ETHUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+      "parquet_4h": "ETHUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.parquet"
+    },
+    {
+      "symbol": "BTCUSDT",
+      "signal_time_1h_open": "2025-08-10T14:00:00+00:00",
+      "decision_ts_inferred_bar_close": "2025-08-10T15:00:00+00:00",
+      "1h_OHLC": {
+        "open": 118410.6,
+        "high": 118841.7,
+        "low": 118272.0,
+        "close": 118749.3,
+        "open_time": "2025-08-10 14:00:00+00:00"
+      },
+      "entry_price_trade": 118749.3,
+      "entry_matches_1h_close": true,
+      "entry_type": "MARKET",
+      "4h_used_by_engine_open": "2025-08-10T12:00:00+00:00",
+      "4h_used_OHLC": {
+        "open": 118295.9,
+        "high": 119094.0,
+        "low": 118192.6,
+        "close": 118766.0,
+        "open_time": "2025-08-10 12:00:00+00:00"
+      },
+      "4h_engine_bar_close_time": "2025-08-10T16:00:00+00:00",
+      "4h_engine_bar_fully_closed_at_decision": false,
+      "4h_last_fully_closed_open": "2025-08-10T08:00:00+00:00",
+      "4h_strict_closed_OHLC": {
+        "open": 117770.0,
+        "high": 118489.9,
+        "low": 117568.9,
+        "close": 118295.9,
+        "open_time": "2025-08-10 08:00:00+00:00"
+      },
+      "forming_vs_strict_same_bar": false,
+      "stop": 118176.94992800335,
+      "tp1": 120100.0,
+      "exit_time": "2025-08-10T20:00:00+00:00",
+      "exit_reason": "SL",
+      "r_net": -1.165581354,
+      "snapshot_htf": {
+        "htf_alignment": "HTF_ALIGNED",
+        "trend_4h": "BULLISH",
+        "trend_1h": "BULLISH"
+      },
+      "parquet_1h": "BTCUSDT_1h_2025-07-01_2026-09-30_ohlcv_v1.parquet",
+      "parquet_4h": "BTCUSDT_4h_2025-07-01_2026-09-30_ohlcv_v1.parquet"
+    }
+  ],
+  "interpretation": "Engine joins 4h by open_time <= 1h open (htf.as_of_index_at_or_before). At 1h close decision, that 4h bar is fully closed ONLY if 1h open is the last hour of the 4h (hour%4==3). Otherwise engine uses a still-forming 4h."
+}

@@ -12,20 +12,23 @@ Evidence window used for classification: **2025-01-01 → 2026-01-31**, COMBO_02
 
 | Symbol | TF | Tier | Risk / trade | Default | Rationale |
 |--------|-----|------|--------------|---------|-----------|
-| BTCUSDT | 1h | **core** | **1.5%** | ON | Best risk-adjusted (~56% WR, avgR ~+0.66, maxDD ~2.5R, streak ≤2) |
-| ETHUSDT | 1h | **secondary** | **0.5%** | ON | Positive but noisy (~38% WR, avgR ~+0.12, maxDD ~10–11R, streak ~10) |
-| SOLUSDT | 1h | **secondary** | **0.5%** | ON | Thin sample / modest edge (audit n≈4, avgR ~+0.52) — optional |
-| BTCUSDT | 4h | **secondary** (swing) | **1.0%** | OFF | Solid avgR, low n — enable explicitly |
-| ETHUSDT | 4h | **secondary** (swing) | **0.5%** | OFF | Positive, higher DD — enable explicitly |
+| BTCUSDT | 1h | **core** | **2%** | ON | Freeze-claim core book; flat 2% across enabled 1h books |
+| ETHUSDT | 1h | **secondary** | **2%** | ON | Same COMBO_02 path; still secondary for monitoring scrutiny |
+| SOLUSDT | 1h | **secondary** | **2%** | ON | Same COMBO_02 path; thin sample — monitor closely |
+| BTCUSDT | 4h | **secondary** (swing) | **2%** | OFF | Optional swing book — enable explicitly |
+| ETHUSDT | 4h | **secondary** (swing) | **2%** | OFF | Optional swing book — enable explicitly |
 | * | 15m | **research** | **0%** live | OFF | Fee-dominated / negative expectancy |
 
-**Principal reference:** $1,000 → BTC 1h = **$15/R**, ETH/SOL 1h = **$5/R**, BTC 4h = **$10/R**.
+**Principal reference:** $1,000 → **$20/R** on every enabled 1h book (code authority: `v1_production.V1_BOOKS` / `risk_percent=0.02`).
+
+> **Resolved 2026-10-05:** Docs previously listed BTC 1.5% / ETH·SOL 0.5%. **Code is flat 2%.** This document now matches code. Do not reintroduce per-symbol risk splits without a version bump + new evidence window.
 
 ### Regime rules (minimal)
 
 1. **Already enforced:** Path A / COMBO_02 LONG only when **4h + 1h are both BULLISH** (`HTF_ALIGNED`); fail closed on missing/neutral/conflict.
-2. **No new cross-asset filters** in v1 (e.g. do not gate SOL on BTC 4h) — keep HTF local to the asset.
-3. Sub-hour setups remain **research-only** for production claims.
+2. **HL intact:** LONG setups fail closed if the protected higher low is broken (close below HL / bearish CHOCH) before entry.
+3. **No new cross-asset filters** in v1 (e.g. do not gate SOL on BTC 4h) — keep HTF local to the asset.
+4. Sub-hour setups remain **research-only** for production claims.
 
 ### Note on live setup TF
 
@@ -39,7 +42,12 @@ Live `SignalConfig.mtf_setup` is still **15m** (structure engine). Path A paper 
 |-----|---------|---------|
 | `PAPER_V1_PROFILE_ENABLED` | `true` | Apply universe + per-symbol risk on Path A |
 | `PAPER_V1_UNIVERSE_ONLY` | `true` | Path A only BTC/ETH/SOL |
-| `PAPER_V1_SECONDARY_ENABLED` | `true` | Allow ETH/SOL at 0.5%; set `false` for BTC-only core book |
+| `PAPER_V1_SECONDARY_ENABLED` | `true` | Allow ETH/SOL (+ extended paper) at 2% |
+| `PAPER_DAILY_LOSS_HALT_R` | `3` | Halt new opens after day PnL ≤ −3R |
+| `PAPER_CONSECUTIVE_LOSS_HALT` | `5` | Book-wide consecutive-loss halt |
+| `PAPER_CONSECUTIVE_LOSS_SYMBOL_HALT` | `3` | Per-symbol consecutive-loss halt |
+| `PAPER_PEAK_DRAWDOWN_HALT_PCT` | `0.10` | Halt when equity DD from peak ≥ 10% |
+| `PAPER_STRATEGY_DRAWDOWN_HALT_R` | `6` | Halt when strategy equity curve DD ≥ 6R |
 
 Code constants: `V1_BOOKS`, `V1_PAPER_RISK_BY_SYMBOL` in `v1_production.py`.
 
@@ -54,7 +62,7 @@ Win rate, avg R, net PnL, max DD (R), max losing streak, trade count. Compare to
 ### Review thresholds (after ≥10 closed trades)
 
 - Realized WR **&lt; 70%** of backtest WR → flag for review (do not auto-tweak params).
-- Max DD **&gt; 1.5×** backtest max DD → pause or cut size (e.g. secondary off, or BTC risk → 1%).
+- Max DD **&gt; 1.5×** backtest max DD → pause or cut size.
 - Max losing streak **&gt; 1.5×** backtest streak → same as DD rule.
 
 ### Logging (required fields)
@@ -77,7 +85,7 @@ python scripts/v1_monitor_paper.py
 2. Do **not** add 15m (or any sub-hour) as a live production timeframe.
 3. Do **not** start heavy parameter optimization / curve-fitting on ETH or SOL.
 4. Do **not** mix Path B or `COMBO_02_LOCAL` into v1 production claims or labels.
-5. Do **not** raise ETH/SOL risk to BTC core levels without a new evidence window and version bump.
+5. Do **not** change flat 2% risk without a new evidence window and version bump.
 6. Do **not** silently mutate frozen HTF gate behavior — see `v1_freeze.md`.
 
 ---
@@ -87,3 +95,4 @@ python scripts/v1_monitor_paper.py
 - Freeze: [`v1_freeze.md`](./v1_freeze.md)
 - Playbook: [`LONG_STRATEGY.md`](./LONG_STRATEGY.md)
 - Changelog: [`../CHANGELOG.md`](../CHANGELOG.md)
+- Regression baselines: `backend/reports/combo02_v1_regression/`

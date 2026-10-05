@@ -1,0 +1,4 @@
+decision_time,trade_id,entry,entry_attribution_type,row_role,signal_bar,execution_bar
+2026-08-24T20:00:00+00:00,1,YES,EXECUTION_BAR,EXECUTION_BAR,True,True
+2026-09-02T04:00:00+00:00,2,YES,EXECUTION_BAR,EXECUTION_BAR,True,True
+2026-09-14T16:00:00+00:00,3,YES,EXECUTION_BAR,EXECUTION_BAR,True,True

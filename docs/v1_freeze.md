@@ -73,5 +73,6 @@ Failures on these files should **block merges** that touch frozen paths unless t
 ## Related docs
 
 - Production profile (core/secondary risk, monitoring): [`v1_production.md`](./v1_production.md)
+- Risk-controlled variant (v1.1 overlay, separate OOS): [`combo02_v1_1_risk_controlled.md`](./combo02_v1_1_risk_controlled.md)
 - Playbook overview: [`LONG_STRATEGY.md`](./LONG_STRATEGY.md)
 - Changelog entry: [`../CHANGELOG.md`](../CHANGELOG.md)

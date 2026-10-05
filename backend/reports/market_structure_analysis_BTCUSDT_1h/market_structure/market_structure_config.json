@@ -1,0 +1,83 @@
+{
+  "feature_config": {
+    "analytics_version": "market_structure_v1_1",
+    "adx_period": 14,
+    "adx_trending_threshold": 25.0,
+    "adx_ranging_threshold": 20.0,
+    "atr_period": 14,
+    "atr_percentile_lookback": 100,
+    "atr_high_percentile": 80.0,
+    "atr_low_percentile": 20.0,
+    "efficiency_lookback": 20,
+    "efficiency_trending_threshold": 0.5,
+    "efficiency_choppy_threshold": 0.3,
+    "choppiness_lookback": 14,
+    "choppiness_high_threshold": 61.8,
+    "choppiness_low_threshold": 38.2,
+    "ema_fast": 20,
+    "ema_mid": 50,
+    "ema_slow": 200,
+    "slope_lookback": 20,
+    "momentum_lookback": 14,
+    "rsi_period": 14,
+    "range_lookback": 40,
+    "direction_change_lookback": 20,
+    "trend_vote_required": 2,
+    "swing_left": 2,
+    "swing_right": 2,
+    "bos_lookback_bars": 30,
+    "pullback_atr_shallow": 1.0,
+    "pullback_atr_deep": 2.5,
+    "min_bars_basic": 30,
+    "min_bars_adx": 30,
+    "min_bars_ema_slow": 200
+  },
+  "feature_config_fingerprint": "5d500a381259dbf2",
+  "analytics_version": "market_structure_v1_1",
+  "metadata": {
+    "strategy_id": "COMBO_02_V1",
+    "combo_id": "COMBO_02",
+    "symbol": "BTCUSDT",
+    "setup_timeframe": "1h",
+    "dataset_fingerprint": "regen_synth_btcusdt_1h",
+    "configuration_fingerprint": "095aec279e492c61",
+    "feature_config_fingerprint": "5d500a381259dbf2",
+    "requested_range": {},
+    "actual_range": {},
+    "timeframes_used": {
+      "4h": true,
+      "1h": true,
+      "15m": true
+    },
+    "data_sources": {
+      "4h": "ohlcv",
+      "1h": "ohlcv",
+      "15m": "ohlcv"
+    },
+    "closed_candle_policy": "4h_close_time <= setup_candle_close_time",
+    "analytics_version": "market_structure_v1_1",
+    "run_id": "market_structure_analysis_BTCUSDT_1h",
+    "disclaimer": "Analytics only \u2014 does not affect strategy decisions"
+  },
+  "closed_candle_policy": "fully_closed_asof_for_analytics",
+  "15m_status": "OK",
+  "15m_source_available": true,
+  "15m_source_available_rows": 1100,
+  "15m_feature_available_rows": 1100,
+  "15m_unknown_rows": 0,
+  "15m_status_distribution": {
+    "OK": 1100
+  },
+  "row_counts": {
+    "raw_decision_rows": 1100,
+    "unique_trade_count": 3,
+    "unique_executed_trades": 3,
+    "signal_row_count": 3,
+    "execution_row_count": 3,
+    "position_active_row_count": 18,
+    "no_trade_row_count": 1079,
+    "unknown_row_count": 0,
+    "ledger_trade_count": 3
+  },
+  "disclaimer": "Analytics only \u2014 does not affect strategy decisions"
+}

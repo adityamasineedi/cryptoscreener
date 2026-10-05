@@ -42,6 +42,12 @@ class PaperRiskPolicy:
     # Only pause on meaningful long-liq pressure (not micro force-orders)
     liq_min_long_notional_5m: float = 25_000.0
     liq_spike_multiplier: float = 3.0
+    # Runtime kill switches (paper/live opens only — not signal engines)
+    daily_loss_halt_r: float = 3.0
+    consecutive_loss_halt: int = 3
+    consecutive_loss_symbol_halt: int = 3
+    peak_drawdown_halt_pct: float = 0.10
+    strategy_drawdown_halt_r: float = 6.0
 
     def risk_percent_for_group(self, group: str) -> float:
         g = (group or "UNKNOWN").upper() if group in {"BTC", "ETH"} else (group or "UNKNOWN")
@@ -70,6 +76,11 @@ class PaperRiskPolicy:
             "max_open_risk_pct": self.max_open_risk_pct,
             "liq_gate_enabled": self.liq_gate_enabled,
             "liq_min_long_notional_5m": self.liq_min_long_notional_5m,
+            "daily_loss_halt_r": self.daily_loss_halt_r,
+            "consecutive_loss_halt": self.consecutive_loss_halt,
+            "consecutive_loss_symbol_halt": self.consecutive_loss_symbol_halt,
+            "peak_drawdown_halt_pct": self.peak_drawdown_halt_pct,
+            "strategy_drawdown_halt_r": self.strategy_drawdown_halt_r,
         }
 
 
@@ -106,6 +117,17 @@ def policy_from_settings(settings: Any | None = None) -> PaperRiskPolicy:
         liq_gate_enabled=bool(getattr(settings, "paper_liq_gate_enabled", True)),
         liq_min_long_notional_5m=float(
             getattr(settings, "paper_liq_min_long_notional_5m", 25_000.0) or 25_000.0
+        ),
+        daily_loss_halt_r=float(getattr(settings, "paper_daily_loss_halt_r", 3.0) or 3.0),
+        consecutive_loss_halt=int(getattr(settings, "paper_consecutive_loss_halt", 5) or 5),
+        consecutive_loss_symbol_halt=int(
+            getattr(settings, "paper_consecutive_loss_symbol_halt", 3) or 3
+        ),
+        peak_drawdown_halt_pct=float(
+            getattr(settings, "paper_peak_drawdown_halt_pct", 0.10) or 0.10
+        ),
+        strategy_drawdown_halt_r=float(
+            getattr(settings, "paper_strategy_drawdown_halt_r", 6.0) or 6.0
         ),
     )
 
@@ -231,6 +253,11 @@ def evaluate_paper_entry_risk(
     open_risk_usd: float,
     equity: float,
     planned_risk_usd: float | None = None,
+    day_pnl_r: float | None = None,
+    consecutive_losses: int | None = None,
+    symbol_consecutive_losses: int | None = None,
+    peak_equity: float | None = None,
+    strategy_drawdown_r: float | None = None,
 ) -> RiskGateResult:
     """Return whether a new paper long may open under the risk policy.
 
@@ -261,6 +288,26 @@ def evaluate_paper_entry_risk(
             mcap=mcap,
             quote_volume_24h=qv,
         )
+
+    # Runtime kill switches (portfolio safety — do not alter signal engines)
+    if day_pnl_r is not None and day_pnl_r <= -abs(float(policy.daily_loss_halt_r)):
+        return _fail(f"daily_loss_halt_r={day_pnl_r:.2f}")
+    if consecutive_losses is not None and consecutive_losses >= int(
+        policy.consecutive_loss_halt
+    ):
+        return _fail(f"consecutive_loss_halt={consecutive_losses}")
+    if symbol_consecutive_losses is not None and symbol_consecutive_losses >= int(
+        policy.consecutive_loss_symbol_halt
+    ):
+        return _fail(f"symbol_consecutive_loss_halt={symbol_consecutive_losses}")
+    if peak_equity is not None and float(peak_equity) > 0:
+        dd_pct = (float(peak_equity) - float(equity)) / float(peak_equity)
+        if dd_pct >= float(policy.peak_drawdown_halt_pct) - 1e-12:
+            return _fail(f"peak_drawdown_halt_pct={dd_pct:.4f}")
+    if strategy_drawdown_r is not None and strategy_drawdown_r <= -abs(
+        float(policy.strategy_drawdown_halt_r)
+    ):
+        return _fail(f"strategy_drawdown_halt_r={strategy_drawdown_r:.2f}")
 
     # Book limits
     if open_count >= int(policy.max_open_positions):

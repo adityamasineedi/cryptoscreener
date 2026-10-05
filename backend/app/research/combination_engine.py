@@ -20,12 +20,82 @@ from app.research.config import ResearchConfig
 from copy import deepcopy
 
 from app.signals._candle_utils import candle_time, ohlc
+from app.signals.choch_engine import detect_choch
 from app.signals.config import SignalConfig
 from app.signals.risk_engine import risk_reward
 from app.signals.schemas import SwingRecord
 from app.signals.signal_engine import SignalEngine
 from app.signals.stop_engine import compute_stop
 from app.signals.target_engine import compute_targets
+
+
+def hl_intact_for_long(
+    candles: Sequence[Mapping[str, Any]],
+    swings: Sequence[SwingRecord],
+    as_of_index: int,
+) -> tuple[bool, str]:
+    """Fail-closed HL integrity for LONG: last low must be HL and never closed below.
+
+    Scans closed bars after the HL pivot through ``as_of_index``. Any close
+    below the HL price is STRUCTURE_INVALID (bearish CHOCH / broken HL).
+    """
+    end = min(int(as_of_index), len(candles) - 1)
+    if end < 0:
+        return False, "INSUFFICIENT_DATA"
+    lows = [s for s in swings if s.swing_type == "LOW" and s.bar_index < end]
+    if not lows:
+        return False, "NO_HL"
+    last_sl = lows[-1]
+    if str(last_sl.label or "") != "HL":
+        return False, "NO_HL"
+    hl_px = float(last_sl.price)
+    for i in range(int(last_sl.bar_index) + 1, end + 1):
+        c = ohlc(candles, i)[3]
+        if c is not None and float(c) < hl_px:
+            return False, "HL_BROKEN"
+    # Same-bar CHOCH detector (close vs HL) — belt-and-suspenders with history scan.
+    trend_stub = {"trend": "BULLISH"}
+    choch = detect_choch(
+        candles,
+        list(swings),
+        trend_stub,
+        symbol="",
+        timeframe="",
+        as_of_index=end,
+    )
+    if choch and str(choch.get("direction") or "") == "CHOCH_BEARISH":
+        return False, "CHOCH_BEARISH"
+    return True, "HL_INTACT"
+
+
+def revalidate_combo02_long_fill(eval_result: Mapping[str, Any] | None) -> tuple[bool, str]:
+    """Fill-time fail-closed check for COMBO_02 LONG (paper/live open path).
+
+    Current paper MARKET fills open on the same closed bar as the signal, so this
+    re-checks the eval snapshot rather than a delayed pending-order book.
+    """
+    if not eval_result:
+        return False, "MISSING_EVAL"
+    status = str(eval_result.get("status") or "").upper()
+    if status != "LONG_ENTRY_CANDIDATE":
+        return False, f"STATUS_{status or 'NONE'}"
+    if str(eval_result.get("direction") or "").upper() != "LONG":
+        return False, "NOT_LONG"
+    htf = eval_result.get("htf") or {}
+    align = str(htf.get("htf_alignment") or eval_result.get("htf_alignment") or "").upper()
+    if align != HTF_ALIGNED:
+        return False, f"HTF_{align or 'MISSING'}"
+    gates = eval_result.get("gates") or {}
+    if gates.get("hl_intact") is False:
+        return False, "HL_NOT_INTACT"
+    stop = eval_result.get("stop_price")
+    entry = eval_result.get("entry_price")
+    try:
+        if stop is None or entry is None or float(stop) >= float(entry):
+            return False, "STOP_INVALID"
+    except (TypeError, ValueError):
+        return False, "STOP_INVALID"
+    return True, "OK"
 
 
 def _clone_signal_config(
@@ -64,11 +134,14 @@ def htf_alignment_gate(
     htf_trend_cache: dict[tuple[str, int], str] | None = None,
     htf_idx_1h_map: Sequence[int | None] | None = None,
     htf_idx_4h_map: Sequence[int | None] | None = None,
+    htf_require_fully_closed: bool = False,
 ) -> tuple[bool, dict[str, Any]]:
     """Hard HTF gate: require classify_htf_alignment == HTF_ALIGNED.
 
     Fail closed when HTF series missing, unavailable, neutral/mixed, or conflict.
     Uses only closed 1h/4h bars at-or-before the setup bar timestamp (no look-ahead).
+    When ``htf_require_fully_closed`` is True, HTF bars must be fully closed by
+    the setup bar close (COMBO_02_CLOSED_HTF / COMBO_02_V1_CLOSED_HTF).
     """
     tf = (timeframe or "").lower()
     # Do NOT copy HTF series here — date-window 15m walks call this gate often.
@@ -81,6 +154,7 @@ def htf_alignment_gate(
         "trend_4h": None,
         "trend_1h": None,
         "reason": None,
+        "htf_require_fully_closed": bool(htf_require_fully_closed),
     }
     if not series_1h or not series_4h:
         meta["reason"] = "HTF candles missing — fail closed"
@@ -98,6 +172,8 @@ def htf_alignment_gate(
         trend_cache=htf_trend_cache,
         idx_1h_map=htf_idx_1h_map,
         idx_4h_map=htf_idx_4h_map,
+        setup_timeframe=tf or "1h",
+        htf_require_fully_closed=bool(htf_require_fully_closed),
     )
     align = classify_htf_alignment(
         bos_direction=(bos or {}).get("direction"),
@@ -110,6 +186,7 @@ def htf_alignment_gate(
     meta["idx_4h"] = htf.get("idx_4h")
     meta["idx_1h"] = htf.get("idx_1h")
     meta["as_of_ts"] = htf.get("as_of_ts")
+    meta["decision_ts"] = htf.get("decision_ts")
     ok = align == HTF_ALIGNED
     if not ok:
         meta["reason"] = (
@@ -366,9 +443,18 @@ def evaluate_combination_at_bar(
                 htf_trend_cache=htf_trend_cache,
                 htf_idx_1h_map=htf_idx_1h_map,
                 htf_idx_4h_map=htf_idx_4h_map,
+                htf_require_fully_closed=bool(
+                    getattr(combination, "htf_require_fully_closed", False)
+                ),
             )
     else:
         htf_ok = True
+
+    # HL-intact / CHOCH fail-closed for LONG trend+BOS playbooks (COMBO_02).
+    hl_ok = True
+    hl_reason = "N/A"
+    if direction == "LONG" and combination.require_trend:
+        hl_ok, hl_reason = hl_intact_for_long(candles, swing_objs, as_of_index)
 
     gates = {
         "bos": _bos_confirmed(bos),
@@ -384,6 +470,7 @@ def evaluate_combination_at_bar(
             last_close=last_close,
         ),
         "htf": htf_ok,
+        "hl_intact": hl_ok if direction == "LONG" and combination.require_trend else True,
     }
 
     required = []
@@ -391,6 +478,8 @@ def evaluate_combination_at_bar(
         required.append("bos")
     if combination.require_trend:
         required.append("trend")
+        if direction == "LONG":
+            required.append("hl_intact")
     if combination.require_impulse:
         required.append("impulse")
     if combination.require_pullback:
@@ -407,6 +496,8 @@ def evaluate_combination_at_bar(
         reason = "Combination gates not satisfied"
         if combination.require_htf_alignment and not htf_ok:
             reason = htf_meta.get("reason") or reason
+        elif direction == "LONG" and combination.require_trend and not hl_ok:
+            reason = f"STRUCTURE_INVALID:{hl_reason}"
         return {
             "status": "NO_SETUP",
             "direction": direction,
@@ -417,6 +508,7 @@ def evaluate_combination_at_bar(
             "as_of_index": as_of_index,
             "reason": reason,
             "htf": htf_meta,
+            "hl_intact_reason": hl_reason,
             "tf_analysis": {k: v for k, v in tf_analysis.items() if k != "_swings_objs"},
         }
 
@@ -444,6 +536,41 @@ def evaluate_combination_at_bar(
             "signal_time": signal_time,
             "as_of_index": as_of_index,
             "reason": "Existing stop engine could not compute structural stop",
+        }
+    try:
+        final_stop = float(stop["final_stop"])
+        if direction == "LONG" and final_stop >= float(entry_price):
+            return {
+                "status": "NO_SETUP",
+                "direction": direction,
+                "gates": gates,
+                "required": required,
+                "combination_id": combination.combination_id,
+                "signal_time": signal_time,
+                "as_of_index": as_of_index,
+                "reason": "STOP_INVALID:stop_ge_entry",
+            }
+        if direction == "SHORT" and final_stop <= float(entry_price):
+            return {
+                "status": "NO_SETUP",
+                "direction": direction,
+                "gates": gates,
+                "required": required,
+                "combination_id": combination.combination_id,
+                "signal_time": signal_time,
+                "as_of_index": as_of_index,
+                "reason": "STOP_INVALID:stop_le_entry",
+            }
+    except (TypeError, ValueError):
+        return {
+            "status": "NO_SETUP",
+            "direction": direction,
+            "gates": gates,
+            "required": required,
+            "combination_id": combination.combination_id,
+            "signal_time": signal_time,
+            "as_of_index": as_of_index,
+            "reason": "STOP_INVALID:non_numeric",
         }
     targets = compute_targets(
         direction=direction,
@@ -526,6 +653,7 @@ def evaluate_combination_at_bar(
         "signal_time": signal_time,
         "as_of_index": as_of_index,
         "htf": htf_meta,
+        "hl_intact_reason": hl_reason,
         "condition_definition": combination.to_dict(),
         "note": "RESEARCH setup — not a live signal, not a trade command",
     }

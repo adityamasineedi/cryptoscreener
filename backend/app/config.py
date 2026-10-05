@@ -124,6 +124,19 @@ class Settings(BaseSettings):
     paper_liq_min_long_notional_5m: float = Field(
         default=25_000.0, alias="PAPER_LIQ_MIN_LONG_NOTIONAL_5M"
     )
+    paper_daily_loss_halt_r: float = Field(default=3.0, alias="PAPER_DAILY_LOSS_HALT_R")
+    paper_consecutive_loss_halt: int = Field(
+        default=5, alias="PAPER_CONSECUTIVE_LOSS_HALT"
+    )
+    paper_consecutive_loss_symbol_halt: int = Field(
+        default=3, alias="PAPER_CONSECUTIVE_LOSS_SYMBOL_HALT"
+    )
+    paper_peak_drawdown_halt_pct: float = Field(
+        default=0.10, alias="PAPER_PEAK_DRAWDOWN_HALT_PCT"
+    )
+    paper_strategy_drawdown_halt_r: float = Field(
+        default=6.0, alias="PAPER_STRATEGY_DRAWDOWN_HALT_R"
+    )
     # COMBO_02 v1 production profile (see app.research.v1_production / docs/v1_production.md)
     paper_v1_profile_enabled: bool = Field(
         default=True, alias="PAPER_V1_PROFILE_ENABLED"
@@ -240,6 +253,14 @@ class Settings(BaseSettings):
     # Research-only CPU stage timers (default off — no production impact)
     research_profile_enabled: bool = Field(
         default=False, alias="RESEARCH_PROFILE_ENABLED"
+    )
+    # Market-structure / regime analytics (observability only — never trade gates)
+    enable_market_structure_analytics: bool = Field(
+        default=True, alias="ENABLE_MARKET_STRUCTURE_ANALYTICS"
+    )
+    # MUST stay False unless an explicit research-only experiment is selected.
+    enable_regime_filtering: bool = Field(
+        default=False, alias="ENABLE_REGIME_FILTERING"
     )
     # Phase 3 — backups / snapshots (safe defaults; no auto-delete)
     backup_destination: str = Field(

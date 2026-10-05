@@ -83,7 +83,11 @@ def _ohlcv_tf_coverage(symbols: list[str], timeframe: str) -> dict[str, int]:
     }
 
 async def build_data_coverage(settings) -> dict[str, Any]:
-    symbols = [s.symbol for s in market_store.list_symbols(market_type="futures_perp")]
+    from app.services.active_universe import active_universe_meta, list_active_symbols
+
+    discovered = [s.symbol for s in market_store.list_symbols(market_type="futures_perp")]
+    symbols = list_active_symbols(discovered)
+    uni_meta = active_universe_meta(discovered)
     stale = float(settings.stale_ticker_seconds)
     unavail = float(settings.unavailable_after_seconds)
     fund_stale = float(settings.stale_fundamental_seconds)
@@ -152,6 +156,9 @@ async def build_data_coverage(settings) -> dict[str, Any]:
     }
     payload = {
         "symbols": len(symbols),
+        "discovered_universe": uni_meta["discovered_universe"],
+        "active_universe": uni_meta["active_universe"],
+        "active_universe_cap": uni_meta["active_universe_cap"],
         "ticker": _count_fresh(ticker_fvs, stale_after=stale, unavailable_after=unavail),
         "ohlcv": ohlcv,
         "open_interest": _count_fresh(
@@ -268,9 +275,12 @@ def _coverage_goals(payload: dict[str, Any], orch) -> dict[str, Any]:
     if orch is not None and getattr(orch, "backfill", None) is not None:
         # Prefer backfill's 1m rolling universe measurement when available
         try:
+            from app.services.active_universe import list_active_symbols
             from app.services.market_store import market_store as ms
 
-            symbols = [s.symbol for s in ms.list_symbols(market_type="futures_perp")]
+            symbols = list_active_symbols(
+                [s.symbol for s in ms.list_symbols(market_type="futures_perp")]
+            )
             bf_goals = orch.backfill.coverage_goals_status(symbols)
             if "1m" in (bf_goals.get("targets") or {}):
                 out["1m"] = bf_goals["targets"]["1m"]
@@ -325,10 +335,16 @@ def _attach_pct(payload: dict[str, Any], total: int) -> dict[str, Any]:
 
 
 async def build_ohlcv_coverage(settings) -> dict[str, Any]:
-    symbols = [s.symbol for s in market_store.list_symbols(market_type="futures_perp")]
+    from app.services.active_universe import active_universe_meta, list_active_symbols
+
+    discovered = [s.symbol for s in market_store.list_symbols(market_type="futures_perp")]
+    symbols = list_active_symbols(discovered)
+    uni_meta = active_universe_meta(discovered)
     orch = get_orchestrator()
     if orch is not None and getattr(orch, "backfill", None) is not None:
-        return orch.backfill.coverage_snapshot(symbols)
+        snap = orch.backfill.coverage_snapshot(symbols)
+        snap.update(uni_meta)
+        return snap
     tfs = settings.market_config.get("timeframes") or ["1m", "5m", "15m", "1h", "4h", "1d"]
     by_tf = {}
     oldest = newest = None
@@ -352,6 +368,7 @@ async def build_ohlcv_coverage(settings) -> dict[str, Any]:
         }
     return {
         "symbol_count": len(symbols),
+        **uni_meta,
         "coverage_by_timeframe": by_tf,
         "oldest_candle": oldest.isoformat() if oldest else None,
         "newest_candle": newest.isoformat() if newest else None,

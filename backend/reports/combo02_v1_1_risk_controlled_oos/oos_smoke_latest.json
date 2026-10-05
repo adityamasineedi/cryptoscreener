@@ -1,0 +1,499 @@
+{
+  "label": "COMBO_02_V1_1_RISK_CONTROLLED_SMOKE",
+  "timestamp": "2026-10-05T07:12:12.632306+00:00",
+  "strategy_id": "COMBO_02_V1_1_RISK_CONTROLLED",
+  "variant_version": "v1.1-combo02-long-htf-risk-controlled",
+  "combo_id": "COMBO_02",
+  "direction": "LONG",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
+  ],
+  "setup_timeframe": "1h",
+  "policy": {
+    "strategy_id": "COMBO_02_V1_1_RISK_CONTROLLED",
+    "parent_strategy_id": "COMBO_02_V1",
+    "parent_combo_version": "v1-combo02-long-htf",
+    "variant_version": "v1.1-combo02-long-htf-risk-controlled",
+    "combo_id": "COMBO_02",
+    "direction": "LONG",
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "setup_tf": "1h",
+    "signal_rules": "Reuse COMBO_02 / COMBO_02_V1 exactly (no signal changes)",
+    "display": "BTC 1.5% / ETH 0.5% / SOL 0.5% \u00b7 cluster \u22644% equity \u00b7 max 2 concurrent",
+    "example_equity_usd": 1000,
+    "example_risk_usd": 15,
+    "risk_percent_by_symbol": {
+      "BTCUSDT": 0.015,
+      "ETHUSDT": 0.005,
+      "SOLUSDT": 0.005
+    },
+    "cluster_heat_cap": 0.04,
+    "max_concurrent_cluster": 2,
+    "reject_reasons": {
+      "max_concurrent": "MAX_CONCURRENT_EXCEEDED",
+      "cluster_heat": "CLUSTER_HEAT_EXCEEDED"
+    },
+    "daily_loss_halt_r": 2.0,
+    "consecutive_loss_halt": 3,
+    "consecutive_loss_pause_hours": 24.0,
+    "strategy_dd_halt_r": 6.0,
+    "symbol_dd_halt_r": 4.0,
+    "oos_window": {
+      "start": "2026-10-06T00:00:00Z",
+      "end_inclusive": "2027-03-31T23:59:59Z",
+      "role": "formal_acceptance"
+    },
+    "smoke_window": {
+      "start": "2026-10-01T00:00:00Z",
+      "end_inclusive": "2026-10-05T23:59:59Z",
+      "role": "operational_smoke_only",
+      "acceptance": false
+    },
+    "sample_rules": {
+      "ready_for_paper_min_combined": 30,
+      "pass_with_review_min_combined": 15,
+      "per_symbol_claim_min": 20,
+      "max_drawdown_r": 6.0,
+      "max_losing_streak": 8,
+      "min_completeness": 0.99
+    },
+    "diagnostic_failed_v1_oos": {
+      "start": "2025-07-01",
+      "end": "2026-09-30",
+      "acceptance": false
+    },
+    "halts_block_entries_only": true
+  },
+  "oos_window": {
+    "start": "2026-10-01T00:00:00Z",
+    "end_inclusive": "2026-10-05T23:59:59Z",
+    "mode": "calendar_dates_utc",
+    "role": "operational_smoke_only",
+    "acceptance": false,
+    "disjoint_from": {
+      "base_training": "2022-10-05 -> 2024-12-31",
+      "oos_development": "2025-01-01 -> 2025-06-30",
+      "failed_v1_oos_validation": "2025-07-01 -> 2026-09-30",
+      "smoke_only": "2026-10-01 -> 2026-10-05"
+    }
+  },
+  "risk_profile": {
+    "principal_usd": 1000.0,
+    "risk_percent_by_symbol": {
+      "BTCUSDT": 0.015,
+      "ETHUSDT": 0.005,
+      "SOLUSDT": 0.005
+    },
+    "per_symbol_risk_usd": {
+      "BTCUSDT": 15.0,
+      "ETHUSDT": 5.0,
+      "SOLUSDT": 5.0
+    },
+    "note": "Frozen evidence-era profile (not flat 2%)",
+    "taker_fee": 0.0004,
+    "maker_fee": 0.0002
+  },
+  "pass_thresholds": {
+    "min_completeness": 0.99,
+    "average_net_R": ">0 combined",
+    "max_drawdown_R": 6.0,
+    "max_losing_streak": 8,
+    "min_combined_trades_ready_for_paper": 30,
+    "min_combined_trades_pass_with_review": 15,
+    "min_per_symbol_claim": 20
+  },
+  "data_health": {
+    "BTCUSDT": {
+      "1h": {
+        "exists": true,
+        "bars": 103,
+        "first": "2026-10-01T00:00:00+00:00",
+        "last": "2026-10-05T06:00:00+00:00",
+        "expected_bars": 120,
+        "completeness": 0.858333,
+        "gap_count": 0,
+        "gaps": [],
+        "duplicate_count": 0,
+        "pass": false
+      },
+      "4h": {
+        "exists": true,
+        "bars": 25,
+        "first": "2026-10-01T00:00:00+00:00",
+        "last": "2026-10-05T00:00:00+00:00",
+        "expected_bars": 30,
+        "completeness": 0.833333,
+        "gap_count": 0,
+        "gaps": [],
+        "duplicate_count": 0,
+        "pass": false
+      }
+    },
+    "ETHUSDT": {
+      "1h": {
+        "exists": true,
+        "bars": 101,
+        "first": "2026-10-01T00:00:00+00:00",
+        "last": "2026-10-05T06:00:00+00:00",
+        "expected_bars": 120,
+        "completeness": 0.841667,
+        "gap_count": 2,
+        "gaps": [
+          {
+            "after": "2026-10-03T19:00:00+00:00",
+            "before": "2026-10-03T22:00:00+00:00",
+            "missing_bars_est": 2
+          }
+        ],
+        "duplicate_count": 0,
+        "pass": false
+      },
+      "4h": {
+        "exists": true,
+        "bars": 25,
+        "first": "2026-10-01T00:00:00+00:00",
+        "last": "2026-10-05T00:00:00+00:00",
+        "expected_bars": 30,
+        "completeness": 0.833333,
+        "gap_count": 0,
+        "gaps": [],
+        "duplicate_count": 0,
+        "pass": false
+      }
+    },
+    "SOLUSDT": {
+      "1h": {
+        "exists": true,
+        "bars": 103,
+        "first": "2026-10-01T00:00:00+00:00",
+        "last": "2026-10-05T06:00:00+00:00",
+        "expected_bars": 120,
+        "completeness": 0.858333,
+        "gap_count": 0,
+        "gaps": [],
+        "duplicate_count": 0,
+        "pass": false
+      },
+      "4h": {
+        "exists": true,
+        "bars": 25,
+        "first": "2026-10-01T00:00:00+00:00",
+        "last": "2026-10-05T00:00:00+00:00",
+        "expected_bars": 30,
+        "completeness": 0.833333,
+        "gap_count": 0,
+        "gaps": [],
+        "duplicate_count": 0,
+        "pass": false
+      }
+    }
+  },
+  "data_health_pass": false,
+  "per_symbol": {
+    "BTCUSDT": {
+      "risk_percent": 0.015,
+      "risk_usd": 15.0,
+      "metrics_uncontrolled": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": null,
+        "gross_R": 0.0,
+        "net_R": 0.0,
+        "average_gross_R": null,
+        "average_net_R": null,
+        "pnl_usd_gross": 0.0,
+        "pnl_usd_net": 0.0,
+        "fees_usd": 0,
+        "risk_usd": 20.0,
+        "max_drawdown_R": 0.0,
+        "max_losing_streak": 0,
+        "max_winning_streak": 0,
+        "profit_factor": null,
+        "avg_holding_bars": null,
+        "exit_breakdown": {}
+      },
+      "metrics_risk_controlled_solo": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": null,
+        "gross_R": 0.0,
+        "net_R": 0.0,
+        "average_gross_R": null,
+        "average_net_R": null,
+        "pnl_usd_gross": 0.0,
+        "pnl_usd_net": 0.0,
+        "fees_usd": 0,
+        "risk_usd": 20.0,
+        "max_drawdown_R": 0.0,
+        "max_losing_streak": 0,
+        "max_winning_streak": 0,
+        "profit_factor": null,
+        "avg_holding_bars": null,
+        "exit_breakdown": {}
+      },
+      "halted_entries_solo": 0,
+      "reject_counts_solo": {},
+      "gate_integrity": {
+        "trades_checked": 0,
+        "violations": 0,
+        "pass": true,
+        "details": []
+      },
+      "lookahead": {
+        "checked": 0,
+        "failed": 0,
+        "pass": true,
+        "failures": []
+      }
+    },
+    "ETHUSDT": {
+      "risk_percent": 0.005,
+      "risk_usd": 5.0,
+      "metrics_uncontrolled": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": null,
+        "gross_R": 0.0,
+        "net_R": 0.0,
+        "average_gross_R": null,
+        "average_net_R": null,
+        "pnl_usd_gross": 0.0,
+        "pnl_usd_net": 0.0,
+        "fees_usd": 0,
+        "risk_usd": 20.0,
+        "max_drawdown_R": 0.0,
+        "max_losing_streak": 0,
+        "max_winning_streak": 0,
+        "profit_factor": null,
+        "avg_holding_bars": null,
+        "exit_breakdown": {}
+      },
+      "metrics_risk_controlled_solo": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": null,
+        "gross_R": 0.0,
+        "net_R": 0.0,
+        "average_gross_R": null,
+        "average_net_R": null,
+        "pnl_usd_gross": 0.0,
+        "pnl_usd_net": 0.0,
+        "fees_usd": 0,
+        "risk_usd": 20.0,
+        "max_drawdown_R": 0.0,
+        "max_losing_streak": 0,
+        "max_winning_streak": 0,
+        "profit_factor": null,
+        "avg_holding_bars": null,
+        "exit_breakdown": {}
+      },
+      "halted_entries_solo": 0,
+      "reject_counts_solo": {},
+      "gate_integrity": {
+        "trades_checked": 0,
+        "violations": 0,
+        "pass": true,
+        "details": []
+      },
+      "lookahead": {
+        "checked": 0,
+        "failed": 0,
+        "pass": true,
+        "failures": []
+      }
+    },
+    "SOLUSDT": {
+      "risk_percent": 0.005,
+      "risk_usd": 5.0,
+      "metrics_uncontrolled": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": null,
+        "gross_R": 0.0,
+        "net_R": 0.0,
+        "average_gross_R": null,
+        "average_net_R": null,
+        "pnl_usd_gross": 0.0,
+        "pnl_usd_net": 0.0,
+        "fees_usd": 0,
+        "risk_usd": 20.0,
+        "max_drawdown_R": 0.0,
+        "max_losing_streak": 0,
+        "max_winning_streak": 0,
+        "profit_factor": null,
+        "avg_holding_bars": null,
+        "exit_breakdown": {}
+      },
+      "metrics_risk_controlled_solo": {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": null,
+        "gross_R": 0.0,
+        "net_R": 0.0,
+        "average_gross_R": null,
+        "average_net_R": null,
+        "pnl_usd_gross": 0.0,
+        "pnl_usd_net": 0.0,
+        "fees_usd": 0,
+        "risk_usd": 20.0,
+        "max_drawdown_R": 0.0,
+        "max_losing_streak": 0,
+        "max_winning_streak": 0,
+        "profit_factor": null,
+        "avg_holding_bars": null,
+        "exit_breakdown": {}
+      },
+      "halted_entries_solo": 0,
+      "reject_counts_solo": {},
+      "gate_integrity": {
+        "trades_checked": 0,
+        "violations": 0,
+        "pass": true,
+        "details": []
+      },
+      "lookahead": {
+        "checked": 0,
+        "failed": 0,
+        "pass": true,
+        "failures": []
+      }
+    }
+  },
+  "combined_metrics_uncontrolled": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "gross_R": 0.0,
+    "net_R": 0.0,
+    "average_gross_R": null,
+    "average_net_R": null,
+    "pnl_usd_gross": 0.0,
+    "pnl_usd_net": 0.0,
+    "fees_usd": 0,
+    "risk_usd": 20.0,
+    "max_drawdown_R": 0.0,
+    "max_losing_streak": 0,
+    "max_winning_streak": 0,
+    "profit_factor": null,
+    "avg_holding_bars": null,
+    "exit_breakdown": {}
+  },
+  "combined_metrics": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "win_rate": null,
+    "gross_R": 0.0,
+    "net_R": 0.0,
+    "average_gross_R": null,
+    "average_net_R": null,
+    "pnl_usd_gross": 0.0,
+    "pnl_usd_net": 0.0,
+    "fees_usd": 0,
+    "risk_usd": 20.0,
+    "max_drawdown_R": 0.0,
+    "max_losing_streak": 0,
+    "max_winning_streak": 0,
+    "profit_factor": null,
+    "avg_holding_bars": null,
+    "exit_breakdown": {}
+  },
+  "halted_entries": 0,
+  "reject_counts": {},
+  "rejected_entries": [],
+  "classification": {
+    "status": "INSUFFICIENT_SAMPLE",
+    "hard_fails": [],
+    "reviews": [],
+    "guards": [
+      "WINDOW_NOT_ELAPSED"
+    ],
+    "acceptance": false,
+    "reason": "Window end has not passed; do not classify pass/fail."
+  },
+  "hard_fails": [],
+  "reviews": [],
+  "status": "INSUFFICIENT_SAMPLE",
+  "diagnostic_failed_v1_oos": {
+    "available": true,
+    "acceptance": false,
+    "window": {
+      "start": "2025-07-01",
+      "end": "2026-09-30"
+    },
+    "source_trades": "E:\\cryptoscreener\\backend\\reports\\combo02_v1_oos\\oos_trades_20261005T054508Z.json",
+    "uncontrolled_metrics": {
+      "trades": 105,
+      "wins": 48,
+      "losses": 57,
+      "win_rate": 0.45714285714285713,
+      "gross_R": 49.00273700103138,
+      "net_R": 40.012914157031375,
+      "average_gross_R": 0.466692733343156,
+      "average_net_R": 0.3810753729241083,
+      "pnl_usd_gross": 329.0378491566365,
+      "pnl_usd_net": 253.92194651663655,
+      "fees_usd": -179.79645688,
+      "risk_usd": 15.0,
+      "max_drawdown_R": 7.99754819214981,
+      "max_losing_streak": 5,
+      "max_winning_streak": 4,
+      "profit_factor": 1.8596971403689715,
+      "avg_holding_bars": 25.98095238095238,
+      "exit_breakdown": {
+        "SL": 57,
+        "TP1": 47,
+        "TP3": 1
+      }
+    },
+    "controlled_metrics": {
+      "trades": 44,
+      "wins": 20,
+      "losses": 24,
+      "win_rate": 0.45454545454545453,
+      "gross_R": 19.604404077806816,
+      "net_R": 16.707589006806817,
+      "average_gross_R": 0.4455546381319731,
+      "average_net_R": 0.37971793197288223,
+      "pnl_usd_gross": 132.85014209871886,
+      "pnl_usd_net": 105.47709130371888,
+      "fees_usd": -57.93630142,
+      "risk_usd": 5.0,
+      "max_drawdown_R": 6.534183330999998,
+      "max_losing_streak": 6,
+      "max_winning_streak": 3,
+      "profit_factor": 1.8168501699086175,
+      "avg_holding_bars": 31.568181818181817,
+      "exit_breakdown": {
+        "TP1": 20,
+        "SL": 24
+      }
+    },
+    "reject_counts": {
+      "MAX_CONCURRENT_EXCEEDED": 3,
+      "SYMBOL_DRAWDOWN_HALT": 7,
+      "STRATEGY_DRAWDOWN_HALT": 51
+    },
+    "halted_entries": 61,
+    "would_have_altered_failed_v1_path": true,
+    "note": "Diagnostic only. Not acceptance evidence. Failed parent OOS window is forbidden for v1.1 acceptance."
+  },
+  "parent_v1_signal_logic_changed": false,
+  "parameters_tuned_during_validation": false,
+  "paper_or_live_trades_created": false,
+  "disclaimer": "Historical OOS validation only. Not a profitability claim. No paper or live trades were created by this run. Smoke and failed-window diagnostic are not acceptance evidence.",
+  "accepted_trades": []
+}

@@ -1,0 +1,89 @@
+{
+  "source": "regenerated_with_fixed_attribution_v1_1",
+  "strategy_isolation": {
+    "trades_unchanged": true,
+    "equity_curve_unchanged": true,
+    "configuration_hash_unchanged": true,
+    "baseline_trade_count": 0,
+    "observed_trade_count": 0,
+    "note": "Synthetic path produced 0 COMBO_02 fills; injected 3 ledger trades only to demonstrate analytics attribution (strategy walk unchanged)."
+  },
+  "row_counts": {
+    "raw_decision_rows": 1100,
+    "unique_trade_count": 3,
+    "unique_executed_trades": 3,
+    "signal_row_count": 3,
+    "execution_row_count": 3,
+    "position_active_row_count": 18,
+    "no_trade_row_count": 1079,
+    "unknown_row_count": 0,
+    "ledger_trade_count": 3
+  },
+  "15m": {
+    "source_available": true,
+    "source_available_rows": 1100,
+    "feature_available_rows": 1100,
+    "unknown_rows": 0,
+    "status_distribution": {
+      "OK": 1100
+    },
+    "series_level_status": "OK"
+  },
+  "quality_report": {
+    "total_1h_decision_bars": 1100,
+    "bars_with_4h_features": 1100,
+    "bars_with_1h_features": 1100,
+    "bars_with_15m_features": 1100,
+    "bars_with_future_feature_violation": 0,
+    "bars_with_missing_feature_data": 0,
+    "bars_with_unknown_regime": 0,
+    "bars_with_timestamp_mismatch": 0,
+    "bars_with_duplicate_feature_rows": 0,
+    "15m_source_available_rows": 1100,
+    "15m_feature_available_rows": 1100,
+    "15m_unknown_rows": 0,
+    "15m_status_distribution": {
+      "OK": 1100
+    },
+    "duplicate_execution_entries_per_trade": 0,
+    "trades_without_execution_row": 0,
+    "execution_rows_without_trade_id": 0,
+    "signal_rows_without_trade_id": 0,
+    "offending_rows": [],
+    "unmatched_trade_context_rows": 0,
+    "ambiguous_trade_context_rows": 0,
+    "unique_executed_trades": 3,
+    "raw_decision_rows": 1100,
+    "signal_row_count": 3,
+    "execution_row_count": 3,
+    "position_active_row_count": 18,
+    "no_trade_row_count": 1079,
+    "unknown_row_count": 0,
+    "missing_4h_feature_rows": 23,
+    "missing_1h_feature_rows": 0,
+    "unknown_15m_feature_rows": 0,
+    "ledger_trade_count": 3,
+    "trade_context_count": 3,
+    "trade_context_reconciles_to_ledger": true
+  },
+  "artifact_paths": {
+    "market_structure_by_bar.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\market_structure_by_bar.csv",
+    "market_structure_by_bar.json": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\market_structure_by_bar.json",
+    "trade_context.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\trade_context.csv",
+    "trade_context_raw_entry_marked_rows.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\trade_context_raw_entry_marked_rows.csv",
+    "unmatched_trade_context.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\unmatched_trade_context.csv",
+    "ambiguous_trade_context.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\ambiguous_trade_context.csv",
+    "trade_regime_summary.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\trade_regime_summary.csv",
+    "trade_regime_summary.json": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\trade_regime_summary.json",
+    "regime_opportunity_summary.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\regime_opportunity_summary.csv",
+    "mtf_alignment_summary.csv": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\mtf_alignment_summary.csv",
+    "market_structure_config.json": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\market_structure_config.json",
+    "market_structure_quality_report.json": "E:\\cryptoscreener\\backend\\reports\\market_structure_analysis_BTCUSDT_1h\\market_structure\\market_structure_quality_report.json"
+  },
+  "acceptance": {
+    "duplicate_execution_entries_per_trade_eq_0": true,
+    "execution_rows_without_trade_id_eq_0": true,
+    "trade_context_reconciles_to_ledger": true,
+    "future_feature_violation_eq_0": true
+  }
+}

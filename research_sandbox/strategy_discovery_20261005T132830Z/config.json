@@ -1,0 +1,49 @@
+{
+  "experiment_id": "S1_HTF_TREND_PULLBACK",
+  "symbol": "BTCUSDT",
+  "setup_timeframe": "1h",
+  "htf_timeframe": "4h",
+  "htf_rule": "fully_closed_only",
+  "independent_of": "COMBO_02",
+  "sandbox_dir": "research_sandbox/strategy_discovery_20261005T132830Z",
+  "data": {
+    "parquet_1h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+    "manifest_1h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_1h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+    "parquet_4h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.parquet",
+    "manifest_4h": "backend/data/research_cache/ohlcv/ohlcv_v1/BTCUSDT_4h_2022-10-06_2026-10-05_ohlcv_v1.manifest.json",
+    "timezone": "UTC"
+  },
+  "predeclared": {
+    "htf_ema_period": 50,
+    "setup_ema_period": 20,
+    "pullback_window_bars": 8,
+    "stop_buffer_frac": 0.0005,
+    "target_R": 2.0,
+    "entry_mode": "E1_confirmation_close",
+    "fee_taker_per_leg": 0.0004,
+    "intrabar_ambiguity": "STOP_FIRST",
+    "cooldown_bars_after_exit": 1,
+    "max_hold_bars": 72,
+    "atr_period": 14,
+    "note": "All definitions declared before any OOS inspection. No post-hoc optimization."
+  },
+  "partitions": {
+    "method": "chronological_fraction",
+    "train_frac": 0.60,
+    "validation_frac": 0.20,
+    "oos_frac": 0.20
+  },
+  "ablations": {
+    "A0": "HTF trend + 1h pullback + continuation",
+    "A1": "A0 + ATR percentile <= 50 descriptive volatility gate (predeclared, not optimized)",
+    "A2": "UNAVAILABLE WITHOUT ENGINE CHANGE — causal retest after continuation not in base S1 engine without new fill model"
+  },
+  "sensitivity": {
+    "min_oos_trades": 20,
+    "pullback_windows": [6, 8, 10],
+    "stop_buffers": [0.00025, 0.0005, 0.001],
+    "targets_R": [1.5, 2.0, 2.5]
+  },
+  "slippage": "UNAVAILABLE WITHOUT ENGINE CHANGE",
+  "funding": "UNAVAILABLE WITHOUT ENGINE CHANGE"
+}

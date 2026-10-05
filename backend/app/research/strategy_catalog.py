@@ -9,6 +9,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.research.bos_combinations import COMBINATIONS, list_combinations
+from app.research.combo02_v1_1_risk_controlled import (
+    STRATEGY_ID as V1_1_STRATEGY_ID,
+    profile_summary as v1_1_profile_summary,
+)
 from app.research.v1_production import (
     COMBO_ID,
     COMBO_VERSION,
@@ -61,6 +65,100 @@ def build_strategy_catalog() -> dict[str, Any]:
                 {"label": "Screener v1 watcher", "path": "/"},
             ],
             "do_not": list(profile.get("do_not") or []),
+            "example": _combo02_example(),
+            "combo_definition": combos.get("COMBO_02"),
+        },
+        {
+            "id": "COMBO_02_V1_CLOSED_HTF",
+            "name": "COMBO_02 v1 closed-HTF — fully closed 4h/1h",
+            "status": "RESEARCH",
+            "tier": "research_variant",
+            "combo_id": "COMBO_02_CLOSED_HTF",
+            "combo_version": "v1-combo02-long-htf-closed",
+            "parent_strategy_id": "COMBO_02_V1",
+            "direction": "LONG",
+            "setup_timeframe": "1h",
+            "htf_timeframes": ["4h", "1h"],
+            "summary": (
+                "Same COMBO_02 Path A gates as v1, but HTF trends use the last "
+                "fully closed 4h/1h candle at setup-bar close (no forming-4h OHLC). "
+                "Does not mutate frozen COMBO_02_V1."
+            ),
+            "gates": list(COMBINATIONS["COMBO_02_CLOSED_HTF"].conditions),
+            "symbols": {
+                "freeze_claim": sorted(FROZEN_V1_SYMBOLS),
+            },
+            "risk": {
+                "default_percent": 0.02,
+                "display": "2% of equity per trade (1R)",
+                "example_equity_usd": 1000,
+                "example_risk_usd": 20,
+            },
+            "where_to_run": [
+                {
+                    "label": "Docs",
+                    "path": "docs/combo02_v1_closed_htf.md",
+                    "kind": "repo_path",
+                },
+                {
+                    "label": "Comparison audit",
+                    "path": "backend/reports/combo02_v1_closed_htf_compare",
+                    "kind": "repo_path",
+                },
+            ],
+            "do_not": [
+                "Do not label closed-HTF results as frozen COMBO_02_V1",
+                "Do not compare closed-HTF trades to the original 6-trade blotter without labeling original/corrected/final",
+                "Do not promote to production until fidelity + OOS review",
+            ],
+            "example": _combo02_example(),
+            "combo_definition": combos.get("COMBO_02_CLOSED_HTF"),
+        },
+        {
+            "id": V1_1_STRATEGY_ID,
+            "name": "COMBO_02 v1.1 — risk-controlled LONG",
+            "status": "RESEARCH",
+            "tier": "research_variant",
+            "combo_id": COMBO_ID,
+            "combo_version": "v1.1-combo02-long-htf-risk-controlled",
+            "parent_strategy_id": "COMBO_02_V1",
+            "direction": "LONG",
+            "setup_timeframe": "1h",
+            "htf_timeframes": ["4h", "1h"],
+            "summary": (
+                "Versioned portfolio risk overlay on frozen COMBO_02_V1 signals. "
+                "Same HTF/BOS/stop/TP; adds cluster heat, concurrency, daily/symbol "
+                "halts. Parent COMBO_02_V1 remains archived OOS_FAIL on its window."
+            ),
+            "gates": list(COMBINATIONS["COMBO_02"].conditions)
+            + [
+                "Cluster heat ≤ 4% equity (BTC/ETH/SOL) → CLUSTER_HEAT_EXCEEDED",
+                "Max 2 concurrent open positions → MAX_CONCURRENT_EXCEEDED",
+                "Daily loss halt −2R",
+                "Symbol pause after 3 consecutive losses (24h)",
+                "Strategy DD halt 6R / symbol DD halt 4R",
+            ],
+            "symbols": {
+                "freeze_claim": sorted(FROZEN_V1_SYMBOLS),
+            },
+            "risk": v1_1_profile_summary(),
+            "where_to_run": [
+                {
+                    "label": "Docs",
+                    "path": "docs/combo02_v1_1_risk_controlled.md",
+                    "kind": "repo_path",
+                },
+                {
+                    "label": "OOS reports",
+                    "path": "backend/reports/combo02_v1_1_risk_controlled_oos",
+                    "kind": "repo_path",
+                },
+            ],
+            "do_not": [
+                "Do not mutate COMBO_02_V1 signal logic from this variant",
+                "Do not create paper/live trades until READY_FOR_PAPER",
+                "Do not reuse failed v1 OOS window for acceptance",
+            ],
             "example": _combo02_example(),
             "combo_definition": combos.get("COMBO_02"),
         },

@@ -56,8 +56,10 @@ async def lifespan(app: FastAPI):
 
     # WS event-loop lag monitor (diagnostic only — does not alter reconnect policy)
     from app.ingestion.ws_forensics import ws_forensics
+    from app.services.performance import performance_monitor
 
     await ws_forensics.event_loop.start()
+    await performance_monitor.event_loop.start()
 
     ingestion = MarketDataIngestionService(settings, market_store)
     ingestion_mod.ingestion_service = ingestion
@@ -81,7 +83,14 @@ async def lifespan(app: FastAPI):
 
     stop_telegram_alerts()
     await ingestion.stop()
+    await performance_monitor.event_loop.stop()
     await ws_forensics.event_loop.stop()
+    try:
+        from app.research.backtest_cpu_pool import shutdown_research_cpu_pool
+
+        shutdown_research_cpu_pool(wait=False)
+    except Exception:  # noqa: BLE001
+        pass
     await db_manager.close()
     await redis_manager.close()
     logger.info("shutdown_complete")

@@ -138,6 +138,17 @@ class CalculationOrchestrator:
             return
         self._running = True
         self._universe_symbols = [s.upper() for s in symbols]
+        # Paper watch always stays on backfill/OI priority lists.
+        try:
+            from app.research.v1_production import V1_SYMBOLS
+
+            paper_syms = sorted(V1_SYMBOLS)
+            self.backfill.set_watchlist(paper_syms)
+            self.oi.set_watchlist(paper_syms)
+        except Exception:  # noqa: BLE001
+            self.backfill.set_watchlist(["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+            self.oi.set_watchlist(["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+        active = self.backfill.select_active_universe(self._universe_symbols)
         await self.fundamentals.start()
         try:
             await self.sentiment.start()
@@ -252,9 +263,10 @@ class CalculationOrchestrator:
         # Background hydrate/enqueue so FastAPI lifespan can yield and bind :8000
         # immediately. Blocking here previously left the API unreachable for minutes
         # while ~symbols×TFs sequential DB loads ran (ERR_CONNECTION_REFUSED / timeouts).
+        # Only hydrate/enqueue the active paper+volume set — not all ~500 discovered perps.
         self._tasks.append(
             asyncio.create_task(
-                self._hydrate_and_enqueue(symbols),
+                self._hydrate_and_enqueue(active),
                 name="hydrate_and_enqueue",
             )
         )
@@ -283,6 +295,8 @@ class CalculationOrchestrator:
         logger.info(
             "orchestrator_started",
             symbols=len(symbols),
+            active_universe=len(active),
+            active_cap=self.backfill.active_universe_count,
             kline_live_symbols=len(live_syms),
             kline_plan=self.kline_ws.plan_for_symbols(live_syms),
             oi=self.oi.status(),
@@ -433,7 +447,19 @@ class CalculationOrchestrator:
     async def _hydrate_and_enqueue(self, symbols: list[str]) -> None:
         """Load OHLCV from DB, restore setups/OI, warm engines, then enqueue gaps."""
         try:
+            try:
+                from app.services.performance import performance_monitor
+
+                performance_monitor.hydrate_active = True
+            except Exception:  # noqa: BLE001
+                pass
             await self.backfill.hydrate_from_db(symbols)
+            try:
+                from app.services.performance import performance_monitor
+
+                performance_monitor.hydrate_active = False
+            except Exception:  # noqa: BLE001
+                pass
             await self._hydrate_setup_signals()
             # OI history for active/visible tier so % changes aren't blank after restart
             try:
@@ -459,6 +485,9 @@ class CalculationOrchestrator:
                     name="engine_warm_from_hydrate",
                 )
             )
+            # Start the startup ramp clock after hydrate so enqueue/REST burst
+            # controls measure from ingestion readiness (scheduling only).
+            self.backfill.mark_ingestion_ready()
             await self.backfill.enqueue_universe(symbols)
         except asyncio.CancelledError:
             raise
@@ -491,7 +520,8 @@ class CalculationOrchestrator:
         self._universe_symbols = [s.upper() for s in symbols]
         await self.refresh_kline_live_subscriptions()
         self.oi.set_symbols(symbols)
-        await self.backfill.enqueue_universe(symbols)
+        active = self.backfill.select_active_universe(symbols)
+        await self.backfill.enqueue_universe(active)
 
     async def on_candle(self, candle: Candle) -> None:
         self._candle_events += 1
@@ -912,7 +942,7 @@ class CalculationOrchestrator:
     async def _refresh_sentiment(self) -> None:
         if not self.sentiment.configured:
             return
-        symbols = list(self.market.symbols.keys())
+        symbols = self.backfill.select_active_universe()
         if not symbols:
             return
         data = await self.sentiment.get_sentiment(symbols)
@@ -946,7 +976,8 @@ class CalculationOrchestrator:
                 )
 
     async def _refresh_fundamentals(self) -> None:
-        symbols = list(self.market.symbols.keys())
+        # Cap CoinGecko/DefiLlama refresh to active paper+volume set.
+        symbols = self.backfill.select_active_universe()
         if not symbols:
             return
         data = await self.fundamentals.refresh(symbols)
