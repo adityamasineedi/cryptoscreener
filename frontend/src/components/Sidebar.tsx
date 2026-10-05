@@ -3,6 +3,7 @@ import { useOhlcvExpandStore } from "../store/ohlcvExpandStore";
 
 const items = [
   { to: "/", label: "Screener", short: "Sc" },
+  { to: "/strategies", label: "Strategies", short: "St" },
   { to: "/health", label: "Data Health", short: "DH" },
   { to: "/diagnostics", label: "System Diagnostics", short: "Sy" },
   { to: "/bos-research", label: "BOS Research", short: "BR" },
@@ -13,7 +14,7 @@ const items = [
   { to: "/charts", label: "Charts", short: "Ch" },
   { to: "/backtest", label: "Backtest", short: "Bt" },
   { to: "/ohlcv-history", label: "OHLCV History", short: "OH" },
-  { to: "/settings", label: "Settings", short: "St" },
+  { to: "/settings", label: "Settings", short: "Se" },
 ];
 
 export function Sidebar({

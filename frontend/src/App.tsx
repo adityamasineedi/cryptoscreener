@@ -15,6 +15,7 @@ import { OhlcvHistoryPanel } from "./components/OhlcvHistoryPanel";
 import { PaperTradePanel } from "./components/PaperTradePanel";
 import { ScreenerTable } from "./components/ScreenerTable";
 import { Sidebar } from "./components/Sidebar";
+import { StrategiesPanel } from "./components/StrategiesPanel";
 import { TopNav } from "./components/TopNav";
 import { DiagnosticsPanel } from "./components/diagnostics/DiagnosticsPanel";
 import { useMarketStream } from "./hooks/useMarketStream";
@@ -157,6 +158,7 @@ export default function App() {
           <Route path="/diagnostics" element={<DiagnosticsPanel />} />
           <Route path="/diagnostics/issues" element={<DiagnosticsPanel />} />
           <Route path="/diagnostics/issues/:issueId" element={<DiagnosticsPanel />} />
+          <Route path="/strategies" element={<StrategiesPanel />} />
           <Route path="/bos-research" element={<BosResearchPanel />} />
           <Route path="/bos-strategy-research" element={<BosStrategyResearchPanel />} />
           <Route path="/paper" element={<PaperTradePanel />} />

@@ -184,6 +184,65 @@ export type BosCompareResponse = {
   disclaimer?: string;
 };
 
+export type StrategyCatalogItem = {
+  id: string;
+  name: string;
+  status: string;
+  tier?: string;
+  combo_id?: string;
+  combo_version?: string;
+  direction?: string;
+  setup_timeframe?: string;
+  htf_timeframes?: string[];
+  summary: string;
+  gates?: string[];
+  symbols?: {
+    freeze_claim?: string[];
+    paper_watch?: string[];
+    extended_paper?: string[];
+  };
+  risk?: {
+    default_percent?: number;
+    display?: string;
+    example_equity_usd?: number;
+    example_risk_usd?: number;
+  };
+  where_to_run?: Array<{ label: string; path: string }>;
+  do_not?: string[];
+  example?: Record<string, unknown>;
+  combo_definition?: Record<string, unknown>;
+};
+
+export type StrategyCatalogResponse = {
+  label?: string;
+  disclaimer?: string;
+  freeze_tags?: {
+    strategy_logic?: string;
+    pre_research_baseline?: string;
+  };
+  primary_working?: string;
+  v1_profile?: Record<string, unknown>;
+  strategies: StrategyCatalogItem[];
+  all_combinations?: Array<Record<string, unknown>>;
+  sizing_example?: {
+    title: string;
+    equity_usd: number;
+    risk_percent: number;
+    risk_usd: number;
+    entry: number;
+    stop: number;
+    risk_per_unit: number;
+    qty: number;
+    tp1_2r: number;
+    outcome: string;
+  };
+  timestamp?: string;
+};
+
+export function fetchStrategyCatalog() {
+  return getJson<StrategyCatalogResponse>("/api/research/strategies");
+}
+
 export function fetchBosCombinations() {
   return getJson<{
     label?: string;

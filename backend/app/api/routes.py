@@ -1792,6 +1792,17 @@ async def research_long_strategy_backtest(
     }
 
 
+@router.get("/research/strategies")
+async def research_strategies_catalog() -> dict[str, Any]:
+    """Operator catalog of working vs research strategies (read-only)."""
+    from app.research.strategy_catalog import build_strategy_catalog
+
+    return {
+        **build_strategy_catalog(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/research/bos-combinations")
 async def research_bos_combinations() -> dict[str, Any]:
     from app.research.service import get_bos_research_service

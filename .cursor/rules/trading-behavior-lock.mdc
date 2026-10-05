@@ -1,0 +1,33 @@
+---
+description: Lock trading strategy behavior — never silently change entries, exits, risk, or backtest methodology
+alwaysApply: true
+---
+
+# Trading Behavior Lock
+
+Unless the user **explicitly** requests a change, treat these as LOCKED:
+
+- strategy entry / exit conditions
+- BOS / FVG / EMA / VWAP logic
+- timeframe logic
+- candle confirmation rules
+- stop-loss / take-profit calculation
+- risk-per-trade, position sizing, leverage
+- fee / slippage assumptions
+- order execution
+- signal scoring / filtering thresholds
+- backtest methodology
+
+## Required behavior
+
+1. **Do not silently modify** any locked item — not even as a "cleanup", refactor, bugfix side effect, or optimization.
+2. If a proposed code change **could** alter locked behavior, **stop** and show the **exact behavioral difference first** (before vs after), then wait for explicit approval.
+3. Refactors that touch locked code must be behavior-preserving; if unsure, treat as a behavioral change and show the diff of behavior.
+4. UI, labels, docs, logging, and pure wiring changes are fine **only if** they do not change how signals, fills, risk, or backtests are computed.
+
+## Example
+
+```text
+❌ BAD: "Fixed SL calculation while cleaning up helpers" (silent behavior change)
+✅ GOOD: "This would change SL from ATR×1.5 to swing-low − buffer. Approve before applying?"
+```
