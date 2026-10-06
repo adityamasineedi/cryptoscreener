@@ -763,18 +763,19 @@ export function DiagnosticsPanel() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4">
+      <div className="shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-display text-lg font-semibold">System Diagnostics</h2>
-          <p className="mt-1 text-xs text-terminal-muted">
-            Forensic Issue Center — measured health only. Never invents errors or fake green lights.
-          </p>
+          {overview ? <DiagStatusBadge status={String(overview.system_status)} /> : null}
         </div>
-        {overview ? <DiagStatusBadge status={String(overview.system_status)} /> : null}
+        <p className="mt-1 text-xs text-terminal-muted">
+          Forensic Issue Center — measured health only. Never invents errors or fake green lights.
+        </p>
       </div>
 
-      <nav className="nav-scroll mt-4 flex gap-1 border-b border-terminal-border pb-2">
+      {/* shrink-0 + min-h: flex column was crushing this to ~9px; nav-scroll clips overflow-y */}
+      <nav className="nav-scroll mt-4 flex min-h-10 shrink-0 items-center gap-1 border-b border-terminal-border pb-2">
         {TABS.map((t) => (
           <button
             key={t}
@@ -795,7 +796,7 @@ export function DiagnosticsPanel() {
         ))}
       </nav>
 
-      <div className="mt-4 min-w-0">
+      <div className="mt-4 min-h-0 min-w-0 flex-1 overflow-auto">
         {tab === "Overview" ? <OverviewTab overview={overview} /> : null}
         {tab === "Issues" ? <IssuesTab selectedId={selectedIssueId} /> : null}
         {tab === "Services" ? (

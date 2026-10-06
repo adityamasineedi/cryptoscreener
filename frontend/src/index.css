@@ -117,10 +117,21 @@ body {
     width: 100%;
     flex: 1 1 0;
     min-width: 0;
-    /* Prefer table over watcher chrome when market-area is short */
-    min-height: 8rem;
+    /* Leave room for COMBO_02 v1 watcher (2 cards); table scrolls in remainder */
+    min-height: 4.5rem;
     overflow-x: auto;
     overflow-y: auto;
+  }
+
+  /* Reserved height so ~2 watcher cards stay visible above the screener table */
+  .v1-watcher-panel {
+    flex: 0 0 auto;
+    min-height: 9.25rem;
+    max-height: min(34%, 13.5rem);
+  }
+
+  .v1-watcher-panel .v1-watcher-scroll {
+    min-height: 6.25rem;
   }
 
   /* Sticky identity columns inside Technical View (table scroll only) */
