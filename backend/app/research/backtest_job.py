@@ -40,6 +40,7 @@ from app.research.backtest_ui_config import (
     job_identity_payload,
     validate_backtest_request,
 )
+from app.research.market_structure.attach import slim_backtest_row_for_api
 from app.research.query_utils import normalize_research_symbol, normalize_research_timeframe
 
 JobStatus = Literal["idle", "running", "done", "error", "cancelled", "stalled"]
@@ -149,16 +150,39 @@ class BacktestJob:
             intra = min(1.0, float(self.bars_processed) / float(self.total_bars))
             intra = intra / float(self.total_cells)
         elif self.status == "running" and self.phase and self.done_cells < self.total_cells:
-            # Data-load / HTF phases before bar walk — show a small non-zero signal.
+            # Data-load / HTF / analytics phases — show a small non-zero signal
+            # when bar counters are not yet (or no longer) available.
             if self.phase in (
                 DB_QUERY_START,
                 DB_QUERY_END,
                 RAW_ROWS_LOADED,
                 HTF_DATA_LOAD_START,
                 HTF_DATA_LOAD_END,
+                "ANALYTICS_LOAD_START",
+                "ANALYTICS_LOAD_END",
+                "ANALYTICS_ATTACH",
             ):
-                intra = 0.02 / float(self.total_cells)
-        return round(100.0 * min(1.0, cell_base + intra), 1)
+                # Analytics runs after the strategy bar walk — bias toward
+                # "almost done with this cell" rather than appearing stuck.
+                if self.phase == "ANALYTICS_ATTACH":
+                    intra = 0.92 / float(self.total_cells)
+                else:
+                    intra = 0.02 / float(self.total_cells)
+        pct = round(100.0 * min(1.0, cell_base + intra), 1)
+        # Keep 100% reserved for terminal done — analytics can finish the bar walk first.
+        if self.status == "running" and pct >= 100.0:
+            return 99.9
+        return pct
+
+    def _rows_for_api(self) -> list[dict[str, Any]]:
+        """Drop multi-MB bar dumps from job polls; keep table_rows when terminal."""
+        terminal = self.status in ("done", "error", "cancelled", "stalled")
+        return [
+            slim_backtest_row_for_api(row, include_table_rows=terminal)
+            if isinstance(row, dict)
+            else row
+            for row in self.rows
+        ]
 
     def to_dict(self) -> dict[str, Any]:
         if self.status in ("done", "error", "cancelled", "stalled"):
@@ -208,7 +232,7 @@ class BacktestJob:
             "finished_at": self.finished_at,
             "error": self.error,
             "error_code": self.error_code,
-            "rows": self.rows,
+            "rows": self._rows_for_api(),
             "elapsed_seconds": elapsed,
             "disclaimer": self.disclaimer,
             "resolved_cells": self.resolved_cells,
@@ -318,9 +342,14 @@ class BacktestJobService:
             maker_fee_pct=maker,
             start_date=start_s,
             end_date=end_s,
-            allow_short=False,
+            allow_short=True,
         )
         identity = job_identity_payload(resolved)
+        resolved_combo = str(
+            getattr(resolved, "combination_id", None)
+            or combination_id
+            or "COMBO_02"
+        ).upper().strip()
 
         async with self._lock:
             if self._job is not None and self._job.status == "running":
@@ -335,7 +364,7 @@ class BacktestJobService:
                 symbols=syms,
                 timeframes=tfs,
                 direction=resolved.direction,
-                combination_id=(combination_id or "COMBO_02").upper().strip(),
+                combination_id=resolved_combo,
                 limit=lim,
                 risk_usd=risk,
                 principal_usd=principal,
@@ -518,12 +547,21 @@ class BacktestJobService:
 
                 def _on_progress(payload: dict[str, Any]) -> None:
                     # Called from worker thread — keep assignments simple.
-                    job.heartbeat(
-                        phase=str(payload.get("phase") or job.phase),
-                        bars_processed=int(payload.get("bars_processed") or 0),
-                        total_bars=int(payload.get("total_bars") or 0),
-                        trades=int(payload.get("trades") or 0),
-                    )
+                    # Only forward fields that are present so phase-only
+                    # heartbeats (e.g. ANALYTICS_ATTACH) cannot wipe progress.
+                    hb_kwargs: dict[str, Any] = {}
+                    if payload.get("phase") is not None:
+                        hb_kwargs["phase"] = str(payload.get("phase") or job.phase)
+                    if payload.get("bars_processed") is not None:
+                        hb_kwargs["bars_processed"] = int(payload["bars_processed"])
+                    if payload.get("total_bars") is not None:
+                        hb_kwargs["total_bars"] = int(payload["total_bars"])
+                    if payload.get("trades") is not None:
+                        hb_kwargs["trades"] = int(payload["trades"])
+                    if hb_kwargs:
+                        job.heartbeat(**hb_kwargs)
+                    else:
+                        job.heartbeat()
                     if payload.get("rows_loaded") is not None:
                         job.rows_loaded = int(payload["rows_loaded"])
                     if isinstance(payload.get("load_meta"), dict):
@@ -612,9 +650,18 @@ class BacktestJobService:
                             ),
                         }
                         enriched["risk_usd"] = cell_risk
-                        job.rows.append(enriched)
+                        # Drop by_bar from stored job rows (artifacts keep full dump).
+                        job.rows.append(
+                            slim_backtest_row_for_api(
+                                enriched, include_table_rows=True
+                            )
+                        )
                     else:
-                        job.rows.append(row)
+                        job.rows.append(
+                            slim_backtest_row_for_api(row, include_table_rows=True)
+                            if isinstance(row, dict)
+                            else row
+                        )
                 job.done_cells = i + 1
                 job.bars_processed = int(
                     (payload.get("rows") or [{}])[0].get("bars_loaded")

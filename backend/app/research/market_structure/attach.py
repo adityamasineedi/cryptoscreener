@@ -17,6 +17,50 @@ from app.research.market_structure.config import (
 )
 from app.research.market_structure.engine import compute_market_structure_analytics
 
+# Keys that are written to disk artifacts and must not ride every UI job poll.
+_UI_HEAVY_MS_KEYS = ("by_bar",)
+
+
+def slim_market_structure_for_api(
+    analytics: Mapping[str, Any] | None,
+    *,
+    include_table_rows: bool = True,
+) -> dict[str, Any] | None:
+    """Return a UI-safe copy of market_structure (summaries kept, bar dumps dropped).
+
+    Does not alter strategy results — observability payload shaping only.
+    ``by_bar`` remains on disk via artifact writers when enabled.
+    """
+    if analytics is None:
+        return None
+    if not isinstance(analytics, Mapping):
+        return None
+    out = dict(analytics)
+    for key in _UI_HEAVY_MS_KEYS:
+        out.pop(key, None)
+    table_rows = out.get("table_rows")
+    if isinstance(table_rows, list):
+        out["table_rows_count"] = len(table_rows)
+        if not include_table_rows:
+            out["table_rows"] = []
+            out["table_rows_deferred"] = True
+    return out
+
+
+def slim_backtest_row_for_api(
+    row: Mapping[str, Any],
+    *,
+    include_table_rows: bool = True,
+) -> dict[str, Any]:
+    """Shallow-copy a matrix row with a UI-safe market_structure payload."""
+    out = dict(row)
+    ms = out.get("market_structure")
+    if isinstance(ms, Mapping):
+        out["market_structure"] = slim_market_structure_for_api(
+            ms, include_table_rows=include_table_rows
+        )
+    return out
+
 
 def attach_market_structure_to_row(
     row: dict[str, Any],
@@ -91,6 +135,7 @@ def attach_market_structure_to_row(
             "period_end": row.get("period_end"),
             "bars_loaded": row.get("bars_loaded"),
         },
+        entry_diagnostics=row.get("entry_diagnostics"),
     )
     analytics["strategy_runtime_seconds"] = strategy_runtime_seconds
     analytics["attach_runtime_seconds"] = round(time.perf_counter() - t0, 6)

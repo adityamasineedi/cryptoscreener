@@ -111,4 +111,37 @@ describe("backtestJobStore polling", () => {
     // Initial restore poll may call once; subsequent ticks should not keep active true.
     expect(useBacktestJobStore.getState().active).toBe(false);
   });
+
+  it("clears optimistic running job when start returns ERROR", async () => {
+    startBacktestJob.mockResolvedValue({
+      status: "ERROR",
+      error_code: "short_research_paused",
+      error: "SHORT research is paused",
+    });
+    await useBacktestJobStore.getState().start({
+      symbols: ["BTCUSDT"],
+      timeframes: ["1h"],
+      direction: "SHORT",
+    });
+    expect(useBacktestJobStore.getState().active).toBe(false);
+    expect(useBacktestJobStore.getState().job).toBeNull();
+    expect(useBacktestJobStore.getState().error).toMatch(/paused|ERROR|short/i);
+  });
+
+  it("clears stuck running job when API reports idle", async () => {
+    fetchBacktestJobStatus.mockResolvedValue({ status: "idle", rows: [] });
+    useBacktestJobStore.setState({
+      active: false,
+      starting: false,
+      job: {
+        status: "running",
+        symbols: ["BTCUSDT"],
+        timeframes: ["1h"],
+        rows: [],
+      },
+    });
+    await useBacktestJobStore.getState().poll();
+    expect(useBacktestJobStore.getState().job).toBeNull();
+    expect(useBacktestJobStore.getState().active).toBe(false);
+  });
 });

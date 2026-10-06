@@ -25,6 +25,11 @@ from app.research.market_structure.config import (
     assert_regime_filtering_safe,
     default_feature_config,
 )
+from app.research.entry_diagnostics import (
+    build_entry_funnel_reports,
+    format_funnel_markdown,
+    merge_diag_into_bar_row,
+)
 from app.research.market_structure.mtf import classify_mtf_alignment
 from app.research.market_structure.research_labels import suggest_research_opportunity
 from app.research.market_structure.structure import (
@@ -91,12 +96,19 @@ def compute_market_structure_analytics(
     configuration_fingerprint: str | None = None,
     requested_range: Mapping[str, Any] | None = None,
     actual_range: Mapping[str, Any] | None = None,
+    entry_diagnostics: Mapping[int, Mapping[str, Any]]
+    | Mapping[str, Mapping[str, Any]]
+    | None = None,
 ) -> dict[str, Any]:
     """Compute bar-level structure/regime analytics for a completed backtest cell.
 
     ``closed_htf_policy`` controls analytics 4h mapping only (always prefers
     fully-closed 4h candles for feature labels). Strategy forming-HTF path is
     never altered here.
+
+    ``entry_diagnostics`` is an optional side-channel from
+    ``run_combination_backtest`` (bar_index → gate rejection record). When
+    absent, non-entry bars keep ``UNKNOWN_NOT_EXPORTED``.
     """
     assert_regime_filtering_safe(
         enable_regime_filtering=enable_regime_filtering,
@@ -114,6 +126,14 @@ def compute_market_structure_analytics(
     n = len(series)
     start = max(0, index_start if index_start is not None else 0)
     end = min(n, index_end if index_end is not None else n)
+
+    diag_by_bar: dict[int, Mapping[str, Any]] = {}
+    if entry_diagnostics:
+        for raw_k, raw_v in dict(entry_diagnostics).items():
+            try:
+                diag_by_bar[int(raw_k)] = raw_v
+            except (TypeError, ValueError):
+                continue
 
     # Prefer dedicated 1h series; if setup is 1h, reuse setup candles.
     tf_l = (setup_timeframe or "").lower()
@@ -456,6 +476,9 @@ def compute_market_structure_analytics(
                 "15m_missing_reason": status_15["15m_missing_reason"],
             }
         )
+        merge_diag_into_bar_row(
+            by_bar[-1], diag_by_bar.get(i), entry_attr=entry_attr
+        )
 
     # Attribution quality invariants
     for tid, cnt in execution_counts.items():
@@ -563,6 +586,11 @@ def compute_market_structure_analytics(
     trade_regime = build_trade_regime_summary(by_bar, trades or [])
     opportunity = build_opportunity_summary(by_bar)
     mtf_summary = build_mtf_alignment_summary(by_bar)
+    entry_funnel = build_entry_funnel_reports(by_bar)
+    quality["entry_diagnostics_bars"] = len(diag_by_bar)
+    quality["unknown_not_exported_new_entry"] = int(
+        entry_funnel.get("unknown_not_exported_count") or 0
+    )
 
     return {
         "status": "OK",
@@ -621,6 +649,8 @@ def compute_market_structure_analytics(
         "trade_regime_summary": trade_regime,
         "regime_opportunity_summary": opportunity,
         "mtf_alignment_summary": mtf_summary,
+        "entry_funnel": entry_funnel,
+        "entry_funnel_markdown": format_funnel_markdown(entry_funnel),
         "quality_report": quality,
         "table_rows": [_table_row(r) for r in by_bar],
     }
@@ -747,7 +777,7 @@ def build_trade_context(
 
 def _table_row(r: Mapping[str, Any]) -> dict[str, Any]:
     """Flattened UI/export row matching the required table columns."""
-    return {
+    out = {
         "decision_time": r.get("decision_time"),
         "signal_time": r.get("signal_time"),
         "entry_time": r.get("entry_time"),
@@ -758,7 +788,10 @@ def _table_row(r: Mapping[str, Any]) -> dict[str, Any]:
         "execution_bar": r.get("execution_bar"),
         "entry_attribution_type": r.get("entry_attribution_type"),
         "row_role": r.get("row_role"),
+        "evaluation_type": r.get("evaluation_type"),
+        "setup_state": r.get("setup_state"),
         "direction": r.get("direction"),
+        "direction_considered": r.get("direction_considered"),
         "regime_4h": r.get("regime_4h"),
         "trend_4h": r.get("trend_4h"),
         "structure_4h": r.get("structure_state_4h"),
@@ -781,6 +814,8 @@ def _table_row(r: Mapping[str, Any]) -> dict[str, Any]:
         "primary_rejection_stage": r.get("primary_rejection_stage"),
         "primary_rejection_reason": r.get("primary_rejection_reason"),
         "rejection_detail_status": r.get("rejection_detail_status"),
+        "htf_alignment": r.get("htf_alignment"),
+        "failed_gates": r.get("failed_gates"),
         "win_loss": r.get("win_loss"),
         "r_multiple": r.get("r_multiple"),
         "market_regime": r.get("market_regime"),
@@ -793,3 +828,11 @@ def _table_row(r: Mapping[str, Any]) -> dict[str, Any]:
         "15m_last_closed_candle_time": r.get("15m_last_closed_candle_time"),
         "15m_missing_reason": r.get("15m_missing_reason"),
     }
+    for i in range(1, 9):
+        sk = f"rejection_stage_{i}"
+        rk = f"rejection_reason_{i}"
+        if r.get(sk) is not None:
+            out[sk] = r.get(sk)
+        if r.get(rk) is not None:
+            out[rk] = r.get(rk)
+    return out

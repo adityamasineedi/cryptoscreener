@@ -1155,9 +1155,20 @@ export type BacktestJob = {
   mismatch_reasons?: string[];
 };
 
+const BACKTEST_FETCH_MS = 20_000;
+
+function backtestAbortSignal(ms = BACKTEST_FETCH_MS): AbortSignal | undefined {
+  try {
+    return AbortSignal.timeout(ms);
+  } catch {
+    return undefined;
+  }
+}
+
 export function fetchBacktestJobStatus() {
   return getJson<BacktestJob & { timestamp?: string }>(
-    "/api/research/long-strategy/backtest/job"
+    "/api/research/long-strategy/backtest/job",
+    { signal: backtestAbortSignal() }
   );
 }
 
@@ -1185,6 +1196,7 @@ export async function startBacktestJob(body: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: backtestAbortSignal(30_000),
   });
   if (!res.ok) {
     throw new Error(
@@ -1206,6 +1218,7 @@ export async function startBacktestJob(body: {
 export async function cancelBacktestJob() {
   const res = await fetch(`${API_BASE}/api/research/long-strategy/backtest/cancel`, {
     method: "POST",
+    signal: backtestAbortSignal(),
   });
   if (!res.ok) {
     throw new Error(

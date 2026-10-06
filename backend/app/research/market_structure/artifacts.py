@@ -98,6 +98,7 @@ def write_market_structure_artifacts(
         "disclaimer": "Analytics only — does not affect strategy decisions",
     }
 
+    entry_funnel = dict(analytics.get("entry_funnel") or {})
     paths = {
         "market_structure_by_bar.csv": out_dir / "market_structure_by_bar.csv",
         "market_structure_by_bar.json": out_dir / "market_structure_by_bar.json",
@@ -110,6 +111,14 @@ def write_market_structure_artifacts(
         "trade_regime_summary.json": out_dir / "trade_regime_summary.json",
         "regime_opportunity_summary.csv": out_dir / "regime_opportunity_summary.csv",
         "mtf_alignment_summary.csv": out_dir / "mtf_alignment_summary.csv",
+        "entry_funnel.json": out_dir / "entry_funnel.json",
+        "entry_funnel.md": out_dir / "entry_funnel.md",
+        "entry_rejection_ranking.csv": out_dir / "entry_rejection_ranking.csv",
+        "entry_funnel_overall.csv": out_dir / "entry_funnel_overall.csv",
+        "entry_funnel_by_regime.json": out_dir / "entry_funnel_by_regime.json",
+        "entry_funnel_by_direction.json": out_dir / "entry_funnel_by_direction.json",
+        "entry_funnel_by_candidate.json": out_dir / "entry_funnel_by_candidate.json",
+        "unknown_not_exported.csv": out_dir / "unknown_not_exported.csv",
         "market_structure_config.json": out_dir / "market_structure_config.json",
         "market_structure_quality_report.json": out_dir
         / "market_structure_quality_report.json",
@@ -142,6 +151,39 @@ def write_market_structure_artifacts(
     _write_json(paths["trade_regime_summary.json"], trade_summary)
     _write_csv(paths["regime_opportunity_summary.csv"], opportunity)
     _write_csv(paths["mtf_alignment_summary.csv"], mtf_summary)
+    _write_json(paths["entry_funnel.json"], entry_funnel)
+    paths["entry_funnel.md"].write_text(
+        str(
+            analytics.get("entry_funnel_markdown")
+            or entry_funnel.get("disclaimer")
+            or ""
+        ),
+        encoding="utf-8",
+    )
+    _write_csv(
+        paths["entry_rejection_ranking.csv"],
+        list(entry_funnel.get("rejection_ranking") or []),
+    )
+    _write_csv(
+        paths["entry_funnel_overall.csv"],
+        list(entry_funnel.get("overall_funnel") or []),
+    )
+    _write_json(
+        paths["entry_funnel_by_regime.json"],
+        entry_funnel.get("by_regime") or {},
+    )
+    _write_json(
+        paths["entry_funnel_by_direction.json"],
+        entry_funnel.get("by_direction") or {},
+    )
+    _write_json(
+        paths["entry_funnel_by_candidate.json"],
+        entry_funnel.get("by_research_candidate") or {},
+    )
+    _write_csv(
+        paths["unknown_not_exported.csv"],
+        list(entry_funnel.get("unknown_not_exported_rows") or []),
+    )
     _write_json(paths["market_structure_config.json"], feature_cfg)
     _write_json(
         paths["market_structure_quality_report.json"],

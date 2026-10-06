@@ -5,7 +5,11 @@ Observability / research only. Does not alter COMBO_02 strategy behavior.
 
 from __future__ import annotations
 
-from app.research.market_structure.attach import attach_market_structure_to_row
+from app.research.market_structure.attach import (
+    attach_market_structure_to_row,
+    slim_backtest_row_for_api,
+    slim_market_structure_for_api,
+)
 from app.research.market_structure.config import (
     ANALYTICS_VERSION,
     ENABLE_MARKET_STRUCTURE_ANALYTICS,
@@ -30,4 +34,6 @@ __all__ = [
     "compute_market_structure_analytics",
     "default_feature_config",
     "resolve_analytics_flags",
+    "slim_backtest_row_for_api",
+    "slim_market_structure_for_api",
 ]

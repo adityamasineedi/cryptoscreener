@@ -63,6 +63,51 @@ def test_progress_percent_increases_during_cell_processing():
     assert job.progress_percent() == 100.0
 
 
+def test_analytics_attach_phase_shows_nonzero_progress():
+    """ANALYTICS_ATTACH must not look stuck at 0% when bar counters are empty."""
+    job = BacktestJob(
+        job_id="a1",
+        status="running",
+        total_cells=3,
+        done_cells=0,
+        bars_processed=0,
+        total_bars=0,
+        phase="ANALYTICS_ATTACH",
+    )
+    assert job.progress_percent() > 20.0
+
+
+def test_to_dict_strips_by_bar_from_market_structure():
+    job = BacktestJob(job_id="ms1", status="running", total_cells=1, done_cells=0)
+    job.rows = [
+        {
+            "symbol": "BTCUSDT",
+            "timeframe": "1h",
+            "trades": [{"id": 1}],
+            "market_structure": {
+                "status": "OK",
+                "by_bar": [{"i": n} for n in range(500)],
+                "table_rows": [{"decision_time": "t", "regime_1h": "BULL"} for _ in range(3)],
+                "trade_regime_summary": [{"regime": "BULL"}],
+            },
+        }
+    ]
+    running = job.to_dict()
+    ms = running["rows"][0]["market_structure"]
+    assert "by_bar" not in ms
+    assert ms["table_rows"] == []
+    assert ms["table_rows_count"] == 3
+    assert ms["table_rows_deferred"] is True
+    assert ms["trade_regime_summary"]
+
+    job.status = "done"
+    job.done_cells = 1
+    done = job.to_dict()
+    ms_done = done["rows"][0]["market_structure"]
+    assert "by_bar" not in ms_done
+    assert len(ms_done["table_rows"]) == 3
+
+
 def test_to_dict_exposes_heartbeat_fields():
     job = BacktestJob(job_id="hb1", status="running", total_cells=1)
     job.heartbeat(

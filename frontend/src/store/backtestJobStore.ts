@@ -81,7 +81,8 @@ function optimisticJob(body: {
     include_trades: body.include_trades,
     start_date: body.start_date ?? null,
     end_date: body.end_date ?? null,
-    short_status: "PAUSED",
+    short_status:
+      body.direction === "SHORT" ? "RESEARCH_ONLY" : "RESEARCH_ENABLED",
     paper_trade_created: false,
     live_trade_created: false,
     telegram_sent: false,
@@ -118,7 +119,10 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
       if (get().starting || get()._gen !== gen) return;
 
       if (!st.status || st.status === "idle") {
-        if (get().active) set({ active: false });
+        // API restart / no job: clear optimistic "running" so the UI unlocks.
+        if (get().active || get().job?.status === "running") {
+          set({ active: false, job: null });
+        }
         return;
       }
 
@@ -179,6 +183,8 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
           error: res.error_code || res.error || "Failed to start backtest",
           active: false,
           starting: false,
+          // Clear optimistic running job so Run stays usable.
+          job: null,
         });
         return;
       }
@@ -202,6 +208,7 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
         error: msg,
         active: false,
         starting: false,
+        job: null,
       });
     }
   },
