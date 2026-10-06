@@ -115,6 +115,105 @@ def build_strategy_catalog() -> dict[str, Any]:
             "combo_definition": combos.get("COMBO_02_CLOSED_HTF"),
         },
         {
+            "id": "COMBO_02_V2",
+            "name": "COMBO_02 v2 — adaptive 3-regime",
+            "status": "RESEARCH",
+            "tier": "research_variant",
+            "combo_id": "COMBO_02_V2",
+            "combo_version": "v2-combo02-adaptive-3-regime",
+            "parent_strategy_id": "COMBO_02_V1",
+            "direction": "LONG_SHORT",
+            "setup_timeframe": "1h",
+            "htf_timeframes": ["4h", "1h", "15m"],
+            "summary": (
+                "Research playbook: regime-routed TREND_FOLLOWING / "
+                "RANGE_MEAN_REVERSION / REVERSAL (LONG+SHORT). Soft HTF for "
+                "trend (allows 4H neutral); range/reversal do not require 4H "
+                "alignment. Uses existing stop/TP/RR engines. Not COMBO_02 v1."
+            ),
+            "gates": list(COMBINATIONS["COMBO_02_V2"].conditions),
+            "symbols": {
+                "freeze_claim": sorted(FROZEN_V1_SYMBOLS),
+            },
+            "risk": {
+                "default_percent": 0.02,
+                "display": "2% of equity per trade (1R) via existing engines",
+                "example_equity_usd": 1000,
+                "example_risk_usd": 20,
+            },
+            "where_to_run": [
+                {
+                    "label": "Research backtest script",
+                    "path": "backend/scripts/run_combo02_v2_january_compare.py",
+                    "kind": "repo_path",
+                },
+            ],
+            "do_not": [
+                "Do not label v2 results as frozen COMBO_02_V1",
+                "Do not promote to production without OOS review",
+                "Do not bypass existing stop/TP/RR validation",
+            ],
+            "example": {
+                "label": "COMBO_02_V2",
+                "regime": "CHOPPY",
+                "playbook": "RANGE_MEAN_REVERSION",
+                "direction": "LONG",
+                "event": "LOW_SWEEP",
+                "confirmation": "BULLISH_CHOCH",
+                "status": "ENTRY_CANDIDATE",
+            },
+            "combo_definition": combos.get("COMBO_02_V2"),
+        },
+        {
+            "id": "COMBO_02_V2_1_A",
+            "name": "COMBO_02 V2.1-A — CHOPPY WAIT",
+            "status": "RESEARCH",
+            "tier": "research_variant",
+            "combo_id": "COMBO_02_V2_1_A",
+            "combo_version": "v2.1-a-choppy-wait",
+            "parent_strategy_id": "COMBO_02_V2",
+            "direction": "LONG_SHORT",
+            "setup_timeframe": "1h",
+            "htf_timeframes": ["4h", "1h", "15m"],
+            "summary": (
+                "Research-only: frozen COMBO_02_V2 playbooks with CHOPPY → WAIT "
+                "(no RANGE_MEAN_REVERSION in CHOPPY). Same stop/TP/RR engines. "
+                "Not production; does not replace COMBO_02_V2."
+            ),
+            "gates": list(COMBINATIONS["COMBO_02_V2_1_A"].conditions),
+            "symbols": {
+                "freeze_claim": sorted(FROZEN_V1_SYMBOLS),
+            },
+            "risk": {
+                "default_percent": 0.02,
+                "display": "2% of equity per trade (1R) via existing engines",
+                "example_equity_usd": 1000,
+                "example_risk_usd": 20,
+            },
+            "where_to_run": [
+                {"label": "Strategy Backtest", "path": "/backtest"},
+                {
+                    "label": "V2.1 research compare",
+                    "path": "backend/reports/combo02_v21_variant_compare",
+                    "kind": "repo_path",
+                },
+            ],
+            "do_not": [
+                "Do not label V2.1-A results as frozen COMBO_02_V1 or COMBO_02_V2",
+                "Do not promote to production/live without explicit approval",
+                "Do not treat research metrics as a profitability claim",
+            ],
+            "example": {
+                "label": "COMBO_02_V2_1_A",
+                "regime": "CHOPPY",
+                "playbook": "WAIT",
+                "direction": None,
+                "status": "NO_TRADE",
+                "note": "RESEARCH ONLY — CHOPPY range disabled",
+            },
+            "combo_definition": combos.get("COMBO_02_V2_1_A"),
+        },
+        {
             "id": V1_1_STRATEGY_ID,
             "name": "COMBO_02 v1.1 — risk-controlled LONG",
             "status": "RESEARCH",
@@ -196,6 +295,38 @@ def build_strategy_catalog() -> dict[str, Any]:
             "combo_definition": combos.get("COMBO_02"),
         },
         {
+            "id": "COMBO_04_HTF_SHORT",
+            "name": "COMBO_04_HTF SHORT — reverse of long (research)",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "combo_id": "COMBO_04_HTF",
+            "direction": "SHORT",
+            "setup_timeframe": "1h",
+            "htf_timeframes": ["4h", "1h"],
+            "summary": (
+                "Research-only reverse of COMBO_02 long for Strategy Backtest: "
+                "bearish BOS + downtrend + HTF + impulse + pullback + LH intact. "
+                "Never opens paper/live or Telegram."
+            ),
+            "gates": list(COMBINATIONS["COMBO_04_HTF"].conditions)
+            + ["LH structure intact (fail closed)"],
+            "where_to_run": [
+                {"label": "Strategy Backtest", "path": "/backtest"},
+                {"label": "BOS Research", "path": "/bos-research"},
+            ],
+            "example": {
+                "title": "Example SHORT reverse of long (illustrative)",
+                "steps": [
+                    "4h trend BEARISH and 1h trend BEARISH",
+                    "1h prints LH+LL and confirms bearish BOS",
+                    "Bearish impulse then pullback into supply holds",
+                    "LH remains intact; enter on hold/retest; stop above structure; TP1 ≥ 2R",
+                ],
+                "note": "Research-only — not Path A production.",
+            },
+            "combo_definition": combos.get("COMBO_04_HTF"),
+        },
+        {
             "id": "COMBO_03",
             "name": "COMBO_03 — Trend + BOS + Pullback",
             "status": "RESEARCH",
@@ -218,6 +349,75 @@ def build_strategy_catalog() -> dict[str, Any]:
                 ],
             },
             "combo_definition": combos.get("COMBO_03"),
+        },
+        {
+            "id": "COMBO_03_TRANSITION",
+            "name": "COMBO_03_TRANSITION — CHOPPY → breakout research",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "combo_id": "COMBO_03_TRANSITION",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1h (+15m confirm)",
+            "summary": COMBINATIONS["COMBO_03_TRANSITION"].description,
+            "gates": list(COMBINATIONS["COMBO_03_TRANSITION"].conditions),
+            "where_to_run": [
+                {"label": "BOS Research", "path": "/bos-research"},
+                {
+                    "label": "Validation script",
+                    "path": "backend/scripts/run_combo03_transition_validation.py",
+                    "kind": "repo_path",
+                },
+            ],
+            "do_not": [
+                "Do not promote to production / paper / Telegram",
+                "Do not mutate COMBO_02 v1 or COMBO_02_V2",
+                "Do not confuse with legacy COMBO_03 (TREND_BOS_PULLBACK)",
+                "Do not add grid / martingale / averaging / pyramiding",
+            ],
+            "example": {
+                "title": "Example LONG transition (illustrative)",
+                "steps": [
+                    "1h regime CHOPPY/RANGE/HIGH_VOLATILITY_RANGE/TRANSITION",
+                    "Sweep below recent low + rejection_back_inside",
+                    "Existing bullish 1H BOS or CHoCH",
+                    "Genuine bullish 15M confirmation after 1H shift",
+                    "Enter via existing risk engines only",
+                ],
+                "note": "Research-only — not Path A production.",
+            },
+            "combo_definition": combos.get("COMBO_03_TRANSITION"),
+        },
+        {
+            "id": "COMBO_03_TRANSITION_B",
+            "name": "COMBO_03_TRANSITION_B — no mandatory 15M (comparison)",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "combo_id": "COMBO_03_TRANSITION_B",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1h",
+            "summary": COMBINATIONS["COMBO_03_TRANSITION_B"].description,
+            "gates": list(COMBINATIONS["COMBO_03_TRANSITION_B"].conditions),
+            "do_not": [
+                "Comparison variant only — not the primary COMBO_03_TRANSITION baseline",
+                "Do not promote to production",
+            ],
+            "combo_definition": combos.get("COMBO_03_TRANSITION_B"),
+        },
+        {
+            "id": "COMBO_03_TRANSITION_C",
+            "name": "COMBO_03_TRANSITION_C — + displacement (comparison)",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "combo_id": "COMBO_03_TRANSITION_C",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1h (+15m confirm)",
+            "summary": COMBINATIONS["COMBO_03_TRANSITION_C"].description,
+            "gates": list(COMBINATIONS["COMBO_03_TRANSITION_C"].conditions),
+            "do_not": [
+                "Comparison variant only — not the primary COMBO_03_TRANSITION baseline",
+                "Do not promote to production",
+            ],
+            "combo_definition": combos.get("COMBO_03_TRANSITION_C"),
         },
         {
             "id": "COMBO_04",

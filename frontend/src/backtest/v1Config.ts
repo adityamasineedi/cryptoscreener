@@ -4,6 +4,36 @@ export const V1_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"] as const;
 export const V1_SETUP_TF = "1h";
 export const SHORT_STATUS = "PAUSED" as const;
 
+/** Backtest strategy selector ids (default remains COMBO_02_V1). */
+export type BacktestStrategyId = "COMBO_02_V1" | "COMBO_02_V2_1_A";
+
+export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
+  id: BacktestStrategyId;
+  label: string;
+  status: "Production candidate" | "Research";
+  combinationId: string;
+  comboVersion: string;
+}> = [
+  {
+    id: "COMBO_02_V1",
+    label: "COMBO_02 V1",
+    status: "Production candidate",
+    combinationId: "COMBO_02",
+    comboVersion: "v1",
+  },
+  {
+    id: "COMBO_02_V2_1_A",
+    label: "COMBO_02 V2.1-A",
+    status: "Research",
+    combinationId: "COMBO_02_V2_1_A",
+    comboVersion: "v2.1-a-choppy-wait",
+  },
+] as const;
+
+export function backtestStrategyLabel(id: BacktestStrategyId): string {
+  return BACKTEST_STRATEGY_OPTIONS.find((o) => o.id === id)?.label ?? id;
+}
+
 export type V1SymbolRole = "CORE" | "SECONDARY" | "RESEARCH" | "NON_V1";
 
 export const V1_PRODUCTION_RISK: Record<
@@ -120,8 +150,12 @@ export function assessProductionComparable(input: {
   leverage: number;
   takerFeePct: number;
   makerFeePct: number;
+  strategyId?: BacktestStrategyId;
 }): { productionComparable: boolean; reasons: ConfigMismatchReason[] } {
   const reasons: ConfigMismatchReason[] = [];
+  if (input.strategyId && input.strategyId !== "COMBO_02_V1") {
+    reasons.push("non_v1_strategy");
+  }
   if (input.direction !== "LONG") reasons.push("direction_mismatch");
   if (input.researchRiskOverride) reasons.push("risk_mismatch");
   if (input.timeframes.some((tf) => tf !== V1_SETUP_TF)) {

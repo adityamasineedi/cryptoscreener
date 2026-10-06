@@ -98,24 +98,86 @@ def test_research_risk_override_marks_production_comparable_false():
     assert identity["effective_risk_percent"] == pytest.approx(0.02)
 
 
-def test_short_request_returns_short_research_paused():
+def test_short_request_returns_short_research_paused_when_disallowed():
     with pytest.raises(BacktestConfigError) as ei:
-        _resolve(direction="SHORT")
+        _resolve(direction="SHORT", allow_short=False)
     assert ei.value.code == SHORT_RESEARCH_PAUSED_CODE
     assert "short_research_paused" in str(ei.value) or ei.value.code == "short_research_paused"
 
 
-def test_short_job_start_rejected():
+def test_short_request_accepted_as_research_only_combo04_htf():
+    r = _resolve(
+        direction="SHORT",
+        allow_short=True,
+        combination_id="COMBO_04_HTF",
+        strategy_id="COMBO_04_HTF_SHORT",
+    )
+    identity = job_identity_payload(r)
+    assert identity["direction"] == "SHORT"
+    assert identity["combination_id"] == "COMBO_04_HTF"
+    assert identity["strategy_id"] == "COMBO_04_HTF_SHORT"
+    assert identity["short_status"] == "RESEARCH_ONLY"
+    assert identity["htf_alignment"] == "BEARISH"
+    assert identity["production_comparable"] is False
+    assert identity["paper_trade_created"] is False
+    assert identity["telegram_sent"] is False
+
+
+def test_short_defaults_combo02_to_combo04_htf():
+    r = _resolve(direction="SHORT", allow_short=True, combination_id="COMBO_02")
+    assert r.combination_id == "COMBO_04_HTF"
+    assert r.short_status == "RESEARCH_ONLY"
+
+
+def test_short_job_start_accepted_research_only(monkeypatch):
     svc = BacktestJobService()
 
+    async def _fake_matrix(**kwargs):
+        assert kwargs["direction"] == "SHORT"
+        assert kwargs["combination_id"] == "COMBO_04_HTF"
+        return {
+            "status": "OK",
+            "playbook": "test",
+            "combination_name": "TREND_BOS_IMPULSE_PULLBACK_HTF",
+            "disclaimer": "research",
+            "label": "SHORT_STRATEGY_BACKTEST",
+            "dataset_id": "ds1",
+            "rows": [
+                {
+                    "symbol": kwargs["symbols"][0],
+                    "timeframe": kwargs["timeframes"][0],
+                    "direction": "SHORT",
+                    "sample_size": 0,
+                    "risk_usd": kwargs["risk_usd"],
+                    "period_start": "2025-01-01T00:00:00+00:00",
+                    "period_end": "2025-02-01T00:00:00+00:00",
+                    "bars_loaded": 100,
+                    "trades": [],
+                }
+            ],
+        }
+
     async def _run() -> None:
-        with pytest.raises(BacktestConfigError) as ei:
-            await svc.start(
-                symbols=["BTCUSDT"],
-                timeframes=["1h"],
-                direction="SHORT",
-            )
-        assert ei.value.code == "short_research_paused"
+        import app.research.service as svc_mod
+
+        monkeypatch.setattr(
+            svc_mod.BosResearchService,
+            "strategy_matrix",
+            _fake_matrix,
+        )
+        started = await svc.start(
+            symbols=["BTCUSDT"],
+            timeframes=["1h"],
+            direction="SHORT",
+            combination_id="COMBO_04_HTF",
+            strategy_id="COMBO_04_HTF_SHORT",
+        )
+        assert started["direction"] == "SHORT"
+        assert started["combination_id"] == "COMBO_04_HTF"
+        assert started["short_status"] == "RESEARCH_ONLY"
+        assert started["paper_trade_created"] is False
+        assert started["telegram_sent"] is False
+        await svc.cancel()
 
     asyncio.run(_run())
 

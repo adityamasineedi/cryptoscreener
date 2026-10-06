@@ -136,6 +136,7 @@ async def run_combination_backtest_isolated(
     index_start: int | None = None,
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
+    candles_15m: Sequence[Mapping[str, Any]] | None = None,
     job_id: str | None = None,
     cancel_event: Any | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
@@ -165,6 +166,7 @@ async def run_combination_backtest_isolated(
         "index_start": index_start,
         "candles_1h": _candles_plain(candles_1h),
         "candles_4h": _candles_plain(candles_4h),
+        "candles_15m": _candles_plain(candles_15m),
         "job_id": job_id,
         "cancel_path": cancel_path,
         "progress_path": progress_path,
@@ -174,10 +176,19 @@ async def run_combination_backtest_isolated(
 
     def _submit_result() -> dict[str, Any]:
         pool = get_research_cpu_pool()
+        # Keep job watchdog alive during long pre-walk work (e.g. COMBO_02_V2
+        # 1h feature-table build can exceed the default 120s heartbeat window
+        # before the worker writes its first progress file).
+        if progress_callback is not None:
+            try:
+                progress_callback({"phase": "CONTEXT_BUILD"})
+            except Exception:  # noqa: BLE001
+                pass
         fut = pool.submit(
             run_combination_backtest_worker,
             {"payload_path": blob_path},
         )
+        last_keep_alive = time.perf_counter()
         while True:
             if should_cancel is not None and should_cancel():
                 try:
@@ -187,13 +198,26 @@ async def run_combination_backtest_isolated(
                         Path(cancel_path).write_text("1", encoding="utf-8")
                 except Exception:  # noqa: BLE001
                     pass
+            saw_worker_progress = False
             if progress_callback is not None and progress_path:
                 p = Path(progress_path)
                 if p.exists():
                     try:
                         progress_callback(json.loads(p.read_text(encoding="utf-8")))
+                        saw_worker_progress = True
+                        last_keep_alive = time.perf_counter()
                     except Exception:  # noqa: BLE001
                         pass
+            if (
+                progress_callback is not None
+                and not saw_worker_progress
+                and (time.perf_counter() - last_keep_alive) >= 15.0
+            ):
+                try:
+                    progress_callback({"phase": "CONTEXT_BUILD"})
+                except Exception:  # noqa: BLE001
+                    pass
+                last_keep_alive = time.perf_counter()
             if fut.done():
                 break
             time.sleep(0.05)
@@ -240,14 +264,9 @@ async def run_matrix_postprocess_isolated(
     while not done.done():
         if progress_callback is not None:
             try:
-                progress_callback(
-                    {
-                        "phase": "ANALYTICS_ATTACH",
-                        "bars_processed": 0,
-                        "total_bars": 0,
-                        "trades": 0,
-                    }
-                )
+                # Phase-only heartbeat: never zero bars/trades — that made the
+                # UI look stuck at 0% for the entire analytics attach window.
+                progress_callback({"phase": "ANALYTICS_ATTACH"})
             except Exception:  # noqa: BLE001
                 pass
         try:

@@ -195,41 +195,62 @@ describe("BacktestPanel interaction paths", () => {
     ).toBeTruthy();
   });
 
-  it("5. SHORT disabled click", async () => {
+  it("5. SHORT research-only select", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
 
-    const shortBtn = root.getByTitle(/SHORT research is paused/i);
-    expect(shortBtn.getAttribute("aria-disabled")).toBe("true");
+    const shortBtn = root.getByTitle(/SHORT research-only/i);
     await user.click(shortBtn);
 
-    expect(root.getByText(/SHORT research is paused\./i)).toBeTruthy();
     expect(
-      root.getByText(
-        /SHORT paper trading, production, and Telegram are disabled/i
-      )
+      root.getByText(/SHORT research-only: COMBO_04_HTF reverse of long/i)
     ).toBeTruthy();
-    expect(root.getAllByText(/SHORT status:\s*PAUSED/i).length).toBeGreaterThan(0);
+    expect(
+      root.getAllByText(/SHORT status:\s*RESEARCH_ONLY/i).length
+    ).toBeGreaterThan(0);
     expect(root.getByRole("button", { name: /^LONG$/i })).toBeTruthy();
-    expect(isSelected(shortBtn)).toBe(false);
+    expect(shortBtn.className).toMatch(/border-rose-500\/50/);
+    expect(root.getAllByText(/Direction:\s*SHORT/i).length).toBeGreaterThan(0);
   });
 
-  it("6. SHORT sends no API request", async () => {
+  it("6. SHORT sends COMBO_04_HTF research request", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
 
-    await user.click(root.getByTitle(/SHORT research is paused/i));
-    expect(startBacktestJob).not.toHaveBeenCalled();
+    await user.click(root.getByTitle(/SHORT research-only/i));
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalled();
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.direction).toBe("SHORT");
+    expect(body?.combination_id).toBe("COMBO_04_HTF");
+    expect(body?.strategy_id).toBe("COMBO_04_HTF_SHORT");
+  });
+
+  it("6b. V2.1-A sends research combo id and RESEARCH ONLY label", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const select = root.getByDisplayValue("COMBO_02 V1") as HTMLSelectElement;
+    await user.selectOptions(select, "COMBO_02_V2_1_A");
+
+    expect(root.getAllByText(/COMBO_02 V2\.1-A/i).length).toBeGreaterThan(0);
+    expect(root.getAllByText(/RESEARCH ONLY/i).length).toBeGreaterThan(0);
+    expect(root.getAllByText(/Status:\s*Research/i).length).toBeGreaterThan(0);
 
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
       expect(startBacktestJob).toHaveBeenCalled();
     });
-    const body = vi.mocked(startBacktestJob).mock.calls[0][0];
-    expect(body.direction).toBe("LONG");
-    expect(body.direction).not.toBe("SHORT");
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.combination_id).toBe("COMBO_02_V2_1_A");
+    expect(body?.strategy_id).toBe("COMBO_02_V2_1_A");
+    expect(body?.combo_version).toBe("v2.1-a-choppy-wait");
+    expect(body?.research_risk_override).toBe(true);
   });
 
   it("7. 15m role label", () => {
@@ -437,8 +458,8 @@ describe("BacktestPanel interaction paths", () => {
     const { container } = renderPanel();
     const root = within(container);
 
-    expect(root.getByText(/Strategy identity:/i)).toBeTruthy();
-    expect(root.getByText(/COMBO_02_V1/i)).toBeTruthy();
+    expect(root.getAllByText(/Strategy:/i).length).toBeGreaterThan(0);
+    expect(root.getAllByText(/COMBO_02_V1/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/Symbol role:/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/BTCUSDT — v1 CORE/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/Effective risk:/i).length).toBeGreaterThan(0);

@@ -31,9 +31,15 @@ RiskSource = Literal["V1_PRODUCTION_PROFILE", "RESEARCH_OVERRIDE", "RESEARCH_FAL
 PeriodMode = Literal["DB_TAIL", "CALENDAR_RANGE"]
 
 STRATEGY_ID_V1 = "COMBO_02_V1"
+STRATEGY_ID_SHORT_RESEARCH = "COMBO_04_HTF_SHORT"
+STRATEGY_ID_V21A = "COMBO_02_V2_1_A"
+COMBINATION_ID_V21A = "COMBO_02_V2_1_A"
 COMBO_VERSION_V1 = "v1"
+COMBO_VERSION_V21A = "v2.1-a-choppy-wait"
 SOURCE_V1_RESEARCH_BACKTEST = "V1_RESEARCH_BACKTEST"
+SOURCE_V21A_RESEARCH_BACKTEST = "V21A_RESEARCH_BACKTEST"
 SHORT_RESEARCH_PAUSED_CODE = "short_research_paused"
+SHORT_RESEARCH_COMBO_ID = "COMBO_04_HTF"
 
 # Frozen COMBO_02 v1 production setup (docs/v1_freeze.md / v1_production.py).
 V1_SETUP_TIMEFRAME = "1h"
@@ -203,6 +209,7 @@ class ResolvedBacktestConfig:
     combo_version: str
     source: str
     direction: str
+    combination_id: str
     setup_timeframe: str
     htf_timeframes: list[str]
     htf_alignment: str
@@ -275,7 +282,7 @@ def validate_backtest_request(
     if not direction_raw or direction_raw in {"ALL", "BOTH", "ANY", "AMBIGUOUS"}:
         raise BacktestConfigError(
             "ambiguous_direction",
-            "Direction must be explicitly LONG (SHORT research is paused)",
+            "Direction must be explicitly LONG or SHORT",
         )
     if direction_raw not in {"LONG", "SHORT"}:
         raise BacktestConfigError(
@@ -299,8 +306,26 @@ def validate_backtest_request(
             raise BacktestConfigError("invalid_risk", "Risk must be positive")
 
     combo = (combination_id or COMBO_ID).upper().strip()
-    sid = (strategy_id or STRATEGY_ID_V1).upper().strip()
-    cver = (combo_version or COMBO_VERSION_V1).strip().lower()
+    if direction_raw == "SHORT" and combo in {COMBO_ID, "COMBO_02"}:
+        # Default SHORT backtest to reverse-of-long impulse/pullback+HTF research combo.
+        combo = SHORT_RESEARCH_COMBO_ID
+    default_sid = (
+        STRATEGY_ID_SHORT_RESEARCH
+        if direction_raw == "SHORT"
+        else STRATEGY_ID_V1
+    )
+    sid = (strategy_id or default_sid).upper().strip()
+    # UI/backtest alias for research V2.1-A (same CHOPPY→WAIT evaluator).
+    if sid in {STRATEGY_ID_V21A, "COMBO_02_V2_1A"} or combo in {
+        COMBINATION_ID_V21A,
+        "COMBO_02_V2_1A",
+    }:
+        combo = COMBINATION_ID_V21A
+        sid = STRATEGY_ID_V21A
+    default_cver = (
+        COMBO_VERSION_V21A if combo == COMBINATION_ID_V21A else COMBO_VERSION_V1
+    )
+    cver = (combo_version or default_cver).strip().lower()
     setup_tf = normalize_timeframe(setup_timeframe or (tfs[0] if len(tfs) == 1 else V1_SETUP_TIMEFRAME))
     if setup_timeframe is None and len(tfs) == 1:
         setup_tf = tfs[0]
@@ -476,7 +501,8 @@ def validate_backtest_request(
     fp = configuration_fingerprint(
         {
             "strategy_id": STRATEGY_ID_V1 if combo == COMBO_ID else sid,
-            "combo_version": COMBO_VERSION_V1,
+            "combo_version": cver,
+            "combination_id": combo,
             "direction": direction_raw,
             "symbols": syms,
             "timeframes": tfs,
@@ -501,14 +527,33 @@ def validate_backtest_request(
         }
     )
 
+    htf_align_display = (
+        "BEARISH" if direction_raw == "SHORT" else V1_HTF_ALIGNMENT
+    )
+    short_status = (
+        "RESEARCH_ONLY"
+        if allow_short and direction_raw == "SHORT"
+        else ("RESEARCH_ENABLED" if allow_short else "PAUSED")
+    )
+    resolved_sid = (
+        STRATEGY_ID_V1
+        if combo == COMBO_ID and direction_raw == "LONG"
+        else sid
+    )
+    source = (
+        SOURCE_V21A_RESEARCH_BACKTEST
+        if combo == COMBINATION_ID_V21A
+        else SOURCE_V1_RESEARCH_BACKTEST
+    )
     return ResolvedBacktestConfig(
-        strategy_id=STRATEGY_ID_V1 if combo == COMBO_ID else sid,
-        combo_version=COMBO_VERSION_V1,
-        source=SOURCE_V1_RESEARCH_BACKTEST,
+        strategy_id=resolved_sid,
+        combo_version=cver,
+        source=source,
         direction=direction_raw,
+        combination_id=combo,
         setup_timeframe=setup_tf,
         htf_timeframes=list(V1_HTF_TIMEFRAMES),
-        htf_alignment=V1_HTF_ALIGNMENT,
+        htf_alignment=htf_align_display,
         risk_mode=mode,
         configured_risk_percent=configured_pct,
         principal_usd=principal,
@@ -520,7 +565,7 @@ def validate_backtest_request(
         paper_trade_created=False,
         live_trade_created=False,
         telegram_sent=False,
-        short_status="PAUSED",
+        short_status=short_status,
         fee_metadata=fee_display_metadata(
             taker_fee_pct=taker_fee_pct, maker_fee_pct=maker_fee_pct
         ),
@@ -606,6 +651,7 @@ def job_identity_payload(resolved: ResolvedBacktestConfig) -> dict[str, Any]:
         "combo_version": resolved.combo_version,
         "source": resolved.source,
         "direction": resolved.direction,
+        "combination_id": resolved.combination_id,
         "setup_timeframe": resolved.setup_timeframe,
         "htf_timeframes": list(resolved.htf_timeframes),
         "htf_alignment": resolved.htf_alignment,

@@ -68,6 +68,45 @@ def hl_intact_for_long(
     return True, "HL_INTACT"
 
 
+def lh_intact_for_short(
+    candles: Sequence[Mapping[str, Any]],
+    swings: Sequence[SwingRecord],
+    as_of_index: int,
+) -> tuple[bool, str]:
+    """Fail-closed LH integrity for SHORT: last high must be LH and never closed above.
+
+    Mirror of ``hl_intact_for_long``. Scans closed bars after the LH pivot
+    through ``as_of_index``. Any close above the LH price is STRUCTURE_INVALID
+    (bullish CHOCH / broken LH).
+    """
+    end = min(int(as_of_index), len(candles) - 1)
+    if end < 0:
+        return False, "INSUFFICIENT_DATA"
+    highs = [s for s in swings if s.swing_type == "HIGH" and s.bar_index < end]
+    if not highs:
+        return False, "NO_LH"
+    last_sh = highs[-1]
+    if str(last_sh.label or "") != "LH":
+        return False, "NO_LH"
+    lh_px = float(last_sh.price)
+    for i in range(int(last_sh.bar_index) + 1, end + 1):
+        c = ohlc(candles, i)[3]
+        if c is not None and float(c) > lh_px:
+            return False, "LH_BROKEN"
+    trend_stub = {"trend": "BEARISH"}
+    choch = detect_choch(
+        candles,
+        list(swings),
+        trend_stub,
+        symbol="",
+        timeframe="",
+        as_of_index=end,
+    )
+    if choch and str(choch.get("direction") or "") == "CHOCH_BULLISH":
+        return False, "CHOCH_BULLISH"
+    return True, "LH_INTACT"
+
+
 def revalidate_combo02_long_fill(eval_result: Mapping[str, Any] | None) -> tuple[bool, str]:
     """Fill-time fail-closed check for COMBO_02 LONG (paper/live open path).
 
@@ -79,7 +118,9 @@ def revalidate_combo02_long_fill(eval_result: Mapping[str, Any] | None) -> tuple
     status = str(eval_result.get("status") or "").upper()
     if status != "LONG_ENTRY_CANDIDATE":
         return False, f"STATUS_{status or 'NONE'}"
-    if str(eval_result.get("direction") or "").upper() != "LONG":
+    # Status already encodes LONG; accept missing direction, reject explicit non-LONG.
+    direction = str(eval_result.get("direction") or "").upper()
+    if direction and direction != "LONG":
         return False, "NOT_LONG"
     htf = eval_result.get("htf") or {}
     align = str(htf.get("htf_alignment") or eval_result.get("htf_alignment") or "").upper()
@@ -358,9 +399,11 @@ def evaluate_combination_at_bar(
     volumes: Sequence[float] | None = None,
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
+    candles_15m: Sequence[Mapping[str, Any]] | None = None,
     htf_trend_cache: dict[tuple[str, int], str] | None = None,
     htf_idx_1h_map: Sequence[int | None] | None = None,
     htf_idx_4h_map: Sequence[int | None] | None = None,
+    v2_context: Any | None = None,
 ) -> dict[str, Any]:
     """Evaluate one combination at historical bar N with as_of_index = N.
 
@@ -369,7 +412,59 @@ def evaluate_combination_at_bar(
 
     When ``combination.require_htf_alignment`` is True, 1h/4h trends must be
     HTF_ALIGNED with BOS direction (missing/mixed/conflict → fail closed).
+
+    ``COMBO_02_V2`` (+ research-only V2.1-A/B) dispatch to the adaptive
+    3-regime evaluator; COMBO_02 v1 path is unchanged. V2.1 variants do not
+    alter the frozen COMBO_02_V2 default combination.
     """
+    from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
+    from app.research.combo03_transition.variants import COMBO_03_FAMILY
+
+    if combination.combination_id in COMBO_V2_FAMILY:
+        from app.research.combo02_v2.evaluate import evaluate_combo02_v2_at_bar
+
+        return evaluate_combo02_v2_at_bar(
+            symbol=symbol,
+            timeframe=timeframe,
+            candles=candles,
+            as_of_index=as_of_index,
+            combination=combination,
+            signal_config=signal_config,
+            research_config=research_config,
+            signal_engine=signal_engine,
+            swings=swings,
+            atr_value=atr_value,
+            volumes=volumes,
+            candles_1h=candles_1h,
+            candles_4h=candles_4h,
+            candles_15m=candles_15m,
+            htf_trend_cache=htf_trend_cache,
+            htf_idx_1h_map=htf_idx_1h_map,
+            htf_idx_4h_map=htf_idx_4h_map,
+            v2_context=v2_context,
+        )
+
+    if combination.combination_id in COMBO_03_FAMILY:
+        from app.research.combo03_transition.evaluate import (
+            evaluate_combo03_transition_at_bar,
+        )
+
+        return evaluate_combo03_transition_at_bar(
+            symbol=symbol,
+            timeframe=timeframe,
+            candles=candles,
+            as_of_index=as_of_index,
+            combination=combination,
+            signal_config=signal_config,
+            research_config=research_config,
+            signal_engine=signal_engine,
+            swings=swings,
+            atr_value=atr_value,
+            volumes=volumes,
+            candles_15m=candles_15m,
+            v2_context=v2_context,
+        )
+
     local_cfg = _clone_signal_config(
         signal_config,
         research_config,
@@ -450,11 +545,15 @@ def evaluate_combination_at_bar(
     else:
         htf_ok = True
 
-    # HL-intact / CHOCH fail-closed for LONG trend+BOS playbooks (COMBO_02).
+    # HL/LH-intact / CHOCH fail-closed for trend+BOS playbooks.
     hl_ok = True
     hl_reason = "N/A"
+    lh_ok = True
+    lh_reason = "N/A"
     if direction == "LONG" and combination.require_trend:
         hl_ok, hl_reason = hl_intact_for_long(candles, swing_objs, as_of_index)
+    elif direction == "SHORT" and combination.require_trend:
+        lh_ok, lh_reason = lh_intact_for_short(candles, swing_objs, as_of_index)
 
     gates = {
         "bos": _bos_confirmed(bos),
@@ -471,6 +570,7 @@ def evaluate_combination_at_bar(
         ),
         "htf": htf_ok,
         "hl_intact": hl_ok if direction == "LONG" and combination.require_trend else True,
+        "lh_intact": lh_ok if direction == "SHORT" and combination.require_trend else True,
     }
 
     required = []
@@ -480,6 +580,8 @@ def evaluate_combination_at_bar(
         required.append("trend")
         if direction == "LONG":
             required.append("hl_intact")
+        elif direction == "SHORT":
+            required.append("lh_intact")
     if combination.require_impulse:
         required.append("impulse")
     if combination.require_pullback:
@@ -498,6 +600,8 @@ def evaluate_combination_at_bar(
             reason = htf_meta.get("reason") or reason
         elif direction == "LONG" and combination.require_trend and not hl_ok:
             reason = f"STRUCTURE_INVALID:{hl_reason}"
+        elif direction == "SHORT" and combination.require_trend and not lh_ok:
+            reason = f"STRUCTURE_INVALID:{lh_reason}"
         return {
             "status": "NO_SETUP",
             "direction": direction,
@@ -509,6 +613,7 @@ def evaluate_combination_at_bar(
             "reason": reason,
             "htf": htf_meta,
             "hl_intact_reason": hl_reason,
+            "lh_intact_reason": lh_reason,
             "tf_analysis": {k: v for k, v in tf_analysis.items() if k != "_swings_objs"},
         }
 
@@ -654,6 +759,7 @@ def evaluate_combination_at_bar(
         "as_of_index": as_of_index,
         "htf": htf_meta,
         "hl_intact_reason": hl_reason,
+        "lh_intact_reason": lh_reason,
         "condition_definition": combination.to_dict(),
         "note": "RESEARCH setup — not a live signal, not a trade command",
     }

@@ -65,6 +65,7 @@ def run_combination_backtest_worker(payload: dict[str, Any]) -> dict[str, Any]:
             should_cancel=should_cancel,
             candles_1h=data.get("candles_1h"),
             candles_4h=data.get("candles_4h"),
+            candles_15m=data.get("candles_15m"),
             progress_callback=progress_callback,
             job_id=data.get("job_id"),
         )
@@ -169,6 +170,8 @@ def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
         "bars_loaded": len(candles),
         "candle_source": load_meta.get("candle_source"),
         "trades": trades,
+        # Observability side-channel from backtest walk (does not affect trades).
+        "entry_diagnostics": out.get("entry_diagnostics") or {},
         "status": out.get("status") or ("OK" if n else "SUCCESS_EMPTY"),
     }
 

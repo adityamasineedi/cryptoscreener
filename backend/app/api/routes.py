@@ -1761,7 +1761,7 @@ async def research_long_strategy_backtest(
             maker_fee_pct=maker_fee_pct,
             start_date=start_date,
             end_date=end_date,
-            allow_short=False,
+            allow_short=True,
         )
     except BacktestConfigError as exc:
         return {
@@ -1791,7 +1791,7 @@ async def research_long_strategy_backtest(
             cell = cell_risk_lookup(resolved, sym, tf)
             cell_risk = float(cell.effective_risk_amount) if cell else float(risk_usd)
             payload = await svc.strategy_matrix(
-                combination_id=combination_id.upper(),
+                combination_id=resolved.combination_id,
                 symbols=[sym],
                 timeframes=[tf],
                 direction=resolved.direction,
@@ -1833,7 +1833,7 @@ async def research_long_strategy_backtest(
         "status": "OK",
         "label": label,
         "playbook": playbook,
-        "combination_id": combination_id.upper(),
+        "combination_id": resolved.combination_id,
         "combination_name": combination_name,
         "direction": resolved.direction,
         "limit": limit,

@@ -64,8 +64,17 @@ class TestCombinationsDefined:
             "COMBO_01": "BOS_ONLY",
             "COMBO_02": "TREND_BOS",
             "COMBO_02_LOCAL": "TREND_BOS_SETUP_TF_ONLY",
+            "COMBO_02_CLOSED_HTF": "TREND_BOS_CLOSED_HTF",
+            "COMBO_02_V2": "ADAPTIVE_3_REGIME",
+            "COMBO_02_V2_1A": "ADAPTIVE_3_REGIME_V21A_CHOPPY_OFF",
+            "COMBO_02_V2_1_A": "ADAPTIVE_3_REGIME_V21A_CHOPPY_OFF",
+            "COMBO_02_V2_1B": "ADAPTIVE_3_REGIME_V21B_CHOPPY_15M_REQ",
             "COMBO_03": "TREND_BOS_PULLBACK",
+            "COMBO_03_TRANSITION": "CHOPPY_TRANSITION_BREAKOUT",
+            "COMBO_03_TRANSITION_B": "CHOPPY_TRANSITION_BREAKOUT_NO_15M",
+            "COMBO_03_TRANSITION_C": "CHOPPY_TRANSITION_BREAKOUT_DISPLACEMENT",
             "COMBO_04": "TREND_BOS_IMPULSE_PULLBACK",
+            "COMBO_04_HTF": "TREND_BOS_IMPULSE_PULLBACK_HTF",
             "COMBO_05": "TREND_BOS_IMPULSE_PULLBACK_RVOL",
             "COMBO_06": "TREND_BOS_PULLBACK_SD",
             "COMBO_07": "TREND_BOS_IMPULSE_PULLBACK_RVOL_SD",
@@ -77,12 +86,18 @@ class TestCombinationsDefined:
             assert COMBINATIONS[cid].conditions
         assert COMBINATIONS["COMBO_02"].require_htf_alignment is True
         assert COMBINATIONS["COMBO_02_LOCAL"].require_htf_alignment is False
+        assert COMBINATIONS["COMBO_02_V2"].require_htf_alignment is False
+        assert COMBINATIONS["COMBO_02_V2"].require_bos is False
+        assert COMBINATIONS["COMBO_04_HTF"].require_impulse is True
+        assert COMBINATIONS["COMBO_04_HTF"].require_pullback is True
+        assert COMBINATIONS["COMBO_04_HTF"].require_htf_alignment is True
 
     def test_list_and_get(self):
-        assert len(list_combinations()) == 9
+        assert len(list_combinations()) == len(COMBINATIONS)
         assert get_combination("COMBO_05") is not None
         assert get_combination("TREND_BOS") is not None
         assert get_combination("COMBO_02_LOCAL") is not None
+        assert get_combination("COMBO_04_HTF") is not None
         assert get_combination("NOPE") is None
 
 

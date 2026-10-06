@@ -11,7 +11,10 @@ import {
 import {
   allFrozenV1Symbols,
   assessProductionComparable,
+  BACKTEST_STRATEGY_OPTIONS,
+  backtestStrategyLabel,
   barsToApproxDays,
+  type BacktestStrategyId,
   FEE_DISPLAY,
   formatBarsDuration,
   lookbackLabelForTf,
@@ -167,6 +170,7 @@ export function BacktestPanel() {
   const [symbols, setSymbols] = useState<string[]>(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
   const [customSymbols, setCustomSymbols] = useState("");
   const [timeframes, setTimeframes] = useState<string[]>(["1h"]);
+  const [strategyId, setStrategyId] = useState<BacktestStrategyId>("COMBO_02_V1");
   const [direction, setDirection] = useState<"LONG" | "SHORT">("LONG");
   const [lookbackId, setLookbackId] = useState<(typeof LOOKBACK_LIMITS)[number]["id"]>("60d");
   const [customLimit, setCustomLimit] = useState("");
@@ -184,6 +188,10 @@ export function BacktestPanel() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<OhlcvRangeRow[]>([]);
+  const isV21A = strategyId === "COMBO_02_V2_1_A";
+  const strategyMeta =
+    BACKTEST_STRATEGY_OPTIONS.find((o) => o.id === strategyId) ??
+    BACKTEST_STRATEGY_OPTIONS[0];
 
   const job = useBacktestJobStore((s) => s.job);
   const storeError = useBacktestJobStore((s) => s.error);
@@ -194,7 +202,8 @@ export function BacktestPanel() {
 
   const loading = active || job?.status === "running";
   const frozenV1Selection = allFrozenV1Symbols(symbols);
-  const lockV1Risk = frozenV1Selection && !researchRiskOverride;
+  const lockV1Risk =
+    !isV21A && frozenV1Selection && !researchRiskOverride;
   const primaryTf = timeframes.includes("1h")
     ? "1h"
     : timeframes[0] || "1h";
@@ -225,6 +234,7 @@ export function BacktestPanel() {
         leverage,
         takerFeePct,
         makerFeePct,
+        strategyId,
       }),
     [
       symbols,
@@ -234,6 +244,7 @@ export function BacktestPanel() {
       leverage,
       takerFeePct,
       makerFeePct,
+      strategyId,
     ]
   );
 
@@ -434,31 +445,45 @@ export function BacktestPanel() {
       setStoreError("Pick at least one symbol and timeframe");
       return;
     }
-    if (direction === "SHORT") {
-      setShortNotice(
-        "SHORT research is paused. SHORT paper trading, production, and Telegram are disabled. No SHORT backtest will enter an operational path."
-      );
-      setStoreError("short_research_paused");
-      return;
-    }
     if (periodMode === "dates" && !start && !end) {
       setStoreError("Custom dates mode needs a start and/or end day (UTC)");
       return;
     }
     setSelectedKey(null);
-    setShortNotice(null);
+    if (isV21A) {
+      setShortNotice(
+        "COMBO_02 V2.1-A research-only: CHOPPY → WAIT. Native LONG+SHORT. Does not replace COMBO_02 V2."
+      );
+    } else {
+      setShortNotice(
+        direction === "SHORT"
+          ? "SHORT research-only: COMBO_04_HTF reverse of long (BOS + downtrend + HTF + impulse + pullback). No paper/live/Telegram."
+          : null
+      );
+    }
+    const isShort = !isV21A && direction === "SHORT";
     await startJob({
       symbols,
       timeframes,
-      direction: "LONG",
-      combination_id: "COMBO_02",
-      strategy_id: "COMBO_02_V1",
-      combo_version: "v1",
+      // V2.1-A is native LONG+SHORT; keep direction LONG for request validation.
+      direction: isV21A ? "LONG" : direction,
+      combination_id: isV21A
+        ? strategyMeta.combinationId
+        : isShort
+          ? "COMBO_04_HTF"
+          : "COMBO_02",
+      strategy_id: isV21A
+        ? strategyId
+        : isShort
+          ? "COMBO_04_HTF_SHORT"
+          : "COMBO_02_V1",
+      combo_version: isV21A ? strategyMeta.comboVersion : "v1",
       setup_timeframe: primaryTf,
-      risk_mode: researchRiskOverride
-        ? "RESEARCH_OVERRIDE"
-        : "V1_PRODUCTION_PROFILE",
-      research_risk_override: researchRiskOverride,
+      risk_mode:
+        isV21A || researchRiskOverride
+          ? "RESEARCH_OVERRIDE"
+          : "V1_PRODUCTION_PROFILE",
+      research_risk_override: isV21A || researchRiskOverride,
       limit,
       risk_usd: riskUsd,
       principal_usd: principalUsd,
@@ -473,6 +498,9 @@ export function BacktestPanel() {
     symbols,
     timeframes,
     direction,
+    strategyId,
+    strategyMeta,
+    isV21A,
     primaryTf,
     researchRiskOverride,
     limit,
@@ -544,32 +572,85 @@ export function BacktestPanel() {
           Strategy Backtest
         </h1>
         <p className="mt-1 max-w-3xl text-xs text-terminal-muted">
-          COMBO_02 v1 research backtest on Postgres OHLCV. LONG-only production
-          profile. Same engine as research scripts — not a profitability claim.
-          No paper or live trade is created from this screen.
+          Research backtest on Postgres OHLCV. Default strategy is frozen COMBO_02
+          v1; SHORT uses research-only COMBO_04_HTF. COMBO_02 V2.1-A is an
+          optional research variant (CHOPPY → WAIT). Same engines as research
+          scripts — not a profitability claim. No paper or live trade is created
+          from this screen.
         </p>
       </div>
 
       <section className="mb-4 rounded border border-terminal-border/80 p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+          <label className="flex items-center gap-2 rounded border border-terminal-accent/40 bg-terminal-accent/10 px-2 py-1 font-mono text-terminal-accent">
+            <span>Strategy</span>
+            <select
+              value={strategyId}
+              onChange={(e) =>
+                setStrategyId(e.target.value as BacktestStrategyId)
+              }
+              className="rounded border border-terminal-border bg-terminal-bg px-1.5 py-0.5 font-mono text-xs text-terminal-text focus:border-terminal-accent focus:outline-none"
+            >
+              {BACKTEST_STRATEGY_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className="rounded border border-terminal-accent/40 bg-terminal-accent/10 px-2 py-1 font-mono text-terminal-accent">
-            Strategy: COMBO_02 v1
+            Strategy: {backtestStrategyLabel(strategyId)}
+            {isV21A
+              ? ""
+              : direction === "SHORT"
+                ? " → COMBO_04_HTF SHORT"
+                : ""}
           </span>
-          <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
-            Direction: LONG
+          <span
+            className={`rounded border px-2 py-0.5 text-[10px] ${
+              isV21A
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                : direction === "SHORT"
+                  ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                  : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+            }`}
+          >
+            Status: {isV21A ? "Research" : direction === "SHORT" ? "Research" : "Production candidate"}
+          </span>
+          {isV21A ? (
+            <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
+              RESEARCH ONLY
+            </span>
+          ) : null}
+          <span
+            className={`rounded border px-2 py-0.5 text-[10px] ${
+              isV21A
+                ? "border-terminal-border bg-white/5 text-terminal-text"
+                : direction === "SHORT"
+                  ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                  : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+            }`}
+          >
+            Direction: {isV21A ? "LONG+SHORT (native)" : direction}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
             Setup TF: 1h
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
-            HTF: 1h + 4h bullish alignment
+            {isV21A
+              ? "HTF: soft 4h + 15m confirm (v2 playbooks)"
+              : `HTF: 1h + 4h ${direction === "SHORT" ? "bearish" : "bullish"} alignment`}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-muted">
-            Source: V1_RESEARCH_BACKTEST
+            Source:{" "}
+            {isV21A ? "V21A_RESEARCH_BACKTEST" : "V1_RESEARCH_BACKTEST"}
           </span>
-          <span className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-200">
-            SHORT status: PAUSED
-          </span>
+          {!isV21A ? (
+            <span className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-200">
+              SHORT status:{" "}
+              {direction === "SHORT" ? "RESEARCH_ONLY" : "RESEARCH_ENABLED"}
+            </span>
+          ) : null}
         </div>
 
         {comparability.productionComparable ? (
@@ -715,44 +796,68 @@ export function BacktestPanel() {
             <div className="mb-1 text-[11px] uppercase tracking-wide text-terminal-muted">
               Direction
             </div>
-            <div className="flex flex-wrap gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setDirection("LONG");
-                  setShortNotice(null);
-                }}
-                className={`rounded border px-2 py-1 font-mono text-xs ${
-                  direction === "LONG"
-                    ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
-                    : "border-terminal-border text-terminal-muted"
-                }`}
-              >
-                LONG
-              </button>
-              <button
-                type="button"
-                aria-disabled="true"
-                title="SHORT research is paused"
-                onClick={() =>
-                  setShortNotice(
-                    "SHORT research is paused. SHORT paper trading, production, and Telegram are disabled. No SHORT backtest will enter an operational path."
-                  )
-                }
-                className="rounded border border-rose-500/30 bg-rose-500/5 px-2 py-1 text-left font-mono text-xs text-rose-200/80 opacity-80"
-              >
-                <div>SHORT</div>
-                <div className="text-[9px] leading-tight text-rose-200/70">Paused</div>
-                <div className="text-[9px] leading-tight text-rose-200/60">
-                  Research disabled
-                </div>
-              </button>
-            </div>
+            {isV21A ? (
+              <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
+                V2.1-A runs native LONG+SHORT (direction filter off). COMBO_04
+                SHORT path is not used.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirection("LONG");
+                    setShortNotice(null);
+                  }}
+                  className={`rounded border px-2 py-1 font-mono text-xs ${
+                    direction === "LONG"
+                      ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
+                      : "border-terminal-border text-terminal-muted"
+                  }`}
+                >
+                  LONG
+                </button>
+                <button
+                  type="button"
+                  title="SHORT research-only: BOS downtrend + impulse + pullback + HTF"
+                  onClick={() => {
+                    setDirection("SHORT");
+                    setShortNotice(
+                      "SHORT research-only: COMBO_04_HTF reverse of long (BOS + downtrend + HTF + impulse + pullback). No paper/live/Telegram."
+                    );
+                  }}
+                  className={`rounded border px-2 py-1 text-left font-mono text-xs ${
+                    direction === "SHORT"
+                      ? "border-rose-500/50 bg-rose-500/15 text-rose-100"
+                      : "border-rose-500/30 bg-rose-500/5 text-rose-200/80"
+                  }`}
+                >
+                  <div>SHORT</div>
+                  <div className="text-[9px] leading-tight text-rose-200/70">
+                    Research only
+                  </div>
+                  <div className="text-[9px] leading-tight text-rose-200/60">
+                    Impulse + pullback
+                  </div>
+                </button>
+              </div>
+            )}
             <div className="mt-1 font-mono text-[10px] text-terminal-muted">
-              Direction: LONG · SHORT status: PAUSED
+              Direction: {isV21A ? "LONG+SHORT" : direction}
+              {!isV21A
+                ? ` · SHORT status: ${
+                    direction === "SHORT" ? "RESEARCH_ONLY" : "RESEARCH_ENABLED"
+                  }`
+                : " · RESEARCH ONLY"}
             </div>
             {shortNotice ? (
-              <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 text-[10px] text-rose-100">
+              <div
+                className={`mt-2 rounded border px-2 py-1.5 text-[10px] ${
+                  isV21A
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                    : "border-rose-500/40 bg-rose-500/10 text-rose-100"
+                }`}
+              >
                 {shortNotice}
               </div>
             ) : null}
@@ -1036,10 +1141,28 @@ export function BacktestPanel() {
               Symbol role:{" "}
               {symbols.map((s) => symbolRoleDisplay(s, primaryTf)).join("; ") || "—"}
             </div>
-            <div>Strategy: COMBO_02 v1</div>
-            <div>Direction: LONG</div>
+            <div>
+              Strategy: {backtestStrategyLabel(strategyId)}
+              {isV21A
+                ? " · RESEARCH ONLY"
+                : direction === "SHORT"
+                  ? " → COMBO_04_HTF SHORT research"
+                  : ""}
+            </div>
+            <div>Status: {isV21A ? "Research" : "as selected"}</div>
+            <div>
+              Direction: {isV21A ? "LONG+SHORT (native)" : direction}
+            </div>
             <div>Setup timeframe: {primaryTf} ({timeframeRoleLabel(primaryTf)})</div>
-            <div>HTF requirement: 1h + 4h bullish alignment</div>
+            <div>
+              {isV21A
+                ? "HTF: soft 4h policy + 15m confirmation (v2 playbooks; CHOPPY WAIT)"
+                : `HTF requirement: 1h + 4h ${
+                    direction === "SHORT" ? "bearish" : "bullish"
+                  } alignment${
+                    direction === "SHORT" ? " · impulse + pullback required" : ""
+                  }`}
+            </div>
             <div>
               Effective risk:{" "}
               {lockV1Risk
@@ -1089,7 +1212,7 @@ export function BacktestPanel() {
           <div className="mt-2 flex flex-wrap items-end gap-3">
             <button
               type="button"
-              disabled={loading || direction === "SHORT"}
+              disabled={loading}
               onClick={() => void run()}
               className="rounded border border-terminal-accent bg-terminal-accent/15 px-4 py-1.5 text-sm text-terminal-accent disabled:opacity-50"
             >
@@ -1260,17 +1383,46 @@ export function BacktestPanel() {
           </div>
           <div className="mb-3 grid gap-1 rounded border border-terminal-border/80 bg-black/20 px-3 py-2 font-mono text-[11px] text-terminal-muted term-md:grid-cols-2">
             <div>
-              Strategy identity:{" "}
+              Strategy:{" "}
               <span className="text-terminal-text">
-                {job?.strategy_id || "COMBO_02_V1"} · {job?.combo_version || "v1"}
+                {job?.strategy_id === "COMBO_02_V2_1_A"
+                  ? "COMBO_02 V2.1-A"
+                  : job?.strategy_id || "COMBO_02_V1"}{" "}
+                · {job?.combo_version || "v1"}
+              </span>
+              {(job?.strategy_id === "COMBO_02_V2_1_A" || isV21A) && (
+                <span className="ml-2 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-100">
+                  RESEARCH ONLY
+                </span>
+              )}
+            </div>
+            <div>
+              Status:{" "}
+              <span className="text-terminal-text">
+                {job?.strategy_id === "COMBO_02_V2_1_A" || isV21A
+                  ? "Research"
+                  : job?.research_only
+                    ? "Research"
+                    : "as configured"}
               </span>
             </div>
             <div>
               Direction:{" "}
-              <span className="text-terminal-text">{job?.direction || "LONG"}</span>
-              {" · "}
-              SHORT status:{" "}
-              <span className="text-rose-200">{job?.short_status || "PAUSED"}</span>
+              <span className="text-terminal-text">
+                {job?.strategy_id === "COMBO_02_V2_1_A"
+                  ? "LONG+SHORT"
+                  : job?.direction || "LONG"}
+              </span>
+              {job?.strategy_id !== "COMBO_02_V2_1_A" ? (
+                <>
+                  {" · "}
+                  SHORT status:{" "}
+                  <span className="text-rose-200">
+                    {job?.short_status ||
+                      (direction === "SHORT" ? "RESEARCH_ONLY" : "RESEARCH_ENABLED")}
+                  </span>
+                </>
+              ) : null}
             </div>
             <div>
               Symbol role:{" "}

@@ -125,3 +125,30 @@ def test_revalidate_fill_passes_aligned():
         }
     )
     assert ok and reason == "OK"
+
+
+def test_revalidate_fill_infers_long_from_status_when_direction_missing():
+    ok, reason = revalidate_combo02_long_fill(
+        {
+            "status": "LONG_ENTRY_CANDIDATE",
+            "entry_price": 100,
+            "stop_price": 90,
+            "htf": {"htf_alignment": HTF_ALIGNED},
+            "gates": {"hl_intact": True},
+        }
+    )
+    assert ok and reason == "OK"
+
+
+def test_revalidate_fill_rejects_explicit_short_direction():
+    ok, reason = revalidate_combo02_long_fill(
+        {
+            "status": "LONG_ENTRY_CANDIDATE",
+            "direction": "SHORT",
+            "entry_price": 100,
+            "stop_price": 90,
+            "htf": {"htf_alignment": HTF_ALIGNED},
+            "gates": {"hl_intact": True},
+        }
+    )
+    assert not ok and reason == "NOT_LONG"

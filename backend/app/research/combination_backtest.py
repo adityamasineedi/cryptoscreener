@@ -22,6 +22,15 @@ from app.research.combination_engine import (
     _clone_signal_config,
     evaluate_combination_at_bar,
 )
+from app.research.entry_diagnostics import (
+    classify_bos_prefilter_skip,
+    classify_direction_filter_mismatch,
+    classify_from_eval_setup,
+    classify_insufficient_bars_before_walk,
+    classify_position_bar,
+    classify_sticky_bos_skip,
+    record_for_bar,
+)
 from app.research.backtest_timing import (
     BACKTEST_END,
     BACKTEST_HEARTBEAT,
@@ -299,8 +308,10 @@ def run_combination_backtest(
     should_cancel: Any | None = None,
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
+    candles_15m: Sequence[Mapping[str, Any]] | None = None,
     progress_callback: Any | None = None,
     job_id: str | None = None,
+    prebuilt_context: Any | None = None,
 ) -> dict[str, Any]:
     """Run one combination on one symbol/timeframe series.
 
@@ -310,6 +321,13 @@ def run_combination_backtest(
 
     When the combination requires HTF alignment, pass ``candles_1h`` /
     ``candles_4h`` (closed bars only). Missing HTF series fail closed (no entries).
+
+    ``candles_15m`` is optional confirmation input for COMBO_02_V2 and
+    COMBO_03_TRANSITION research families.
+
+    ``prebuilt_context`` optionally supplies a precomputed COMBO_02_V2 /
+    COMBO_03 context (validation memory control). When omitted, context is
+    built inside the walk as before.
 
     ``progress_callback`` receives dict heartbeats (phase / bars / trades) for
     UI job polling — does not affect trade results.
@@ -328,6 +346,7 @@ def run_combination_backtest(
     # Keep HTF references (no deep copy) — gate must not mutate series.
     htf_1h = list(candles_1h) if candles_1h is not None else None
     htf_4h = list(candles_4h) if candles_4h is not None else None
+    series_15m = list(candles_15m) if candles_15m is not None else None
     # Setup TF may itself be 1h/4h — reuse when HTF series not supplied.
     tf_l = (timeframe or "").lower()
     if combo.require_htf_alignment:
@@ -434,6 +453,35 @@ def run_combination_backtest(
     htf_idx_1h_map: list[int | None] | None = None
     htf_idx_4h_map: list[int | None] | None = None
     htf_precompute_seconds = 0.0
+    # Observability side-channel only — never consulted for entry decisions.
+    entry_diagnostics: dict[int, dict[str, Any]] = {}
+    for _pre_i in range(start, loop_start):
+        entry_diagnostics[_pre_i] = record_for_bar(
+            _pre_i, classified=classify_insufficient_bars_before_walk()
+        )
+
+    v2_context = prebuilt_context
+    from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
+    from app.research.combo03_transition.variants import COMBO_03_FAMILY
+
+    if v2_context is None and combo.combination_id in COMBO_V2_FAMILY:
+        from app.research.combo02_v2.context import Combo02V2Context
+
+        v2_context = Combo02V2Context.build(
+            symbol=symbol,
+            setup_timeframe=timeframe,
+            setup_candles=series,
+            candles_15m=series_15m,
+        )
+    elif v2_context is None and combo.combination_id in COMBO_03_FAMILY:
+        from app.research.combo03_transition.context import Combo03Context
+
+        v2_context = Combo03Context.build(
+            symbol=symbol,
+            setup_timeframe=timeframe,
+            setup_candles=series,
+            candles_15m=series_15m,
+        )
 
     _progress(BACKTEST_START, bars=0, total=walk_total, trades_n=0)
     _progress(STRUCTURE_SCAN_START, bars=0, total=walk_total, trades_n=0)
@@ -502,6 +550,7 @@ def run_combination_backtest(
                 "sample_size": 0,
                 "result": {},
                 "trades": [],
+                "entry_diagnostics": entry_diagnostics,
                 "elapsed_seconds": time.perf_counter() - t0,
                 "candles_processed": candles_processed,
                 "setups_processed": setups,
@@ -610,6 +659,13 @@ def run_combination_backtest(
                     trades.append(open_trade)
                 open_trade = None
                 prev_break = False
+                entry_diagnostics[i] = record_for_bar(
+                    i, classified=classify_position_bar(exited=True)
+                )
+            else:
+                entry_diagnostics[i] = record_for_bar(
+                    i, classified=classify_position_bar(exited=False)
+                )
             continue
 
         # COMBO_* that require BOS: skip full structure scan when break impossible.
@@ -622,8 +678,14 @@ def run_combination_backtest(
                 )
             if not brk:
                 prev_break = False
+                entry_diagnostics[i] = record_for_bar(
+                    i, classified=classify_bos_prefilter_skip()
+                )
                 continue
             if prev_break and not swing_grew:
+                entry_diagnostics[i] = record_for_bar(
+                    i, classified=classify_sticky_bos_skip()
+                )
                 continue
             prev_break = True
 
@@ -644,21 +706,40 @@ def run_combination_backtest(
                 volumes=vols_arr,
                 candles_1h=htf_1h,
                 candles_4h=htf_4h,
+                candles_15m=series_15m,
                 htf_trend_cache=htf_trend_cache,
                 htf_idx_1h_map=htf_idx_1h_map,
                 htf_idx_4h_map=htf_idx_4h_map,
+                v2_context=v2_context,
             )
         if setup.get("status") not in (
             "LONG_ENTRY_CANDIDATE",
             "SHORT_ENTRY_CANDIDATE",
             "ENTRY_CANDIDATE",
         ):
+            entry_diagnostics[i] = record_for_bar(
+                i,
+                classified=classify_from_eval_setup(setup),
+                signal_time=setup.get("signal_time"),
+            )
             continue
         direction = str(setup["direction"])
         if direction_filter and direction_filter.upper() in ("LONG", "SHORT"):
             if direction != direction_filter.upper():
+                entry_diagnostics[i] = record_for_bar(
+                    i,
+                    classified=classify_direction_filter_mismatch(
+                        direction, direction_filter
+                    ),
+                    signal_time=setup.get("signal_time"),
+                )
                 continue
         setups += 1
+        entry_diagnostics[i] = record_for_bar(
+            i,
+            classified=classify_from_eval_setup(setup),
+            signal_time=setup.get("signal_time"),
+        )
         open_trade = ResearchTrade(
             symbol=symbol.upper(),
             timeframe=timeframe,
@@ -695,6 +776,31 @@ def run_combination_backtest(
                         "bos_direction": (setup.get("bos") or {}).get("direction"),
                     }
                     if isinstance(setup.get("bos"), dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "playbook": setup.get("playbook"),
+                        "regime": setup.get("regime"),
+                        "event": setup.get("event"),
+                        "confirmation": setup.get("confirmation"),
+                        "htf_state": setup.get("htf_state"),
+                        "v2_diagnostics": setup.get("v2_diagnostics"),
+                    }
+                    if combo.combination_id in COMBO_V2_FAMILY
+                    else {}
+                ),
+                **(
+                    {
+                        "playbook": setup.get("playbook"),
+                        "regime": setup.get("regime"),
+                        "event": setup.get("event"),
+                        "confirmation": setup.get("confirmation"),
+                        "htf_state": setup.get("htf_state"),
+                        "sweep": setup.get("sweep"),
+                        "combo03_diagnostics": setup.get("combo03_diagnostics"),
+                    }
+                    if combo.combination_id in COMBO_03_FAMILY
                     else {}
                 ),
             },
@@ -760,6 +866,8 @@ def run_combination_backtest(
         "data_quality": quality,
         "result": result.to_dict(),
         "trades": [t.to_dict() for t in trades],
+        # Observability only — never used for signal/trade decisions.
+        "entry_diagnostics": entry_diagnostics,
         "elapsed_seconds": time.perf_counter() - t0,
         "candles_processed": candles_processed,
         "setups_processed": setups,

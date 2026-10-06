@@ -10,9 +10,14 @@ def test_catalog_has_working_combo02_v1():
     assert "COMBO_02_V1" in ids
     assert "COMBO_02_V1_1_RISK_CONTROLLED" in ids
     assert "COMBO_02_V1_CLOSED_HTF" in ids
+    assert "COMBO_02_V2_1_A" in ids
     assert "COMBO_02_LOCAL" in ids
     assert "COMBO_03" in ids
     assert "COMBO_04" in ids
+
+    v21a = next(s for s in cat["strategies"] if s["id"] == "COMBO_02_V2_1_A")
+    assert v21a["status"] == "RESEARCH"
+    assert v21a["combo_id"] == "COMBO_02_V2_1_A"
 
     v1 = next(s for s in cat["strategies"] if s["id"] == "COMBO_02_V1")
     assert v1["status"] == "WORKING"

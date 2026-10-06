@@ -1050,9 +1050,14 @@ class BosResearchService:
                 _notify(TIMEFRAME_NORMALIZATION_END, symbol=sym, timeframe=tf)
                 _notify(HTF_DATA_LOAD_START, symbol=sym, timeframe=tf)
                 t_htf = time.perf_counter()
+                from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
+
+                is_v2_family = str(combo.combination_id) in COMBO_V2_FAMILY
+                # V2 family needs soft HTF (4h) even though require_htf_alignment
+                # is False — same inputs as research runners.
                 c1h, c4h = await _load_htf_candles_for_combo(
                     sym,
-                    require_htf=bool(combo.require_htf_alignment),
+                    require_htf=bool(combo.require_htf_alignment) or is_v2_family,
                     setup_timeframe=tf,
                     limit=limit,
                     start_date=start_date,
@@ -1060,10 +1065,22 @@ class BosResearchService:
                     warmup_bars=warmup,
                     use_research_cache=use_research_cache,
                 )
+                c15m_strategy: list[dict[str, Any]] | None = None
+                if is_v2_family:
+                    c15m_strategy, _, _ = await _load_research_candles(
+                        sym,
+                        "15m",
+                        limit=max(int(limit) * 4, 500),
+                        start_date=start_date,
+                        end_date=end_date,
+                        warmup_bars=max(warmup, 200),
+                        use_research_cache=use_research_cache,
+                    )
                 htf_seconds = time.perf_counter() - t_htf
                 timing["htf_load_seconds"] = round(htf_seconds, 6)
                 timing["htf_1h_rows"] = len(c1h or [])
                 timing["htf_4h_rows"] = len(c4h or [])
+                timing["strategy_15m_rows"] = len(c15m_strategy or [])
                 _notify(
                     HTF_DATA_LOAD_END,
                     symbol=sym,
@@ -1086,6 +1103,9 @@ class BosResearchService:
                 sym_u = load_meta["symbol"]
                 tf_u = load_meta["timeframe"]
                 idx0 = eval_start if eval_start > 0 else None
+                # V2 family is native LONG+SHORT (research parity); do not
+                # silently fall back to another combo when UI direction is set.
+                matrix_direction = None if is_v2_family else direction_u
 
                 out = await run_combination_backtest_isolated(
                     symbol=sym_u,
@@ -1095,11 +1115,12 @@ class BosResearchService:
                     signal_config=scfg,
                     research_config=rcfg,
                     market_cap=mcap,
-                    direction_filter=direction_u,
+                    direction_filter=matrix_direction,
                     index_start=idx0,
                     should_cancel=should_cancel,
                     candles_1h=c1h,
                     candles_4h=c4h,
+                    candles_15m=c15m_strategy,
                     progress_callback=progress_callback,
                     job_id=job_id,
                     cancel_event=cancel_event,
@@ -1140,18 +1161,21 @@ class BosResearchService:
                 c15m: list[dict[str, Any]] | None = None
                 if analytics_on:
                     _notify("ANALYTICS_LOAD_START", symbol=sym, timeframe="15m")
-                    try:
-                        c15m, _, _ = await _load_research_candles(
-                            sym,
-                            "15m",
-                            limit=max(int(limit) * 4, 500),
-                            start_date=start_date,
-                            end_date=end_date,
-                            warmup_bars=warmup,
-                            use_research_cache=use_research_cache,
-                        )
-                    except Exception:  # noqa: BLE001
-                        c15m = None
+                    if c15m_strategy is not None:
+                        c15m = c15m_strategy
+                    else:
+                        try:
+                            c15m, _, _ = await _load_research_candles(
+                                sym,
+                                "15m",
+                                limit=max(int(limit) * 4, 500),
+                                start_date=start_date,
+                                end_date=end_date,
+                                warmup_bars=warmup,
+                                use_research_cache=use_research_cache,
+                            )
+                        except Exception:  # noqa: BLE001
+                            c15m = None
                     _notify(
                         "ANALYTICS_LOAD_END",
                         symbol=sym,
