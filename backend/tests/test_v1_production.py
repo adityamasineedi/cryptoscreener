@@ -128,6 +128,7 @@ def test_path_a_legacy_and_v1_coexist_on_same_symbol(monkeypatch):
         book=V1Book("BTCUSDT", "1h", "core", 0.02, True),
         eval_result={
             "status": "LONG_ENTRY_CANDIDATE",
+            "direction": "LONG",
             "entry_price": 100.0,
             "stop_price": 98.0,
             "tp1": 104.0,
@@ -136,6 +137,7 @@ def test_path_a_legacy_and_v1_coexist_on_same_symbol(monkeypatch):
                 "trend_1h": "BULLISH",
                 "trend_4h": "BULLISH",
             },
+            "gates": {"hl_intact": True},
         },
         setup_bar_time_utc="2026-10-02T15:00:00+00:00",
         emit_alert=False,

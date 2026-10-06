@@ -52,6 +52,7 @@ def _path_a_payload(symbol: str = "TRXUSDT", timeframe: str = "15m") -> dict:
 def _v1_eval() -> dict:
     return {
         "status": "LONG_ENTRY_CANDIDATE",
+        "direction": "LONG",
         "entry_price": 100.0,
         "stop_price": 98.0,
         "tp1": 104.0,
@@ -60,6 +61,7 @@ def _v1_eval() -> dict:
             "trend_4h": "BULLISH",
             "htf_alignment": "HTF_ALIGNED",
         },
+        "gates": {"hl_intact": True},
     }
 
 

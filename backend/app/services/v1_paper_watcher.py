@@ -81,7 +81,9 @@ def is_v1_long_entry(result: Mapping[str, Any] | None) -> bool:
         return False
     if str(result.get("status") or "") != "LONG_ENTRY_CANDIDATE":
         return False
-    if str(result.get("direction") or "").upper() != "LONG":
+    # LONG_ENTRY_CANDIDATE implies LONG; only reject an explicit non-LONG direction.
+    direction = str(result.get("direction") or "").upper()
+    if direction and direction != "LONG":
         return False
     if str(result.get("combination_id") or "").upper() != COMBO_ID:
         return False

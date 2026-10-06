@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.research.v1_production import V1_SYMBOLS
+
 # Frozen v1 watcher identity
 STRATEGY_COMBO_02_V1 = "COMBO_02_V1"
 SOURCE_V1_PAPER_WATCHER = "V1_PAPER_WATCHER"
@@ -15,7 +17,6 @@ COMBO_ID_V1 = "COMBO_02"
 COMBO_VERSION_V1 = "v1-combo02-long-htf"
 PATH_V1 = "A"
 TIMEFRAME_V1 = "1h"
-V1_SYMBOLS = frozenset({"BTCUSDT", "ETHUSDT", "SOLUSDT"})
 
 # Legacy / research
 STRATEGY_RESEARCH_15M = "RESEARCH_15M"
@@ -198,7 +199,9 @@ def classification_fields_from_position(pos: dict[str, Any]) -> dict[str, Any]:
             "combo_version": combo_version,
             "path": path,
         }
-        telegram_eligible = bool(snip.get("telegram_eligible")) and v1_gate_metadata_complete(
+        # Recompute from gate (includes extended v1 paper universe). Do not
+        # trust a stale stored telegram_eligible=False from older builds.
+        telegram_eligible = v1_gate_metadata_complete(
             merged, symbol=symbol, timeframe=timeframe
         )
 
