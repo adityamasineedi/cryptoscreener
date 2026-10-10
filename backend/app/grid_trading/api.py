@@ -1,0 +1,216 @@
+"""Grid research routes. Every handler is 404 while GRID_TRADING_ENABLED is off."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.routing import APIRoute
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.logging import get_logger
+from app.grid_trading.config import MARKET, GridConfig, GridConfigError, grid_trading_enabled
+from app.grid_trading.engine import run_grid
+from app.grid_trading.execution import GridExecution
+from app.grid_trading.metrics import export_fills, summarize
+from app.grid_trading.scanner import rank_scores, score_series
+from app.grid_trading.validation import split_sample, sweep_grid_count, walk_forward
+
+logger = get_logger("grid_trading.api")
+
+
+class _FlaggedRoute(APIRoute):
+    """404 before body validation while the feature flag is off."""
+
+    def get_route_handler(self):
+        original = super().get_route_handler()
+
+        async def gated(request: Request):
+            if not grid_trading_enabled():
+                raise HTTPException(status_code=404, detail="grid trading disabled")
+            return await original(request)
+
+        return gated
+
+
+router = APIRouter(prefix="/grid-trading", tags=["grid-trading"], route_class=_FlaggedRoute)
+_execution = GridExecution()
+
+
+def _require_enabled() -> None:
+    if not grid_trading_enabled():
+        raise HTTPException(status_code=404, detail="grid trading disabled")
+
+
+def _config_error(exc: GridConfigError) -> HTTPException:
+    return HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)})
+
+
+class GridRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = ""
+    timeframe: str = "1h"
+    grid_type: str = "arithmetic"
+    range_low: float
+    range_high: float
+    grid_count: int
+    capital: float
+    max_capital: float = 1_000_000.0
+    fee_bps: float = 4.0
+    slippage_bps: float = 1.0
+    stop_price: float
+    max_drawdown: float = 0.5
+    max_open_orders: int = 50
+    intrabar_path: str = "worst"
+    candles: list[dict[str, Any]] | None = None
+    limit: int = Field(default=1500, ge=2, le=5000)
+    is_fraction: float = 0.7
+    train_bars: int = 80
+    test_bars: int = 40
+    grid_counts: list[int] = Field(default_factory=lambda: [4, 8, 12])
+
+
+class ScanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeframe: str = "1h"
+    symbols: list[str] = Field(default_factory=list)
+    limit: int = Field(default=400, ge=30, le=2000)
+    fee_bps: float = 4.0
+    slippage_bps: float = 1.0
+    grid_count: int = 8
+
+
+def _to_config(body: GridRunRequest) -> GridConfig:
+    try:
+        return GridConfig(
+            symbol=body.symbol,
+            timeframe=body.timeframe,
+            mode="backtest",
+            grid_type=body.grid_type,  # type: ignore[arg-type]
+            range_low=body.range_low,
+            range_high=body.range_high,
+            grid_count=body.grid_count,
+            capital=body.capital,
+            max_capital=body.max_capital,
+            fee_bps=body.fee_bps,
+            slippage_bps=body.slippage_bps,
+            stop_price=body.stop_price,
+            max_drawdown=body.max_drawdown,
+            max_open_orders=body.max_open_orders,
+            intrabar_path=body.intrabar_path,  # type: ignore[arg-type]
+            market=MARKET,
+        )
+    except Exception as exc:
+        if isinstance(exc, GridConfigError):
+            raise
+        raise GridConfigError("config", str(exc)) from exc
+
+
+async def _candles(body: GridRunRequest) -> list[dict[str, Any]]:
+    if body.candles is not None:
+        return body.candles
+    if not body.symbol:
+        raise GridConfigError("symbol", "symbol is required when candles are omitted")
+    from app.research.postgres_ohlcv import load_ohlcv_series_tail
+
+    return await load_ohlcv_series_tail(body.symbol, body.timeframe, limit=body.limit)
+
+
+def _public_run(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "summary": summarize(result),
+        "levels": result["levels"],
+        "fills": export_fills(result),
+        "equity_curve": result["equity_curve"],
+        "paths": result["paths"],
+        "candles": result["candles"],
+        "buy_and_hold": result["buy_and_hold"],
+    }
+
+
+@router.get("/status")
+async def status() -> dict[str, Any]:
+    _require_enabled()
+    return {
+        "enabled": True,
+        "market": MARKET,
+        "mode": "backtest",
+        "live": False,
+        "paper": False,
+    }
+
+
+@router.post("/backtest")
+async def backtest(body: GridRunRequest) -> dict[str, Any]:
+    _require_enabled()
+    try:
+        config = _to_config(body)
+        candles = await _candles(body)
+        logger.info(
+            "grid_backtest",
+            symbol=config.symbol,
+            timeframe=config.timeframe,
+            bars=len(candles),
+            market=MARKET,
+        )
+        result = run_grid(candles, config)
+    except GridConfigError as exc:
+        raise _config_error(exc) from exc
+    return _public_run(result)
+
+
+@router.post("/validate")
+async def validate(body: GridRunRequest) -> dict[str, Any]:
+    _require_enabled()
+    try:
+        config = _to_config(body)
+        candles = await _candles(body)
+        return {
+            "market": MARKET,
+            "split": split_sample(candles, config, is_fraction=body.is_fraction),
+            "walk_forward": walk_forward(
+                candles,
+                config,
+                train_bars=body.train_bars,
+                test_bars=body.test_bars,
+            ),
+            "sweep": sweep_grid_count(candles, config, body.grid_counts),
+        }
+    except GridConfigError as exc:
+        raise _config_error(exc) from exc
+
+
+@router.post("/scan")
+async def scan(body: ScanRequest) -> dict[str, Any]:
+    _require_enabled()
+    from app.research.postgres_ohlcv import list_symbols_with_ohlcv, load_ohlcv_series_tail
+
+    symbols = [item.strip().upper() for item in body.symbols if item.strip()]
+    if not symbols:
+        symbols = (await list_symbols_with_ohlcv(body.timeframe))[:20]
+    rows = []
+    for symbol in symbols:
+        candles = await load_ohlcv_series_tail(symbol, body.timeframe, limit=body.limit)
+        rows.append(
+            score_series(
+                candles,
+                fee_bps=body.fee_bps,
+                slippage_bps=body.slippage_bps,
+                grid_count=body.grid_count,
+                symbol=symbol,
+                timeframe=body.timeframe,
+            )
+        )
+    return {"market": MARKET, "timeframe": body.timeframe, "rows": rank_scores(rows)}
+
+
+@router.post("/live")
+async def live_order(order: dict[str, Any]) -> dict[str, Any]:
+    _require_enabled()
+    try:
+        await _execution.submit_live(order)
+    except GridConfigError as exc:
+        raise _config_error(exc) from exc
+    return {"ok": False}
