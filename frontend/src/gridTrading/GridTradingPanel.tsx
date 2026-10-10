@@ -9,6 +9,8 @@ import {
   type GridScanRow,
   type GridStatus,
 } from "./client";
+import { EquityCurve } from "./EquityCurve";
+import { bookToJson, equityToCsv, fillsToCsv } from "./export";
 import { GridChart } from "./GridChart";
 
 type Tab = "scanner" | "configure" | "backtest";
@@ -27,6 +29,8 @@ const defaults: GridConfigInput = {
   stop_price: 0,
   max_drawdown: 0.35,
   max_open_orders: 20,
+  leverage: 1,
+  paused: false,
   intrabar_path: "worst",
 };
 
@@ -50,6 +54,8 @@ export function GridTradingPanel() {
   const [rows, setRows] = useState<GridScanRow[]>([]);
   const [result, setResult] = useState<GridBacktest | null>(null);
   const [validation, setValidation] = useState<string>("");
+  const [lookbackEnd, setLookbackEnd] = useState<number | string | null>(null);
+  const [allowOverlap, setAllowOverlap] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -106,14 +112,31 @@ export function GridTradingPanel() {
       range_high: row.range_high ?? config.range_high,
       stop_price: row.stop_price ?? config.stop_price,
     });
+    setLookbackEnd(row.window_end ?? null);
+    setAllowOverlap(false);
     setTab("configure");
+  }
+
+  function download(filename: string, text: string, type: string) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function onBacktest() {
     setBusy(true);
     setError(null);
     try {
-      setResult(await runGridBacktest(config, { limit: scanLimit }));
+      setResult(
+        await runGridBacktest(config, {
+          limit: scanLimit,
+          after_time: lookbackEnd,
+          allow_overlap: allowOverlap,
+        }),
+      );
       setTab("backtest");
     } catch (err) {
       setError(err instanceof Error ? err.message : "backtest failed");
@@ -132,6 +155,8 @@ export function GridTradingPanel() {
         train_bars: 80,
         test_bars: 40,
         grid_counts: [4, 8, 12],
+        after_time: lookbackEnd,
+        allow_overlap: allowOverlap,
       });
       setValidation(JSON.stringify(report, null, 2));
       setTab("backtest");
@@ -167,9 +192,9 @@ export function GridTradingPanel() {
     <section className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-terminal-text" data-testid="grid-trading">
       <header>
         <h1 className="font-display text-xl">Grid trading</h1>
-        <p className="mt-1 text-sm text-terminal-muted">
-          Backtest only on Binance USDT-M futures candles ({status.market}). Live orders are
-          disabled. This book is separate from paper trading.
+        <p className="mt-1 rounded border border-terminal-border bg-terminal-panel px-3 py-2 text-sm text-terminal-muted">
+          Backtest only. Not financial advice. Binance USDT-M futures, unleveraged long grid (
+          {status.market}). Funding is excluded. Live orders are disabled.
         </p>
       </header>
       <div className="flex gap-2">
@@ -280,6 +305,7 @@ export function GridTradingPanel() {
               ["stop_price", "Stop", "number"],
               ["max_drawdown", "Max drawdown", "number"],
               ["max_open_orders", "Max open orders", "number"],
+              ["leverage", "Leverage", "number"],
             ] as const
           ).map(([key, label, kind]) => (
             <label key={key}>
@@ -321,6 +347,34 @@ export function GridTradingPanel() {
               <option value="sell_then_buy">sell then buy</option>
             </select>
           </label>
+          <label className="col-span-2 flex items-center gap-2 text-sm text-terminal-text md:col-span-3">
+            <input
+              type="checkbox"
+              checked={Boolean(config.paused)}
+              onChange={(event) => patch({ paused: event.target.checked })}
+            />
+            Pause / kill (no new fills; inventory marked to market)
+          </label>
+          {lookbackEnd != null ? (
+            <div className="col-span-2 space-y-2 text-sm md:col-span-3">
+              <p className="text-terminal-muted">
+                Scanner window ends at {String(lookbackEnd)}. The backtest starts after that bar.
+              </p>
+              <label className="flex items-center gap-2 text-terminal-text">
+                <input
+                  type="checkbox"
+                  checked={allowOverlap}
+                  onChange={(event) => setAllowOverlap(event.target.checked)}
+                />
+                Allow overlap with the scanner window
+              </label>
+              {allowOverlap ? (
+                <p className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2" role="alert">
+                  This backtest overlaps the scanner lookback that chose the range.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="col-span-2 flex items-end gap-2 md:col-span-3">
             <button
               type="button"
@@ -352,6 +406,73 @@ export function GridTradingPanel() {
                 {pct(summary.max_drawdown)} · grid {pct(summary.return)} · buy & hold{" "}
                 {pct(summary.buy_and_hold_return)}
               </p>
+              {(result?.warnings ?? summary.warnings ?? []).map((warning) => (
+                <p key={warning} className="text-sm text-amber-200" role="status">
+                  {warning}
+                </p>
+              ))}
+              <table className="w-full text-left text-sm">
+                <tbody>
+                  {(
+                    [
+                      ["Fees paid", num(summary.fees_paid, 4)],
+                      ["Realized PnL", num(summary.realized_pnl, 4)],
+                      ["Unrealized PnL", num(summary.unrealized_pnl, 4)],
+                      ["Net PnL", num(summary.net_pnl, 4)],
+                      ["Time in range", pct(summary.pct_time_in_range)],
+                      ["Avg profit / cycle", num(summary.avg_profit_per_grid_cycle, 4)],
+                      ["Fill rate", pct(summary.fill_rate)],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <tr key={label} className="border-t border-terminal-border">
+                      <th className="py-1 pr-3 font-normal text-terminal-muted">{label}</th>
+                      <td>{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {(summary.events ?? []).length ? (
+                <ul className="text-sm text-terminal-muted">
+                  {summary.events?.map((event, index) => (
+                    <li key={`${event.type}-${event.time}-${index}`}>
+                      {event.type} at {String(event.time ?? "")}
+                      {event.price != null ? ` (${num(event.price, 4)})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-terminal-border px-3 py-1.5 text-sm"
+                  onClick={() => download("grid-fills.csv", fillsToCsv(result?.fills ?? []), "text/csv")}
+                >
+                  Download fills CSV
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-terminal-border px-3 py-1.5 text-sm"
+                  onClick={() =>
+                    download("grid-equity.csv", equityToCsv(result?.equity_curve ?? []), "text/csv")
+                  }
+                >
+                  Download equity CSV
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-terminal-border px-3 py-1.5 text-sm"
+                  onClick={() =>
+                    download(
+                      "grid-book.json",
+                      bookToJson(result?.fills ?? [], result?.equity_curve ?? []),
+                      "application/json",
+                    )
+                  }
+                >
+                  Download JSON
+                </button>
+              </div>
+              <EquityCurve points={result?.equity_curve ?? []} />
               <GridChart
                 candles={result?.candles ?? []}
                 levels={result?.levels ?? []}
@@ -385,9 +506,15 @@ export function GridTradingPanel() {
             <p className="text-sm text-terminal-muted">Run a backtest from Configure.</p>
           )}
           {validation ? (
-            <pre className="max-h-64 overflow-auto rounded border border-terminal-border p-3 text-xs text-terminal-muted">
-              {validation}
-            </pre>
+            <>
+              <p className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm" role="alert">
+                Parameter sweeps overfit. Rank is the share of nearby grid counts (±20%) and range
+                widths (±10%) with positive net PnL, not the single best PnL.
+              </p>
+              <pre className="max-h-64 overflow-auto rounded border border-terminal-border p-3 text-xs text-terminal-muted">
+                {validation}
+              </pre>
+            </>
           ) : null}
         </div>
       ) : null}

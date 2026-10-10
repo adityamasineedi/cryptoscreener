@@ -66,7 +66,10 @@ describe("GridTradingPanel", () => {
         { time: 1, side: "buy", slot: 0, level: 100, price: 100, qty: 1, fee: 0.1 },
         { time: 2, side: "sell", slot: 0, level: 110, price: 110, qty: 1, fee: 0.1 },
       ],
-      equity_curve: [],
+      equity_curve: [
+        { time: 1, equity: 1000, drawdown: 0 },
+        { time: 2, equity: 1010, drawdown: 0 },
+      ],
       candles: [
         { time: 1_700_000_000, open: 105, high: 106, low: 104, close: 105 },
         { time: 1_700_003_600, open: 105, high: 112, low: 99, close: 108 },
@@ -77,10 +80,13 @@ describe("GridTradingPanel", () => {
     render(<GridTradingPanel />);
     expect(await screen.findByRole("button", { name: "scanner" })).toBeInTheDocument();
     expect(screen.getByText(/binance usdt-m futures/i)).toBeInTheDocument();
+    expect(screen.getByText(/not financial advice/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "configure" }));
     await user.click(screen.getByRole("button", { name: "Run backtest" }));
     expect(backtest).toHaveBeenCalled();
     expect(await screen.findByText(/Accepted/)).toBeInTheDocument();
     expect(screen.getByText("buy")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download fills CSV" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Equity curve" })).toBeInTheDocument();
   });
 });

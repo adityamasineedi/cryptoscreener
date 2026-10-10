@@ -26,10 +26,13 @@ export type GridConfigInput = {
   capital: number;
   max_capital: number;
   fee_bps: number;
+  taker_fee_bps?: number | null;
   slippage_bps: number;
+  leverage?: number;
   stop_price: number;
   max_drawdown: number;
   max_open_orders: number;
+  paused?: boolean;
   intrabar_path: "worst" | "buy_then_sell" | "sell_then_buy";
 };
 
@@ -55,7 +58,15 @@ export type GridBacktest = {
     fill_rate: number;
     round_trips: number;
     max_drawdown: number;
+    fees_paid?: number;
     realized_pnl: number;
+    unrealized_pnl?: number;
+    net_pnl?: number;
+    pct_time_in_range?: number;
+    avg_profit_per_grid_cycle?: number | null;
+    events?: { type: string; time: number | string | null; price?: number; side?: string }[];
+    warnings?: string[];
+    funding_included?: boolean;
     liquidated_equity: number;
     return: number;
     buy_and_hold_return: number;
@@ -67,6 +78,8 @@ export type GridBacktest = {
   equity_curve: { time: number | string | null; equity: number; drawdown: number }[];
   candles: GridCandle[];
   buy_and_hold: { equity: number; return: number };
+  warnings?: string[];
+  overlap?: boolean;
 };
 
 export type GridScanRow = {
@@ -82,6 +95,7 @@ export type GridScanRow = {
   atr?: number | null;
   mid_crosses?: number;
   bars?: number;
+  window_end?: number | string | null;
 };
 
 async function read<T>(res: Response): Promise<T> {
@@ -109,7 +123,12 @@ export async function fetchGridStatus(): Promise<GridStatus | null> {
 
 export function runGridBacktest(
   config: GridConfigInput,
-  extra?: { candles?: GridCandle[]; limit?: number },
+  extra?: {
+    candles?: GridCandle[];
+    limit?: number;
+    after_time?: number | string | null;
+    allow_overlap?: boolean;
+  },
 ): Promise<GridBacktest> {
   return fetch("/api/grid-trading/backtest", {
     method: "POST",
@@ -120,7 +139,15 @@ export function runGridBacktest(
 
 export function runGridValidation(
   config: GridConfigInput,
-  extra: { limit?: number; is_fraction: number; train_bars: number; test_bars: number; grid_counts: number[] },
+  extra: {
+    limit?: number;
+    is_fraction: number;
+    train_bars: number;
+    test_bars: number;
+    grid_counts: number[];
+    after_time?: number | string | null;
+    allow_overlap?: boolean;
+  },
 ): Promise<Record<string, unknown>> {
   return fetch("/api/grid-trading/validate", {
     method: "POST",
