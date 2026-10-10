@@ -40,16 +40,30 @@ class GridConfig(BaseModel):
     capital: float
     max_capital: float = 1_000_000.0
     fee_bps: float = Field(default=4.0, ge=0)
+    taker_fee_bps: float | None = None
     slippage_bps: float = Field(default=1.0, ge=0)
+    leverage: float = 1.0
     stop_price: float
     max_drawdown: float = 0.5
     max_open_orders: int = 50
+    paused: bool = False
     intrabar_path: Literal["worst", "buy_then_sell", "sell_then_buy"] = "worst"
     market: Literal["binance_usdt_m_futures"] = MARKET
 
 
 def _bps(value: float) -> float:
     return value / 10_000.0
+
+
+def maker_fee_rate(config: GridConfig) -> float:
+    """Limit-grid fills. ``fee_bps`` is the maker rate."""
+    return _bps(config.fee_bps)
+
+
+def taker_fee_rate(config: GridConfig) -> float:
+    """Stops, drawdown exits, and the buy-and-hold benchmark."""
+    bps = config.fee_bps if config.taker_fee_bps is None else config.taker_fee_bps
+    return _bps(bps)
 
 
 def validate_config(config: GridConfig, levels: list[float]) -> None:
@@ -79,8 +93,11 @@ def validate_config(config: GridConfig, levels: list[float]) -> None:
         raise GridConfigError("capital", "capital and max_capital must be > 0")
     if config.capital > config.max_capital:
         raise GridConfigError("max_capital", "capital exceeds max_capital")
-    if config.fee_bps > BPS_MAX or config.slippage_bps > BPS_MAX:
-        raise GridConfigError("fees", f"fee_bps and slippage_bps must be <= {BPS_MAX}")
+    taker_bps = config.fee_bps if config.taker_fee_bps is None else config.taker_fee_bps
+    if config.fee_bps > BPS_MAX or taker_bps > BPS_MAX or config.slippage_bps > BPS_MAX:
+        raise GridConfigError("fees", f"fee_bps, taker_fee_bps, and slippage_bps must be <= {BPS_MAX}")
+    if config.leverage <= 0 or config.leverage > 1:
+        raise GridConfigError("leverage", "leverage must be in (0, 1]; this book is unleveraged")
     if not (0 < config.max_drawdown <= 1):
         raise GridConfigError("max_drawdown", "max_drawdown must be in (0, 1]")
     if config.max_open_orders < 1:
@@ -93,23 +110,20 @@ def validate_config(config: GridConfig, levels: list[float]) -> None:
     if config.stop_price <= 0 or config.stop_price >= config.range_low:
         raise GridConfigError("stop", "stop must be > 0 and below the range")
 
-    fee = _bps(config.fee_bps)
-    slip = _bps(config.slippage_bps)
-    round_trip = 2.0 * (fee + slip)
+    round_trip = 2.0 * maker_fee_rate(config)
     spacing = min(levels[i + 1] / levels[i] - 1.0 for i in range(len(levels) - 1))
-    if spacing <= round_trip:
+    if spacing <= round_trip + 1e-12:
         raise GridConfigError(
             "spacing",
-            "grid spacing does not clear round-trip fees and slippage",
+            "grid spacing does not clear the round-trip maker fee",
         )
 
 
 def slot_quantity(capital: float, grid_count: int, buy_level: float, config: GridConfig) -> float:
     """Size each slot so the slipped, fee-inclusive buy spends an equal quote slice."""
     quote = capital / grid_count
-    buy_px = buy_level * (1.0 + _bps(config.slippage_bps))
-    fee = _bps(config.fee_bps)
-    denom = buy_px * (1.0 + fee)
+    fee = maker_fee_rate(config)
+    denom = buy_level * (1.0 + fee)
     if denom <= 0:
         raise GridConfigError("capital", "cannot size a slot")
     return quote / denom

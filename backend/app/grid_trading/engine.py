@@ -11,7 +11,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.grid_trading.config import GridConfig, GridConfigError, slot_quantity, validate_config
+from app.grid_trading.config import (
+    GridConfig,
+    GridConfigError,
+    maker_fee_rate,
+    slot_quantity,
+    taker_fee_rate,
+    validate_config,
+)
 from app.grid_trading.levels import build_levels
 
 _DUST = 1e-12
@@ -27,8 +34,7 @@ def _f(value: Any, name: str) -> float:
     return number
 
 
-def _fee_rate(config: GridConfig) -> float:
-    return config.fee_bps / 10_000.0
+FUNDING_EXCLUDED = "Funding is excluded. USDT-M funding payments are not charged."
 
 
 def _slip(config: GridConfig) -> float:
@@ -62,6 +68,7 @@ def _new_state(config: GridConfig, levels: list[float], anchor: float) -> dict[s
         "touches": 0,
         "dual_touch_bars": 0,
         "paths": [],
+        "events": [],
     }
 
 
@@ -70,9 +77,8 @@ def _equity(state: dict[str, Any], price: float) -> float:
 
 
 def _buy_slot(state: dict[str, Any], slot: dict[str, Any], config: GridConfig, time: Any) -> bool:
-    slip = _slip(config)
-    fee = _fee_rate(config)
-    px = slot["buy"] * (1.0 + slip)
+    fee = maker_fee_rate(config)
+    px = slot["buy"]
     qty = slot["qty"]
     notional = qty * px
     fee_quote = notional * fee
@@ -103,9 +109,8 @@ def _buy_slot(state: dict[str, Any], slot: dict[str, Any], config: GridConfig, t
 def _sell_slot(state: dict[str, Any], slot: dict[str, Any], config: GridConfig, time: Any) -> bool:
     if not slot["long"] or slot["qty"] <= _DUST:
         return False
-    slip = _slip(config)
-    fee = _fee_rate(config)
-    px = slot["sell"] * (1.0 - slip)
+    fee = maker_fee_rate(config)
+    px = slot["sell"]
     qty = slot["qty"]
     notional = qty * px
     fee_quote = notional * fee
@@ -140,7 +145,7 @@ def _sell_slot(state: dict[str, Any], slot: dict[str, Any], config: GridConfig, 
 def _flatten(state: dict[str, Any], config: GridConfig, price: float, time: Any, reason: str) -> None:
     if state["base"] > _DUST:
         slip = _slip(config)
-        fee = _fee_rate(config)
+        fee = taker_fee_rate(config)
         px = price * (1.0 - slip)
         notional = state["base"] * px
         fee_quote = notional * fee
@@ -161,6 +166,8 @@ def _flatten(state: dict[str, Any], config: GridConfig, price: float, time: Any,
         )
         state["base"] = 0.0
         state["cost_basis"] = 0.0
+        label = "drawdown" if reason == "max_drawdown" else reason
+        state["events"].append({"type": label, "time": time, "price": px})
     for slot in state["slots"]:
         slot["long"] = False
         slot["armed"] = False
@@ -223,6 +230,16 @@ def _bar_has_two_sides(state: dict[str, Any], candle: dict[str, Any]) -> bool:
     return any(candle["high"] >= slot["sell"] for slot in buys)
 
 
+def _note_range(state: dict[str, Any], config: GridConfig, candle: dict[str, Any]) -> None:
+    if candle["low"] < config.range_low or candle["high"] > config.range_high:
+        side = "below" if candle["low"] < config.range_low else "above"
+        if candle["low"] < config.range_low and candle["high"] > config.range_high:
+            side = "both"
+        state["events"].append(
+            {"type": "range_exit", "time": candle.get("time"), "price": candle["close"], "side": side}
+        )
+
+
 def _run_bar(state: dict[str, Any], config: GridConfig, candle: dict[str, Any]) -> None:
     if state["halted"]:
         return
@@ -278,7 +295,7 @@ def _normalize(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _buy_and_hold(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, float]:
-    fee = _fee_rate(config)
+    fee = taker_fee_rate(config)
     slip = _slip(config)
     entry = candles[0]["open"] * (1.0 + slip)
     qty = config.capital / (entry * (1.0 + fee))
@@ -291,6 +308,29 @@ def _buy_and_hold(candles: list[dict[str, Any]], config: GridConfig) -> dict[str
         "equity": credit,
         "return": credit / config.capital - 1.0,
     }
+
+
+def _cycle_profits(fills: list[dict[str, Any]]) -> list[float]:
+    """A cycle is one slot buy paired with that slot's later grid sell.
+
+    Stop, drawdown, and mark sells have no slot and are not cycles.
+    """
+    pending: dict[int, list[float]] = {}
+    profits: list[float] = []
+    for fill in fills:
+        slot = fill.get("slot")
+        if slot is None:
+            continue
+        if fill["side"] == "buy":
+            pending.setdefault(slot, []).append(float(fill["qty"]) * float(fill["price"]) + float(fill["fee"]))
+        elif fill["side"] == "sell":
+            stack = pending.get(int(slot)) or []
+            if not stack:
+                continue
+            debit = stack.pop(0)
+            credit = float(fill["qty"]) * float(fill["price"]) - float(fill["fee"])
+            profits.append(credit - debit)
+    return profits
 
 
 def _liquidate(state: dict[str, Any], config: GridConfig, candle: dict[str, Any]) -> float:
@@ -306,6 +346,9 @@ def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any
     validate_config(config, levels)
     bars = _normalize(candles)
     state = _new_state(config, levels, bars[0]["open"])
+    if config.paused:
+        state["halted"] = "paused"
+        state["events"].append({"type": "paused", "time": bars[0].get("time"), "price": bars[0]["open"]})
     open_orders = sum(1 for slot in state["slots"] if slot["armed"])
     if open_orders > config.max_open_orders:
         raise GridConfigError("max_open_orders", "initial resting buys exceed max_open_orders")
@@ -318,6 +361,7 @@ def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any
 
     for bar in bars:
         _run_bar(state, config, bar)
+        _note_range(state, config, bar)
         equity = _equity(state, bar["close"])
         if equity > peak:
             peak = equity
@@ -337,9 +381,14 @@ def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any
 
     last = bars[min(len(equity_curve), len(bars)) - 1]
     liquidated = _liquidate(state, config, last)
-    hold = _buy_and_hold(bars, config)
+    hold = _buy_and_hold(bars[: len(equity_curve)], config)
     fills = state["fills"]
     touches = state["touches"]
+    seen = bars[: len(equity_curve)]
+    inside = sum(1 for bar in seen if config.range_low <= bar["close"] <= config.range_high)
+    mark = last["close"]
+    unrealized = state["base"] * mark - state["cost_basis"]
+    cycles = _cycle_profits(fills)
     return {
         "accepted": accepted,
         "error": error,
@@ -357,7 +406,17 @@ def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any
         "round_trips": sum(1 for fill in fills if fill["side"] == "sell" and fill.get("slot") is not None),
         "dual_touch_bars": state["dual_touch_bars"],
         "paths": state["paths"],
+        "fees_paid": sum(float(fill["fee"]) for fill in fills),
         "realized_pnl": state["realized"],
+        "unrealized_pnl": unrealized,
+        "net_pnl": state["realized"] + unrealized,
+        "pct_time_in_range": (inside / len(seen)) if seen else 0.0,
+        "avg_profit_per_grid_cycle": (sum(cycles) / len(cycles)) if cycles else None,
+        "cycle_count": len(cycles),
+        "events": state["events"],
+        "warnings": [FUNDING_EXCLUDED],
+        "funding_included": False,
+        "leverage": config.leverage,
         "quote": state["quote"],
         "base": state["base"],
         "equity": _equity(state, last["close"]) if state["base"] > _DUST else state["quote"],

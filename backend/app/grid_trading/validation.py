@@ -8,9 +8,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.grid_trading.config import GridConfig, GridConfigError
+from app.grid_trading.config import GRID_COUNT_MAX, GRID_COUNT_MIN, GridConfig, GridConfigError
 from app.grid_trading.engine import run_grid
 from app.grid_trading.metrics import summarize
+
+OVERFIT_WARNING = (
+    "Parameter sweeps overfit. Rank is the share of nearby sets with positive net PnL: "
+    "grid count within ±20% and range width at ±10%. It is not the single best PnL."
+)
 
 
 def split_sample(candles: list[dict[str, Any]], config: GridConfig, *, is_fraction: float = 0.7) -> dict[str, Any]:
@@ -57,6 +62,52 @@ def walk_forward(
     return {"train_bars": train_bars, "test_bars": test_bars, "windows": windows}
 
 
+def _neighbor_configs(config: GridConfig) -> list[GridConfig]:
+    low_count = max(GRID_COUNT_MIN, int(round(config.grid_count * 0.8)))
+    high_count = min(GRID_COUNT_MAX, int(round(config.grid_count * 1.2)))
+    counts = {count for count in range(low_count, high_count + 1) if count != config.grid_count}
+    if not counts:
+        if config.grid_count > GRID_COUNT_MIN:
+            counts.add(config.grid_count - 1)
+        if config.grid_count < GRID_COUNT_MAX:
+            counts.add(config.grid_count + 1)
+    neighbors: list[GridConfig] = []
+    for count in sorted(counts):
+        neighbors.append(
+            config.model_copy(update={"grid_count": count, "max_open_orders": max(config.max_open_orders, count)})
+        )
+    mid = (config.range_low + config.range_high) / 2.0
+    width = config.range_high - config.range_low
+    for scale in (0.9, 1.1):
+        half = width * scale / 2.0
+        low = mid - half
+        high = mid + half
+        if low <= 0 or high <= low:
+            continue
+        stop = config.stop_price if config.stop_price < low else low * 0.99
+        neighbors.append(config.model_copy(update={"range_low": low, "range_high": high, "stop_price": stop}))
+    return neighbors
+
+
+def robustness(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any]:
+    neighbors = _neighbor_configs(config)
+    profitable = 0
+    for trial in neighbors:
+        try:
+            result = run_grid(candles, trial)
+        except GridConfigError:
+            continue
+        net = float(result.get("net_pnl") or 0.0)
+        if result.get("accepted") and net > 0:
+            profitable += 1
+    total = len(neighbors)
+    return {
+        "neighbors": total,
+        "profitable_neighbors": profitable,
+        "robustness": (profitable / total) if total else 0.0,
+    }
+
+
 def sweep_grid_count(
     candles: list[dict[str, Any]],
     config: GridConfig,
@@ -66,13 +117,30 @@ def sweep_grid_count(
         raise GridConfigError("sweep", "grid_counts is empty")
     rows = []
     for count in grid_counts:
-        trial = config.model_copy(update={"grid_count": count})
+        trial = config.model_copy(update={"grid_count": count, "max_open_orders": max(config.max_open_orders, count)})
         try:
             result = run_grid(candles, trial)
         except GridConfigError as exc:
-            rows.append({"grid_count": count, "accepted": False, "error": exc.code, "message": str(exc)})
+            rows.append(
+                {
+                    "grid_count": count,
+                    "accepted": False,
+                    "error": exc.code,
+                    "message": str(exc),
+                    "robustness": 0.0,
+                    "net_pnl": None,
+                }
+            )
             continue
         summary = summarize(result)
         summary["grid_count"] = count
+        summary.update(robustness(candles, trial))
         rows.append(summary)
-    return {"rows": rows}
+    rows.sort(
+        key=lambda row: (
+            -float(row.get("robustness") or 0.0),
+            -float(row.get("net_pnl") or 0.0),
+            int(row.get("grid_count") or 0),
+        )
+    )
+    return {"warning": OVERFIT_WARNING, "rows": rows}

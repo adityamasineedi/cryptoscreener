@@ -56,9 +56,14 @@ def test_walk_forward_windows_step_by_the_test_length():
 
 def test_sweep_reports_a_rejected_count_without_dropping_the_rest():
     report = sweep_grid_count(_candles(6), _config(), [1, 0, 2])
-    assert report["rows"][0]["accepted"] is True
-    assert report["rows"][1]["error"] == "grid_count"
-    assert report["rows"][2]["grid_count"] == 2
+    by_count = {row["grid_count"]: row for row in report["rows"]}
+    assert by_count[1]["accepted"] is True
+    assert by_count[0]["error"] == "grid_count"
+    assert by_count[2]["grid_count"] == 2
+    assert "overfit" in report["warning"].lower()
+    scores = [row["robustness"] for row in report["rows"]]
+    assert scores == sorted(scores, reverse=True)
+    assert "robustness" in by_count[1]
 
 
 def test_short_split_is_rejected():

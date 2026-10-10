@@ -128,6 +128,7 @@ def score_series(
         "swing_alternations": flips,
         "trend": trend,
         "bars": len(candles),
+        "window_end": candles[-1].get("time"),
     }
 
 

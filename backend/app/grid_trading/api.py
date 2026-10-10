@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -58,13 +59,18 @@ class GridRunRequest(BaseModel):
     capital: float
     max_capital: float = 1_000_000.0
     fee_bps: float = 4.0
+    taker_fee_bps: float | None = None
     slippage_bps: float = 1.0
+    leverage: float = 1.0
     stop_price: float
     max_drawdown: float = 0.5
     max_open_orders: int = 50
+    paused: bool = False
     intrabar_path: str = "worst"
     candles: list[dict[str, Any]] | None = None
     limit: int = Field(default=1500, ge=2, le=5000)
+    after_time: str | float | int | None = None
+    allow_overlap: bool = False
     is_fraction: float = 0.7
     train_bars: int = 80
     test_bars: int = 40
@@ -95,10 +101,13 @@ def _to_config(body: GridRunRequest) -> GridConfig:
             capital=body.capital,
             max_capital=body.max_capital,
             fee_bps=body.fee_bps,
+            taker_fee_bps=body.taker_fee_bps,
             slippage_bps=body.slippage_bps,
+            leverage=body.leverage,
             stop_price=body.stop_price,
             max_drawdown=body.max_drawdown,
             max_open_orders=body.max_open_orders,
+            paused=body.paused,
             intrabar_path=body.intrabar_path,  # type: ignore[arg-type]
             market=MARKET,
         )
@@ -108,14 +117,56 @@ def _to_config(body: GridRunRequest) -> GridConfig:
         raise GridConfigError("config", str(exc)) from exc
 
 
-async def _candles(body: GridRunRequest) -> list[dict[str, Any]]:
-    if body.candles is not None:
-        return body.candles
-    if not body.symbol:
-        raise GridConfigError("symbol", "symbol is required when candles are omitted")
-    from app.research.postgres_ohlcv import load_ohlcv_series_tail
+def _time_key(value: Any) -> float:
+    if isinstance(value, datetime):
+        return value.timestamp()
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.timestamp()
+    return float(value)
 
-    return await load_ohlcv_series_tail(body.symbol, body.timeframe, limit=body.limit)
+
+def apply_lookback(
+    candles: list[dict[str, Any]],
+    after_time: str | float | int | None,
+    *,
+    allow_overlap: bool,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Drop the scanner window. Overlap is explicit and always warned."""
+    if after_time is None:
+        return candles, None
+    try:
+        cutoff = _time_key(after_time)
+    except (TypeError, ValueError) as exc:
+        raise GridConfigError("after_time", "after_time is not a timestamp") from exc
+    later: list[dict[str, Any]] = []
+    for bar in candles:
+        try:
+            stamp = _time_key(bar.get("time"))
+        except (TypeError, ValueError):
+            continue
+        if stamp > cutoff:
+            later.append(bar)
+    if later:
+        return later, None
+    if allow_overlap:
+        return candles, "Backtest overlaps the scanner lookback window."
+    raise GridConfigError(
+        "lookback",
+        "No candles after the scanner lookback. Overlap reuses the window that chose the range.",
+    )
+
+
+async def _candles(body: GridRunRequest) -> tuple[list[dict[str, Any]], str | None]:
+    if body.candles is not None:
+        series = body.candles
+    else:
+        if not body.symbol:
+            raise GridConfigError("symbol", "symbol is required when candles are omitted")
+        from app.research.postgres_ohlcv import load_ohlcv_series_tail
+
+        series = await load_ohlcv_series_tail(body.symbol, body.timeframe, limit=body.limit)
+    return apply_lookback(series, body.after_time, allow_overlap=body.allow_overlap)
 
 
 def _public_run(result: dict[str, Any]) -> dict[str, Any]:
@@ -127,6 +178,7 @@ def _public_run(result: dict[str, Any]) -> dict[str, Any]:
         "paths": result["paths"],
         "candles": result["candles"],
         "buy_and_hold": result["buy_and_hold"],
+        "warnings": result["warnings"],
     }
 
 
@@ -139,6 +191,9 @@ async def status() -> dict[str, Any]:
         "mode": "backtest",
         "live": False,
         "paper": False,
+        "leverage": 1,
+        "side": "long",
+        "funding_included": False,
     }
 
 
@@ -147,7 +202,7 @@ async def backtest(body: GridRunRequest) -> dict[str, Any]:
     _require_enabled()
     try:
         config = _to_config(body)
-        candles = await _candles(body)
+        candles, overlap = await _candles(body)
         logger.info(
             "grid_backtest",
             symbol=config.symbol,
@@ -158,7 +213,11 @@ async def backtest(body: GridRunRequest) -> dict[str, Any]:
         result = run_grid(candles, config)
     except GridConfigError as exc:
         raise _config_error(exc) from exc
-    return _public_run(result)
+    payload = _public_run(result)
+    if overlap:
+        payload["warnings"] = [overlap, *payload["warnings"]]
+        payload["overlap"] = True
+    return payload
 
 
 @router.post("/validate")
@@ -166,9 +225,10 @@ async def validate(body: GridRunRequest) -> dict[str, Any]:
     _require_enabled()
     try:
         config = _to_config(body)
-        candles = await _candles(body)
-        return {
+        candles, overlap = await _candles(body)
+        report = {
             "market": MARKET,
+            "overlap": bool(overlap),
             "split": split_sample(candles, config, is_fraction=body.is_fraction),
             "walk_forward": walk_forward(
                 candles,
@@ -178,6 +238,9 @@ async def validate(body: GridRunRequest) -> dict[str, Any]:
             ),
             "sweep": sweep_grid_count(candles, config, body.grid_counts),
         }
+        if overlap:
+            report["warning"] = overlap
+        return report
     except GridConfigError as exc:
         raise _config_error(exc) from exc
 
