@@ -1,0 +1,66 @@
+"""Sample split, walk-forward, and grid-count sweep stay on their own bars."""
+
+from __future__ import annotations
+
+import pytest
+
+from app.grid_trading.config import GridConfig, GridConfigError
+from app.grid_trading.validation import split_sample, sweep_grid_count, walk_forward
+
+
+def _candles(count: int) -> list[dict]:
+    rows = []
+    for i in range(count):
+        price = 105.0 if i % 2 == 0 else 100.0
+        rows.append(
+            {
+                "time": i,
+                "open": 105.0,
+                "high": max(112.0, price),
+                "low": min(99.0, price),
+                "close": price,
+            }
+        )
+    return rows
+
+
+def _config() -> GridConfig:
+    return GridConfig(
+        range_low=100.0,
+        range_high=110.0,
+        grid_count=1,
+        capital=1000.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        stop_price=90.0,
+        max_drawdown=1.0,
+        max_open_orders=5,
+        intrabar_path="buy_then_sell",
+    )
+
+
+def test_split_does_not_share_bars():
+    report = split_sample(_candles(10), _config(), is_fraction=0.6)
+    assert report["in_sample_bars"] == 6
+    assert report["out_of_sample_bars"] == 4
+    assert report["in_sample"]["bar_count"] == 6
+    assert report["out_of_sample"]["bar_count"] == 4
+
+
+def test_walk_forward_windows_step_by_the_test_length():
+    report = walk_forward(_candles(12), _config(), train_bars=4, test_bars=4)
+    assert [window["start"] for window in report["windows"]] == [0, 4]
+    assert report["windows"][0]["train"]["bar_count"] == 4
+    assert report["windows"][1]["test"]["bar_count"] == 4
+
+
+def test_sweep_reports_a_rejected_count_without_dropping_the_rest():
+    report = sweep_grid_count(_candles(6), _config(), [1, 0, 2])
+    assert report["rows"][0]["accepted"] is True
+    assert report["rows"][1]["error"] == "grid_count"
+    assert report["rows"][2]["grid_count"] == 2
+
+
+def test_short_split_is_rejected():
+    with pytest.raises(GridConfigError):
+        split_sample(_candles(3), _config(), is_fraction=0.7)
