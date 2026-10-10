@@ -10,6 +10,7 @@ from typing import Any
 
 from app.grid_trading.config import GRID_COUNT_MAX, GRID_COUNT_MIN, GridConfig, GridConfigError
 from app.grid_trading.engine import run_grid
+from app.grid_trading.funding import stamp
 from app.grid_trading.metrics import summarize
 
 OVERFIT_WARNING = (
@@ -18,14 +19,38 @@ OVERFIT_WARNING = (
 )
 
 
-def split_sample(candles: list[dict[str, Any]], config: GridConfig, *, is_fraction: float = 0.7) -> dict[str, Any]:
+def _funding_for(candles: list[dict[str, Any]], funding: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    """Hide settlements after this slice. Earlier rows stay as cadence context."""
+    if not funding or not candles:
+        return funding
+    start = stamp(candles[0]["time"])
+    end = stamp(candles[-1]["time"])
+    visible = []
+    for row in funding:
+        when = stamp(row.get("time"))
+        if when > end:
+            continue
+        item = dict(row)
+        if when < start:
+            item["context"] = True
+        visible.append(item)
+    return visible
+
+
+def split_sample(
+    candles: list[dict[str, Any]],
+    config: GridConfig,
+    *,
+    is_fraction: float = 0.7,
+    funding: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     if not 0.1 <= is_fraction <= 0.9:
         raise GridConfigError("is_fraction", "is_fraction must be between 0.1 and 0.9")
     cut = int(len(candles) * is_fraction)
     if cut < 2 or len(candles) - cut < 2:
         raise GridConfigError("candles", "not enough candles to split in-sample and out-of-sample")
-    ins = run_grid(candles[:cut], config)
-    oos = run_grid(candles[cut:], config)
+    ins = run_grid(candles[:cut], config, _funding_for(candles[:cut], funding))
+    oos = run_grid(candles[cut:], config, _funding_for(candles[cut:], funding))
     return {
         "is_fraction": is_fraction,
         "in_sample_bars": cut,
@@ -41,6 +66,7 @@ def walk_forward(
     *,
     train_bars: int,
     test_bars: int,
+    funding: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if train_bars < 2 or test_bars < 2:
         raise GridConfigError("walk_forward", "train_bars and test_bars must be >= 2")
@@ -52,8 +78,8 @@ def walk_forward(
         windows.append(
             {
                 "start": start,
-                "train": summarize(run_grid(train, config)),
-                "test": summarize(run_grid(test, config)),
+                "train": summarize(run_grid(train, config, _funding_for(train, funding))),
+                "test": summarize(run_grid(test, config, _funding_for(test, funding))),
             }
         )
         start += test_bars
@@ -89,12 +115,17 @@ def _neighbor_configs(config: GridConfig) -> list[GridConfig]:
     return neighbors
 
 
-def robustness(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any]:
+def robustness(
+    candles: list[dict[str, Any]],
+    config: GridConfig,
+    funding: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     neighbors = _neighbor_configs(config)
     profitable = 0
+    visible = _funding_for(candles, funding)
     for trial in neighbors:
         try:
-            result = run_grid(candles, trial)
+            result = run_grid(candles, trial, visible)
         except GridConfigError:
             continue
         net = float(result.get("net_pnl") or 0.0)
@@ -112,6 +143,7 @@ def sweep_grid_count(
     candles: list[dict[str, Any]],
     config: GridConfig,
     grid_counts: list[int],
+    funding: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if not grid_counts:
         raise GridConfigError("sweep", "grid_counts is empty")
@@ -119,7 +151,7 @@ def sweep_grid_count(
     for count in grid_counts:
         trial = config.model_copy(update={"grid_count": count, "max_open_orders": max(config.max_open_orders, count)})
         try:
-            result = run_grid(candles, trial)
+            result = run_grid(candles, trial, _funding_for(candles, funding))
         except GridConfigError as exc:
             rows.append(
                 {
@@ -134,7 +166,7 @@ def sweep_grid_count(
             continue
         summary = summarize(result)
         summary["grid_count"] = count
-        summary.update(robustness(candles, trial))
+        summary.update(robustness(candles, trial, funding))
         rows.append(summary)
     rows.sort(
         key=lambda row: (

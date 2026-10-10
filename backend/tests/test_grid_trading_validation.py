@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.grid_trading.config import GridConfig, GridConfigError
+from app.grid_trading.engine import run_grid
 from app.grid_trading.validation import split_sample, sweep_grid_count, walk_forward
 
 
@@ -64,6 +65,27 @@ def test_sweep_reports_a_rejected_count_without_dropping_the_rest():
     scores = [row["robustness"] for row in report["rows"]]
     assert scores == sorted(scores, reverse=True)
     assert "robustness" in by_count[1]
+
+
+def test_sweep_net_pnl_includes_funding():
+    candles = []
+    for time in range(6):
+        candles.append(
+            {
+                "time": time,
+                "open": 105.0,
+                "high": 106.0,
+                "low": 99.0 if time == 1 else 100.0,
+                "close": 102.0,
+            }
+        )
+    funding = [{"time": 1, "rate": 0.02, "mark_price": 100.0}]
+    report = sweep_grid_count(candles, _config(), [1], funding)
+    direct = run_grid(candles, _config(), funding)
+    row = next(item for item in report["rows"] if item["grid_count"] == 1)
+    assert direct["funding_paid"] > 0
+    assert row["funding_paid"] == pytest.approx(direct["funding_paid"])
+    assert row["net_pnl"] == pytest.approx(direct["net_pnl"])
 
 
 def test_short_split_is_rejected():

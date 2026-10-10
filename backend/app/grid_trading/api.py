@@ -13,6 +13,7 @@ from app.core.logging import get_logger
 from app.grid_trading.config import MARKET, GridConfig, GridConfigError, grid_trading_enabled
 from app.grid_trading.engine import run_grid
 from app.grid_trading.execution import GridExecution
+from app.grid_trading.funding import load_funding_window
 from app.grid_trading.metrics import export_fills, summarize
 from app.grid_trading.scanner import rank_scores, score_series
 from app.grid_trading.validation import split_sample, sweep_grid_count, walk_forward
@@ -66,7 +67,9 @@ class GridRunRequest(BaseModel):
     max_drawdown: float = 0.5
     max_open_orders: int = 50
     paused: bool = False
+    funding_mode: str = "charge"
     intrabar_path: str = "worst"
+    funding: list[dict[str, Any]] | None = None
     candles: list[dict[str, Any]] | None = None
     limit: int = Field(default=1500, ge=2, le=5000)
     after_time: str | float | int | None = None
@@ -108,6 +111,7 @@ def _to_config(body: GridRunRequest) -> GridConfig:
             max_drawdown=body.max_drawdown,
             max_open_orders=body.max_open_orders,
             paused=body.paused,
+            funding_mode=body.funding_mode,  # type: ignore[arg-type]
             intrabar_path=body.intrabar_path,  # type: ignore[arg-type]
             market=MARKET,
         )
@@ -157,6 +161,16 @@ def apply_lookback(
     )
 
 
+async def _funding(body: GridRunRequest, candles: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    if body.funding_mode == "exclude":
+        return None
+    if body.funding is not None:
+        return body.funding
+    if not body.symbol or not candles:
+        return []
+    return await load_funding_window(body.symbol, candles[0]["time"], candles[-1]["time"])
+
+
 async def _candles(body: GridRunRequest) -> tuple[list[dict[str, Any]], str | None]:
     if body.candles is not None:
         series = body.candles
@@ -203,6 +217,7 @@ async def backtest(body: GridRunRequest) -> dict[str, Any]:
     try:
         config = _to_config(body)
         candles, overlap = await _candles(body)
+        funding = await _funding(body, candles)
         logger.info(
             "grid_backtest",
             symbol=config.symbol,
@@ -210,7 +225,7 @@ async def backtest(body: GridRunRequest) -> dict[str, Any]:
             bars=len(candles),
             market=MARKET,
         )
-        result = run_grid(candles, config)
+        result = run_grid(candles, config, funding)
     except GridConfigError as exc:
         raise _config_error(exc) from exc
     payload = _public_run(result)
@@ -226,17 +241,19 @@ async def validate(body: GridRunRequest) -> dict[str, Any]:
     try:
         config = _to_config(body)
         candles, overlap = await _candles(body)
+        funding = await _funding(body, candles)
         report = {
             "market": MARKET,
             "overlap": bool(overlap),
-            "split": split_sample(candles, config, is_fraction=body.is_fraction),
+            "split": split_sample(candles, config, is_fraction=body.is_fraction, funding=funding),
             "walk_forward": walk_forward(
                 candles,
                 config,
                 train_bars=body.train_bars,
                 test_bars=body.test_bars,
+                funding=funding,
             ),
-            "sweep": sweep_grid_count(candles, config, body.grid_counts),
+            "sweep": sweep_grid_count(candles, config, body.grid_counts, funding),
         }
         if overlap:
             report["warning"] = overlap

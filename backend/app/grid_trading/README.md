@@ -22,8 +22,37 @@ taker fee (`taker_fee_bps`, or `fee_bps` when taker is omitted) and
 `slippage_bps` against the exit. Spacing must clear a round trip of the maker
 fee. A maker fee that consumes the whole grid step is rejected.
 
-**Funding is excluded.** The result always says so. This module does not read
-`funding_rates`.
+## Funding
+
+`funding_mode` is `charge` or `exclude`. The default is `charge`.
+
+`charge` loads `funding_rates` for the symbol between the first and last
+candle, and one neighboring row on each side. Those neighbors are only used
+to measure the cadence. Settlements are the stored timestamps. Nothing in
+this book assumes an 8 hour interval.
+
+At each settlement, payment is `inventory_qty * price * rate` for the inventory
+held after that candle's fills and stop check. `price` is the row's
+`mark_price` when it is finite and positive, otherwise the close of the last
+candle at or before the settlement. A settlement that falls between two
+candles uses the earlier candle. Positive rate: the long pays. Negative rate:
+the long receives. `funding_paid` is the signed sum (positive means paid) and
+is not included in `fees_paid`. It is subtracted inside `net_pnl` and inside
+the equity curve. The same settlements are charged on the buy-and-hold
+benchmark.
+
+Pause does not flatten inventory and does not stop funding. A stop or a
+drawdown flatten does: later settlements are not charged. A settlement that
+shares the stop candle is not charged, because that candle's flatten is known
+only at the candle timestamp.
+
+Coverage is the share of settlements in the window that have a stored rate.
+A gap wider than 1.5 times the median stored interval counts as missing
+settlements, and the result names that uncovered span. Missing rows are not
+treated as a zero rate. If coverage is 0, the result keeps the warning
+"Funding is excluded. USDT-M funding payments are not charged." `exclude`
+does not charge and keeps that same warning, so the PnL matches a run with
+no funding cashflows.
 
 ## Cycle and PnL
 

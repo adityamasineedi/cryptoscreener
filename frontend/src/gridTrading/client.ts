@@ -33,6 +33,7 @@ export type GridConfigInput = {
   max_drawdown: number;
   max_open_orders: number;
   paused?: boolean;
+  funding_mode?: "charge" | "exclude";
   intrabar_path: "worst" | "buy_then_sell" | "sell_then_buy";
 };
 
@@ -62,6 +63,8 @@ export type GridBacktest = {
     realized_pnl: number;
     unrealized_pnl?: number;
     net_pnl?: number;
+    funding_paid?: number;
+    funding_coverage_pct?: number | null;
     pct_time_in_range?: number;
     avg_profit_per_grid_cycle?: number | null;
     events?: { type: string; time: number | string | null; price?: number; side?: string }[];

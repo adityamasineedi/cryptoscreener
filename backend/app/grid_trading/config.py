@@ -47,6 +47,7 @@ class GridConfig(BaseModel):
     max_drawdown: float = 0.5
     max_open_orders: int = 50
     paused: bool = False
+    funding_mode: Literal["charge", "exclude"] = "charge"
     intrabar_path: Literal["worst", "buy_then_sell", "sell_then_buy"] = "worst"
     market: Literal["binance_usdt_m_futures"] = MARKET
 

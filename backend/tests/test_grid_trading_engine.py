@@ -349,6 +349,173 @@ def test_backtest_starts_after_the_scanner_window(monkeypatch):
     assert "overlaps the scanner lookback" in overlap.json()["warnings"][0]
 
 
+def _fund(time: int, rate: float, mark: float | None = None) -> dict:
+    row = {"time": time, "rate": rate}
+    if mark is not None:
+        row["mark_price"] = mark
+    return row
+
+
+def test_positive_funding_is_paid_by_the_long_and_negative_funding_is_received():
+    candles = [
+        _bar(0, 105, 106, 104, 105),
+        _bar(1, 105, 106, 99, 101),
+    ]
+    cfg = _config(fee_bps=0.0, slippage_bps=0.0)
+    paid = run_grid(candles, cfg, [_fund(1, 0.001)])
+    received = run_grid(candles, cfg, [_fund(1, -0.001)])
+    # qty 10 bought at 100, still open, marked at close 101. Price source is the close.
+    payment = 10.0 * 101.0 * 0.001
+    assert paid["funding_paid"] == pytest.approx(payment)
+    assert paid["unrealized_pnl"] == pytest.approx(10.0)
+    assert paid["net_pnl"] == pytest.approx(10.0 - payment)
+    assert paid["equity_curve"][-1]["equity"] == pytest.approx(1000.0 + 10.0 - payment)
+    assert received["funding_paid"] == pytest.approx(-payment)
+    assert received["net_pnl"] == pytest.approx(10.0 + payment)
+    assert paid["events"][-1]["price_source"] == "close"
+    marked = run_grid(candles, cfg, [_fund(1, 0.001, 50.0)])
+    assert marked["funding_paid"] == pytest.approx(10.0 * 50.0 * 0.001)
+    assert marked["events"][-1]["price_source"] == "mark_price"
+
+
+def test_zero_inventory_at_settlement_pays_nothing():
+    candles = [
+        _bar(0, 105, 106, 104, 105),
+        _bar(1, 105, 106, 99, 101),
+    ]
+    result = run_grid(candles, _config(fee_bps=0.0, slippage_bps=0.0), [_fund(0, 0.01, 100.0)])
+    assert result["funding_paid"] == pytest.approx(0.0)
+    assert result["base"] == pytest.approx(10.0)
+
+
+def test_inventory_is_charged_at_each_settlement_it_is_held():
+    candles = [
+        _bar(0, 105, 106, 104, 105),
+        _bar(10, 105, 106, 99, 101),
+        _bar(20, 101, 102, 100, 102),
+    ]
+    result = run_grid(
+        candles,
+        _config(fee_bps=0.0, slippage_bps=0.0),
+        [_fund(10, 0.001), _fund(20, 0.002)],
+    )
+    assert result["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001 + 10.0 * 102.0 * 0.002)
+    assert result["fill_count"] == 1
+
+
+def test_funding_can_turn_a_winning_cycle_into_a_net_loss():
+    candles = [
+        _bar(0, 105, 106, 104, 105),
+        _bar(1, 105, 106, 99, 101),
+        _bar(2, 101, 112, 100, 108),
+    ]
+    result = run_grid(candles, _config(fee_bps=0.0, slippage_bps=0.0), [_fund(1, 0.2, 100.0)])
+    assert result["realized_pnl"] == pytest.approx(100.0)
+    assert result["funding_paid"] == pytest.approx(200.0)
+    assert result["net_pnl"] == pytest.approx(-100.0)
+    assert result["realized_pnl"] > 0 > result["net_pnl"]
+
+
+def test_missing_funding_rows_are_not_treated_as_zero():
+    candles = [_bar(time, 105, 106, 104, 105) for time in (0, 10, 20, 30, 40)]
+    result = run_grid(
+        candles,
+        _config(fee_bps=0.0, slippage_bps=0.0),
+        [_fund(0, 0.001), _fund(10, 0.001), _fund(30, 0.001), _fund(40, 0.001)],
+    )
+    assert result["funding_coverage_pct"] == pytest.approx(0.8)
+    assert result["funding_included"] is True
+    assert "No settlement data from 10.0 to 30.0" in result["warnings"][0]
+    assert "Funding is excluded" not in result["warnings"][0]
+
+
+def test_no_funding_rows_keeps_the_excluded_warning():
+    candles = [_bar(0, 105, 106, 104, 105), _bar(1, 105, 112, 99, 108)]
+    result = run_grid(candles, _config())
+    assert result["funding_coverage_pct"] == pytest.approx(0.0)
+    assert result["funding_included"] is False
+    assert result["warnings"][0] == "Funding is excluded. USDT-M funding payments are not charged."
+
+
+def test_paused_inventory_still_pays_funding(monkeypatch):
+    from app.grid_trading import engine
+
+    original = engine._new_state
+
+    def seeded(config, levels, anchor):
+        state = original(config, levels, anchor)
+        state["base"] = 2.0
+        state["quote"] = 800.0
+        state["cost_basis"] = 200.0
+        return state
+
+    monkeypatch.setattr(engine, "_new_state", seeded)
+    candles = [
+        _bar(0, 100, 101, 99, 100),
+        _bar(1, 100, 101, 99, 100),
+    ]
+    result = run_grid(candles, _config(paused=True, fee_bps=0.0, slippage_bps=0.0), [_fund(1, 0.01, 100.0)])
+    assert result["halted"] == "paused"
+    assert result["fill_count"] == 0
+    assert result["base"] == pytest.approx(2.0)
+    assert result["funding_paid"] == pytest.approx(2.0)
+    assert result["net_pnl"] == pytest.approx(-2.0)
+
+
+def test_no_funding_after_the_stop_flatten():
+    candles = [
+        _bar(0, 105, 106, 104, 105),
+        _bar(1, 105, 106, 99, 101),
+        _bar(2, 101, 102, 89, 95),
+        _bar(3, 95, 96, 94, 95),
+    ]
+    result = run_grid(
+        candles,
+        _config(fee_bps=0.0, slippage_bps=0.0),
+        [_fund(1, 0.001), _fund(2, 0.05, 90.0), _fund(3, 0.05, 95.0)],
+    )
+    assert result["halted"] == "stop"
+    assert result["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001)
+
+
+def test_exclude_mode_matches_a_run_with_no_funding_cashflow():
+    candles = [
+        _bar(0, 105, 106, 104, 105),
+        _bar(1, 105, 106, 99, 101),
+    ]
+    funding = [_fund(1, 0.001)]
+    cfg = _config(fee_bps=0.0, slippage_bps=0.0)
+    plain = run_grid(candles, cfg)
+    excluded = run_grid(candles, cfg.model_copy(update={"funding_mode": "exclude"}), funding)
+    charged = run_grid(candles, cfg, funding)
+    assert excluded["net_pnl"] == pytest.approx(plain["net_pnl"])
+    assert excluded["funding_paid"] == pytest.approx(0.0)
+    assert [point["equity"] for point in excluded["equity_curve"]] == pytest.approx(
+        [point["equity"] for point in plain["equity_curve"]]
+    )
+    assert excluded["warnings"] == plain["warnings"]
+    assert charged["net_pnl"] < excluded["net_pnl"]
+
+
+def test_buy_and_hold_is_charged_the_same_settlements():
+    candles = [
+        _bar(0, 100, 101, 99, 100),
+        _bar(1, 100, 101, 99, 100),
+    ]
+    cfg = _config(
+        range_low=10.0,
+        range_high=20.0,
+        stop_price=5.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+    )
+    result = run_grid(candles, cfg, [_fund(0, 0.001, 100.0)])
+    assert result["fill_count"] == 0
+    assert result["funding_paid"] == pytest.approx(0.0)
+    assert result["buy_and_hold"]["funding_paid"] == pytest.approx(1.0)
+    assert result["buy_and_hold"]["equity"] == pytest.approx(999.0)
+
+
 def test_create_app_does_not_run_grid_paths(monkeypatch):
     monkeypatch.setenv("GRID_TRADING_ENABLED", "false")
     calls: list[str] = []

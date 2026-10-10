@@ -19,6 +19,14 @@ from app.grid_trading.config import (
     taker_fee_rate,
     validate_config,
 )
+from app.grid_trading.funding import (
+    FUNDING_EXCLUDED,
+    assess_coverage,
+    due_settlements,
+    normalize_funding,
+    settlement_price,
+    stamp,
+)
 from app.grid_trading.levels import build_levels
 
 _DUST = 1e-12
@@ -32,9 +40,6 @@ def _f(value: Any, name: str) -> float:
     if number != number or number in (float("inf"), float("-inf")):
         raise GridConfigError("candles", f"candle {name} is not finite")
     return number
-
-
-FUNDING_EXCLUDED = "Funding is excluded. USDT-M funding payments are not charged."
 
 
 def _slip(config: GridConfig) -> float:
@@ -69,6 +74,7 @@ def _new_state(config: GridConfig, levels: list[float], anchor: float) -> dict[s
         "dual_touch_bars": 0,
         "paths": [],
         "events": [],
+        "funding_paid": 0.0,
     }
 
 
@@ -294,20 +300,45 @@ def _normalize(candles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _buy_and_hold(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, float]:
+def _buy_and_hold(
+    candles: list[dict[str, Any]],
+    config: GridConfig,
+    *,
+    funding_paid: float = 0.0,
+) -> dict[str, float]:
     fee = taker_fee_rate(config)
     slip = _slip(config)
     entry = candles[0]["open"] * (1.0 + slip)
     qty = config.capital / (entry * (1.0 + fee))
     exit_px = candles[-1]["close"] * (1.0 - slip)
     credit = qty * exit_px * (1.0 - fee)
+    equity = credit - funding_paid
     return {
         "qty": qty,
         "entry": entry,
         "exit": exit_px,
-        "equity": credit,
-        "return": credit / config.capital - 1.0,
+        "equity": equity,
+        "return": equity / config.capital - 1.0,
+        "funding_paid": funding_paid,
     }
+
+
+def _charge_funding(state: dict[str, Any], qty: float, row: dict[str, Any], close: float) -> float:
+    price, source = settlement_price(row, close)
+    payment = qty * price * float(row["rate"])
+    state["quote"] -= payment
+    state["funding_paid"] += payment
+    state["events"].append(
+        {
+            "type": "funding",
+            "time": row.get("time"),
+            "price": price,
+            "price_source": source,
+            "rate": float(row["rate"]),
+            "payment": payment,
+        }
+    )
+    return payment
 
 
 def _cycle_profits(fills: list[dict[str, Any]]) -> list[float]:
@@ -341,7 +372,27 @@ def _liquidate(state: dict[str, Any], config: GridConfig, candle: dict[str, Any]
     return end["quote"]
 
 
-def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any]:
+def _window_funding(rows: list[dict[str, Any]], bars: list[dict[str, Any]], qty_at) -> float:
+    """Sum funding for a constant or per-candle quantity. Does not touch grid state."""
+    if not rows or not bars:
+        return 0.0
+    window_end = stamp(bars[-1]["time"])
+    paid = 0.0
+    for index, bar in enumerate(bars):
+        nxt = stamp(bars[index + 1]["time"]) if index + 1 < len(bars) else None
+        for row in due_settlements(
+            rows, bar_time=stamp(bar["time"]), next_time=nxt, window_end=window_end
+        ):
+            price, _source = settlement_price(row, bar["close"])
+            paid += qty_at(index) * price * float(row["rate"])
+    return paid
+
+
+def run_grid(
+    candles: list[dict[str, Any]],
+    config: GridConfig,
+    funding: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     levels = build_levels(config)
     validate_config(config, levels)
     bars = _normalize(candles)
@@ -353,15 +404,24 @@ def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any
     if open_orders > config.max_open_orders:
         raise GridConfigError("max_open_orders", "initial resting buys exceed max_open_orders")
 
+    rows = [] if config.funding_mode == "exclude" else normalize_funding(funding)
+    window_start = stamp(bars[0]["time"])
+    window_end = stamp(bars[-1]["time"])
     equity_curve: list[dict[str, Any]] = []
     peak = float(config.capital)
     max_dd = 0.0
     accepted = True
     error: str | None = None
 
-    for bar in bars:
+    for index, bar in enumerate(bars):
         _run_bar(state, config, bar)
         _note_range(state, config, bar)
+        nxt = stamp(bars[index + 1]["time"]) if index + 1 < len(bars) else None
+        if rows and state["halted"] not in ("stop", "max_drawdown"):
+            for row in due_settlements(
+                rows, bar_time=stamp(bar["time"]), next_time=nxt, window_end=window_end
+            ):
+                _charge_funding(state, state["base"], row, bar["close"])
         equity = _equity(state, bar["close"])
         if equity > peak:
             peak = equity
@@ -381,10 +441,22 @@ def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any
 
     last = bars[min(len(equity_curve), len(bars)) - 1]
     liquidated = _liquidate(state, config, last)
-    hold = _buy_and_hold(bars[: len(equity_curve)], config)
+    seen = bars[: len(equity_curve)]
+    if config.funding_mode == "exclude":
+        coverage = {
+            "funding_coverage_pct": None,
+            "funding_included": False,
+            "warnings": [FUNDING_EXCLUDED],
+        }
+        hold_funding = 0.0
+    else:
+        coverage = assess_coverage(rows, window_start=window_start, window_end=stamp(seen[-1]["time"]))
+        entry = seen[0]["open"] * (1.0 + _slip(config))
+        hold_qty = config.capital / (entry * (1.0 + taker_fee_rate(config)))
+        hold_funding = _window_funding(rows, seen, lambda _index: hold_qty)
+    hold = _buy_and_hold(seen, config, funding_paid=hold_funding)
     fills = state["fills"]
     touches = state["touches"]
-    seen = bars[: len(equity_curve)]
     inside = sum(1 for bar in seen if config.range_low <= bar["close"] <= config.range_high)
     mark = last["close"]
     unrealized = state["base"] * mark - state["cost_basis"]
@@ -409,13 +481,15 @@ def run_grid(candles: list[dict[str, Any]], config: GridConfig) -> dict[str, Any
         "fees_paid": sum(float(fill["fee"]) for fill in fills),
         "realized_pnl": state["realized"],
         "unrealized_pnl": unrealized,
-        "net_pnl": state["realized"] + unrealized,
+        "net_pnl": state["realized"] + unrealized - state["funding_paid"],
+        "funding_paid": state["funding_paid"],
+        "funding_coverage_pct": coverage["funding_coverage_pct"],
         "pct_time_in_range": (inside / len(seen)) if seen else 0.0,
         "avg_profit_per_grid_cycle": (sum(cycles) / len(cycles)) if cycles else None,
         "cycle_count": len(cycles),
         "events": state["events"],
-        "warnings": [FUNDING_EXCLUDED],
-        "funding_included": False,
+        "warnings": coverage["warnings"],
+        "funding_included": coverage["funding_included"],
         "leverage": config.leverage,
         "quote": state["quote"],
         "base": state["base"],

@@ -31,6 +31,7 @@ const defaults: GridConfigInput = {
   max_open_orders: 20,
   leverage: 1,
   paused: false,
+  funding_mode: "charge",
   intrabar_path: "worst",
 };
 
@@ -194,7 +195,8 @@ export function GridTradingPanel() {
         <h1 className="font-display text-xl">Grid trading</h1>
         <p className="mt-1 rounded border border-terminal-border bg-terminal-panel px-3 py-2 text-sm text-terminal-muted">
           Backtest only. Not financial advice. Binance USDT-M futures, unleveraged long grid (
-          {status.market}). Funding is excluded. Live orders are disabled.
+          {status.market}). Funding is charged from stored settlements unless the mode is
+          exclude. Live orders are disabled.
         </p>
       </header>
       <div className="flex gap-2">
@@ -323,6 +325,19 @@ export function GridTradingPanel() {
             </label>
           ))}
           <label>
+            Funding
+            <select
+              className="mt-1 block w-full rounded border border-terminal-border bg-transparent px-2 py-1 text-sm text-terminal-text"
+              value={config.funding_mode ?? "charge"}
+              onChange={(event) =>
+                patch({ funding_mode: event.target.value as GridConfigInput["funding_mode"] })
+              }
+            >
+              <option value="charge">charge</option>
+              <option value="exclude">exclude</option>
+            </select>
+          </label>
+          <label>
             Grid type
             <select
               className="mt-1 block w-full rounded border border-terminal-border bg-transparent px-2 py-1 text-sm text-terminal-text"
@@ -419,6 +434,8 @@ export function GridTradingPanel() {
                       ["Realized PnL", num(summary.realized_pnl, 4)],
                       ["Unrealized PnL", num(summary.unrealized_pnl, 4)],
                       ["Net PnL", num(summary.net_pnl, 4)],
+                      ["Funding paid", num(summary.funding_paid, 4)],
+                      ["Funding coverage", pct(summary.funding_coverage_pct)],
                       ["Time in range", pct(summary.pct_time_in_range)],
                       ["Avg profit / cycle", num(summary.avg_profit_per_grid_cycle, 4)],
                       ["Fill rate", pct(summary.fill_rate)],
