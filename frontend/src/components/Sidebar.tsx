@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { fetchGridStatus } from "../gridTrading/client";
 import { useOhlcvExpandStore } from "../store/ohlcvExpandStore";
 
 const items = [
@@ -26,6 +28,25 @@ export function Sidebar({
 }) {
   const expandActive = useOhlcvExpandStore((s) => s.active);
   const location = useLocation();
+  const [gridEnabled, setGridEnabled] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchGridStatus()
+      .then((body) => {
+        if (alive) setGridEnabled(Boolean(body?.enabled));
+      })
+      .catch(() => {
+        if (alive) setGridEnabled(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const navItems = gridEnabled
+    ? [...items, { to: "/grid-trading", label: "Grid Trading", short: "Gd" }]
+    : items;
 
   return (
     <aside
@@ -87,7 +108,7 @@ export function Sidebar({
           collapsed ? "p-2" : "p-3"
         }`}
       >
-        {items.map((item) => (
+        {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

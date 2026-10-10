@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.diagnostics_routes import router as diagnostics_router
 from app.api.routes import router, ws_router
+from app.grid_trading.api import router as grid_trading_router
 from app.config import ROOT, get_settings
 from app.core.logging import get_logger, setup_logging
 from app.ingestion import service as ingestion_mod
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(router, prefix="/api")
     app.include_router(diagnostics_router, prefix="/api")
+    app.include_router(grid_trading_router, prefix="/api")
     app.include_router(ws_router, prefix="/ws")
     return app
 

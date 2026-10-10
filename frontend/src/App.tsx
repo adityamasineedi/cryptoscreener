@@ -6,6 +6,7 @@ import { ChartsPage } from "./components/ChartsPage";
 import { CoinDetailPanel } from "./components/CoinDetailPanel";
 import { BacktestPanel } from "./components/BacktestPanel";
 import { BosResearchPanel } from "./components/BosResearchPanel";
+import { GridTradingPanel } from "./gridTrading/GridTradingPanel";
 import { BosStrategyResearchPanel } from "./components/BosStrategyResearchPanel";
 import { DataHealthPanel } from "./components/DataHealthPanel";
 import { AlertsPanel } from "./components/AlertsPanel";
@@ -161,6 +162,7 @@ export default function App() {
           <Route path="/strategies" element={<StrategiesPanel />} />
           <Route path="/bos-research" element={<BosResearchPanel />} />
           <Route path="/bos-strategy-research" element={<BosStrategyResearchPanel />} />
+          <Route path="/grid-trading" element={<GridTradingPanel />} />
           <Route path="/paper" element={<PaperTradePanel />} />
           <Route path="/watchlist" element={<Placeholder title="Watchlist" />} />
           <Route path="/alerts" element={<AlertsPanel />} />
