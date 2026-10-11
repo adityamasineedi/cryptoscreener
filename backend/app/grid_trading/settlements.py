@@ -10,27 +10,85 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
-GRID_FUNDING_DDL = """
-CREATE TABLE IF NOT EXISTS grid_funding_settlements (
-    symbol TEXT NOT NULL,
-    funding_time TIMESTAMPTZ NOT NULL,
-    funding_rate DOUBLE PRECISION NOT NULL,
-    mark_price DOUBLE PRECISION,
-    PRIMARY KEY (symbol, funding_time)
-);
-CREATE TABLE IF NOT EXISTS grid_funding_fetch_ranges (
-    symbol TEXT NOT NULL,
-    "from" TIMESTAMPTZ NOT NULL,
-    "to" TIMESTAMPTZ NOT NULL,
-    fetched_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (symbol, "from", "to")
-);
-"""
+GRID_FUNDING_DDL = (
+    """
+    CREATE TABLE IF NOT EXISTS grid_funding_settlements (
+        symbol TEXT NOT NULL,
+        funding_time TIMESTAMPTZ NOT NULL,
+        funding_rate DOUBLE PRECISION NOT NULL,
+        mark_price DOUBLE PRECISION,
+        PRIMARY KEY (symbol, funding_time)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS grid_funding_fetch_ranges (
+        symbol TEXT NOT NULL,
+        "from" TIMESTAMPTZ NOT NULL,
+        "to" TIMESTAMPTZ NOT NULL,
+        fetched_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (symbol, "from", "to")
+    )
+    """,
+)
 
 # GET /fapi/v1/fundingRate — published max page size. Weight is 1 on the
 # MARKET_DATA listing; the OpenAPI mirror does not repeat the weight.
 FUNDING_PAGE_LIMIT = 1000
 _BACKOFF_SECONDS = (1.0, 2.0, 4.0, 8.0)
+
+
+async def load_grid_settlements(symbol: str, start: Any, end: Any) -> dict[str, Any]:
+    """Read grid_funding_settlements. Does not touch funding_rates.
+
+    ``status`` is ``rows``, ``fetched_no_rows``, ``never_fetched``, or ``unavailable``
+    when the database is not connected.
+    """
+    from sqlalchemy import text
+
+    from app.services.database import db_manager
+
+    if db_manager.engine is None:
+        return {"status": "unavailable", "rows": []}
+    sym = (symbol or "").strip().upper()
+    async with db_manager.engine.begin() as conn:
+        covered = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT 1 FROM grid_funding_fetch_ranges
+                    WHERE symbol = :symbol AND "from" <= :start AND "to" >= :end
+                    LIMIT 1
+                    """
+                ),
+                {"symbol": sym, "start": start, "end": end},
+            )
+        ).first()
+        found = (
+            await conn.execute(
+                text(
+                    """
+                    SELECT funding_time, funding_rate, mark_price
+                    FROM grid_funding_settlements
+                    WHERE symbol = :symbol AND funding_time >= :start AND funding_time <= :end
+                    ORDER BY funding_time
+                    """
+                ),
+                {"symbol": sym, "start": start, "end": end},
+            )
+        ).fetchall()
+    rows = [
+        {
+            "time": row[0],
+            "rate": float(row[1]),
+            "mark_price": None if row[2] is None else float(row[2]),
+        }
+        for row in found
+    ]
+    if rows:
+        return {"status": "rows", "rows": rows}
+    if covered:
+        return {"status": "fetched_no_rows", "rows": []}
+    return {"status": "never_fetched", "rows": []}
 
 
 class FundingHttpError(Exception):

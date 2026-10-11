@@ -110,7 +110,8 @@ async def _load(symbol: str) -> MemorySettlementStore:
 
 async def _save(store: MemorySettlementStore) -> None:
     async with db_manager.engine.begin() as conn:
-        await conn.execute(text(GRID_FUNDING_DDL))
+        for statement in GRID_FUNDING_DDL:
+            await conn.execute(text(statement))
         for row in store.rows.values():
             await conn.execute(
                 text(
@@ -144,7 +145,8 @@ async def _run(symbol: str, start: datetime, end: datetime) -> dict[str, Any]:
     await db_manager.connect(settings, ensure_schema=False)
     try:
         async with db_manager.engine.begin() as conn:
-            await conn.execute(text(GRID_FUNDING_DDL))
+            for statement in GRID_FUNDING_DDL:
+                await conn.execute(text(statement))
         store = await _load(symbol.upper())
         result = backfill_symbol(
             symbol,

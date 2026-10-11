@@ -161,11 +161,17 @@ def apply_lookback(
 
 
 async def _funding(body: GridRunRequest, candles: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
-    """Settlements passed on the request. Charge mode does not read funding_rates."""
-    del candles
+    """Settlement rows only. Charge mode does not read funding_rates."""
     if body.funding_mode == "exclude":
         return None
-    return body.funding
+    if body.funding is not None:
+        return body.funding
+    if not body.symbol or not candles:
+        return None
+    from app.grid_trading.settlements import load_grid_settlements
+
+    loaded = await load_grid_settlements(body.symbol, candles[0]["time"], candles[-1]["time"])
+    return loaded["rows"] or None
 
 
 async def _candles(body: GridRunRequest) -> tuple[list[dict[str, Any]], str | None]:

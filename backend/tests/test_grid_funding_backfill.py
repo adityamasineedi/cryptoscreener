@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from app.grid_trading.config import GridConfig
+from app.grid_trading.engine import run_grid
 from app.grid_trading.settlements import (
     FUNDING_PAGE_LIMIT,
     FundingHttpError,
@@ -95,6 +97,59 @@ def test_backoff_on_429_and_418_then_writes_the_recorded_page():
     assert slept == [1.0, 2.0]
     assert result["rows"] == 2
     assert store.rows_between("BTCUSDT", START, END)[0]["funding_rate"] == pytest.approx(0.0001)
+
+
+def test_recorded_btcusdt_settlements_charge_the_held_inventory_only():
+    path = Path(__file__).parent / "fixtures" / "btcusdt_funding_settlements_2026-08-02_2026-10-11.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    parsed = [parse_funding_row(row) for row in raw]
+    assert len(parsed) == 211
+    gaps = [
+        (parsed[index]["funding_time"] - parsed[index - 1]["funding_time"]).total_seconds()
+        for index in range(1, len(parsed))
+    ]
+    assert gaps
+    assert min(gaps) == max(gaps) == 8 * 3600
+    candles = []
+    funding = []
+    for index, row in enumerate(parsed):
+        when = int(row["funding_time"].timestamp())
+        candles.append(
+            {
+                "time": when,
+                "open": 70_000.0,
+                "high": 71_000.0,
+                "low": 59_000.0 if index == 0 else 65_000.0,
+                "close": 70_000.0,
+            }
+        )
+        funding.append(
+            {
+                "time": when,
+                "rate": row["funding_rate"],
+                "mark_price": row["mark_price"],
+            }
+        )
+    result = run_grid(
+        candles,
+        GridConfig(
+            range_low=60_000.0,
+            range_high=90_000.0,
+            grid_count=1,
+            capital=10_000.0,
+            fee_bps=0.0,
+            slippage_bps=0.0,
+            stop_price=50_000.0,
+            max_drawdown=0.99,
+            max_open_orders=1,
+        ),
+        funding,
+    )
+    qty = 10_000.0 / 60_000.0
+    expected = sum(qty * row["mark_price"] * row["funding_rate"] for row in parsed[1:])
+    assert result["funding_status"] == "charged"
+    assert result["funding_coverage_pct"] == pytest.approx(1.0)
+    assert result["funding_paid"] == pytest.approx(expected)
 
 
 def test_pagination_continues_after_a_full_page():
