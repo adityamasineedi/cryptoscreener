@@ -13,7 +13,6 @@ from app.core.logging import get_logger
 from app.grid_trading.config import MARKET, GridConfig, GridConfigError, grid_trading_enabled
 from app.grid_trading.engine import run_grid
 from app.grid_trading.execution import GridExecution
-from app.grid_trading.funding import load_funding_window
 from app.grid_trading.metrics import export_fills, summarize
 from app.grid_trading.scanner import rank_scores, score_series
 from app.grid_trading.validation import split_sample, sweep_grid_count, walk_forward
@@ -162,13 +161,11 @@ def apply_lookback(
 
 
 async def _funding(body: GridRunRequest, candles: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    """Settlements passed on the request. Charge mode does not read funding_rates."""
+    del candles
     if body.funding_mode == "exclude":
         return None
-    if body.funding is not None:
-        return body.funding
-    if not body.symbol or not candles:
-        return []
-    return await load_funding_window(body.symbol, candles[0]["time"], candles[-1]["time"])
+    return body.funding
 
 
 async def _candles(body: GridRunRequest) -> tuple[list[dict[str, Any]], str | None]:

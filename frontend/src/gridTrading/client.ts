@@ -62,7 +62,9 @@ export type GridBacktest = {
     fees_paid?: number;
     realized_pnl: number;
     unrealized_pnl?: number;
-    net_pnl?: number;
+    net_pnl?: number | null;
+    pnl_before_funding?: number | null;
+    funding_status?: "unavailable" | "excluded" | "charged";
     funding_paid?: number;
     funding_coverage_pct?: number | null;
     pct_time_in_range?: number;

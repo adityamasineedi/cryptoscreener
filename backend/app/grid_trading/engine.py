@@ -21,9 +21,13 @@ from app.grid_trading.config import (
 )
 from app.grid_trading.funding import (
     FUNDING_EXCLUDED,
+    FUNDING_QUOTES,
+    FUNDING_UNAVAILABLE,
     assess_coverage,
+    coarse_inventory_warning,
     due_settlements,
     normalize_funding,
+    quotes_not_settlements,
     settlement_price,
     stamp,
 )
@@ -404,7 +408,20 @@ def run_grid(
     if open_orders > config.max_open_orders:
         raise GridConfigError("max_open_orders", "initial resting buys exceed max_open_orders")
 
-    rows = [] if config.funding_mode == "exclude" else normalize_funding(funding)
+    funding_status = "excluded" if config.funding_mode == "exclude" else "charged"
+    unavailable_reason: str | None = None
+    if config.funding_mode == "exclude":
+        rows = []
+    else:
+        rows = normalize_funding(funding)
+        if not rows:
+            funding_status = "unavailable"
+            unavailable_reason = FUNDING_UNAVAILABLE
+            rows = []
+        elif quotes_not_settlements(rows):
+            funding_status = "unavailable"
+            unavailable_reason = FUNDING_QUOTES
+            rows = []
     window_start = stamp(bars[0]["time"])
     window_end = stamp(bars[-1]["time"])
     equity_curve: list[dict[str, Any]] = []
@@ -442,15 +459,25 @@ def run_grid(
     last = bars[min(len(equity_curve), len(bars)) - 1]
     liquidated = _liquidate(state, config, last)
     seen = bars[: len(equity_curve)]
-    if config.funding_mode == "exclude":
+    if funding_status == "excluded":
         coverage = {
             "funding_coverage_pct": None,
             "funding_included": False,
             "warnings": [FUNDING_EXCLUDED],
         }
         hold_funding = 0.0
+    elif funding_status == "unavailable":
+        coverage = {
+            "funding_coverage_pct": None,
+            "funding_included": False,
+            "warnings": [unavailable_reason or FUNDING_UNAVAILABLE],
+        }
+        hold_funding = 0.0
     else:
         coverage = assess_coverage(rows, window_start=window_start, window_end=stamp(seen[-1]["time"]))
+        coarse = coarse_inventory_warning(config.timeframe, seen, rows)
+        if coarse:
+            coverage["warnings"] = [*coverage["warnings"], coarse]
         entry = seen[0]["open"] * (1.0 + _slip(config))
         hold_qty = config.capital / (entry * (1.0 + taker_fee_rate(config)))
         hold_funding = _window_funding(rows, seen, lambda _index: hold_qty)
@@ -461,6 +488,8 @@ def run_grid(
     mark = last["close"]
     unrealized = state["base"] * mark - state["cost_basis"]
     cycles = _cycle_profits(fills)
+    pnl_before_funding = state["realized"] + unrealized
+    funded_net = None if funding_status == "unavailable" else pnl_before_funding - state["funding_paid"]
     return {
         "accepted": accepted,
         "error": error,
@@ -481,7 +510,9 @@ def run_grid(
         "fees_paid": sum(float(fill["fee"]) for fill in fills),
         "realized_pnl": state["realized"],
         "unrealized_pnl": unrealized,
-        "net_pnl": state["realized"] + unrealized - state["funding_paid"],
+        "net_pnl": funded_net,
+        "pnl_before_funding": pnl_before_funding,
+        "funding_status": funding_status,
         "funding_paid": state["funding_paid"],
         "funding_coverage_pct": coverage["funding_coverage_pct"],
         "pct_time_in_range": (inside / len(seen)) if seen else 0.0,

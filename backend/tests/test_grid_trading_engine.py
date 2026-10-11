@@ -88,7 +88,9 @@ def test_limit_fills_use_the_maker_fee_and_exits_use_taker_plus_slippage():
     assert result["liquidated_equity"] == pytest.approx(credit)
     assert result["fees_paid"] == pytest.approx(result["fills"][0]["fee"] + result["fills"][1]["fee"])
     assert result["funding_included"] is False
-    assert "Funding is excluded" in result["warnings"][0]
+    assert result["funding_status"] == "unavailable"
+    assert result["net_pnl"] is None
+    assert "Funding is unavailable" in result["warnings"][0]
 
     stopped = run_grid(
         [
@@ -241,7 +243,9 @@ def test_open_inventory_can_show_a_loss_while_a_cycle_is_profitable():
     assert unrealized == pytest.approx(-1500.0 / 105.0)
     assert result["realized_pnl"] == pytest.approx(realized)
     assert result["unrealized_pnl"] == pytest.approx(unrealized)
-    assert result["net_pnl"] == pytest.approx(realized + unrealized)
+    assert result["funding_status"] == "unavailable"
+    assert result["net_pnl"] is None
+    assert result["pnl_before_funding"] == pytest.approx(realized + unrealized)
     assert result["realized_pnl"] > 0 > result["unrealized_pnl"]
     assert result["avg_profit_per_grid_cycle"] == pytest.approx(realized)
     assert result["cycle_count"] == 1
@@ -308,7 +312,9 @@ def test_pause_marks_to_market_and_takes_no_fills():
     assert result["fill_count"] == 0
     assert result["base"] == pytest.approx(0.0)
     assert result["unrealized_pnl"] == pytest.approx(0.0)
-    assert result["net_pnl"] == pytest.approx(0.0)
+    assert result["funding_status"] == "unavailable"
+    assert result["net_pnl"] is None
+    assert result["pnl_before_funding"] == pytest.approx(0.0)
     assert result["equity_curve"][-1]["equity"] == pytest.approx(1000.0)
     assert result["events"][0]["type"] == "paused"
 
@@ -429,12 +435,19 @@ def test_missing_funding_rows_are_not_treated_as_zero():
     assert "Funding is excluded" not in result["warnings"][0]
 
 
-def test_no_funding_rows_keeps_the_excluded_warning():
+def test_no_settlement_source_is_unavailable_and_not_a_silent_exclude():
     candles = [_bar(0, 105, 106, 104, 105), _bar(1, 105, 112, 99, 108)]
     result = run_grid(candles, _config())
-    assert result["funding_coverage_pct"] == pytest.approx(0.0)
-    assert result["funding_included"] is False
-    assert result["warnings"][0] == "Funding is excluded. USDT-M funding payments are not charged."
+    excluded = run_grid(candles, _config(funding_mode="exclude"))
+    assert result["funding_status"] == "unavailable"
+    assert result["funding_paid"] == pytest.approx(0.0)
+    assert result["net_pnl"] is None
+    assert result["pnl_before_funding"] == pytest.approx(excluded["net_pnl"])
+    assert result["funding_coverage_pct"] is None
+    assert "Funding is unavailable" in result["warnings"][0]
+    assert "not charged" not in result["warnings"][0]
+    assert excluded["funding_status"] == "excluded"
+    assert excluded["warnings"][0] == "Funding is not charged."
 
 
 def test_paused_inventory_still_pays_funding(monkeypatch):
@@ -488,13 +501,93 @@ def test_exclude_mode_matches_a_run_with_no_funding_cashflow():
     plain = run_grid(candles, cfg)
     excluded = run_grid(candles, cfg.model_copy(update={"funding_mode": "exclude"}), funding)
     charged = run_grid(candles, cfg, funding)
-    assert excluded["net_pnl"] == pytest.approx(plain["net_pnl"])
+    assert plain["funding_status"] == "unavailable"
+    assert plain["net_pnl"] is None
+    assert excluded["funding_status"] == "excluded"
+    assert excluded["net_pnl"] == pytest.approx(plain["pnl_before_funding"])
     assert excluded["funding_paid"] == pytest.approx(0.0)
-    assert [point["equity"] for point in excluded["equity_curve"]] == pytest.approx(
-        [point["equity"] for point in plain["equity_curve"]]
-    )
-    assert excluded["warnings"] == plain["warnings"]
+    assert excluded["warnings"] == ["Funding is not charged."]
     assert charged["net_pnl"] < excluded["net_pnl"]
+
+
+def test_settlement_on_the_candle_open_and_inside_the_candle_use_that_candle():
+    candles = [
+        _bar(0, 105, 106, 99, 101),
+        _bar(10, 101, 102, 100, 102),
+    ]
+    cfg = _config(fee_bps=0.0, slippage_bps=0.0)
+    on_open = run_grid(candles, cfg, [_fund(0, 0.001)])
+    inside = run_grid(candles, cfg, [_fund(5, 0.001)])
+    on_next_open = run_grid(candles, cfg, [_fund(10, 0.001)])
+    assert on_open["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001)
+    assert inside["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001)
+    assert on_next_open["funding_paid"] == pytest.approx(10.0 * 102.0 * 0.001)
+
+
+def test_daily_candles_warn_that_settlement_inventory_is_approximated():
+    day = 86_400
+    step = 8 * 3600
+    start = 1_700_000_000
+    candles = [
+        _bar(start, 105, 106, 99, 101),
+        _bar(start + day, 101, 102, 100, 102),
+        _bar(start + 2 * day, 102, 103, 101, 102),
+    ]
+    funding = [_fund(start + step, 0.001), _fund(start + 2 * step, 0.001), _fund(start + 3 * step, 0.001)]
+    daily = run_grid(candles, _config(timeframe="1d", fee_bps=0.0, slippage_bps=0.0), funding)
+    hourly_candles = [
+        _bar(start + index * 3600, 105, 106, 104, 105) for index in range(0, 25)
+    ]
+    hourly_candles[1] = _bar(start + 3600, 105, 106, 99, 101)
+    hourly = run_grid(
+        hourly_candles,
+        _config(timeframe="1h", fee_bps=0.0, slippage_bps=0.0),
+        funding,
+    )
+    assert daily["accepted"] is True
+    assert any("approximated" in warning for warning in daily["warnings"])
+    assert not any("approximated" in warning for warning in hourly["warnings"])
+
+
+def test_a_funding_interval_change_warns_and_keeps_the_run():
+    # 8h, 8h, then 4h, 4h. Median is 6h, so none of these gaps is a missing row.
+    times = [0, 8, 16, 20, 24]
+    candles = [_bar(time, 105, 106, 104, 105) for time in times]
+    result = run_grid(
+        candles,
+        _config(fee_bps=0.0, slippage_bps=0.0),
+        [_fund(time, 0.001) for time in times],
+    )
+    assert result["accepted"] is True
+    assert result["funding_coverage_pct"] == pytest.approx(1.0)
+    assert result["funding_included"] is True
+    assert any("interval changes inside the window" in warning for warning in result["warnings"])
+    assert not any("No settlement data" in warning for warning in result["warnings"])
+
+
+def test_quote_table_rows_are_unavailable_and_charge_nothing():
+    start = 1_700_000_000
+    candles = [
+        _bar(start, 105, 106, 99, 101),
+        _bar(start + 3600, 101, 102, 100, 102),
+    ]
+    quotes = []
+    for index in range(3600):
+        quotes.append(
+            {
+                "time": start + index,
+                "funding_rate": 0.0001 + (index % 5) * 1e-6,
+                "mark_price": 100.0 + index * 0.01,
+                "source": "binance_ws" if index % 2 == 0 else "binance_rest",
+            }
+        )
+    result = run_grid(candles, _config(fee_bps=0.0, slippage_bps=0.0), quotes)
+    assert result["funding_status"] == "unavailable"
+    assert result["funding_paid"] == pytest.approx(0.0)
+    assert result["net_pnl"] is None
+    assert result["buy_and_hold"]["funding_paid"] == pytest.approx(0.0)
+    assert not any(event.get("type") == "funding" for event in result["events"])
+    assert "live funding quotes" in result["warnings"][0]
 
 
 def test_buy_and_hold_is_charged_the_same_settlements():

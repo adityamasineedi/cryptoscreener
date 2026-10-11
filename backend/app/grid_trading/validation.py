@@ -120,9 +120,20 @@ def robustness(
     config: GridConfig,
     funding: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    visible = _funding_for(candles, funding)
+    if config.funding_mode == "charge":
+        probe = run_grid(candles, config, visible)
+        if probe.get("funding_status") == "unavailable":
+            return {
+                "funding_status": "unavailable",
+                "ranked": False,
+                "robustness": None,
+                "neighbors": 0,
+                "profitable_neighbors": 0,
+                "reason": (probe.get("warnings") or [""])[0],
+            }
     neighbors = _neighbor_configs(config)
     profitable = 0
-    visible = _funding_for(candles, funding)
     for trial in neighbors:
         try:
             result = run_grid(candles, trial, visible)
@@ -147,6 +158,17 @@ def sweep_grid_count(
 ) -> dict[str, Any]:
     if not grid_counts:
         raise GridConfigError("sweep", "grid_counts is empty")
+    if config.funding_mode == "charge":
+        probe = run_grid(candles, config, _funding_for(candles, funding))
+        if probe.get("funding_status") == "unavailable":
+            return {
+                "funding_status": "unavailable",
+                "ranked": False,
+                "rows": [],
+                "reason": (probe.get("warnings") or [""])[0],
+                "pnl_before_funding": probe.get("pnl_before_funding"),
+                "warning": (probe.get("warnings") or [""])[0],
+            }
     rows = []
     for count in grid_counts:
         trial = config.model_copy(update={"grid_count": count, "max_open_orders": max(config.max_open_orders, count)})
@@ -175,4 +197,10 @@ def sweep_grid_count(
             int(row.get("grid_count") or 0),
         )
     )
-    return {"warning": OVERFIT_WARNING, "rows": rows}
+    report: dict[str, Any] = {"warning": OVERFIT_WARNING, "rows": rows, "ranked": True}
+    if config.funding_mode == "exclude":
+        report["funding_status"] = "excluded"
+        report["label"] = "funding excluded"
+    else:
+        report["funding_status"] = "charged"
+    return report

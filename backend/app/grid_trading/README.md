@@ -26,16 +26,21 @@ fee. A maker fee that consumes the whole grid step is rejected.
 
 `funding_mode` is `charge` or `exclude`. The default is `charge`.
 
-`charge` loads `funding_rates` for the symbol between the first and last
-candle, and one neighboring row on each side. Those neighbors are only used
-to measure the cadence. Settlements are the stored timestamps. Nothing in
-this book assumes an 8 hour interval.
+`charge` does not read `funding_rates`. That table is a live quote of the
+current rate. With no settlement history for the symbol and window, charge
+returns `funding_status` `unavailable`, leaves `net_pnl` empty, and reports
+`pnl_before_funding`. It does not fall back to exclude. `exclude` is an
+explicit choice and warns "Funding is not charged." A sweep in charge mode
+with unavailable funding is not ranked. A sweep in exclude mode is labeled
+"funding excluded."
 
 At each settlement, payment is `inventory_qty * price * rate` for the inventory
 held after that candle's fills and stop check. `price` is the row's
 `mark_price` when it is finite and positive, otherwise the close of the last
-candle at or before the settlement. A settlement that falls between two
-candles uses the earlier candle. Positive rate: the long pays. Negative rate:
+candle at or before the settlement. A settlement timestamp equal to a candle's
+time is charged on that candle, after its fills. A timestamp strictly inside
+the candle, after that time and before the next candle's time, is charged on
+the same earlier candle. Positive rate: the long pays. Negative rate:
 the long receives. `funding_paid` is the signed sum (positive means paid) and
 is not included in `fees_paid`. It is subtracted inside `net_pnl` and inside
 the equity curve. The same settlements are charged on the buy-and-hold
@@ -46,13 +51,21 @@ drawdown flatten does: later settlements are not charged. A settlement that
 shares the stop candle is not charged, because that candle's flatten is known
 only at the candle timestamp.
 
+The backtester does not reject a candle timeframe. The OHLCV loader knows
+`1m`, `5m`, `15m`, `30m`, `1h`, `4h`, and `1d` (and their aliases). Any other
+string is passed through. When the candle gaps match that timeframe and the
+timeframe is longer than the median settlement spacing, `charge` still runs
+and adds a warning that inventory at each settlement is approximated.
+
 Coverage is the share of settlements in the window that have a stored rate.
 A gap wider than 1.5 times the median stored interval counts as missing
-settlements, and the result names that uncovered span. Missing rows are not
-treated as a zero rate. If coverage is 0, the result keeps the warning
-"Funding is excluded. USDT-M funding payments are not charged." `exclude`
-does not charge and keeps that same warning, so the PnL matches a run with
-no funding cashflows.
+settlements, and the result names that uncovered span. If the stored interval
+itself changes inside the window (the later half of the gaps has a median more
+than 1.5 times the earlier half, or the other way around), the result warns
+and still returns. That change is not a silent pass and not a failed run. A
+single longer hole stays a missing-row warning. Missing rows are not
+treated as a zero rate. Coverage of 0 with no settlement source is
+`unavailable`, not a zero rate and not exclude.
 
 ## Cycle and PnL
 

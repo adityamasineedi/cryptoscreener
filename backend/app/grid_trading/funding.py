@@ -17,7 +17,14 @@ from sqlalchemy import text
 
 from app.grid_trading.config import GridConfigError
 
-FUNDING_EXCLUDED = "Funding is excluded. USDT-M funding payments are not charged."
+FUNDING_EXCLUDED = "Funding is not charged."
+FUNDING_UNAVAILABLE = (
+    "Funding is unavailable. No settlement history covers this symbol and window."
+)
+FUNDING_QUOTES = (
+    "Funding is unavailable. These rows are live funding quotes, not settlements."
+)
+_QUOTE_SOURCES = frozenset({"binance_ws", "binance_rest"})
 
 _GAP = 1.5
 
@@ -110,25 +117,102 @@ def assess_coverage(
             gap_to = right if gap_to is None else max(gap_to, right)
     total = len(inside) + missing
     coverage = len(inside) / total if total else 0.0
+    warnings: list[str] = []
     if missing and gap_from is not None and gap_to is not None:
-        warning = (
+        warnings.append(
             f"Funding coverage is {coverage:.2%}. "
             f"No settlement data from {gap_from} to {gap_to}."
         )
-        return {
-            "funding_coverage_pct": coverage,
-            "funding_included": True,
-            "warnings": [warning],
-            "uncovered_from": gap_from,
-            "uncovered_to": gap_to,
-        }
+    if len(diffs) >= 2:
+        split = len(diffs) // 2
+        early = float(median(diffs[:split]))
+        late = float(median(diffs[split:]))
+        if early > 0 and late > 0 and max(early, late) > min(early, late) * _GAP:
+            warnings.append(
+                "Funding settlement interval changes inside the window "
+                f"({early} then {late}). "
+                "Coverage uses the median interval, so a missing row can be missed or over-counted."
+            )
     return {
         "funding_coverage_pct": coverage,
         "funding_included": True,
-        "warnings": [],
-        "uncovered_from": None,
-        "uncovered_to": None,
+        "warnings": warnings,
+        "uncovered_from": gap_from,
+        "uncovered_to": gap_to,
     }
+
+
+_TF_SECONDS = {
+    "1m": 60.0,
+    "5m": 300.0,
+    "15m": 900.0,
+    "30m": 1800.0,
+    "1h": 3600.0,
+    "4h": 14400.0,
+    "1d": 86400.0,
+}
+_TF_ALIASES = {
+    "1min": "1m",
+    "5min": "5m",
+    "15min": "15m",
+    "30min": "30m",
+    "60m": "1h",
+    "1hour": "1h",
+    "1-hour": "1h",
+    "4hour": "4h",
+    "4-hour": "4h",
+    "1day": "1d",
+    "1-day": "1d",
+}
+
+
+def timeframe_seconds(timeframe: str) -> float | None:
+    key = (timeframe or "").strip().lower()
+    key = _TF_ALIASES.get(key, key)
+    return _TF_SECONDS.get(key)
+
+
+def coarse_inventory_warning(
+    timeframe: str,
+    bars: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+) -> str | None:
+    """Warn when one candle covers more than one settlement.
+
+    The check runs only when the candle gaps match the stated timeframe, so a
+    synthetic clock that is not that timeframe is left alone.
+    """
+    duration = timeframe_seconds(timeframe)
+    if duration is None or len(bars) < 2:
+        return None
+    bar_times = sorted(stamp(bar["time"]) for bar in bars)
+    bar_diffs = [right - left for left, right in zip(bar_times, bar_times[1:]) if right > left]
+    if not bar_diffs:
+        return None
+    bar_step = float(median(bar_diffs))
+    if abs(bar_step - duration) / duration > 0.25:
+        return None
+    settle_times = sorted(float(row["stamp"]) for row in rows if not row.get("context"))
+    settle = [right - left for left, right in zip(settle_times, settle_times[1:]) if right > left]
+    if not settle:
+        return None
+    if duration <= float(median(settle)):
+        return None
+    return (
+        f"Candle timeframe {timeframe} is longer than the funding settlement spacing. "
+        "Inventory at each settlement is the inventory after that candle, so it is approximated."
+    )
+
+
+def quotes_not_settlements(rows: list[dict[str, Any]]) -> bool:
+    """True when the rows are the live quote table, which charge mode must not use."""
+    if any(str(row.get("source") or "") in _QUOTE_SOURCES for row in rows):
+        return True
+    stamps = sorted(float(row["stamp"]) for row in rows)
+    if not stamps or max(stamps) < 1_000_000_000:
+        return False
+    diffs = [right - left for left, right in zip(stamps, stamps[1:]) if right > left]
+    return len(diffs) >= 2 and float(median(diffs)) < 3600.0
 
 
 def normalize_funding(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -151,6 +235,7 @@ def normalize_funding(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]
                 "stamp": when,
                 "rate": rate,
                 "mark_price": raw.get("mark_price"),
+                "source": raw.get("source"),
                 "context": bool(raw.get("context")),
             }
         )
@@ -159,7 +244,10 @@ def normalize_funding(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]
 
 
 async def load_funding_window(symbol: str, start: Any, end: Any) -> list[dict[str, Any]]:
-    """Rows inside the window, plus one neighbor on each side for the cadence."""
+    """Read funding_rates for diagnostics. Charge mode must not call this.
+
+    The table is a live quote of the current rate, not a settlement history.
+    """
     from app.services.database import db_manager
 
     if db_manager.engine is None:

@@ -6,7 +6,7 @@ import pytest
 
 from app.grid_trading.config import GridConfig, GridConfigError
 from app.grid_trading.engine import run_grid
-from app.grid_trading.validation import split_sample, sweep_grid_count, walk_forward
+from app.grid_trading.validation import robustness, split_sample, sweep_grid_count, walk_forward
 
 
 def _candles(count: int) -> list[dict]:
@@ -56,7 +56,14 @@ def test_walk_forward_windows_step_by_the_test_length():
 
 
 def test_sweep_reports_a_rejected_count_without_dropping_the_rest():
-    report = sweep_grid_count(_candles(6), _config(), [1, 0, 2])
+    report = sweep_grid_count(
+        _candles(6),
+        _config().model_copy(update={"funding_mode": "exclude"}),
+        [1, 0, 2],
+    )
+    assert report["ranked"] is True
+    assert report["label"] == "funding excluded"
+    assert report["funding_status"] == "excluded"
     by_count = {row["grid_count"]: row for row in report["rows"]}
     assert by_count[1]["accepted"] is True
     assert by_count[0]["error"] == "grid_count"
@@ -79,13 +86,31 @@ def test_sweep_net_pnl_includes_funding():
                 "close": 102.0,
             }
         )
-    funding = [{"time": 1, "rate": 0.02, "mark_price": 100.0}]
+    funding = [{"time": 1, "rate": 0.05, "mark_price": 100.0}]
+    unfunded = _config().model_copy(update={"funding_mode": "exclude"})
+    plain = run_grid(candles, unfunded)
     report = sweep_grid_count(candles, _config(), [1], funding)
     direct = run_grid(candles, _config(), funding)
     row = next(item for item in report["rows"] if item["grid_count"] == 1)
+    assert plain["net_pnl"] > 0 > direct["net_pnl"]
     assert direct["funding_paid"] > 0
     assert row["funding_paid"] == pytest.approx(direct["funding_paid"])
     assert row["net_pnl"] == pytest.approx(direct["net_pnl"])
+    without = robustness(candles, unfunded)
+    with_funding = robustness(candles, _config(), funding)
+    assert with_funding["profitable_neighbors"] < without["profitable_neighbors"]
+    assert row["robustness"] == pytest.approx(with_funding["robustness"])
+
+
+def test_charge_without_settlements_is_not_ranked():
+    report = sweep_grid_count(_candles(6), _config(), [1, 2])
+    assert report["funding_status"] == "unavailable"
+    assert report["ranked"] is False
+    assert report["rows"] == []
+    assert "Funding is unavailable" in report["reason"]
+    score = robustness(_candles(6), _config())
+    assert score["ranked"] is False
+    assert score["robustness"] is None
 
 
 def test_short_split_is_rejected():

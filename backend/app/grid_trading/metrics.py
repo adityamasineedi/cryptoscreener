@@ -23,6 +23,8 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
         "realized_pnl": result.get("realized_pnl"),
         "unrealized_pnl": result.get("unrealized_pnl"),
         "net_pnl": result.get("net_pnl"),
+        "pnl_before_funding": result.get("pnl_before_funding"),
+        "funding_status": result.get("funding_status"),
         "funding_paid": result.get("funding_paid"),
         "funding_coverage_pct": result.get("funding_coverage_pct"),
         "pct_time_in_range": result.get("pct_time_in_range"),
