@@ -42,18 +42,19 @@ At each settlement, payment is `inventory_qty * price * rate` for the inventory
 held after that candle's fills and stop check. `price` is the row's
 `mark_price` when it is finite and positive, otherwise the close of the last
 candle at or before the settlement. A settlement timestamp equal to a candle's
-time is charged on that candle, after its fills. A timestamp strictly inside
-the candle, after that time and before the next candle's time, is charged on
-the same earlier candle. Positive rate: the long pays. Negative rate:
+open uses the inventory at the end of the previous candle, so a buy or sell
+on that candle is not included. A timestamp strictly inside the candle uses
+the worse of the opening and closing inventory: the larger quantity when the
+rate is positive, the smaller when it is negative. Positive rate: the long pays. Negative rate:
 the long receives. `funding_paid` is the signed sum (positive means paid) and
 is not included in `fees_paid`. It is subtracted inside `net_pnl` and inside
 the equity curve. The same settlements are charged on the buy-and-hold
 benchmark.
 
 Pause does not flatten inventory and does not stop funding. A stop or a
-drawdown flatten does: later settlements are not charged. A settlement that
-shares the stop candle is not charged, because that candle's flatten is known
-only at the candle timestamp.
+drawdown flatten ends funding for later settlements. A settlement at or
+inside the stop candle is charged on the inventory held at that candle's
+open, which is the position before the flatten.
 
 The backtester does not reject a candle timeframe. The OHLCV loader knows
 `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, and `1d` (and their aliases). Any other

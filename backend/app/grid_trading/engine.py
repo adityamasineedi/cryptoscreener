@@ -329,6 +329,31 @@ def _buy_and_hold(
     }
 
 
+def _funding_qty(
+    opening: float,
+    closing: float,
+    rate: float,
+    *,
+    at_open: bool,
+    stopped: bool,
+) -> float:
+    """Inventory used for one settlement.
+
+    A settlement exactly at the candle open, including the stop candle, uses
+    the inventory at the end of the previous candle. A settlement strictly
+    inside a candle uses the worse of the opening and closing inventory:
+    the larger quantity when the rate is positive, the smaller when it is
+    negative.
+    """
+    if stopped or at_open:
+        return opening
+    if rate > 0:
+        return max(opening, closing)
+    if rate < 0:
+        return min(opening, closing)
+    return opening
+
+
 def _charge_funding(state: dict[str, Any], qty: float, row: dict[str, Any], close: float) -> float:
     price, source = settlement_price(row, close)
     payment = qty * price * float(row["rate"])
@@ -433,14 +458,26 @@ def run_grid(
     error: str | None = None
 
     for index, bar in enumerate(bars):
+        opening_base = float(state["base"])
+        already_closed = state["halted"] in ("stop", "max_drawdown")
         _run_bar(state, config, bar)
         _note_range(state, config, bar)
         nxt = stamp(bars[index + 1]["time"]) if index + 1 < len(bars) else None
-        if rows and state["halted"] not in ("stop", "max_drawdown"):
+        bar_time = stamp(bar["time"])
+        if rows and not already_closed:
+            stopped = state["halted"] == "stop"
             for row in due_settlements(
-                rows, bar_time=stamp(bar["time"]), next_time=nxt, window_end=window_end
+                rows, bar_time=bar_time, next_time=nxt, window_end=window_end
             ):
-                _charge_funding(state, state["base"], row, bar["close"])
+                when = float(row["stamp"])
+                qty = _funding_qty(
+                    opening_base,
+                    float(state["base"]),
+                    float(row["rate"]),
+                    at_open=when == bar_time,
+                    stopped=stopped,
+                )
+                _charge_funding(state, qty, row, bar["close"])
         equity = _equity(state, bar["close"])
         if equity > peak:
             peak = equity

@@ -364,22 +364,23 @@ def _fund(time: int, rate: float, mark: float | None = None) -> dict:
 
 def test_positive_funding_is_paid_by_the_long_and_negative_funding_is_received():
     candles = [
-        _bar(0, 105, 106, 104, 105),
-        _bar(1, 105, 106, 99, 101),
+        _bar(0, 105, 106, 99, 101),
+        _bar(10, 101, 102, 100, 102),
+        _bar(20, 102, 103, 101, 102),
     ]
     cfg = _config(fee_bps=0.0, slippage_bps=0.0)
-    paid = run_grid(candles, cfg, [_fund(1, 0.001)])
-    received = run_grid(candles, cfg, [_fund(1, -0.001)])
-    # qty 10 bought at 100, still open, marked at close 101. Price source is the close.
-    payment = 10.0 * 101.0 * 0.001
+    paid = run_grid(candles, cfg, [_fund(15, 0.001)])
+    received = run_grid(candles, cfg, [_fund(15, -0.001)])
+    # Held across candle 10. Settlement 15 is inside it, so both signs use qty 10 at close 102.
+    payment = 10.0 * 102.0 * 0.001
     assert paid["funding_paid"] == pytest.approx(payment)
-    assert paid["unrealized_pnl"] == pytest.approx(10.0)
-    assert paid["net_pnl"] == pytest.approx(10.0 - payment)
-    assert paid["equity_curve"][-1]["equity"] == pytest.approx(1000.0 + 10.0 - payment)
+    assert paid["unrealized_pnl"] == pytest.approx(20.0)
+    assert paid["net_pnl"] == pytest.approx(20.0 - payment)
+    assert paid["equity_curve"][-1]["equity"] == pytest.approx(1000.0 + 20.0 - payment)
     assert received["funding_paid"] == pytest.approx(-payment)
-    assert received["net_pnl"] == pytest.approx(10.0 + payment)
+    assert received["net_pnl"] == pytest.approx(20.0 + payment)
     assert paid["events"][-1]["price_source"] == "close"
-    marked = run_grid(candles, cfg, [_fund(1, 0.001, 50.0)])
+    marked = run_grid(candles, cfg, [_fund(15, 0.001, 50.0)])
     assert marked["funding_paid"] == pytest.approx(10.0 * 50.0 * 0.001)
     assert marked["events"][-1]["price_source"] == "mark_price"
 
@@ -396,14 +397,14 @@ def test_zero_inventory_at_settlement_pays_nothing():
 
 def test_inventory_is_charged_at_each_settlement_it_is_held():
     candles = [
-        _bar(0, 105, 106, 104, 105),
-        _bar(10, 105, 106, 99, 101),
-        _bar(20, 101, 102, 100, 102),
+        _bar(0, 105, 106, 99, 101),
+        _bar(10, 101, 102, 100, 102),
+        _bar(20, 102, 103, 101, 102),
     ]
     result = run_grid(
         candles,
         _config(fee_bps=0.0, slippage_bps=0.0),
-        [_fund(10, 0.001), _fund(20, 0.002)],
+        [_fund(5, 0.001), _fund(15, 0.002)],
     )
     assert result["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001 + 10.0 * 102.0 * 0.002)
     assert result["fill_count"] == 1
@@ -415,7 +416,7 @@ def test_funding_can_turn_a_winning_cycle_into_a_net_loss():
         _bar(1, 105, 106, 99, 101),
         _bar(2, 101, 112, 100, 108),
     ]
-    result = run_grid(candles, _config(fee_bps=0.0, slippage_bps=0.0), [_fund(1, 0.2, 100.0)])
+    result = run_grid(candles, _config(fee_bps=0.0, slippage_bps=0.0), [_fund(1.5, 0.2, 100.0)])
     assert result["realized_pnl"] == pytest.approx(100.0)
     assert result["funding_paid"] == pytest.approx(200.0)
     assert result["net_pnl"] == pytest.approx(-100.0)
@@ -490,15 +491,18 @@ def test_no_funding_after_the_stop_flatten():
         [_fund(1, 0.001), _fund(2, 0.05, 90.0), _fund(3, 0.05, 95.0)],
     )
     assert result["halted"] == "stop"
-    assert result["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001)
+    # t=1 is the buy candle's open, so it pays nothing. t=2 is the stop candle's
+    # open and pays the inventory held into that candle. t=3 is after the stop.
+    assert result["funding_paid"] == pytest.approx(10.0 * 90.0 * 0.05)
 
 
 def test_exclude_mode_matches_a_run_with_no_funding_cashflow():
     candles = [
         _bar(0, 105, 106, 104, 105),
         _bar(1, 105, 106, 99, 101),
+        _bar(2, 101, 102, 100, 101),
     ]
-    funding = [_fund(1, 0.001)]
+    funding = [_fund(1.5, 0.001)]
     cfg = _config(fee_bps=0.0, slippage_bps=0.0)
     plain = run_grid(candles, cfg)
     excluded = run_grid(candles, cfg.model_copy(update={"funding_mode": "exclude"}), funding)
@@ -512,18 +516,44 @@ def test_exclude_mode_matches_a_run_with_no_funding_cashflow():
     assert charged["net_pnl"] < excluded["net_pnl"]
 
 
-def test_settlement_on_the_candle_open_and_inside_the_candle_use_that_candle():
-    candles = [
+def test_settlement_timing_uses_previous_close_inventory_and_the_worse_inside_quantity():
+    cfg = _config(fee_bps=0.0, slippage_bps=0.0)
+    buy_then_hold = [
         _bar(0, 105, 106, 99, 101),
         _bar(10, 101, 102, 100, 102),
     ]
-    cfg = _config(fee_bps=0.0, slippage_bps=0.0)
-    on_open = run_grid(candles, cfg, [_fund(0, 0.001)])
-    inside = run_grid(candles, cfg, [_fund(5, 0.001)])
-    on_next_open = run_grid(candles, cfg, [_fund(10, 0.001)])
-    assert on_open["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001)
-    assert inside["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001)
-    assert on_next_open["funding_paid"] == pytest.approx(10.0 * 102.0 * 0.001)
+    at_buy_open = run_grid(buy_then_hold, cfg, [_fund(0, 0.001)])
+    assert at_buy_open["funding_paid"] == pytest.approx(0.0)
+    assert at_buy_open["fill_count"] == 1
+    inside_positive = run_grid(buy_then_hold, cfg, [_fund(5, 0.001)])
+    inside_negative = run_grid(buy_then_hold, cfg, [_fund(5, -0.001)])
+    assert inside_positive["funding_paid"] == pytest.approx(10.0 * 101.0 * 0.001)
+    assert inside_negative["funding_paid"] == pytest.approx(0.0)
+    held_then_sold = [
+        _bar(0, 105, 106, 99, 101),
+        _bar(10, 101, 112, 100, 108),
+    ]
+    at_sell_open = run_grid(held_then_sold, cfg, [_fund(10, 0.001)])
+    assert at_sell_open["fill_count"] == 2
+    assert at_sell_open["funding_paid"] == pytest.approx(10.0 * 108.0 * 0.001)
+    stop_candles = [
+        _bar(0, 105, 106, 99, 101),
+        _bar(10, 101, 102, 89, 95),
+        _bar(20, 95, 96, 94, 95),
+    ]
+    on_stop_open = run_grid(stop_candles, cfg, [_fund(10, 0.01, 90.0), _fund(20, 0.05, 95.0)])
+    assert on_stop_open["halted"] == "stop"
+    assert on_stop_open["funding_paid"] == pytest.approx(10.0 * 90.0 * 0.01)
+    jittered = run_grid(
+        [
+            _bar(1_700_000_000, 105, 106, 104, 105),
+            _bar(1_700_003_600, 105, 106, 99, 101),
+        ],
+        cfg,
+        [_fund(1_700_003_600.4, 0.001)],
+    )
+    assert jittered["funding_paid"] == pytest.approx(0.0)
+    assert jittered["fill_count"] == 1
 
 
 def test_daily_candles_warn_that_settlement_inventory_is_approximated():
