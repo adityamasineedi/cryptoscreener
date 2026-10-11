@@ -204,6 +204,77 @@ def coarse_inventory_warning(
     )
 
 
+def distinct_settlements(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per snapped funding time. Context rows stay, for the cadence only."""
+    seen: set[float] = set()
+    chosen = []
+    for row in rows:
+        when = float(row["stamp"])
+        if when >= 1_000_000_000:
+            when = snap_funding_time_seconds(when)
+            row = {**row, "stamp": when}
+        if when in seen:
+            continue
+        seen.add(when)
+        chosen.append(row)
+    chosen.sort(key=lambda item: float(item["stamp"]))
+    return chosen
+
+
+def snap_funding_time_seconds(when: float) -> float:
+    return float(round(when))
+
+
+def funding_result_guards(
+    rows: list[dict[str, Any]],
+    coverage: dict[str, Any],
+    *,
+    payments: list[tuple[float, float]],
+) -> dict[str, Any]:
+    """Median spacing under 1 hour is not a settlement series.
+
+    Coverage under 95% hides funded net PnL. Annualized funding above 50% of
+    average notional is a warning only.
+    """
+    status = "charged"
+    warnings = list(coverage.get("warnings") or [])
+    inside = [row for row in rows if not row.get("context")]
+    stamps = sorted(float(row["stamp"]) for row in inside)
+    diffs = [right - left for left, right in zip(stamps, stamps[1:]) if right > left]
+    if stamps and max(stamps) >= 1_000_000_000 and diffs and float(median(diffs)) < 3600.0:
+        return {
+            "funding_status": "unavailable",
+            "funding_included": False,
+            "funding_coverage_pct": None,
+            "warnings": [FUNDING_QUOTES],
+            "hide_funded_net": True,
+        }
+    pct = coverage.get("funding_coverage_pct")
+    if inside and pct is not None and float(pct) < 0.95:
+        status = "incomplete"
+        warnings.append(
+            f"Funding is incomplete. Coverage is {float(pct):.2%}, so funded net PnL is not shown."
+        )
+    if diffs and payments:
+        step = float(median(diffs))
+        rates = [rate for _notional, rate in payments if rate == rate]
+        notionals = [notional for notional, _rate in payments]
+        if step > 0 and rates and notionals and (sum(notionals) / len(notionals)) > 0:
+            annualized = abs(sum(rates) / len(rates)) * (365.25 * 86400.0 / step)
+            if annualized > 0.50:
+                warnings.append(
+                    "Annualized funding on average notional is "
+                    f"{annualized:.2%}, above 50%."
+                )
+    return {
+        "funding_status": status,
+        "funding_included": status == "charged",
+        "funding_coverage_pct": pct,
+        "warnings": warnings,
+        "hide_funded_net": status != "charged",
+    }
+
+
 def quotes_not_settlements(rows: list[dict[str, Any]]) -> bool:
     """True when the rows are the live quote table, which charge mode must not use."""
     if any(str(row.get("source") or "") in _QUOTE_SOURCES for row in rows):

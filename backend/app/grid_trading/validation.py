@@ -123,9 +123,9 @@ def robustness(
     visible = _funding_for(candles, funding)
     if config.funding_mode == "charge":
         probe = run_grid(candles, config, visible)
-        if probe.get("funding_status") == "unavailable":
+        if probe.get("funding_status") in ("unavailable", "incomplete"):
             return {
-                "funding_status": "unavailable",
+                "funding_status": probe["funding_status"],
                 "ranked": False,
                 "robustness": None,
                 "neighbors": 0,
@@ -160,9 +160,9 @@ def sweep_grid_count(
         raise GridConfigError("sweep", "grid_counts is empty")
     if config.funding_mode == "charge":
         probe = run_grid(candles, config, _funding_for(candles, funding))
-        if probe.get("funding_status") == "unavailable":
+        if probe.get("funding_status") in ("unavailable", "incomplete"):
             return {
-                "funding_status": "unavailable",
+                "funding_status": probe["funding_status"],
                 "ranked": False,
                 "rows": [],
                 "reason": (probe.get("warnings") or [""])[0],

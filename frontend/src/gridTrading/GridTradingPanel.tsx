@@ -433,7 +433,7 @@ export function GridTradingPanel() {
                       ["Fees paid", num(summary.fees_paid, 4)],
                       ["Realized PnL", num(summary.realized_pnl, 4)],
                       ["Unrealized PnL", num(summary.unrealized_pnl, 4)],
-                      summary.funding_status === "unavailable"
+                      summary.funding_status === "unavailable" || summary.funding_status === "incomplete"
                         ? ["PnL before funding", num(summary.pnl_before_funding, 4)]
                         : ["Net PnL", num(summary.net_pnl, 4)],
                       ["Funding paid", num(summary.funding_paid, 4)],

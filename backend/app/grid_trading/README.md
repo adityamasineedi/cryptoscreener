@@ -31,7 +31,11 @@ current rate. With no settlement history for the symbol and window, charge
 returns `funding_status` `unavailable`, leaves `net_pnl` empty, and reports
 `pnl_before_funding`. It does not fall back to exclude. `exclude` is an
 explicit choice and warns "Funding is not charged." A sweep in charge mode
-with unavailable funding is not ranked. A sweep in exclude mode is labeled
+with unavailable funding is not ranked. Coverage under 95% is
+`funding_status` `incomplete`: funded net PnL is hidden and the sweep is not
+ranked. A median settlement gap under one hour is treated as quotes, not
+settlements. Annualized funding above 50% of average notional is a warning.
+A sweep in exclude mode is labeled
 "funding excluded."
 
 At each settlement, payment is `inventory_qty * price * rate` for the inventory

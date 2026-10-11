@@ -25,7 +25,9 @@ from app.grid_trading.funding import (
     FUNDING_UNAVAILABLE,
     assess_coverage,
     coarse_inventory_warning,
+    distinct_settlements,
     due_settlements,
+    funding_result_guards,
     normalize_funding,
     quotes_not_settlements,
     settlement_price,
@@ -413,7 +415,7 @@ def run_grid(
     if config.funding_mode == "exclude":
         rows = []
     else:
-        rows = normalize_funding(funding)
+        rows = distinct_settlements(normalize_funding(funding))
         if not rows:
             funding_status = "unavailable"
             unavailable_reason = FUNDING_UNAVAILABLE
@@ -481,6 +483,27 @@ def run_grid(
         entry = seen[0]["open"] * (1.0 + _slip(config))
         hold_qty = config.capital / (entry * (1.0 + taker_fee_rate(config)))
         hold_funding = _window_funding(rows, seen, lambda _index: hold_qty)
+        payments = [
+            (float(event["payment"]) / float(event["rate"]), float(event["rate"]))
+            for event in state["events"]
+            if event.get("type") == "funding" and float(event.get("rate") or 0.0) != 0.0
+        ]
+        guarded = funding_result_guards(rows, coverage, payments=payments)
+        if guarded["funding_status"] == "unavailable":
+            funding_status = "unavailable"
+            unavailable_reason = guarded["warnings"][0]
+            coverage = {
+                "funding_coverage_pct": None,
+                "funding_included": False,
+                "warnings": guarded["warnings"],
+            }
+        else:
+            funding_status = guarded["funding_status"]
+            coverage = {
+                "funding_coverage_pct": guarded["funding_coverage_pct"],
+                "funding_included": guarded["funding_included"],
+                "warnings": guarded["warnings"],
+            }
     hold = _buy_and_hold(seen, config, funding_paid=hold_funding)
     fills = state["fills"]
     touches = state["touches"]
@@ -489,7 +512,11 @@ def run_grid(
     unrealized = state["base"] * mark - state["cost_basis"]
     cycles = _cycle_profits(fills)
     pnl_before_funding = state["realized"] + unrealized
-    funded_net = None if funding_status == "unavailable" else pnl_before_funding - state["funding_paid"]
+    funded_net = (
+        None
+        if funding_status in ("unavailable", "incomplete")
+        else pnl_before_funding - state["funding_paid"]
+    )
     return {
         "accepted": accepted,
         "error": error,

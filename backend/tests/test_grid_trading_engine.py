@@ -430,9 +430,11 @@ def test_missing_funding_rows_are_not_treated_as_zero():
         [_fund(0, 0.001), _fund(10, 0.001), _fund(30, 0.001), _fund(40, 0.001)],
     )
     assert result["funding_coverage_pct"] == pytest.approx(0.8)
-    assert result["funding_included"] is True
-    assert "No settlement data from 10.0 to 30.0" in result["warnings"][0]
-    assert "Funding is excluded" not in result["warnings"][0]
+    assert result["funding_status"] == "incomplete"
+    assert result["net_pnl"] is None
+    assert result["funding_included"] is False
+    assert any("No settlement data from 10.0 to 30.0" in warning for warning in result["warnings"])
+    assert any("Funding is incomplete" in warning for warning in result["warnings"])
 
 
 def test_no_settlement_source_is_unavailable_and_not_a_silent_exclude():
@@ -563,6 +565,44 @@ def test_a_funding_interval_change_warns_and_keeps_the_run():
     assert result["funding_included"] is True
     assert any("interval changes inside the window" in warning for warning in result["warnings"])
     assert not any("No settlement data" in warning for warning in result["warnings"])
+
+
+def test_duplicate_funding_time_is_charged_once_and_a_high_rate_warns():
+    start = 1_700_000_000
+    step = 8 * 3600
+    candles = [
+        _bar(start + index * step, 105, 106, 99 if index == 0 else 100, 101)
+        for index in range(4)
+    ]
+    once = [_fund(start + index * step, 0.001, 100.0) for index in range(4)]
+    doubled = once + [_fund(start + step, 0.001, 100.0)]
+    single = run_grid(candles, _config(fee_bps=0.0, slippage_bps=0.0), once)
+    duplicate = run_grid(candles, _config(fee_bps=0.0, slippage_bps=0.0), doubled)
+    assert duplicate["funding_paid"] == pytest.approx(single["funding_paid"])
+    assert single["funding_paid"] > 0
+    assert single["funding_status"] == "charged"
+    assert any("above 50%" in warning for warning in single["warnings"])
+
+
+def test_coverage_under_95_percent_hides_funded_net_and_is_not_ranked():
+    from app.grid_trading.validation import sweep_grid_count
+
+    start = 1_700_000_000
+    step = 8 * 3600
+    times = [start, start + step, start + 2 * step, start + 6 * step]
+    candles = [_bar(when, 105, 106, 99 if when == start else 100, 101) for when in times]
+    funding = [_fund(when, 0.0001, 100.0) for when in times]
+    cfg = _config(fee_bps=0.0, slippage_bps=0.0)
+    result = run_grid(candles, cfg, funding)
+    assert result["funding_coverage_pct"] < 0.95
+    assert result["funding_status"] == "incomplete"
+    assert result["net_pnl"] is None
+    assert result["funding_paid"] > 0
+    assert result["pnl_before_funding"] is not None
+    report = sweep_grid_count(candles, cfg, [1], funding)
+    assert report["ranked"] is False
+    assert report["funding_status"] == "incomplete"
+    assert report["rows"] == []
 
 
 def test_quote_table_rows_are_unavailable_and_charge_nothing():
