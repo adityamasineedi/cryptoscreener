@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,38 @@ END = datetime(2023, 11, 15, 8, 0, tzinfo=timezone.utc)
 
 def _rows() -> list[dict]:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_missing_settlement_tables_name_the_backfill_command(monkeypatch):
+    from datetime import datetime, timezone
+
+    from app.grid_trading.settlements import load_grid_settlements
+
+    class _Broken:
+        def begin(self):
+            return self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def execute(self, *args, **kwargs):
+            raise RuntimeError('relation "grid_funding_settlements" does not exist')
+
+    monkeypatch.setattr("app.services.database.db_manager.engine", _Broken())
+    result = asyncio.run(
+        load_grid_settlements(
+            "BTCUSDT",
+            datetime(2026, 8, 2, tzinfo=timezone.utc),
+            datetime(2026, 10, 11, tzinfo=timezone.utc),
+        )
+    )
+    assert result["status"] == "unavailable"
+    assert result["rows"] == []
+    assert "backfill_grid_funding.py" in result["reason"]
+    assert "grid_funding_settlements" in result["reason"]
 
 
 def test_snap_funding_time_to_the_nearest_second_and_to_a_candle_open():

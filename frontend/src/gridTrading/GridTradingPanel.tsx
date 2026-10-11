@@ -437,6 +437,8 @@ export function GridTradingPanel() {
                         ? ["PnL before funding", num(summary.pnl_before_funding, 4)]
                         : ["Net PnL", num(summary.net_pnl, 4)],
                       ["Funding paid", num(summary.funding_paid, 4)],
+                      ["Funding at mark", num(summary.funding_mark_prices, 0)],
+                      ["Funding at close", num(summary.funding_closes, 0)],
                       ["Funding coverage", pct(summary.funding_coverage_pct)],
                       ["Time in range", pct(summary.pct_time_in_range)],
                       ["Avg profit / cycle", num(summary.avg_profit_per_grid_cycle, 4)],

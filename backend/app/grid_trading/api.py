@@ -160,18 +160,30 @@ def apply_lookback(
     )
 
 
-async def _funding(body: GridRunRequest, candles: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+async def _funding(
+    body: GridRunRequest, candles: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]] | None, str | None]:
     """Settlement rows only. Charge mode does not read funding_rates."""
     if body.funding_mode == "exclude":
-        return None
+        return None, None
     if body.funding is not None:
-        return body.funding
+        return body.funding, None
     if not body.symbol or not candles:
-        return None
+        return None, None
     from app.grid_trading.settlements import load_grid_settlements
 
     loaded = await load_grid_settlements(body.symbol, candles[0]["time"], candles[-1]["time"])
-    return loaded["rows"] or None
+    return loaded["rows"] or None, loaded.get("reason")
+
+
+def _apply_funding_reason(result: dict[str, Any], reason: str | None) -> dict[str, Any]:
+    if not reason:
+        return result
+    result["funding_status"] = "unavailable"
+    result["net_pnl"] = None
+    result["funding_included"] = False
+    result["warnings"] = [reason]
+    return result
 
 
 async def _candles(body: GridRunRequest) -> tuple[list[dict[str, Any]], str | None]:
@@ -220,7 +232,7 @@ async def backtest(body: GridRunRequest) -> dict[str, Any]:
     try:
         config = _to_config(body)
         candles, overlap = await _candles(body)
-        funding = await _funding(body, candles)
+        funding, funding_reason = await _funding(body, candles)
         logger.info(
             "grid_backtest",
             symbol=config.symbol,
@@ -228,7 +240,7 @@ async def backtest(body: GridRunRequest) -> dict[str, Any]:
             bars=len(candles),
             market=MARKET,
         )
-        result = run_grid(candles, config, funding)
+        result = _apply_funding_reason(run_grid(candles, config, funding), funding_reason)
     except GridConfigError as exc:
         raise _config_error(exc) from exc
     payload = _public_run(result)
@@ -244,7 +256,7 @@ async def validate(body: GridRunRequest) -> dict[str, Any]:
     try:
         config = _to_config(body)
         candles, overlap = await _candles(body)
-        funding = await _funding(body, candles)
+        funding, funding_reason = await _funding(body, candles)
         report = {
             "market": MARKET,
             "overlap": bool(overlap),
@@ -258,6 +270,9 @@ async def validate(body: GridRunRequest) -> dict[str, Any]:
             ),
             "sweep": sweep_grid_count(candles, config, body.grid_counts, funding),
         }
+        if funding_reason:
+            report["funding_status"] = "unavailable"
+            report["reason"] = funding_reason
         if overlap:
             report["warning"] = overlap
         return report

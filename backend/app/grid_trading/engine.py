@@ -554,6 +554,7 @@ def run_grid(
         if funding_status in ("unavailable", "incomplete")
         else pnl_before_funding - state["funding_paid"]
     )
+    funding_events = [event for event in state["events"] if event.get("type") == "funding"]
     return {
         "accepted": accepted,
         "error": error,
@@ -578,6 +579,8 @@ def run_grid(
         "pnl_before_funding": pnl_before_funding,
         "funding_status": funding_status,
         "funding_paid": state["funding_paid"],
+        "funding_mark_prices": sum(1 for event in funding_events if event.get("price_source") == "mark_price"),
+        "funding_closes": sum(1 for event in funding_events if event.get("price_source") == "close"),
         "funding_coverage_pct": coverage["funding_coverage_pct"],
         "pct_time_in_range": (inside / len(seen)) if seen else 0.0,
         "avg_profit_per_grid_cycle": (sum(cycles) / len(cycles)) if cycles else None,

@@ -383,6 +383,10 @@ def test_positive_funding_is_paid_by_the_long_and_negative_funding_is_received()
     marked = run_grid(candles, cfg, [_fund(15, 0.001, 50.0)])
     assert marked["funding_paid"] == pytest.approx(10.0 * 50.0 * 0.001)
     assert marked["events"][-1]["price_source"] == "mark_price"
+    assert marked["funding_mark_prices"] == 1
+    assert marked["funding_closes"] == 0
+    assert paid["funding_mark_prices"] == 0
+    assert paid["funding_closes"] == 1
 
 
 def test_zero_inventory_at_settlement_pays_nothing():

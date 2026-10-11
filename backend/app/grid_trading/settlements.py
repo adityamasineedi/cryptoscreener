@@ -43,13 +43,37 @@ async def load_grid_settlements(symbol: str, start: Any, end: Any) -> dict[str, 
     ``status`` is ``rows``, ``fetched_no_rows``, ``never_fetched``, or ``unavailable``
     when the database is not connected.
     """
+    from app.services.database import db_manager
+
+    if db_manager.engine is None:
+        return {
+            "status": "unavailable",
+            "rows": [],
+            "reason": "Funding is unavailable. The database is not connected.",
+        }
+    sym = (symbol or "").strip().upper()
+    try:
+        return await _read_settlements(sym, start, end)
+    except Exception as exc:
+        if "grid_funding_" in str(exc) and "does not exist" in str(exc):
+            return {
+                "status": "unavailable",
+                "rows": [],
+                "reason": (
+                    "Funding is unavailable. Tables grid_funding_settlements and "
+                    "grid_funding_fetch_ranges are missing. Run "
+                    f"python scripts/backfill_grid_funding.py --symbol {sym} "
+                    "--start YYYY-MM-DD --end YYYY-MM-DD"
+                ),
+            }
+        raise
+
+
+async def _read_settlements(sym: str, start: Any, end: Any) -> dict[str, Any]:
     from sqlalchemy import text
 
     from app.services.database import db_manager
 
-    if db_manager.engine is None:
-        return {"status": "unavailable", "rows": []}
-    sym = (symbol or "").strip().upper()
     async with db_manager.engine.begin() as conn:
         covered = (
             await conn.execute(

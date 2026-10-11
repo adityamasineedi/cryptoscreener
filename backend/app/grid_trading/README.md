@@ -41,7 +41,10 @@ A sweep in exclude mode is labeled
 At each settlement, payment is `inventory_qty * price * rate` for the inventory
 held after that candle's fills and stop check. `price` is the row's
 `mark_price` when it is finite and positive, otherwise the close of the last
-candle at or before the settlement. A settlement timestamp equal to a candle's
+candle at or before the settlement. The result counts those as
+`funding_mark_prices` and `funding_closes`. If the settlement tables are
+missing, charge mode stays `unavailable` and names
+`python scripts/backfill_grid_funding.py`. A settlement timestamp equal to a candle's
 open uses the inventory at the end of the previous candle, so a buy or sell
 on that candle is not included. A timestamp strictly inside the candle uses
 the worse of the opening and closing inventory: the larger quantity when the

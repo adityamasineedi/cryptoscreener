@@ -26,6 +26,8 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
         "pnl_before_funding": result.get("pnl_before_funding"),
         "funding_status": result.get("funding_status"),
         "funding_paid": result.get("funding_paid"),
+        "funding_mark_prices": result.get("funding_mark_prices"),
+        "funding_closes": result.get("funding_closes"),
         "funding_coverage_pct": result.get("funding_coverage_pct"),
         "pct_time_in_range": result.get("pct_time_in_range"),
         "avg_profit_per_grid_cycle": result.get("avg_profit_per_grid_cycle"),
