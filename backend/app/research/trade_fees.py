@@ -13,6 +13,7 @@ net_pnl = gross_pnl + total_fee  (total_fee <= 0)
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
@@ -32,6 +33,9 @@ FEE_TYPE_MAKER = "MAKER"
 
 _DEC_Q = Decimal("0.00000001")
 
+R_DEFINITION_REALIZED_RISK = "REALIZED_RISK"
+_MIN_RUNNING_EQUITY = 1e-6
+
 
 class FeeCalculationError(ValueError):
     """Invalid inputs for research fee calculation."""
@@ -39,6 +43,22 @@ class FeeCalculationError(ValueError):
 
 def _d(value: float | int | str | Decimal) -> Decimal:
     return Decimal(str(value))
+
+
+def _parse_utc(value: Any) -> datetime | None:
+    """Parse an ISO timestamp to aware UTC; ``Z`` and naive values are UTC."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        ts = value
+    else:
+        try:
+            ts = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(timezone.utc)
 
 
 def normalize_fee_type(fee_type: str | None) -> str:
@@ -132,6 +152,7 @@ def enrich_trade_execution(
     leverage: float = DEFAULT_LEVERAGE,
     account_equity: float | None = None,
     fee_sign: str = FEE_SIGN_NEGATIVE_COST,
+    slippage_rate: float = 0.0,
 ) -> dict[str, Any]:
     """Attach qty, gross/net PnL, fee, and margin fields for one research trade.
 
@@ -142,6 +163,7 @@ def enrich_trade_execution(
     entry = float(trade.get("entry_price") or 0.0)
     stop = float(trade.get("stop_price") or 0.0)
     exit_px = trade.get("exit_price")
+    slip_rate = max(0.0, float(slippage_rate or 0.0))
     direction = str(trade.get("direction") or "LONG").upper()
     snap = trade.get("condition_snapshot") or {}
     entry_type = snap.get("entry_type") if isinstance(snap, Mapping) else None
@@ -188,9 +210,22 @@ def enrich_trade_execution(
     notional_entry = abs(qty * entry) if qty else 0.0
     notional_exit = None
 
-    if qty > 0 and entry > 0:
+    fill_entry = entry
+    fill_exit = float(exit_px) if exit_px is not None else None
+    if slip_rate > 0 and entry > 0:
+        if direction == "SHORT":
+            fill_entry = entry * (1.0 - slip_rate)
+            if fill_exit is not None:
+                fill_exit = fill_exit * (1.0 + slip_rate)
+        else:
+            fill_entry = entry * (1.0 + slip_rate)
+            if fill_exit is not None:
+                fill_exit = fill_exit * (1.0 - slip_rate)
+    notional_entry = abs(qty * fill_entry) if qty else 0.0
+
+    if qty > 0 and fill_entry > 0:
         fee_entry = calculate_execution_fee(
-            price=entry,
+            price=fill_entry,
             quantity=qty,
             fee_type=entry_fee_type,
             maker_rate=maker_fee,
@@ -198,8 +233,8 @@ def enrich_trade_execution(
             fee_sign=fee_sign,
         )
 
-    if exit_px is not None and qty > 0:
-        exit_f = float(exit_px)
+    if fill_exit is not None and qty > 0:
+        exit_f = float(fill_exit)
         notional_exit = abs(qty * exit_f)
         # Exit rate may be overridden via exit_fee argument (rate, not dollars).
         if exit_fee is not None:
@@ -297,6 +332,7 @@ def enrich_trade_execution(
         "net_pnl_usd": net_pnl,
         "r_gross": r_gross,
         "r_net": r_net,
+        "slippage_rate": slip_rate,
     }
 
 
@@ -311,12 +347,36 @@ def enrich_trades(
     account_equity: float | None = None,
     closed_only: bool = True,
     fee_sign: str = FEE_SIGN_NEGATIVE_COST,
+    slippage_rate: float = 0.0,
+    running_equity: bool = False,
 ) -> list[dict[str, Any]]:
+    """Enrich closed trades in order.
+
+    ``running_equity=False`` (default) caps every trade against the constant
+    ``account_equity``. ``running_equity=True`` caps each trade against
+    ``account_equity`` plus the net PnL of trades already closed at its entry
+    (``exit_time <= signal_time``). ``risk_usd`` stays fixed either way.
+    """
+    use_running = bool(
+        running_equity and account_equity is not None and float(account_equity) > 0
+    )
     out: list[dict[str, Any]] = []
+    # (exit timestamp, net pnl) of trades already enriched, for running equity.
+    closed: list[tuple[datetime | None, float]] = []
     for i, t in enumerate(trades):
         outcome = str(t.get("outcome") or "")
         if closed_only and outcome in ("", "OPEN", "None"):
             continue
+        trade_equity = account_equity
+        if use_running:
+            entry_ts = _parse_utc(t.get("signal_time"))
+            realized = sum(
+                pnl
+                for exit_ts, pnl in closed
+                if entry_ts is None or exit_ts is None or exit_ts <= entry_ts
+            )
+            # Floor above zero so a ruined account does not flip to implied equity.
+            trade_equity = max(_MIN_RUNNING_EQUITY, float(account_equity) + realized)
         row = enrich_trade_execution(
             t,
             risk_usd=risk_usd,
@@ -324,12 +384,65 @@ def enrich_trades(
             maker_fee=maker_fee,
             exit_fee=exit_fee,
             leverage=leverage,
-            account_equity=account_equity,
+            account_equity=trade_equity,
             fee_sign=fee_sign,
+            slippage_rate=slippage_rate,
         )
         row["trade_no"] = len(out) + 1
         row["source_index"] = i
         if row.get("trade_id") is None:
             row["trade_id"] = f"t{row['trade_no']}"
         out.append(row)
+        if use_running and row.get("net_pnl_usd") is not None:
+            closed.append((_parse_utc(t.get("exit_time")), float(row["net_pnl_usd"])))
     return out
+
+
+def summarize_net_trades(
+    enriched: Sequence[Mapping[str, Any]],
+    *,
+    risk_usd: float,
+) -> dict[str, Any]:
+    """Net row metrics from enriched trades only (engine result is not consulted).
+
+    ``average_R_net`` is on realized risk (``r_net``, post leverage cap); the
+    ``average_R_usd_basis_*`` fields divide dollars by the requested ``risk_usd``.
+    """
+    r_nets = [float(t["r_net"]) for t in enriched if t.get("r_net") is not None]
+    gross = [
+        float(t["gross_pnl_usd"])
+        for t in enriched
+        if t.get("gross_pnl_usd") is not None
+    ]
+    net = [
+        float(t["net_pnl_usd"]) for t in enriched if t.get("net_pnl_usd") is not None
+    ]
+    risk = float(risk_usd or 0.0)
+
+    wins = sum(p for p in net if p > 0)
+    losses = -sum(p for p in net if p < 0)
+
+    curve: list[float] = []
+    cum = 0.0
+    peak = 0.0
+    max_dd = 0.0
+    for p in net:
+        cum += p
+        peak = max(peak, cum)
+        max_dd = max(max_dd, peak - cum)
+        curve.append(round(cum, 6))
+
+    return {
+        "average_R_net": (sum(r_nets) / len(r_nets)) if r_nets else None,
+        "average_R_usd_basis_gross": (
+            sum(gross) / (len(gross) * risk) if gross and risk > 0 else None
+        ),
+        "average_R_usd_basis_net": (
+            sum(net) / (len(net) * risk) if net and risk > 0 else None
+        ),
+        "profit_factor_net": (wins / losses) if losses > 0 else None,
+        "win_rate_net": (sum(1 for p in net if p > 0) / len(net)) if net else None,
+        "max_drawdown_usd_net": max_dd if net else None,
+        "equity_curve_usd_net": curve,
+        "r_definition": R_DEFINITION_REALIZED_RISK,
+    }

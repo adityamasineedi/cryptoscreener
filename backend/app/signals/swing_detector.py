@@ -180,7 +180,7 @@ def extend_swings(
 
     # Already applied this confirmable index (common when no new swing forms).
     if swings and swings[-1].bar_index >= candidate:
-        return list(swings)
+        return swings if isinstance(swings, list) else list(swings)
 
     if highs is None or lows is None or closes is None:
         _, highs, lows, closes, _ = series_ohlcv(list(candles[: end + 1]))
@@ -240,7 +240,7 @@ def extend_swings(
                 )
             )
     if not added:
-        return list(swings)
+        return swings if isinstance(swings, list) else list(swings)
     out = list(swings) + added
     out.sort(key=lambda s: s.bar_index)
     return _label_swings(out)

@@ -47,9 +47,56 @@ class ResearchConfig:
     # Parameter experiment grids (only used when explicitly requested)
     parameter_grid: dict[str, list[float]] = field(default_factory=dict)
     multiple_testing_flag_threshold: int = 8
+    # Execution / HTF cutoff. Excluded from configuration_hash so existing
+    # strategy fingerprints stay stable. New COMBO_02_V2 runs opt in via
+    # for_new_combo02_v2_run(); the default leaves prior callers unchanged.
+    htf_fully_closed: bool = False
+    execution_model: str = "LEGACY_SIGNAL_CLOSE"
+    entry_slippage_rate: float = 0.0005
+    exit_slippage_rate: float = 0.0005
+    taker_fee_rate: float = 0.0004
+    maker_fee_rate: float = 0.0002
+    risk_usd: float = 20.0
+    leverage: float = 2.0
+
+    _STRATEGY_HASH_EXCLUDED = frozenset(
+        {
+            "htf_fully_closed",
+            "execution_model",
+            "entry_slippage_rate",
+            "exit_slippage_rate",
+            "taker_fee_rate",
+            "maker_fee_rate",
+            "risk_usd",
+            "leverage",
+        }
+    )
 
     def configuration_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        for key in self._STRATEGY_HASH_EXCLUDED:
+            data.pop(key, None)
+        return data
+
+    def execution_configuration_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        return {key: data[key] for key in self._STRATEGY_HASH_EXCLUDED}
+
+    def execution_configuration_hash(self) -> str:
+        raw = json.dumps(self.execution_configuration_dict(), sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+    @classmethod
+    def for_new_combo02_v2_run(cls) -> ResearchConfig:
+        """Defaults for a new COMBO_02_V2 research run.
+
+        Fully closed 4h context and a dual execution ledger. Does not change
+        the frozen combination object or callers that use ResearchConfig().
+        """
+        cfg = cls()
+        cfg.htf_fully_closed = True
+        cfg.execution_model = "DUAL_LEGACY_AND_CAUSAL"
+        return cfg
 
     def configuration_hash(self) -> str:
         raw = json.dumps(self.configuration_dict(), sort_keys=True, default=str)
@@ -71,7 +118,7 @@ class ResearchConfig:
         return cfg
 
     def with_overrides(self, **kwargs: Any) -> ResearchConfig:
-        data = self.configuration_dict()
+        data = asdict(self)
         data.update(kwargs)
         return ResearchConfig.from_mapping(data)
 
