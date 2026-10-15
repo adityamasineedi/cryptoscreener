@@ -53,3 +53,15 @@ backend/uv_err.txt
 
 # Candle-1 v3 paper runtime state: stores, watermarks, kill switch
 backend/data/candle12_v3_paper/
+
+# Research study regenerable data: candle/feature caches, per-symbol signal and regime
+# dumps, paper-runner state. Summaries, reports and freeze files stay tracked.
+backend/scripts/**/*.pkl
+backend/scripts/**/*.bak
+backend/scripts/sleeve_study/out/signals/
+backend/scripts/sleeve_study/out/regimes/
+backend/scripts/strategy_search/out/regimes/
+backend/scripts/strategy_search/out/engine_signals/
+backend/scripts/strategy_search/study2/out/regimes/
+backend/scripts/strategy_search/study2/paper/state/
+backend/scripts/smc_monthly/btc_ohlcv.csv
