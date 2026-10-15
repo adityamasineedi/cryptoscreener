@@ -27,3 +27,31 @@ The stored row (source `db_chart_hydrate`) was a forming candle captured mid-hou
 | source | db_chart_hydrate | binance_final_kline_correction |
 
 Corrected at 2026-10-15T17:40:11.851174+00:00. To revert, write the old values back to that row.
+
+## Restart drill (pre-window), 2026-10-15
+
+| Time (UTC) | Step | Evidence |
+|---|---|---|
+| 18:01 | Kill-switch drill | engage gives `status.kill_switch.engaged=true`; release gives false; no exception |
+| 18:12:14 | Hard kill of the detached runner (launcher 8404, interpreter 12868), while idle | store intact: no torn lines; `completed_bar_index` 993 = last; no inflight; not halted |
+| 18:27:16 | `preflight --recover` | PREFLIGHT_PASS 12/12, no warnings |
+| 18:27–18:30 | Runner started through task `CANDLE12_V3_OOS2_Runner` (always `--recover`) | first start refused: `clock_skew` −1800 ms single-sample noise. NTP offset −0.03 s. The supervisor now retries refusals every 60 s (deferred item D6). |
+| 18:30:22 | Stale-lock takeover (runner PID 6248) | `RUNNER_CRASH_RECOVERED`; exception `RUNNER_CRASH:2026-10-15T17:41:16.966785+00:00`; `PROCESS_RESTART` alerts |
+| 18:30:24 | Recovery | `ADAPTER_RESUMED`; `RECOVERY_COMPLETE` `REC-20261015T183024053556Z` `RECONCILED` |
+| 18:30 | No loss or duplication | pre-restart events and heartbeats are an unchanged prefix; event seq contiguous; flat; no orders |
+| 19:00:07 | Next closed candle | bar 2026-10-15T18:00Z processed |
+| 19:00:30 | Exception resolved | written note on `RUNNER_CRASH:…17:41:16…`; open exceptions none; store eligible |
+
+## Service evidence (task `CANDLE12_V3_OOS2_Runner`, supervisor `backend/scripts/candle12_v3_oos2_service/`)
+
+| Test | Time (UTC) | Result |
+|---|---|---|
+| B: supervisor killed, runner left alive | 19:01:02 | runner PID 6248 kept running; the 5-minute watchdog started a new supervisor at 19:05:40, which logged `adopting live runner pid=6248` and started no second runner |
+| Single instance | 19:10:37 tick | still one supervisor (task IgnoreNew plus OS file lock) |
+| A: runner killed | 19:12:25 | supervisor restarted at once; refused with `CONCURRENT_RUN` every 60 s while the lock was fresh (no storm exception); took over at 19:26:32 (runner PID 16420) with `RUNNER_CRASH_RECOVERED`, `ADAPTER_RESUMED`, `RECOVERY_COMPLETE` |
+| Reboot / logon | not run | manual test plan: `docs/candle12_v3_oos2_first_24h_runbook.md` section 4, and the risk note below |
+
+**Accepted risks:**
+- Without admin rights the task starts at **logon**, not at boot. `install_task.ps1 -AtStartup`, run elevated, registers a boot-time S4U task.
+- A hard stop always costs the 15-minute lock takeover and a `RUNNER_CRASH` exception, because the runner has no graceful stop in frozen code.
+- The laptop was on battery (58%, discharging) at 18:47 UTC. It must stay on mains power.
