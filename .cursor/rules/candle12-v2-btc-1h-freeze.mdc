@@ -1,0 +1,18 @@
+---
+description: CANDLE12_V2 BTCUSDT 1h LONG is a frozen research book
+alwaysApply: true
+---
+
+# CANDLE12_V2 BTC 1h LONG freeze
+
+`docs/candle12_v2_btc_1h_freeze.md` is the lock for **BTCUSDT, 1h, LONG, CANDLE12_V2**.
+
+Unless the user explicitly asks to change this book:
+
+- Keep the wick entry (Candle-2 high through Candle-1 high). Do not replace it with a candle-close entry.
+- Keep the structural stop, nearest-target exit, and same-bar stop-wins rule.
+- Keep $20 risk on a $1,000 account, 2× leverage, $1,000 margin cap, 0.04% taker, 0.02% slippage.
+- Do not add the stop-out short to this book.
+- Do not call it production or paper.
+
+Other symbols and 5m / 15m are outside this freeze. A behavior change needs a new strategy id.

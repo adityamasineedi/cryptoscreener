@@ -5,6 +5,7 @@
 **Engine:** Structure-based setup signals (not prediction, not auto-execution)  
 **Capital example used in research:** `$1,000` · **risk per trade:** `2%` (`$20` = 1R)  
 **v1 freeze:** [`v1_freeze.md`](./v1_freeze.md) · git tag `v1-combo02-long-htf`  
+**CANDLE12_V2 BTC 1h freeze:** [`candle12_v2_btc_1h_freeze.md`](./candle12_v2_btc_1h_freeze.md) (research only, BTCUSDT)  
 **v1 production profile:** [`v1_production.md`](./v1_production.md) (core/secondary risk books)
 
 > Historical research only. Not a claim of future profitability.  
