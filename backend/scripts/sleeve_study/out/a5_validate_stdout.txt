@@ -1,0 +1,39 @@
+screened variants 33 of 450
+{
+ "base_2pct": {
+  "total_net": 1263.97,
+  "avg_per_30d": 247.84,
+  "months_ge_1000": 0,
+  "worst_month_net": -27.7,
+  "max_drawdown": 217.98,
+  "best_coin_share": 0.15,
+  "best_month_share": 0.755
+ },
+ "risk_1pct": {
+  "total_net": 631.42,
+  "avg_per_30d": 123.81,
+  "months_ge_1000": 0,
+  "worst_month_net": -13.73,
+  "max_drawdown": 107.53,
+  "best_coin_share": 0.146,
+  "best_month_share": 0.747
+ },
+ "costs_1.5x": {
+  "total_net": 1248.44,
+  "avg_per_30d": 244.79,
+  "months_ge_1000": 0,
+  "worst_month_net": -28.13,
+  "max_drawdown": 218.96,
+  "best_coin_share": 0.151,
+  "best_month_share": 0.757
+ },
+ "funding_0.01pct_8h": {
+  "total_net": 1240.22,
+  "avg_per_30d": 243.18,
+  "months_ge_1000": 0,
+  "worst_month_net": -29.75,
+  "max_drawdown": 222.84,
+  "best_coin_share": 0.15,
+  "best_month_share": 0.759
+ }
+}

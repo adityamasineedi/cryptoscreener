@@ -1,0 +1,540 @@
+{
+ "generated_utc": "2026-10-14T14:41:48.630097+00:00",
+ "freeze_sha256": "1b75a2f8d5d30d1694e690241305e8c9117d6e870862585e542b31a352fc518a",
+ "window": [
+  "2025-09-01T00:00:00+00:00",
+  "2026-02-14T00:00:00+00:00"
+ ],
+ "account": {
+  "base_2pct": {
+   "total_net": -91.15,
+   "days": 166.0,
+   "avg_per_30d": -16.47,
+   "avg_per_day": -0.55,
+   "months": {
+    "2025-09": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9937.49,
+     "net": -62.51,
+     "withdrawn": 0.0
+    },
+    "2025-10": {
+     "start_equity": 9937.49,
+     "end_equity_marked": 9974.78,
+     "net": 37.28,
+     "withdrawn": 0.0
+    },
+    "2025-11": {
+     "start_equity": 9974.78,
+     "end_equity_marked": 9934.15,
+     "net": -40.62,
+     "withdrawn": 0.0
+    },
+    "2025-12": {
+     "start_equity": 9934.15,
+     "end_equity_marked": 9914.3,
+     "net": -19.86,
+     "withdrawn": 0.0
+    },
+    "2026-01": {
+     "start_equity": 9914.3,
+     "end_equity_marked": 9908.85,
+     "net": -5.45,
+     "withdrawn": 0.0
+    },
+    "2026-02": {
+     "start_equity": 9908.85,
+     "end_equity_marked": 9908.85,
+     "net": 0.0,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 131.42,
+   "withdrawn": 0.0,
+   "trades": 12,
+   "per_coin": {
+    "NEARUSDT": 15.93,
+    "BTCUSDT": 14.7,
+    "DOGEUSDT": -40.37,
+    "LINKUSDT": -40.65,
+    "SOLUSDT": -40.76
+   },
+   "best_coin": "NEARUSDT",
+   "best_coin_share": null,
+   "best_month": "2025-10",
+   "best_month_share": null,
+   "worst_month": "2025-09",
+   "worst_month_net": -62.51,
+   "skips": {
+    "coin_busy": 3
+   }
+  },
+  "risk_1pct": {
+   "total_net": -44.9,
+   "days": 166.0,
+   "avg_per_30d": -8.11,
+   "avg_per_day": -0.27,
+   "months": {
+    "2025-09": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9968.75,
+     "net": -31.25,
+     "withdrawn": 0.0
+    },
+    "2025-10": {
+     "start_equity": 9968.75,
+     "end_equity_marked": 9987.7,
+     "net": 18.96,
+     "withdrawn": 0.0
+    },
+    "2025-11": {
+     "start_equity": 9987.7,
+     "end_equity_marked": 9967.29,
+     "net": -20.42,
+     "withdrawn": 0.0
+    },
+    "2025-12": {
+     "start_equity": 9967.29,
+     "end_equity_marked": 9957.25,
+     "net": -10.03,
+     "withdrawn": 0.0
+    },
+    "2026-01": {
+     "start_equity": 9957.25,
+     "end_equity_marked": 9955.1,
+     "net": -2.15,
+     "withdrawn": 0.0
+    },
+    "2026-02": {
+     "start_equity": 9955.1,
+     "end_equity_marked": 9955.1,
+     "net": 0.0,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 65.59,
+   "withdrawn": 0.0,
+   "trades": 12,
+   "per_coin": {
+    "NEARUSDT": 8.46,
+    "BTCUSDT": 7.85,
+    "DOGEUSDT": -20.29,
+    "LINKUSDT": -20.43,
+    "SOLUSDT": -20.48
+   },
+   "best_coin": "NEARUSDT",
+   "best_coin_share": null,
+   "best_month": "2025-10",
+   "best_month_share": null,
+   "worst_month": "2025-09",
+   "worst_month_net": -31.25,
+   "skips": {
+    "coin_busy": 3
+   }
+  },
+  "costs_1.5x": {
+   "total_net": -95.29,
+   "days": 166.0,
+   "avg_per_30d": -17.22,
+   "avg_per_day": -0.57,
+   "months": {
+    "2025-09": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9936.26,
+     "net": -63.74,
+     "withdrawn": 0.0
+    },
+    "2025-10": {
+     "start_equity": 9936.26,
+     "end_equity_marked": 9972.79,
+     "net": 36.54,
+     "withdrawn": 0.0
+    },
+    "2025-11": {
+     "start_equity": 9972.79,
+     "end_equity_marked": 9931.67,
+     "net": -41.13,
+     "withdrawn": 0.0
+    },
+    "2025-12": {
+     "start_equity": 9931.67,
+     "end_equity_marked": 9911.68,
+     "net": -19.98,
+     "withdrawn": 0.0
+    },
+    "2026-01": {
+     "start_equity": 9911.68,
+     "end_equity_marked": 9904.71,
+     "net": -6.97,
+     "withdrawn": 0.0
+    },
+    "2026-02": {
+     "start_equity": 9904.71,
+     "end_equity_marked": 9904.71,
+     "net": 0.0,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 133.56,
+   "withdrawn": 0.0,
+   "trades": 12,
+   "per_coin": {
+    "NEARUSDT": 14.9,
+    "BTCUSDT": 13.07,
+    "DOGEUSDT": -40.76,
+    "LINKUSDT": -41.17,
+    "SOLUSDT": -41.33
+   },
+   "best_coin": "NEARUSDT",
+   "best_coin_share": null,
+   "best_month": "2025-10",
+   "best_month_share": null,
+   "worst_month": "2025-09",
+   "worst_month_net": -63.74,
+   "skips": {
+    "coin_busy": 3
+   }
+  },
+  "funding_0.01pct_8h": {
+   "total_net": -98.03,
+   "days": 166.0,
+   "avg_per_30d": -17.72,
+   "avg_per_day": -0.59,
+   "months": {
+    "2025-09": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9936.77,
+     "net": -63.23,
+     "withdrawn": 0.0
+    },
+    "2025-10": {
+     "start_equity": 9936.77,
+     "end_equity_marked": 9971.81,
+     "net": 35.04,
+     "withdrawn": 0.0
+    },
+    "2025-11": {
+     "start_equity": 9971.81,
+     "end_equity_marked": 9930.93,
+     "net": -40.88,
+     "withdrawn": 0.0
+    },
+    "2025-12": {
+     "start_equity": 9930.93,
+     "end_equity_marked": 9910.09,
+     "net": -20.84,
+     "withdrawn": 0.0
+    },
+    "2026-01": {
+     "start_equity": 9910.09,
+     "end_equity_marked": 9901.97,
+     "net": -8.12,
+     "withdrawn": 0.0
+    },
+    "2026-02": {
+     "start_equity": 9901.97,
+     "end_equity_marked": 9901.97,
+     "net": 0.0,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 135.39,
+   "withdrawn": 0.0,
+   "trades": 12,
+   "per_coin": {
+    "NEARUSDT": 14.04,
+    "BTCUSDT": 12.32,
+    "LINKUSDT": -40.86,
+    "DOGEUSDT": -41.46,
+    "SOLUSDT": -42.07
+   },
+   "best_coin": "NEARUSDT",
+   "best_coin_share": null,
+   "best_month": "2025-10",
+   "best_month_share": null,
+   "worst_month": "2025-09",
+   "worst_month_net": -63.23,
+   "skips": {
+    "coin_busy": 3
+   }
+  }
+ },
+ "ledger_base": [
+  {
+   "sid": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "coin": "BTCUSDT",
+   "tf": "4h",
+   "side": "LONG",
+   "signal_close": 1758168000,
+   "entry_t": 1758168000,
+   "exit_t": 1758294000,
+   "fill": 117554.80626,
+   "stop": 115824.77291537597,
+   "target": 122744.90629387207,
+   "exit_px": 115801.6079607929,
+   "qty": 0.01156047082106758,
+   "risk_usd": 20.0,
+   "gross": -20.267797781528976,
+   "fees": 1.0790840070033743,
+   "funding": 0.0,
+   "net": -21.34688178853235,
+   "r": -1.0673440894266175,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "coin": "LINKUSDT",
+   "tf": "1h",
+   "side": "LONG",
+   "signal_close": 1758646800,
+   "entry_t": 1758646800,
+   "exit_t": 1758686400,
+   "fill": 21.9613914,
+   "stop": 21.172,
+   "target": 24.3295656,
+   "exit_px": 21.167765600000003,
+   "qty": 25.335974017451942,
+   "risk_usd": 20.0,
+   "gross": -20.107282648379446,
+   "fees": 0.4370876804586423,
+   "funding": 0.0,
+   "net": -20.544370328838088,
+   "r": -1.0272185164419043,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "coin": "SOLUSDT",
+   "tf": "1h",
+   "side": "LONG",
+   "signal_close": 1759179600,
+   "entry_t": 1759179600,
+   "exit_t": 1759226400,
+   "fill": 214.322856,
+   "stop": 207.51,
+   "target": 234.76142400000003,
+   "exit_px": 207.46849799999998,
+   "qty": 2.935626409834579,
+   "risk_usd": 20.0,
+   "gross": -20.12183436726098,
+   "fees": 0.4952887352969143,
+   "funding": 0.0,
+   "net": -20.617123102557898,
+   "r": -1.030856155127895,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "coin": "BTCUSDT",
+   "tf": "4h",
+   "side": "LONG",
+   "signal_close": 1759320000,
+   "entry_t": 1759320000,
+   "exit_t": 1759633200,
+   "fill": 116760.14736,
+   "stop": 114229.04902165428,
+   "target": 124353.44237503716,
+   "exit_px": 124328.57168656217,
+   "qty": 0.007733031177691006,
+   "risk_usd": 19.573062364229354,
+   "gross": 58.526861283300256,
+   "fees": 0.7457386323906612,
+   "funding": 0.0,
+   "net": 57.781122650909595,
+   "r": 2.9520737008689646,
+   "reason": "target",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "coin": "NEARUSDT",
+   "tf": "4h",
+   "side": "LONG",
+   "signal_close": 1759464000,
+   "entry_t": 1759464000,
+   "exit_t": 1760130000,
+   "fill": 2.920584,
+   "stop": 2.8057989454708623,
+   "target": 3.2649391635874125,
+   "exit_px": 2.805237785681768,
+   "qty": 174.2387114946494,
+   "risk_usd": 20.0,
+   "gross": -20.097775758594384,
+   "fees": 0.39906392407407354,
+   "funding": 0.0,
+   "net": -20.49683968266846,
+   "r": -1.0248419841334229,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_OSE_B_acceptance_1h_RF2_X_3R",
+   "coin": "DOGEUSDT",
+   "tf": "1h",
+   "side": "LONG",
+   "signal_close": 1762362000,
+   "entry_t": 1762362000,
+   "exit_t": 1762434000,
+   "fill": 0.16739347200000002,
+   "stop": 0.16104,
+   "target": 0.1864538880000001,
+   "exit_px": 0.16100779199999998,
+   "qty": 3147.8851248577025,
+   "risk_usd": 20.0,
+   "gross": -20.101387084101436,
+   "fees": 0.41350778157202694,
+   "funding": 0.0,
+   "net": -20.514894865673465,
+   "r": -1.0257447432836733,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "coin": "LINKUSDT",
+   "tf": "1h",
+   "side": "LONG",
+   "signal_close": 1762358400,
+   "entry_t": 1762358400,
+   "exit_t": 1762444800,
+   "fill": 15.0890172,
+   "stop": 14.53,
+   "target": 16.766068800000006,
+   "exit_px": 14.527094,
+   "qty": 35.04205701259853,
+   "risk_usd": 19.589112593423238,
+   "gross": -19.69094481110183,
+   "fees": 0.41512378286474316,
+   "funding": 0.0,
+   "net": -20.106068593966572,
+   "r": -1.0263899652461488,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_OSE_B_acceptance_1h_RF2_X_3R",
+   "coin": "DOGEUSDT",
+   "tf": "1h",
+   "side": "LONG",
+   "signal_close": 1766160000,
+   "entry_t": 1766160000,
+   "exit_t": 1767196800,
+   "fill": 0.129585912,
+   "stop": 0.12049,
+   "target": 0.15687364799999998,
+   "exit_px": 0.120465902,
+   "qty": 2153.682017007919,
+   "risk_usd": 19.58970210268653,
+   "gross": -19.641601531932388,
+   "fees": 0.21541283805280365,
+   "funding": 0.0,
+   "net": -19.85701436998519,
+   "r": -1.0136455503967057,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "coin": "NEARUSDT",
+   "tf": "4h",
+   "side": "LONG",
+   "signal_close": 1767528000,
+   "entry_t": 1767528000,
+   "exit_t": 1767700800,
+   "fill": 1.7233446000000001,
+   "stop": 1.6901613877960133,
+   "target": 1.8228942366119605,
+   "exit_px": 1.8225296577646382,
+   "qty": 590.360664480607,
+   "risk_usd": 19.59006320634663,
+   "gross": 58.55495660847911,
+   "fees": 0.8373378731914445,
+   "funding": 0.0,
+   "net": 57.717618735287665,
+   "r": 2.946270163977254,
+   "reason": "target",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "coin": "NEARUSDT",
+   "tf": "4h",
+   "side": "LONG",
+   "signal_close": 1767744000,
+   "entry_t": 1767744000,
+   "exit_t": 1767798000,
+   "fill": 1.8083616,
+   "stop": 1.7408607904530538,
+   "target": 2.010864028640839,
+   "exit_px": 1.7405126182949633,
+   "qty": 307.3209894856863,
+   "risk_usd": 20.744415581052387,
+   "gross": -20.851416193188115,
+   "fees": 0.4362574145306599,
+   "funding": 0.0,
+   "net": -21.287673607718776,
+   "r": -1.0261881577017091,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "coin": "BTCUSDT",
+   "tf": "4h",
+   "side": "LONG",
+   "signal_close": 1767600000,
+   "entry_t": 1767600000,
+   "exit_t": 1767844800,
+   "fill": 92510.59842000001,
+   "stop": 90629.93136718625,
+   "target": 98152.5995784413,
+   "exit_px": 90611.80538091282,
+   "qty": 0.01102198541003539,
+   "risk_usd": 20.728684817247544,
+   "gross": -20.928469173495785,
+   "fees": 0.8073489851777083,
+   "funding": 0.0,
+   "net": -21.735818158673492,
+   "r": -1.048586456415602,
+   "reason": "stop",
+   "regime": "UPTREND"
+  },
+  {
+   "sid": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "coin": "SOLUSDT",
+   "tf": "1h",
+   "side": "LONG",
+   "signal_close": 1768186800,
+   "entry_t": 1768186800,
+   "exit_t": 1768784400,
+   "fill": 142.40847599999998,
+   "stop": 137.47,
+   "target": 157.22390399999992,
+   "exit_px": 137.442506,
+   "qty": 3.966336484767552,
+   "risk_usd": 19.587657537948843,
+   "gross": -19.696707993261,
+   "fees": 0.443993264081851,
+   "funding": 0.0,
+   "net": -20.140701257342855,
+   "r": -1.02823429592449,
+   "reason": "stop",
+   "regime": "UPTREND"
+  }
+ ]
+}

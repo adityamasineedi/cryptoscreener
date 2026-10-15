@@ -1,0 +1,2235 @@
+{
+ "functions_called": [
+  "app.research.market_structure.structure.build_timeframe_feature_table",
+  "app.research.market_structure.structure.snapshot_at_index",
+  "app.research.market_structure.regime.classify_market_regime (inside snapshot_at_index; re-called only on HVT bars to read the side reason code)",
+  "app.research.passed_regime_backtest.RegimeClock.at",
+  "app.research.btc_daily_regime.daily_trend (inside RegimeClock)"
+ ],
+ "map": {
+  "UPTREND": [
+   "BULL_TREND",
+   "HIGH_VOLATILITY_TREND"
+  ],
+  "DOWNTREND": [
+   "BEAR_TREND"
+  ],
+  "RANGE": [
+   "RANGE",
+   "HIGH_VOLATILITY_RANGE",
+   "LOW_VOLATILITY_COMPRESSION"
+  ],
+  "NO_TRADE": [
+   "CHOPPY",
+   "TRANSITION",
+   "UNKNOWN"
+  ]
+ },
+ "days_per_coin_tf_year": {
+  "ADAUSDT|4h": {
+   "2023": {
+    "NO_TRADE": 50.33,
+    "raw:CHOPPY": 45.5,
+    "raw:TRANSITION": 4.83,
+    "RANGE": 9.83,
+    "raw:HIGH_VOLATILITY_RANGE": 5.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.0,
+    "UPTREND": 99.17,
+    "raw:BULL_TREND": 51.33,
+    "raw:HIGH_VOLATILITY_TREND": 47.83,
+    "DOWNTREND": 54.67,
+    "raw:BEAR_TREND": 54.67,
+    "raw:RANGE": 0.17
+   },
+   "2024": {
+    "NO_TRADE": 107.0,
+    "raw:CHOPPY": 88.83,
+    "UPTREND": 131.67,
+    "raw:BULL_TREND": 57.33,
+    "raw:TRANSITION": 18.17,
+    "DOWNTREND": 104.5,
+    "raw:BEAR_TREND": 104.5,
+    "RANGE": 22.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 9.33,
+    "raw:HIGH_VOLATILITY_TREND": 74.33,
+    "raw:HIGH_VOLATILITY_RANGE": 12.67,
+    "raw:RANGE": 0.83
+   },
+   "2025": {
+    "DOWNTREND": 120.83,
+    "raw:BEAR_TREND": 120.83,
+    "NO_TRADE": 119.33,
+    "raw:CHOPPY": 98.67,
+    "raw:TRANSITION": 20.67,
+    "UPTREND": 104.33,
+    "raw:BULL_TREND": 48.5,
+    "RANGE": 20.5,
+    "raw:HIGH_VOLATILITY_RANGE": 12.33,
+    "raw:HIGH_VOLATILITY_TREND": 55.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 7.17,
+    "raw:RANGE": 1.0
+   },
+   "2026": {
+    "DOWNTREND": 18.83,
+    "raw:BEAR_TREND": 18.83,
+    "NO_TRADE": 8.17,
+    "raw:CHOPPY": 7.5,
+    "UPTREND": 14.33,
+    "raw:HIGH_VOLATILITY_TREND": 11.83,
+    "raw:BULL_TREND": 2.5,
+    "RANGE": 2.67,
+    "raw:HIGH_VOLATILITY_RANGE": 2.5,
+    "raw:TRANSITION": 0.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.17
+   }
+  },
+  "ADAUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 82.0,
+    "raw:BEAR_TREND": 82.0,
+    "NO_TRADE": 50.0,
+    "raw:CHOPPY": 45.0,
+    "raw:TRANSITION": 5.0,
+    "RANGE": 4.0,
+    "raw:HIGH_VOLATILITY_RANGE": 1.0,
+    "UPTREND": 78.0,
+    "raw:HIGH_VOLATILITY_TREND": 60.0,
+    "raw:BULL_TREND": 18.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.0
+   },
+   "2024": {
+    "UPTREND": 95.0,
+    "raw:HIGH_VOLATILITY_TREND": 60.0,
+    "RANGE": 34.0,
+    "raw:HIGH_VOLATILITY_RANGE": 26.0,
+    "NO_TRADE": 128.0,
+    "raw:CHOPPY": 103.0,
+    "raw:TRANSITION": 25.0,
+    "raw:BULL_TREND": 35.0,
+    "DOWNTREND": 109.0,
+    "raw:BEAR_TREND": 109.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.0
+   },
+   "2025": {
+    "NO_TRADE": 83.0,
+    "raw:CHOPPY": 71.0,
+    "UPTREND": 130.0,
+    "raw:BULL_TREND": 92.0,
+    "raw:TRANSITION": 12.0,
+    "DOWNTREND": 122.0,
+    "raw:BEAR_TREND": 122.0,
+    "RANGE": 30.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 15.0,
+    "raw:HIGH_VOLATILITY_TREND": 38.0,
+    "raw:HIGH_VOLATILITY_RANGE": 15.0
+   },
+   "2026": {
+    "DOWNTREND": 20.0,
+    "raw:BEAR_TREND": 20.0,
+    "UPTREND": 4.0,
+    "raw:BULL_TREND": 4.0,
+    "NO_TRADE": 18.0,
+    "raw:CHOPPY": 18.0,
+    "RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0
+   }
+  },
+  "APTUSDT|4h": {
+   "2023": {
+    "NO_TRADE": 53.33,
+    "raw:CHOPPY": 49.5,
+    "UPTREND": 88.0,
+    "raw:HIGH_VOLATILITY_TREND": 48.5,
+    "raw:BULL_TREND": 39.5,
+    "RANGE": 10.33,
+    "raw:HIGH_VOLATILITY_RANGE": 6.83,
+    "raw:TRANSITION": 3.83,
+    "DOWNTREND": 62.33,
+    "raw:BEAR_TREND": 62.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.33,
+    "raw:RANGE": 0.17
+   },
+   "2024": {
+    "UPTREND": 151.17,
+    "raw:BULL_TREND": 88.67,
+    "raw:HIGH_VOLATILITY_TREND": 62.5,
+    "RANGE": 26.0,
+    "raw:HIGH_VOLATILITY_RANGE": 15.0,
+    "NO_TRADE": 93.5,
+    "raw:CHOPPY": 81.83,
+    "raw:TRANSITION": 11.67,
+    "DOWNTREND": 95.33,
+    "raw:BEAR_TREND": 95.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 10.67,
+    "raw:RANGE": 0.33
+   },
+   "2025": {
+    "DOWNTREND": 152.83,
+    "raw:BEAR_TREND": 152.83,
+    "NO_TRADE": 91.83,
+    "raw:CHOPPY": 75.83,
+    "RANGE": 21.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 10.67,
+    "UPTREND": 99.33,
+    "raw:BULL_TREND": 37.0,
+    "raw:TRANSITION": 16.0,
+    "raw:HIGH_VOLATILITY_TREND": 62.33,
+    "raw:HIGH_VOLATILITY_RANGE": 9.17,
+    "raw:RANGE": 1.17
+   },
+   "2026": {
+    "NO_TRADE": 3.33,
+    "raw:CHOPPY": 2.67,
+    "UPTREND": 13.67,
+    "raw:BULL_TREND": 4.83,
+    "raw:HIGH_VOLATILITY_TREND": 8.83,
+    "RANGE": 2.33,
+    "raw:HIGH_VOLATILITY_RANGE": 2.17,
+    "raw:TRANSITION": 0.67,
+    "DOWNTREND": 24.67,
+    "raw:BEAR_TREND": 24.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.17
+   }
+  },
+  "APTUSDT|1d": {
+   "2023": {
+    "NO_TRADE": 66.0,
+    "raw:CHOPPY": 62.0,
+    "DOWNTREND": 80.0,
+    "raw:BEAR_TREND": 80.0,
+    "raw:TRANSITION": 4.0,
+    "UPTREND": 56.0,
+    "raw:BULL_TREND": 11.0,
+    "raw:HIGH_VOLATILITY_TREND": 45.0,
+    "RANGE": 12.0,
+    "raw:HIGH_VOLATILITY_RANGE": 12.0
+   },
+   "2024": {
+    "UPTREND": 155.0,
+    "raw:HIGH_VOLATILITY_TREND": 135.0,
+    "raw:BULL_TREND": 20.0,
+    "NO_TRADE": 84.0,
+    "raw:CHOPPY": 55.0,
+    "RANGE": 15.0,
+    "raw:RANGE": 2.0,
+    "raw:TRANSITION": 29.0,
+    "DOWNTREND": 112.0,
+    "raw:BEAR_TREND": 112.0,
+    "raw:HIGH_VOLATILITY_RANGE": 13.0
+   },
+   "2025": {
+    "NO_TRADE": 110.0,
+    "raw:TRANSITION": 16.0,
+    "DOWNTREND": 227.0,
+    "raw:BEAR_TREND": 227.0,
+    "raw:CHOPPY": 94.0,
+    "RANGE": 12.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.0,
+    "raw:RANGE": 3.0,
+    "UPTREND": 16.0,
+    "raw:BULL_TREND": 6.0,
+    "raw:HIGH_VOLATILITY_RANGE": 3.0,
+    "raw:HIGH_VOLATILITY_TREND": 10.0
+   },
+   "2026": {
+    "DOWNTREND": 31.0,
+    "raw:BEAR_TREND": 31.0,
+    "UPTREND": 3.0,
+    "raw:BULL_TREND": 3.0,
+    "NO_TRADE": 9.0,
+    "raw:CHOPPY": 9.0,
+    "RANGE": 1.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 1.0
+   }
+  },
+  "ARBUSDT|4h": {
+   "2023": {
+    "NO_TRADE": 67.83,
+    "raw:CHOPPY": 59.17,
+    "raw:TRANSITION": 8.67,
+    "DOWNTREND": 54.0,
+    "raw:BEAR_TREND": 54.0,
+    "RANGE": 13.67,
+    "raw:HIGH_VOLATILITY_RANGE": 9.5,
+    "UPTREND": 78.5,
+    "raw:BULL_TREND": 24.83,
+    "raw:HIGH_VOLATILITY_TREND": 53.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.83,
+    "raw:RANGE": 0.33
+   },
+   "2024": {
+    "UPTREND": 116.5,
+    "raw:HIGH_VOLATILITY_TREND": 73.17,
+    "raw:BULL_TREND": 43.33,
+    "RANGE": 20.67,
+    "raw:HIGH_VOLATILITY_RANGE": 14.17,
+    "NO_TRADE": 102.67,
+    "raw:CHOPPY": 86.5,
+    "raw:TRANSITION": 16.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.5,
+    "DOWNTREND": 126.17,
+    "raw:BEAR_TREND": 126.17
+   },
+   "2025": {
+    "DOWNTREND": 133.17,
+    "raw:BEAR_TREND": 133.17,
+    "NO_TRADE": 98.0,
+    "raw:CHOPPY": 86.33,
+    "RANGE": 21.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 15.0,
+    "UPTREND": 112.5,
+    "raw:BULL_TREND": 44.83,
+    "raw:TRANSITION": 11.67,
+    "raw:HIGH_VOLATILITY_TREND": 67.67,
+    "raw:HIGH_VOLATILITY_RANGE": 4.33,
+    "raw:RANGE": 2.0
+   },
+   "2026": {
+    "DOWNTREND": 20.5,
+    "raw:BEAR_TREND": 20.5,
+    "NO_TRADE": 8.17,
+    "raw:CHOPPY": 7.0,
+    "raw:TRANSITION": 1.17,
+    "UPTREND": 12.17,
+    "raw:BULL_TREND": 4.33,
+    "raw:HIGH_VOLATILITY_TREND": 7.83,
+    "RANGE": 3.17,
+    "raw:HIGH_VOLATILITY_RANGE": 3.17
+   }
+  },
+  "ARBUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 71.0,
+    "raw:BEAR_TREND": 71.0,
+    "NO_TRADE": 54.0,
+    "raw:CHOPPY": 50.0,
+    "UPTREND": 58.0,
+    "raw:BULL_TREND": 37.0,
+    "RANGE": 31.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 1.0,
+    "raw:HIGH_VOLATILITY_TREND": 21.0,
+    "raw:TRANSITION": 4.0,
+    "raw:HIGH_VOLATILITY_RANGE": 30.0
+   },
+   "2024": {
+    "UPTREND": 94.0,
+    "raw:HIGH_VOLATILITY_TREND": 58.0,
+    "NO_TRADE": 109.0,
+    "raw:CHOPPY": 68.0,
+    "raw:TRANSITION": 41.0,
+    "raw:BULL_TREND": 36.0,
+    "RANGE": 15.0,
+    "raw:HIGH_VOLATILITY_RANGE": 7.0,
+    "raw:RANGE": 5.0,
+    "DOWNTREND": 148.0,
+    "raw:BEAR_TREND": 148.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.0
+   },
+   "2025": {
+    "NO_TRADE": 108.0,
+    "raw:TRANSITION": 18.0,
+    "raw:CHOPPY": 90.0,
+    "UPTREND": 55.0,
+    "raw:BULL_TREND": 16.0,
+    "DOWNTREND": 192.0,
+    "raw:BEAR_TREND": 192.0,
+    "RANGE": 10.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.0,
+    "raw:HIGH_VOLATILITY_TREND": 39.0,
+    "raw:HIGH_VOLATILITY_RANGE": 2.0
+   },
+   "2026": {
+    "DOWNTREND": 29.0,
+    "raw:BEAR_TREND": 29.0,
+    "UPTREND": 4.0,
+    "raw:BULL_TREND": 4.0,
+    "NO_TRADE": 9.0,
+    "raw:CHOPPY": 9.0,
+    "RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0
+   }
+  },
+  "AVAXUSDT|4h": {
+   "2023": {
+    "DOWNTREND": 64.17,
+    "raw:BEAR_TREND": 64.17,
+    "NO_TRADE": 43.17,
+    "raw:CHOPPY": 38.83,
+    "RANGE": 13.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.0,
+    "UPTREND": 93.33,
+    "raw:BULL_TREND": 39.5,
+    "raw:HIGH_VOLATILITY_RANGE": 6.0,
+    "raw:HIGH_VOLATILITY_TREND": 53.83,
+    "raw:TRANSITION": 4.33,
+    "raw:RANGE": 1.33
+   },
+   "2024": {
+    "NO_TRADE": 88.0,
+    "raw:CHOPPY": 70.5,
+    "UPTREND": 159.33,
+    "raw:BULL_TREND": 87.67,
+    "raw:TRANSITION": 17.5,
+    "RANGE": 20.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 11.0,
+    "DOWNTREND": 98.0,
+    "raw:BEAR_TREND": 98.0,
+    "raw:HIGH_VOLATILITY_TREND": 71.67,
+    "raw:HIGH_VOLATILITY_RANGE": 9.5,
+    "raw:RANGE": 0.17
+   },
+   "2025": {
+    "DOWNTREND": 110.5,
+    "raw:BEAR_TREND": 110.5,
+    "NO_TRADE": 109.67,
+    "raw:CHOPPY": 98.0,
+    "RANGE": 23.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 12.33,
+    "UPTREND": 121.33,
+    "raw:BULL_TREND": 55.67,
+    "raw:TRANSITION": 11.67,
+    "raw:HIGH_VOLATILITY_TREND": 65.67,
+    "raw:HIGH_VOLATILITY_RANGE": 10.83,
+    "raw:RANGE": 0.33
+   },
+   "2026": {
+    "NO_TRADE": 10.5,
+    "raw:CHOPPY": 8.5,
+    "DOWNTREND": 15.33,
+    "raw:BEAR_TREND": 15.33,
+    "raw:TRANSITION": 2.0,
+    "UPTREND": 16.0,
+    "raw:BULL_TREND": 2.83,
+    "raw:HIGH_VOLATILITY_TREND": 13.17,
+    "RANGE": 2.17,
+    "raw:HIGH_VOLATILITY_RANGE": 1.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 1.0
+   }
+  },
+  "AVAXUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 113.0,
+    "raw:BEAR_TREND": 113.0,
+    "NO_TRADE": 17.0,
+    "raw:CHOPPY": 17.0,
+    "UPTREND": 84.0,
+    "raw:BULL_TREND": 17.0,
+    "raw:HIGH_VOLATILITY_TREND": 67.0
+   },
+   "2024": {
+    "UPTREND": 100.0,
+    "raw:HIGH_VOLATILITY_TREND": 67.0,
+    "RANGE": 34.0,
+    "raw:HIGH_VOLATILITY_RANGE": 14.0,
+    "NO_TRADE": 170.0,
+    "raw:TRANSITION": 33.0,
+    "raw:CHOPPY": 137.0,
+    "raw:RANGE": 3.0,
+    "raw:BULL_TREND": 33.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 17.0,
+    "DOWNTREND": 62.0,
+    "raw:BEAR_TREND": 62.0
+   },
+   "2025": {
+    "NO_TRADE": 127.0,
+    "raw:TRANSITION": 22.0,
+    "raw:CHOPPY": 105.0,
+    "DOWNTREND": 160.0,
+    "raw:BEAR_TREND": 160.0,
+    "RANGE": 20.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.0,
+    "UPTREND": 58.0,
+    "raw:BULL_TREND": 26.0,
+    "raw:HIGH_VOLATILITY_TREND": 32.0,
+    "raw:HIGH_VOLATILITY_RANGE": 12.0
+   },
+   "2026": {
+    "DOWNTREND": 31.0,
+    "raw:BEAR_TREND": 31.0,
+    "UPTREND": 2.0,
+    "raw:BULL_TREND": 2.0,
+    "RANGE": 3.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.0,
+    "NO_TRADE": 8.0,
+    "raw:CHOPPY": 8.0
+   }
+  },
+  "BNBUSDT|4h": {
+   "2023": {
+    "DOWNTREND": 59.67,
+    "raw:BEAR_TREND": 59.67,
+    "UPTREND": 80.33,
+    "raw:HIGH_VOLATILITY_TREND": 41.17,
+    "NO_TRADE": 59.67,
+    "raw:CHOPPY": 53.33,
+    "raw:TRANSITION": 6.33,
+    "RANGE": 14.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 5.67,
+    "raw:BULL_TREND": 39.17,
+    "raw:HIGH_VOLATILITY_RANGE": 7.67,
+    "raw:RANGE": 1.0
+   },
+   "2024": {
+    "NO_TRADE": 145.33,
+    "raw:TRANSITION": 28.17,
+    "raw:CHOPPY": 117.17,
+    "UPTREND": 174.83,
+    "raw:BULL_TREND": 108.67,
+    "RANGE": 20.0,
+    "raw:HIGH_VOLATILITY_RANGE": 11.0,
+    "DOWNTREND": 25.83,
+    "raw:BEAR_TREND": 25.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.67,
+    "raw:HIGH_VOLATILITY_TREND": 66.17,
+    "raw:RANGE": 0.33
+   },
+   "2025": {
+    "UPTREND": 155.5,
+    "raw:BULL_TREND": 89.5,
+    "NO_TRADE": 119.83,
+    "raw:CHOPPY": 107.17,
+    "raw:TRANSITION": 12.67,
+    "DOWNTREND": 69.83,
+    "raw:BEAR_TREND": 69.83,
+    "RANGE": 19.83,
+    "raw:HIGH_VOLATILITY_RANGE": 9.83,
+    "raw:HIGH_VOLATILITY_TREND": 66.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 9.67,
+    "raw:RANGE": 0.33
+   },
+   "2026": {
+    "UPTREND": 26.17,
+    "raw:BULL_TREND": 12.17,
+    "raw:HIGH_VOLATILITY_TREND": 14.0,
+    "RANGE": 3.0,
+    "raw:HIGH_VOLATILITY_RANGE": 2.83,
+    "NO_TRADE": 5.5,
+    "raw:CHOPPY": 4.17,
+    "raw:TRANSITION": 1.33,
+    "DOWNTREND": 9.33,
+    "raw:BEAR_TREND": 9.33,
+    "raw:RANGE": 0.17
+   }
+  },
+  "BNBUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 77.0,
+    "raw:BEAR_TREND": 77.0,
+    "NO_TRADE": 78.0,
+    "raw:CHOPPY": 67.0,
+    "UPTREND": 38.0,
+    "raw:HIGH_VOLATILITY_TREND": 28.0,
+    "raw:BULL_TREND": 10.0,
+    "RANGE": 21.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 1.0,
+    "raw:HIGH_VOLATILITY_RANGE": 20.0,
+    "raw:TRANSITION": 11.0
+   },
+   "2024": {
+    "UPTREND": 215.0,
+    "raw:HIGH_VOLATILITY_TREND": 101.0,
+    "raw:BULL_TREND": 114.0,
+    "NO_TRADE": 125.0,
+    "raw:CHOPPY": 114.0,
+    "RANGE": 24.0,
+    "raw:HIGH_VOLATILITY_RANGE": 16.0,
+    "raw:TRANSITION": 11.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.0,
+    "DOWNTREND": 2.0,
+    "raw:BEAR_TREND": 2.0
+   },
+   "2025": {
+    "UPTREND": 168.0,
+    "raw:BULL_TREND": 87.0,
+    "NO_TRADE": 171.0,
+    "raw:CHOPPY": 142.0,
+    "raw:TRANSITION": 29.0,
+    "DOWNTREND": 15.0,
+    "raw:BEAR_TREND": 15.0,
+    "RANGE": 11.0,
+    "raw:HIGH_VOLATILITY_RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.0,
+    "raw:RANGE": 1.0,
+    "raw:HIGH_VOLATILITY_TREND": 81.0
+   },
+   "2026": {
+    "NO_TRADE": 22.0,
+    "raw:CHOPPY": 19.0,
+    "RANGE": 4.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.0,
+    "UPTREND": 7.0,
+    "raw:BULL_TREND": 7.0,
+    "raw:TRANSITION": 3.0,
+    "DOWNTREND": 11.0,
+    "raw:BEAR_TREND": 11.0
+   }
+  },
+  "BTCUSDT|4h": {
+   "2023": {
+    "RANGE": 13.67,
+    "raw:HIGH_VOLATILITY_RANGE": 7.0,
+    "NO_TRADE": 60.5,
+    "raw:TRANSITION": 10.83,
+    "UPTREND": 103.33,
+    "raw:HIGH_VOLATILITY_TREND": 40.17,
+    "DOWNTREND": 36.5,
+    "raw:BEAR_TREND": 36.5,
+    "raw:CHOPPY": 49.67,
+    "raw:BULL_TREND": 63.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.17,
+    "raw:RANGE": 0.5
+   },
+   "2024": {
+    "NO_TRADE": 99.17,
+    "raw:CHOPPY": 73.5,
+    "raw:TRANSITION": 25.67,
+    "UPTREND": 178.67,
+    "raw:BULL_TREND": 122.17,
+    "raw:HIGH_VOLATILITY_TREND": 56.5,
+    "RANGE": 25.5,
+    "raw:HIGH_VOLATILITY_RANGE": 19.83,
+    "DOWNTREND": 62.67,
+    "raw:BEAR_TREND": 62.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 5.17,
+    "raw:RANGE": 0.5
+   },
+   "2025": {
+    "DOWNTREND": 77.67,
+    "raw:BEAR_TREND": 77.67,
+    "NO_TRADE": 115.67,
+    "raw:CHOPPY": 97.83,
+    "RANGE": 22.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 7.0,
+    "UPTREND": 149.17,
+    "raw:BULL_TREND": 79.5,
+    "raw:TRANSITION": 17.83,
+    "raw:HIGH_VOLATILITY_TREND": 69.67,
+    "raw:HIGH_VOLATILITY_RANGE": 14.5,
+    "raw:RANGE": 1.0
+   },
+   "2026": {
+    "NO_TRADE": 8.0,
+    "raw:CHOPPY": 6.0,
+    "raw:TRANSITION": 2.0,
+    "RANGE": 2.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.17,
+    "UPTREND": 22.5,
+    "raw:BULL_TREND": 8.17,
+    "raw:HIGH_VOLATILITY_TREND": 14.33,
+    "raw:HIGH_VOLATILITY_RANGE": 2.0,
+    "DOWNTREND": 11.33,
+    "raw:BEAR_TREND": 11.33
+   }
+  },
+  "BTCUSDT|1d": {
+   "2023": {
+    "NO_TRADE": 80.0,
+    "raw:CHOPPY": 68.0,
+    "UPTREND": 119.0,
+    "raw:BULL_TREND": 48.0,
+    "raw:TRANSITION": 12.0,
+    "RANGE": 4.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.0,
+    "DOWNTREND": 11.0,
+    "raw:BEAR_TREND": 11.0,
+    "raw:HIGH_VOLATILITY_TREND": 71.0
+   },
+   "2024": {
+    "UPTREND": 204.0,
+    "raw:HIGH_VOLATILITY_TREND": 88.0,
+    "RANGE": 55.0,
+    "raw:HIGH_VOLATILITY_RANGE": 49.0,
+    "NO_TRADE": 103.0,
+    "raw:CHOPPY": 90.0,
+    "raw:TRANSITION": 13.0,
+    "raw:BULL_TREND": 116.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.0,
+    "DOWNTREND": 4.0,
+    "raw:BEAR_TREND": 4.0
+   },
+   "2025": {
+    "NO_TRADE": 109.0,
+    "raw:CHOPPY": 97.0,
+    "UPTREND": 176.0,
+    "raw:BULL_TREND": 143.0,
+    "raw:HIGH_VOLATILITY_TREND": 33.0,
+    "RANGE": 51.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0,
+    "raw:TRANSITION": 12.0,
+    "raw:HIGH_VOLATILITY_RANGE": 49.0,
+    "DOWNTREND": 29.0,
+    "raw:BEAR_TREND": 29.0
+   },
+   "2026": {
+    "NO_TRADE": 7.0,
+    "raw:CHOPPY": 7.0,
+    "RANGE": 4.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.0,
+    "UPTREND": 17.0,
+    "raw:BULL_TREND": 8.0,
+    "DOWNTREND": 16.0,
+    "raw:BEAR_TREND": 16.0,
+    "raw:HIGH_VOLATILITY_TREND": 9.0
+   }
+  },
+  "DOGEUSDT|4h": {
+   "2023": {
+    "DOWNTREND": 50.5,
+    "raw:BEAR_TREND": 50.5,
+    "NO_TRADE": 59.17,
+    "raw:CHOPPY": 53.5,
+    "RANGE": 10.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.67,
+    "UPTREND": 93.5,
+    "raw:HIGH_VOLATILITY_TREND": 48.0,
+    "raw:RANGE": 0.83,
+    "raw:TRANSITION": 5.67,
+    "raw:BULL_TREND": 45.5,
+    "raw:HIGH_VOLATILITY_RANGE": 5.33
+   },
+   "2024": {
+    "NO_TRADE": 119.5,
+    "raw:CHOPPY": 102.83,
+    "UPTREND": 149.17,
+    "raw:BULL_TREND": 73.5,
+    "raw:TRANSITION": 16.67,
+    "raw:HIGH_VOLATILITY_TREND": 75.67,
+    "DOWNTREND": 84.33,
+    "raw:BEAR_TREND": 84.33,
+    "RANGE": 13.0,
+    "raw:HIGH_VOLATILITY_RANGE": 6.0,
+    "raw:RANGE": 0.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.67
+   },
+   "2025": {
+    "NO_TRADE": 95.5,
+    "raw:CHOPPY": 75.33,
+    "UPTREND": 109.33,
+    "raw:BULL_TREND": 53.17,
+    "raw:TRANSITION": 20.17,
+    "raw:HIGH_VOLATILITY_TREND": 56.17,
+    "DOWNTREND": 140.5,
+    "raw:BEAR_TREND": 140.5,
+    "RANGE": 19.67,
+    "raw:HIGH_VOLATILITY_RANGE": 9.0,
+    "raw:RANGE": 0.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 10.17
+   },
+   "2026": {
+    "DOWNTREND": 17.0,
+    "raw:BEAR_TREND": 17.0,
+    "NO_TRADE": 6.33,
+    "raw:CHOPPY": 6.0,
+    "UPTREND": 19.0,
+    "raw:BULL_TREND": 3.83,
+    "raw:HIGH_VOLATILITY_TREND": 15.17,
+    "raw:TRANSITION": 0.33,
+    "RANGE": 1.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 1.67
+   }
+  },
+  "DOGEUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 93.0,
+    "raw:BEAR_TREND": 93.0,
+    "NO_TRADE": 25.0,
+    "raw:CHOPPY": 23.0,
+    "UPTREND": 95.0,
+    "raw:BULL_TREND": 34.0,
+    "RANGE": 1.0,
+    "raw:HIGH_VOLATILITY_RANGE": 1.0,
+    "raw:HIGH_VOLATILITY_TREND": 61.0,
+    "raw:TRANSITION": 2.0
+   },
+   "2024": {
+    "UPTREND": 147.0,
+    "raw:BULL_TREND": 52.0,
+    "raw:HIGH_VOLATILITY_TREND": 95.0,
+    "NO_TRADE": 130.0,
+    "raw:TRANSITION": 32.0,
+    "RANGE": 32.0,
+    "raw:HIGH_VOLATILITY_RANGE": 7.0,
+    "raw:CHOPPY": 98.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 25.0,
+    "DOWNTREND": 57.0,
+    "raw:BEAR_TREND": 57.0
+   },
+   "2025": {
+    "NO_TRADE": 62.0,
+    "raw:TRANSITION": 21.0,
+    "UPTREND": 124.0,
+    "raw:BULL_TREND": 107.0,
+    "raw:CHOPPY": 41.0,
+    "DOWNTREND": 144.0,
+    "raw:BEAR_TREND": 144.0,
+    "RANGE": 35.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 22.0,
+    "raw:HIGH_VOLATILITY_TREND": 17.0,
+    "raw:HIGH_VOLATILITY_RANGE": 13.0
+   },
+   "2026": {
+    "DOWNTREND": 21.0,
+    "raw:BEAR_TREND": 21.0,
+    "UPTREND": 9.0,
+    "raw:BULL_TREND": 9.0,
+    "NO_TRADE": 8.0,
+    "raw:CHOPPY": 7.0,
+    "RANGE": 6.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.0,
+    "raw:TRANSITION": 1.0
+   }
+  },
+  "DOTUSDT|4h": {
+   "2023": {
+    "NO_TRADE": 59.0,
+    "raw:CHOPPY": 48.33,
+    "DOWNTREND": 50.83,
+    "raw:BEAR_TREND": 50.83,
+    "UPTREND": 92.0,
+    "raw:BULL_TREND": 37.67,
+    "RANGE": 12.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.5,
+    "raw:HIGH_VOLATILITY_TREND": 54.33,
+    "raw:TRANSITION": 10.67,
+    "raw:HIGH_VOLATILITY_RANGE": 7.67,
+    "raw:RANGE": 1.0
+   },
+   "2024": {
+    "NO_TRADE": 110.17,
+    "raw:CHOPPY": 97.0,
+    "UPTREND": 121.5,
+    "raw:BULL_TREND": 56.33,
+    "raw:TRANSITION": 13.17,
+    "DOWNTREND": 106.0,
+    "raw:BEAR_TREND": 106.0,
+    "RANGE": 28.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 10.17,
+    "raw:HIGH_VOLATILITY_TREND": 65.17,
+    "raw:HIGH_VOLATILITY_RANGE": 15.83,
+    "raw:RANGE": 2.33
+   },
+   "2025": {
+    "DOWNTREND": 137.83,
+    "raw:BEAR_TREND": 137.83,
+    "NO_TRADE": 99.17,
+    "raw:CHOPPY": 81.0,
+    "RANGE": 26.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 11.33,
+    "UPTREND": 101.5,
+    "raw:BULL_TREND": 45.5,
+    "raw:TRANSITION": 18.17,
+    "raw:HIGH_VOLATILITY_TREND": 56.0,
+    "raw:HIGH_VOLATILITY_RANGE": 13.17,
+    "raw:RANGE": 2.0
+   },
+   "2026": {
+    "NO_TRADE": 5.67,
+    "raw:CHOPPY": 4.33,
+    "raw:TRANSITION": 1.33,
+    "UPTREND": 15.0,
+    "raw:BULL_TREND": 4.0,
+    "raw:HIGH_VOLATILITY_TREND": 11.0,
+    "RANGE": 2.5,
+    "raw:HIGH_VOLATILITY_RANGE": 2.5,
+    "DOWNTREND": 20.83,
+    "raw:BEAR_TREND": 20.83
+   }
+  },
+  "DOTUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 106.0,
+    "raw:BEAR_TREND": 106.0,
+    "NO_TRADE": 29.0,
+    "raw:CHOPPY": 27.0,
+    "raw:TRANSITION": 2.0,
+    "RANGE": 12.0,
+    "raw:RANGE": 1.0,
+    "UPTREND": 67.0,
+    "raw:BULL_TREND": 19.0,
+    "raw:HIGH_VOLATILITY_TREND": 48.0,
+    "raw:HIGH_VOLATILITY_RANGE": 11.0
+   },
+   "2024": {
+    "UPTREND": 75.0,
+    "raw:HIGH_VOLATILITY_TREND": 65.0,
+    "raw:BULL_TREND": 10.0,
+    "NO_TRADE": 136.0,
+    "raw:TRANSITION": 42.0,
+    "raw:CHOPPY": 94.0,
+    "RANGE": 22.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 5.0,
+    "raw:RANGE": 2.0,
+    "raw:HIGH_VOLATILITY_RANGE": 15.0,
+    "DOWNTREND": 133.0,
+    "raw:BEAR_TREND": 133.0
+   },
+   "2025": {
+    "NO_TRADE": 116.0,
+    "raw:CHOPPY": 106.0,
+    "UPTREND": 47.0,
+    "raw:BULL_TREND": 21.0,
+    "raw:TRANSITION": 10.0,
+    "DOWNTREND": 188.0,
+    "raw:BEAR_TREND": 188.0,
+    "RANGE": 14.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 7.0,
+    "raw:RANGE": 5.0,
+    "raw:HIGH_VOLATILITY_TREND": 26.0,
+    "raw:HIGH_VOLATILITY_RANGE": 2.0
+   },
+   "2026": {
+    "DOWNTREND": 44.0,
+    "raw:BEAR_TREND": 44.0
+   }
+  },
+  "ETHUSDT|4h": {
+   "2023": {
+    "UPTREND": 93.0,
+    "raw:HIGH_VOLATILITY_TREND": 42.67,
+    "raw:BULL_TREND": 50.33,
+    "NO_TRADE": 61.83,
+    "raw:CHOPPY": 51.0,
+    "raw:TRANSITION": 10.83,
+    "DOWNTREND": 46.33,
+    "raw:BEAR_TREND": 46.33,
+    "RANGE": 12.83,
+    "raw:HIGH_VOLATILITY_RANGE": 7.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.17,
+    "raw:RANGE": 1.33
+   },
+   "2024": {
+    "UPTREND": 152.0,
+    "raw:BULL_TREND": 87.17,
+    "RANGE": 21.5,
+    "raw:HIGH_VOLATILITY_RANGE": 13.17,
+    "NO_TRADE": 98.5,
+    "raw:TRANSITION": 20.5,
+    "raw:CHOPPY": 78.0,
+    "raw:HIGH_VOLATILITY_TREND": 64.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 7.83,
+    "DOWNTREND": 94.0,
+    "raw:BEAR_TREND": 94.0,
+    "raw:RANGE": 0.5
+   },
+   "2025": {
+    "NO_TRADE": 113.83,
+    "raw:CHOPPY": 99.5,
+    "RANGE": 20.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 7.83,
+    "raw:TRANSITION": 14.33,
+    "UPTREND": 147.67,
+    "raw:BULL_TREND": 71.5,
+    "DOWNTREND": 82.67,
+    "raw:BEAR_TREND": 82.67,
+    "raw:HIGH_VOLATILITY_TREND": 76.17,
+    "raw:HIGH_VOLATILITY_RANGE": 12.83,
+    "raw:RANGE": 0.17
+   },
+   "2026": {
+    "NO_TRADE": 11.17,
+    "raw:CHOPPY": 8.67,
+    "RANGE": 2.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.67,
+    "UPTREND": 19.33,
+    "raw:BULL_TREND": 4.33,
+    "raw:HIGH_VOLATILITY_TREND": 15.0,
+    "raw:HIGH_VOLATILITY_RANGE": 1.83,
+    "raw:TRANSITION": 2.5,
+    "DOWNTREND": 10.83,
+    "raw:BEAR_TREND": 10.83,
+    "raw:RANGE": 0.17
+   }
+  },
+  "ETHUSDT|1d": {
+   "2023": {
+    "NO_TRADE": 55.0,
+    "raw:CHOPPY": 42.0,
+    "UPTREND": 114.0,
+    "raw:BULL_TREND": 46.0,
+    "DOWNTREND": 43.0,
+    "raw:BEAR_TREND": 43.0,
+    "raw:TRANSITION": 13.0,
+    "RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0,
+    "raw:HIGH_VOLATILITY_TREND": 68.0
+   },
+   "2024": {
+    "UPTREND": 155.0,
+    "raw:HIGH_VOLATILITY_TREND": 94.0,
+    "RANGE": 45.0,
+    "raw:HIGH_VOLATILITY_RANGE": 39.0,
+    "raw:BULL_TREND": 61.0,
+    "NO_TRADE": 130.0,
+    "raw:CHOPPY": 112.0,
+    "raw:TRANSITION": 18.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.0,
+    "DOWNTREND": 36.0,
+    "raw:BEAR_TREND": 36.0
+   },
+   "2025": {
+    "UPTREND": 118.0,
+    "raw:BULL_TREND": 64.0,
+    "NO_TRADE": 104.0,
+    "raw:CHOPPY": 83.0,
+    "RANGE": 24.0,
+    "raw:HIGH_VOLATILITY_RANGE": 22.0,
+    "raw:TRANSITION": 21.0,
+    "DOWNTREND": 119.0,
+    "raw:BEAR_TREND": 119.0,
+    "raw:HIGH_VOLATILITY_TREND": 54.0,
+    "raw:RANGE": 2.0
+   },
+   "2026": {
+    "DOWNTREND": 29.0,
+    "raw:BEAR_TREND": 29.0,
+    "RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0,
+    "UPTREND": 7.0,
+    "raw:BULL_TREND": 7.0,
+    "NO_TRADE": 6.0,
+    "raw:CHOPPY": 6.0
+   }
+  },
+  "LINKUSDT|4h": {
+   "2023": {
+    "NO_TRADE": 58.83,
+    "raw:CHOPPY": 49.33,
+    "DOWNTREND": 24.0,
+    "raw:BEAR_TREND": 24.0,
+    "UPTREND": 119.67,
+    "raw:HIGH_VOLATILITY_TREND": 54.67,
+    "raw:BULL_TREND": 65.0,
+    "raw:TRANSITION": 9.5,
+    "RANGE": 11.5,
+    "raw:HIGH_VOLATILITY_RANGE": 5.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 5.5,
+    "raw:RANGE": 0.17
+   },
+   "2024": {
+    "NO_TRADE": 99.5,
+    "raw:CHOPPY": 80.5,
+    "UPTREND": 138.17,
+    "raw:BULL_TREND": 67.33,
+    "RANGE": 34.17,
+    "raw:HIGH_VOLATILITY_RANGE": 21.33,
+    "raw:TRANSITION": 19.0,
+    "DOWNTREND": 94.17,
+    "raw:BEAR_TREND": 94.17,
+    "raw:HIGH_VOLATILITY_TREND": 70.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 12.67,
+    "raw:RANGE": 0.17
+   },
+   "2025": {
+    "DOWNTREND": 110.17,
+    "raw:BEAR_TREND": 110.17,
+    "NO_TRADE": 118.83,
+    "raw:CHOPPY": 103.83,
+    "UPTREND": 109.67,
+    "raw:BULL_TREND": 44.17,
+    "raw:TRANSITION": 15.0,
+    "raw:HIGH_VOLATILITY_TREND": 65.5,
+    "RANGE": 26.33,
+    "raw:HIGH_VOLATILITY_RANGE": 14.67,
+    "raw:RANGE": 0.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 11.17
+   },
+   "2026": {
+    "DOWNTREND": 16.0,
+    "raw:BEAR_TREND": 16.0,
+    "NO_TRADE": 8.83,
+    "raw:CHOPPY": 7.33,
+    "RANGE": 2.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.33,
+    "raw:TRANSITION": 1.5,
+    "UPTREND": 16.5,
+    "raw:BULL_TREND": 5.33,
+    "raw:HIGH_VOLATILITY_TREND": 11.17,
+    "raw:HIGH_VOLATILITY_RANGE": 2.33
+   }
+  },
+  "LINKUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 51.0,
+    "raw:BEAR_TREND": 51.0,
+    "NO_TRADE": 41.0,
+    "raw:CHOPPY": 26.0,
+    "raw:TRANSITION": 15.0,
+    "UPTREND": 118.0,
+    "raw:BULL_TREND": 44.0,
+    "raw:HIGH_VOLATILITY_TREND": 74.0,
+    "RANGE": 4.0,
+    "raw:HIGH_VOLATILITY_RANGE": 4.0
+   },
+   "2024": {
+    "UPTREND": 122.0,
+    "raw:BULL_TREND": 60.0,
+    "RANGE": 45.0,
+    "raw:HIGH_VOLATILITY_RANGE": 31.0,
+    "raw:HIGH_VOLATILITY_TREND": 62.0,
+    "NO_TRADE": 99.0,
+    "raw:CHOPPY": 87.0,
+    "raw:TRANSITION": 12.0,
+    "DOWNTREND": 100.0,
+    "raw:BEAR_TREND": 100.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 14.0
+   },
+   "2025": {
+    "NO_TRADE": 131.0,
+    "raw:TRANSITION": 21.0,
+    "raw:CHOPPY": 110.0,
+    "UPTREND": 79.0,
+    "raw:BULL_TREND": 33.0,
+    "RANGE": 40.0,
+    "raw:HIGH_VOLATILITY_RANGE": 13.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 22.0,
+    "DOWNTREND": 115.0,
+    "raw:BEAR_TREND": 115.0,
+    "raw:RANGE": 5.0,
+    "raw:HIGH_VOLATILITY_TREND": 46.0
+   },
+   "2026": {
+    "DOWNTREND": 44.0,
+    "raw:BEAR_TREND": 44.0
+   }
+  },
+  "LTCUSDT|4h": {
+   "2023": {
+    "NO_TRADE": 71.83,
+    "raw:CHOPPY": 58.17,
+    "UPTREND": 71.17,
+    "raw:BULL_TREND": 39.0,
+    "raw:HIGH_VOLATILITY_TREND": 32.17,
+    "raw:TRANSITION": 13.67,
+    "RANGE": 12.83,
+    "raw:HIGH_VOLATILITY_RANGE": 8.67,
+    "DOWNTREND": 58.17,
+    "raw:BEAR_TREND": 58.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.0,
+    "raw:RANGE": 0.17
+   },
+   "2024": {
+    "RANGE": 36.17,
+    "raw:RANGE": 2.0,
+    "NO_TRADE": 119.5,
+    "raw:CHOPPY": 103.0,
+    "UPTREND": 132.17,
+    "raw:BULL_TREND": 67.33,
+    "raw:HIGH_VOLATILITY_TREND": 64.83,
+    "DOWNTREND": 78.17,
+    "raw:BEAR_TREND": 78.17,
+    "raw:HIGH_VOLATILITY_RANGE": 20.5,
+    "raw:TRANSITION": 16.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 13.67
+   },
+   "2025": {
+    "NO_TRADE": 120.17,
+    "raw:CHOPPY": 104.33,
+    "RANGE": 22.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 7.83,
+    "UPTREND": 125.33,
+    "raw:BULL_TREND": 59.67,
+    "raw:TRANSITION": 15.83,
+    "DOWNTREND": 97.17,
+    "raw:BEAR_TREND": 97.17,
+    "raw:HIGH_VOLATILITY_TREND": 65.67,
+    "raw:HIGH_VOLATILITY_RANGE": 13.33,
+    "raw:RANGE": 1.17
+   },
+   "2026": {
+    "DOWNTREND": 18.67,
+    "raw:BEAR_TREND": 18.67,
+    "NO_TRADE": 6.33,
+    "raw:CHOPPY": 6.33,
+    "RANGE": 1.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.5,
+    "UPTREND": 18.0,
+    "raw:BULL_TREND": 5.33,
+    "raw:HIGH_VOLATILITY_TREND": 12.67,
+    "raw:HIGH_VOLATILITY_RANGE": 0.5
+   }
+  },
+  "LTCUSDT|1d": {
+   "2023": {
+    "UPTREND": 57.0,
+    "raw:BULL_TREND": 36.0,
+    "DOWNTREND": 73.0,
+    "raw:BEAR_TREND": 73.0,
+    "NO_TRADE": 69.0,
+    "raw:CHOPPY": 61.0,
+    "raw:HIGH_VOLATILITY_TREND": 21.0,
+    "raw:TRANSITION": 8.0,
+    "RANGE": 15.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0,
+    "raw:HIGH_VOLATILITY_RANGE": 13.0
+   },
+   "2024": {
+    "NO_TRADE": 160.0,
+    "raw:CHOPPY": 142.0,
+    "RANGE": 40.0,
+    "raw:HIGH_VOLATILITY_RANGE": 24.0,
+    "UPTREND": 94.0,
+    "raw:HIGH_VOLATILITY_TREND": 91.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 16.0,
+    "raw:TRANSITION": 18.0,
+    "DOWNTREND": 72.0,
+    "raw:BEAR_TREND": 72.0,
+    "raw:BULL_TREND": 3.0
+   },
+   "2025": {
+    "NO_TRADE": 149.0,
+    "raw:CHOPPY": 131.0,
+    "UPTREND": 82.0,
+    "raw:BULL_TREND": 27.0,
+    "raw:HIGH_VOLATILITY_TREND": 55.0,
+    "RANGE": 52.0,
+    "raw:HIGH_VOLATILITY_RANGE": 31.0,
+    "raw:TRANSITION": 18.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 15.0,
+    "DOWNTREND": 82.0,
+    "raw:BEAR_TREND": 82.0,
+    "raw:RANGE": 6.0
+   },
+   "2026": {
+    "DOWNTREND": 44.0,
+    "raw:BEAR_TREND": 44.0
+   }
+  },
+  "NEARUSDT|4h": {
+   "2023": {
+    "DOWNTREND": 69.33,
+    "raw:BEAR_TREND": 69.33,
+    "NO_TRADE": 49.83,
+    "raw:TRANSITION": 8.0,
+    "RANGE": 12.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.17,
+    "raw:CHOPPY": 41.83,
+    "raw:HIGH_VOLATILITY_RANGE": 9.83,
+    "UPTREND": 82.33,
+    "raw:HIGH_VOLATILITY_TREND": 59.83,
+    "raw:RANGE": 0.5,
+    "raw:BULL_TREND": 22.5
+   },
+   "2024": {
+    "NO_TRADE": 121.0,
+    "raw:CHOPPY": 103.33,
+    "UPTREND": 147.33,
+    "raw:BULL_TREND": 72.83,
+    "raw:HIGH_VOLATILITY_TREND": 74.5,
+    "RANGE": 24.5,
+    "raw:HIGH_VOLATILITY_RANGE": 13.5,
+    "raw:TRANSITION": 17.67,
+    "DOWNTREND": 73.17,
+    "raw:BEAR_TREND": 73.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 10.67,
+    "raw:RANGE": 0.33
+   },
+   "2025": {
+    "DOWNTREND": 123.17,
+    "raw:BEAR_TREND": 123.17,
+    "NO_TRADE": 99.17,
+    "raw:CHOPPY": 82.17,
+    "RANGE": 25.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 10.67,
+    "UPTREND": 116.83,
+    "raw:BULL_TREND": 53.0,
+    "raw:TRANSITION": 17.0,
+    "raw:HIGH_VOLATILITY_TREND": 63.83,
+    "raw:HIGH_VOLATILITY_RANGE": 13.83,
+    "raw:RANGE": 1.33
+   },
+   "2026": {
+    "DOWNTREND": 21.83,
+    "raw:BEAR_TREND": 21.83,
+    "NO_TRADE": 1.5,
+    "raw:CHOPPY": 0.5,
+    "RANGE": 2.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.5,
+    "raw:TRANSITION": 1.0,
+    "UPTREND": 18.0,
+    "raw:BULL_TREND": 7.33,
+    "raw:HIGH_VOLATILITY_TREND": 10.67,
+    "raw:HIGH_VOLATILITY_RANGE": 2.17
+   }
+  },
+  "NEARUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 141.0,
+    "raw:BEAR_TREND": 141.0,
+    "NO_TRADE": 3.0,
+    "raw:CHOPPY": 3.0,
+    "UPTREND": 70.0,
+    "raw:BULL_TREND": 9.0,
+    "raw:HIGH_VOLATILITY_TREND": 61.0
+   },
+   "2024": {
+    "UPTREND": 186.0,
+    "raw:HIGH_VOLATILITY_TREND": 81.0,
+    "raw:BULL_TREND": 105.0,
+    "NO_TRADE": 97.0,
+    "raw:TRANSITION": 18.0,
+    "raw:CHOPPY": 79.0,
+    "RANGE": 31.0,
+    "raw:HIGH_VOLATILITY_RANGE": 11.0,
+    "raw:RANGE": 4.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 16.0,
+    "DOWNTREND": 52.0,
+    "raw:BEAR_TREND": 52.0
+   },
+   "2025": {
+    "NO_TRADE": 107.0,
+    "raw:CHOPPY": 95.0,
+    "DOWNTREND": 188.0,
+    "raw:BEAR_TREND": 188.0,
+    "raw:TRANSITION": 12.0,
+    "UPTREND": 49.0,
+    "raw:BULL_TREND": 22.0,
+    "RANGE": 21.0,
+    "raw:RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.0,
+    "raw:HIGH_VOLATILITY_RANGE": 11.0,
+    "raw:HIGH_VOLATILITY_TREND": 27.0
+   },
+   "2026": {
+    "DOWNTREND": 44.0,
+    "raw:BEAR_TREND": 44.0
+   }
+  },
+  "OPUSDT|4h": {
+   "2023": {
+    "DOWNTREND": 54.0,
+    "raw:BEAR_TREND": 54.0,
+    "UPTREND": 91.5,
+    "raw:HIGH_VOLATILITY_TREND": 48.0,
+    "RANGE": 10.67,
+    "raw:HIGH_VOLATILITY_RANGE": 6.0,
+    "NO_TRADE": 57.83,
+    "raw:CHOPPY": 49.83,
+    "raw:TRANSITION": 8.0,
+    "raw:BULL_TREND": 43.5,
+    "raw:RANGE": 0.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.83
+   },
+   "2024": {
+    "UPTREND": 138.17,
+    "raw:BULL_TREND": 75.17,
+    "raw:HIGH_VOLATILITY_TREND": 63.0,
+    "NO_TRADE": 82.83,
+    "raw:CHOPPY": 67.0,
+    "RANGE": 26.83,
+    "raw:HIGH_VOLATILITY_RANGE": 15.5,
+    "raw:TRANSITION": 15.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 11.0,
+    "DOWNTREND": 118.17,
+    "raw:BEAR_TREND": 118.17,
+    "raw:RANGE": 0.33
+   },
+   "2025": {
+    "DOWNTREND": 154.83,
+    "raw:BEAR_TREND": 154.83,
+    "NO_TRADE": 88.0,
+    "raw:CHOPPY": 76.17,
+    "RANGE": 20.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 9.67,
+    "UPTREND": 101.33,
+    "raw:BULL_TREND": 43.0,
+    "raw:TRANSITION": 11.83,
+    "raw:HIGH_VOLATILITY_TREND": 58.33,
+    "raw:HIGH_VOLATILITY_RANGE": 10.5,
+    "raw:RANGE": 0.67
+   },
+   "2026": {
+    "DOWNTREND": 16.5,
+    "raw:BEAR_TREND": 16.5,
+    "NO_TRADE": 8.67,
+    "raw:CHOPPY": 6.33,
+    "raw:TRANSITION": 2.33,
+    "UPTREND": 14.67,
+    "raw:BULL_TREND": 4.83,
+    "raw:HIGH_VOLATILITY_TREND": 9.83,
+    "RANGE": 4.17,
+    "raw:HIGH_VOLATILITY_RANGE": 3.83,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.33
+   }
+  },
+  "OPUSDT|1d": {
+   "2023": {
+    "DOWNTREND": 72.0,
+    "raw:BEAR_TREND": 72.0,
+    "NO_TRADE": 57.0,
+    "raw:CHOPPY": 56.0,
+    "raw:TRANSITION": 1.0,
+    "UPTREND": 70.0,
+    "raw:BULL_TREND": 30.0,
+    "RANGE": 15.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.0,
+    "raw:HIGH_VOLATILITY_TREND": 40.0,
+    "raw:HIGH_VOLATILITY_RANGE": 12.0
+   },
+   "2024": {
+    "UPTREND": 71.0,
+    "raw:HIGH_VOLATILITY_TREND": 45.0,
+    "RANGE": 31.0,
+    "raw:HIGH_VOLATILITY_RANGE": 27.0,
+    "NO_TRADE": 150.0,
+    "raw:CHOPPY": 110.0,
+    "raw:BULL_TREND": 26.0,
+    "raw:TRANSITION": 40.0,
+    "raw:RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0,
+    "DOWNTREND": 114.0,
+    "raw:BEAR_TREND": 114.0
+   },
+   "2025": {
+    "NO_TRADE": 99.0,
+    "raw:TRANSITION": 16.0,
+    "raw:CHOPPY": 83.0,
+    "DOWNTREND": 238.0,
+    "raw:BEAR_TREND": 238.0,
+    "RANGE": 8.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 5.0,
+    "UPTREND": 20.0,
+    "raw:BULL_TREND": 12.0,
+    "raw:HIGH_VOLATILITY_RANGE": 2.0,
+    "raw:RANGE": 1.0,
+    "raw:HIGH_VOLATILITY_TREND": 8.0
+   },
+   "2026": {
+    "DOWNTREND": 37.0,
+    "raw:BEAR_TREND": 37.0,
+    "UPTREND": 6.0,
+    "raw:BULL_TREND": 6.0,
+    "NO_TRADE": 1.0,
+    "raw:CHOPPY": 1.0
+   }
+  },
+  "SOLUSDT|4h": {
+   "2023": {
+    "RANGE": 10.67,
+    "raw:HIGH_VOLATILITY_RANGE": 4.83,
+    "NO_TRADE": 55.17,
+    "raw:CHOPPY": 45.67,
+    "raw:TRANSITION": 9.5,
+    "UPTREND": 123.67,
+    "raw:BULL_TREND": 61.33,
+    "raw:HIGH_VOLATILITY_TREND": 62.33,
+    "DOWNTREND": 24.5,
+    "raw:BEAR_TREND": 24.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 5.83
+   },
+   "2024": {
+    "NO_TRADE": 138.33,
+    "raw:CHOPPY": 114.0,
+    "UPTREND": 150.0,
+    "raw:BULL_TREND": 85.5,
+    "raw:TRANSITION": 24.33,
+    "DOWNTREND": 56.67,
+    "raw:BEAR_TREND": 56.67,
+    "RANGE": 21.0,
+    "raw:RANGE": 1.33,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.5,
+    "raw:HIGH_VOLATILITY_RANGE": 13.17,
+    "raw:HIGH_VOLATILITY_TREND": 64.5
+   },
+   "2025": {
+    "NO_TRADE": 94.17,
+    "raw:CHOPPY": 82.17,
+    "RANGE": 17.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.67,
+    "UPTREND": 147.33,
+    "raw:BULL_TREND": 78.17,
+    "raw:TRANSITION": 12.0,
+    "DOWNTREND": 106.33,
+    "raw:BEAR_TREND": 106.33,
+    "raw:HIGH_VOLATILITY_TREND": 69.17,
+    "raw:HIGH_VOLATILITY_RANGE": 8.5
+   },
+   "2026": {
+    "NO_TRADE": 3.5,
+    "raw:CHOPPY": 1.67,
+    "RANGE": 1.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.67,
+    "raw:TRANSITION": 1.83,
+    "UPTREND": 25.0,
+    "raw:BULL_TREND": 11.5,
+    "raw:HIGH_VOLATILITY_TREND": 13.5,
+    "raw:HIGH_VOLATILITY_RANGE": 0.83,
+    "DOWNTREND": 14.0,
+    "raw:BEAR_TREND": 14.0
+   }
+  },
+  "SOLUSDT|1d": {
+   "2023": {
+    "NO_TRADE": 31.0,
+    "raw:CHOPPY": 26.0,
+    "DOWNTREND": 38.0,
+    "raw:BEAR_TREND": 38.0,
+    "UPTREND": 143.0,
+    "raw:BULL_TREND": 53.0,
+    "raw:TRANSITION": 5.0,
+    "raw:HIGH_VOLATILITY_TREND": 90.0,
+    "RANGE": 2.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 2.0
+   },
+   "2024": {
+    "UPTREND": 185.0,
+    "raw:HIGH_VOLATILITY_TREND": 72.0,
+    "raw:BULL_TREND": 113.0,
+    "NO_TRADE": 137.0,
+    "raw:CHOPPY": 106.0,
+    "RANGE": 44.0,
+    "raw:HIGH_VOLATILITY_RANGE": 33.0,
+    "raw:TRANSITION": 31.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 11.0
+   },
+   "2025": {
+    "NO_TRADE": 99.0,
+    "raw:CHOPPY": 75.0,
+    "UPTREND": 96.0,
+    "raw:HIGH_VOLATILITY_TREND": 66.0,
+    "raw:TRANSITION": 24.0,
+    "RANGE": 57.0,
+    "raw:HIGH_VOLATILITY_RANGE": 33.0,
+    "raw:BULL_TREND": 30.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 23.0,
+    "DOWNTREND": 113.0,
+    "raw:BEAR_TREND": 113.0,
+    "raw:RANGE": 1.0
+   },
+   "2026": {
+    "DOWNTREND": 30.0,
+    "raw:BEAR_TREND": 30.0,
+    "NO_TRADE": 3.0,
+    "raw:CHOPPY": 3.0,
+    "RANGE": 3.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.0,
+    "UPTREND": 8.0,
+    "raw:BULL_TREND": 8.0
+   }
+  },
+  "SUIUSDT|4h": {
+   "2023": {
+    "DOWNTREND": 68.5,
+    "raw:BEAR_TREND": 68.5,
+    "NO_TRADE": 55.0,
+    "raw:CHOPPY": 46.67,
+    "UPTREND": 78.0,
+    "raw:HIGH_VOLATILITY_TREND": 46.5,
+    "raw:TRANSITION": 8.33,
+    "raw:BULL_TREND": 31.5,
+    "RANGE": 12.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 1.17,
+    "raw:HIGH_VOLATILITY_RANGE": 11.33
+   },
+   "2024": {
+    "NO_TRADE": 103.33,
+    "raw:CHOPPY": 86.83,
+    "UPTREND": 166.33,
+    "raw:BULL_TREND": 99.83,
+    "RANGE": 26.17,
+    "raw:HIGH_VOLATILITY_RANGE": 19.67,
+    "raw:HIGH_VOLATILITY_TREND": 66.5,
+    "raw:TRANSITION": 16.5,
+    "DOWNTREND": 70.17,
+    "raw:BEAR_TREND": 70.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 6.17,
+    "raw:RANGE": 0.33
+   },
+   "2025": {
+    "NO_TRADE": 117.33,
+    "raw:CHOPPY": 104.33,
+    "UPTREND": 103.17,
+    "raw:BULL_TREND": 51.0,
+    "raw:TRANSITION": 13.0,
+    "DOWNTREND": 120.0,
+    "raw:BEAR_TREND": 120.0,
+    "RANGE": 24.5,
+    "raw:HIGH_VOLATILITY_RANGE": 13.67,
+    "raw:HIGH_VOLATILITY_TREND": 52.17,
+    "raw:RANGE": 2.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.67
+   },
+   "2026": {
+    "DOWNTREND": 21.0,
+    "raw:BEAR_TREND": 21.0,
+    "NO_TRADE": 4.17,
+    "raw:CHOPPY": 3.17,
+    "raw:TRANSITION": 1.0,
+    "UPTREND": 18.83,
+    "raw:BULL_TREND": 7.5,
+    "raw:HIGH_VOLATILITY_TREND": 11.33
+   }
+  },
+  "SUIUSDT|1d": {
+   "2023": {
+    "NO_TRADE": 29.0,
+    "raw:UNKNOWN": 6.0,
+    "raw:CHOPPY": 19.0,
+    "RANGE": 38.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.0,
+    "DOWNTREND": 129.0,
+    "raw:BEAR_TREND": 129.0,
+    "UPTREND": 18.0,
+    "raw:BULL_TREND": 4.0,
+    "raw:TRANSITION": 4.0,
+    "raw:HIGH_VOLATILITY_TREND": 14.0,
+    "raw:HIGH_VOLATILITY_RANGE": 35.0
+   },
+   "2024": {
+    "UPTREND": 200.0,
+    "raw:HIGH_VOLATILITY_TREND": 179.0,
+    "raw:BULL_TREND": 21.0,
+    "NO_TRADE": 62.0,
+    "raw:CHOPPY": 49.0,
+    "RANGE": 35.0,
+    "raw:HIGH_VOLATILITY_RANGE": 31.0,
+    "raw:TRANSITION": 13.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.0,
+    "DOWNTREND": 69.0,
+    "raw:BEAR_TREND": 69.0
+   },
+   "2025": {
+    "UPTREND": 122.0,
+    "raw:BULL_TREND": 104.0,
+    "raw:HIGH_VOLATILITY_TREND": 18.0,
+    "NO_TRADE": 138.0,
+    "raw:TRANSITION": 23.0,
+    "raw:CHOPPY": 115.0,
+    "RANGE": 16.0,
+    "raw:HIGH_VOLATILITY_RANGE": 7.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 9.0,
+    "DOWNTREND": 89.0,
+    "raw:BEAR_TREND": 89.0
+   },
+   "2026": {
+    "NO_TRADE": 6.0,
+    "raw:CHOPPY": 6.0,
+    "UPTREND": 13.0,
+    "raw:BULL_TREND": 13.0,
+    "DOWNTREND": 25.0,
+    "raw:BEAR_TREND": 25.0
+   }
+  },
+  "XRPUSDT|4h": {
+   "2023": {
+    "UPTREND": 77.17,
+    "raw:HIGH_VOLATILITY_TREND": 39.83,
+    "raw:BULL_TREND": 37.33,
+    "RANGE": 13.0,
+    "raw:HIGH_VOLATILITY_RANGE": 9.0,
+    "NO_TRADE": 75.17,
+    "raw:TRANSITION": 7.5,
+    "raw:CHOPPY": 67.67,
+    "raw:LOW_VOLATILITY_COMPRESSION": 3.83,
+    "DOWNTREND": 48.67,
+    "raw:BEAR_TREND": 48.67,
+    "raw:RANGE": 0.17
+   },
+   "2024": {
+    "NO_TRADE": 112.5,
+    "raw:CHOPPY": 99.83,
+    "raw:TRANSITION": 12.67,
+    "UPTREND": 133.67,
+    "raw:BULL_TREND": 58.0,
+    "raw:HIGH_VOLATILITY_TREND": 75.67,
+    "DOWNTREND": 98.5,
+    "raw:BEAR_TREND": 98.5,
+    "RANGE": 21.33,
+    "raw:HIGH_VOLATILITY_RANGE": 15.5,
+    "raw:LOW_VOLATILITY_COMPRESSION": 5.5,
+    "raw:RANGE": 0.33
+   },
+   "2025": {
+    "NO_TRADE": 126.17,
+    "raw:CHOPPY": 107.67,
+    "UPTREND": 127.33,
+    "raw:BULL_TREND": 69.33,
+    "raw:TRANSITION": 18.5,
+    "RANGE": 21.83,
+    "raw:HIGH_VOLATILITY_RANGE": 9.83,
+    "raw:HIGH_VOLATILITY_TREND": 58.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 11.83,
+    "DOWNTREND": 89.67,
+    "raw:BEAR_TREND": 89.67,
+    "raw:RANGE": 0.17
+   },
+   "2026": {
+    "DOWNTREND": 15.33,
+    "raw:BEAR_TREND": 15.33,
+    "NO_TRADE": 7.0,
+    "raw:CHOPPY": 5.33,
+    "raw:TRANSITION": 1.67,
+    "UPTREND": 21.17,
+    "raw:BULL_TREND": 6.0,
+    "raw:HIGH_VOLATILITY_TREND": 15.17,
+    "RANGE": 0.5,
+    "raw:RANGE": 0.17,
+    "raw:LOW_VOLATILITY_COMPRESSION": 0.33
+   }
+  },
+  "XRPUSDT|1d": {
+   "2023": {
+    "UPTREND": 94.0,
+    "raw:BULL_TREND": 55.0,
+    "raw:HIGH_VOLATILITY_TREND": 39.0,
+    "NO_TRADE": 94.0,
+    "raw:CHOPPY": 73.0,
+    "RANGE": 10.0,
+    "raw:RANGE": 1.0,
+    "DOWNTREND": 16.0,
+    "raw:BEAR_TREND": 16.0,
+    "raw:TRANSITION": 21.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 4.0,
+    "raw:HIGH_VOLATILITY_RANGE": 5.0
+   },
+   "2024": {
+    "UPTREND": 130.0,
+    "raw:BULL_TREND": 39.0,
+    "RANGE": 28.0,
+    "raw:HIGH_VOLATILITY_RANGE": 19.0,
+    "NO_TRADE": 100.0,
+    "raw:CHOPPY": 78.0,
+    "raw:TRANSITION": 22.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 8.0,
+    "DOWNTREND": 108.0,
+    "raw:BEAR_TREND": 108.0,
+    "raw:RANGE": 1.0,
+    "raw:HIGH_VOLATILITY_TREND": 91.0
+   },
+   "2025": {
+    "NO_TRADE": 186.0,
+    "raw:CHOPPY": 172.0,
+    "UPTREND": 100.0,
+    "raw:BULL_TREND": 61.0,
+    "raw:HIGH_VOLATILITY_TREND": 39.0,
+    "raw:TRANSITION": 14.0,
+    "DOWNTREND": 58.0,
+    "raw:BEAR_TREND": 58.0,
+    "RANGE": 21.0,
+    "raw:HIGH_VOLATILITY_RANGE": 12.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 9.0
+   },
+   "2026": {
+    "DOWNTREND": 19.0,
+    "raw:BEAR_TREND": 19.0,
+    "NO_TRADE": 4.0,
+    "raw:CHOPPY": 3.0,
+    "UPTREND": 14.0,
+    "raw:BULL_TREND": 14.0,
+    "RANGE": 7.0,
+    "raw:LOW_VOLATILITY_COMPRESSION": 7.0,
+    "raw:TRANSITION": 1.0
+   }
+  }
+ },
+ "hvt_days_by_side": {
+  "ADAUSDT|4h": {
+   "2023": {
+    "BEAR": 14.17,
+    "BULL": 33.67
+   },
+   "2024": {
+    "BULL": 45.67,
+    "BEAR": 28.67
+   },
+   "2025": {
+    "BEAR": 23.33,
+    "BULL": 32.5
+   },
+   "2026": {
+    "BULL": 4.5,
+    "BEAR": 7.33
+   }
+  },
+  "ADAUSDT|1d": {
+   "2023": {
+    "BULL": 60.0
+   },
+   "2024": {
+    "BULL": 53.0,
+    "BEAR": 7.0
+   },
+   "2025": {
+    "BULL": 38.0
+   }
+  },
+  "APTUSDT|4h": {
+   "2023": {
+    "BULL": 33.83,
+    "BEAR": 14.67
+   },
+   "2024": {
+    "BULL": 47.17,
+    "BEAR": 15.33
+   },
+   "2025": {
+    "BEAR": 29.17,
+    "BULL": 33.17
+   },
+   "2026": {
+    "BULL": 2.83,
+    "BEAR": 6.0
+   }
+  },
+  "APTUSDT|1d": {
+   "2023": {
+    "BULL": 45.0
+   },
+   "2024": {
+    "BULL": 131.0,
+    "BEAR": 4.0
+   },
+   "2025": {
+    "BEAR": 10.0
+   }
+  },
+  "ARBUSDT|4h": {
+   "2023": {
+    "BEAR": 14.67,
+    "BULL": 39.0
+   },
+   "2024": {
+    "BULL": 52.33,
+    "BEAR": 20.83
+   },
+   "2025": {
+    "BEAR": 32.0,
+    "BULL": 35.67
+   },
+   "2026": {
+    "BULL": 2.83,
+    "BEAR": 5.0
+   }
+  },
+  "ARBUSDT|1d": {
+   "2023": {
+    "BULL": 21.0
+   },
+   "2024": {
+    "BULL": 58.0
+   },
+   "2025": {
+    "BULL": 33.0,
+    "BEAR": 6.0
+   }
+  },
+  "AVAXUSDT|4h": {
+   "2023": {
+    "BEAR": 14.67,
+    "BULL": 39.17
+   },
+   "2024": {
+    "BULL": 54.67,
+    "BEAR": 17.0
+   },
+   "2025": {
+    "BEAR": 27.33,
+    "BULL": 38.33
+   },
+   "2026": {
+    "BULL": 5.83,
+    "BEAR": 7.33
+   }
+  },
+  "AVAXUSDT|1d": {
+   "2023": {
+    "BULL": 67.0
+   },
+   "2024": {
+    "BULL": 65.0,
+    "BEAR": 2.0
+   },
+   "2025": {
+    "BULL": 30.0,
+    "BEAR": 2.0
+   }
+  },
+  "BNBUSDT|4h": {
+   "2023": {
+    "BEAR": 18.17,
+    "BULL": 23.0
+   },
+   "2024": {
+    "BULL": 49.17,
+    "BEAR": 17.0
+   },
+   "2025": {
+    "BEAR": 16.5,
+    "BULL": 49.5
+   },
+   "2026": {
+    "BULL": 3.5,
+    "BEAR": 10.5
+   }
+  },
+  "BNBUSDT|1d": {
+   "2023": {
+    "BEAR": 6.0,
+    "BULL": 22.0
+   },
+   "2024": {
+    "BULL": 101.0
+   },
+   "2025": {
+    "BULL": 81.0
+   }
+  },
+  "BTCUSDT|4h": {
+   "2023": {
+    "BEAR": 10.33,
+    "BULL": 29.83
+   },
+   "2024": {
+    "BULL": 39.83,
+    "BEAR": 16.67
+   },
+   "2025": {
+    "BEAR": 32.0,
+    "BULL": 37.67
+   },
+   "2026": {
+    "BULL": 3.83,
+    "BEAR": 10.5
+   }
+  },
+  "BTCUSDT|1d": {
+   "2023": {
+    "BULL": 71.0
+   },
+   "2024": {
+    "BULL": 88.0
+   },
+   "2025": {
+    "BULL": 23.0,
+    "BEAR": 10.0
+   },
+   "2026": {
+    "BEAR": 9.0
+   }
+  },
+  "DOGEUSDT|4h": {
+   "2023": {
+    "BEAR": 13.5,
+    "BULL": 34.5
+   },
+   "2024": {
+    "BEAR": 17.83,
+    "BULL": 57.83
+   },
+   "2025": {
+    "BEAR": 24.0,
+    "BULL": 32.17
+   },
+   "2026": {
+    "BULL": 7.33,
+    "BEAR": 7.83
+   }
+  },
+  "DOGEUSDT|1d": {
+   "2023": {
+    "BULL": 59.0,
+    "BEAR": 2.0
+   },
+   "2024": {
+    "BULL": 95.0
+   },
+   "2025": {
+    "BULL": 17.0
+   }
+  },
+  "DOTUSDT|4h": {
+   "2023": {
+    "BEAR": 18.0,
+    "BULL": 36.33
+   },
+   "2024": {
+    "BULL": 37.83,
+    "BEAR": 27.33
+   },
+   "2025": {
+    "BULL": 30.83,
+    "BEAR": 25.17
+   },
+   "2026": {
+    "BULL": 7.5,
+    "BEAR": 3.5
+   }
+  },
+  "DOTUSDT|1d": {
+   "2023": {
+    "BULL": 48.0
+   },
+   "2024": {
+    "BULL": 65.0
+   },
+   "2025": {
+    "BULL": 3.0,
+    "BEAR": 23.0
+   }
+  },
+  "ETHUSDT|4h": {
+   "2023": {
+    "BULL": 29.0,
+    "BEAR": 13.67
+   },
+   "2024": {
+    "BULL": 43.0,
+    "BEAR": 21.83
+   },
+   "2025": {
+    "BEAR": 40.17,
+    "BULL": 36.0
+   },
+   "2026": {
+    "BULL": 4.5,
+    "BEAR": 10.5
+   }
+  },
+  "ETHUSDT|1d": {
+   "2023": {
+    "BULL": 68.0
+   },
+   "2024": {
+    "BULL": 87.0,
+    "BEAR": 7.0
+   },
+   "2025": {
+    "BEAR": 2.0,
+    "BULL": 52.0
+   }
+  },
+  "LINKUSDT|4h": {
+   "2023": {
+    "BEAR": 13.0,
+    "BULL": 41.67
+   },
+   "2024": {
+    "BULL": 50.0,
+    "BEAR": 20.83
+   },
+   "2025": {
+    "BEAR": 23.67,
+    "BULL": 41.83
+   },
+   "2026": {
+    "BULL": 2.33,
+    "BEAR": 8.83
+   }
+  },
+  "LINKUSDT|1d": {
+   "2023": {
+    "BULL": 73.0,
+    "BEAR": 1.0
+   },
+   "2024": {
+    "BULL": 56.0,
+    "BEAR": 6.0
+   },
+   "2025": {
+    "BULL": 46.0
+   }
+  },
+  "LTCUSDT|4h": {
+   "2023": {
+    "BULL": 23.67,
+    "BEAR": 8.5
+   },
+   "2024": {
+    "BEAR": 23.5,
+    "BULL": 41.33
+   },
+   "2025": {
+    "BEAR": 24.0,
+    "BULL": 41.67
+   },
+   "2026": {
+    "BULL": 0.33,
+    "BEAR": 12.33
+   }
+  },
+  "LTCUSDT|1d": {
+   "2023": {
+    "BULL": 21.0
+   },
+   "2024": {
+    "BEAR": 17.0,
+    "BULL": 74.0
+   },
+   "2025": {
+    "BULL": 46.0,
+    "BEAR": 9.0
+   }
+  },
+  "NEARUSDT|4h": {
+   "2023": {
+    "BEAR": 17.17,
+    "BULL": 42.67
+   },
+   "2024": {
+    "BULL": 59.0,
+    "BEAR": 15.5
+   },
+   "2025": {
+    "BEAR": 28.83,
+    "BULL": 35.0
+   },
+   "2026": {
+    "BULL": 7.0,
+    "BEAR": 3.67
+   }
+  },
+  "NEARUSDT|1d": {
+   "2023": {
+    "BULL": 61.0
+   },
+   "2024": {
+    "BULL": 81.0
+   },
+   "2025": {
+    "BEAR": 17.0,
+    "BULL": 10.0
+   }
+  },
+  "OPUSDT|4h": {
+   "2023": {
+    "BEAR": 6.17,
+    "BULL": 41.83
+   },
+   "2024": {
+    "BULL": 43.33,
+    "BEAR": 19.67
+   },
+   "2025": {
+    "BEAR": 29.5,
+    "BULL": 28.83
+   },
+   "2026": {
+    "BULL": 6.67,
+    "BEAR": 3.17
+   }
+  },
+  "OPUSDT|1d": {
+   "2023": {
+    "BULL": 40.0
+   },
+   "2024": {
+    "BULL": 36.0,
+    "BEAR": 9.0
+   },
+   "2025": {
+    "BEAR": 8.0
+   }
+  },
+  "SOLUSDT|4h": {
+   "2023": {
+    "BULL": 50.0,
+    "BEAR": 12.33
+   },
+   "2024": {
+    "BULL": 42.33,
+    "BEAR": 22.17
+   },
+   "2025": {
+    "BEAR": 31.17,
+    "BULL": 38.0
+   },
+   "2026": {
+    "BULL": 4.67,
+    "BEAR": 8.83
+   }
+  },
+  "SOLUSDT|1d": {
+   "2023": {
+    "BULL": 90.0
+   },
+   "2024": {
+    "BULL": 72.0
+   },
+   "2025": {
+    "BULL": 66.0
+   }
+  },
+  "SUIUSDT|4h": {
+   "2023": {
+    "BEAR": 14.83,
+    "BULL": 31.67
+   },
+   "2024": {
+    "BULL": 55.5,
+    "BEAR": 11.0
+   },
+   "2025": {
+    "BULL": 28.33,
+    "BEAR": 23.83
+   },
+   "2026": {
+    "BULL": 6.33,
+    "BEAR": 5.0
+   }
+  },
+  "SUIUSDT|1d": {
+   "2023": {
+    "BULL": 14.0
+   },
+   "2024": {
+    "BULL": 177.0,
+    "BEAR": 2.0
+   },
+   "2025": {
+    "BULL": 11.0,
+    "BEAR": 7.0
+   }
+  },
+  "XRPUSDT|4h": {
+   "2023": {
+    "BULL": 34.17,
+    "BEAR": 5.67
+   },
+   "2024": {
+    "BEAR": 23.67,
+    "BULL": 52.0
+   },
+   "2025": {
+    "BULL": 30.83,
+    "BEAR": 27.17
+   },
+   "2026": {
+    "BULL": 5.17,
+    "BEAR": 10.0
+   }
+  },
+  "XRPUSDT|1d": {
+   "2023": {
+    "BULL": 39.0
+   },
+   "2024": {
+    "BULL": 91.0
+   },
+   "2025": {
+    "BULL": 38.0,
+    "BEAR": 1.0
+   }
+  }
+ },
+ "btc_daily_trend_days_per_year": {
+  "2023": {
+   "BEARISH": 51,
+   "NEUTRAL": 61,
+   "BULLISH": 102
+  },
+  "2024": {
+   "NEUTRAL": 142,
+   "BULLISH": 159,
+   "BEARISH": 65
+  },
+  "2025": {
+   "BEARISH": 138,
+   "NEUTRAL": 121,
+   "BULLISH": 106
+  },
+  "2026": {
+   "NEUTRAL": 15,
+   "BULLISH": 16,
+   "BEARISH": 13
+  }
+ }
+}

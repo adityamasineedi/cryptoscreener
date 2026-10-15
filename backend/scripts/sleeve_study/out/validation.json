@@ -1,0 +1,6266 @@
+{
+ "generated_utc": "2026-10-14T14:38:47.172796+00:00",
+ "validation_window": [
+  "2025-04-01T00:00:00+00:00",
+  "2025-09-01T00:00:00+00:00"
+ ],
+ "screened_variants": [
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 173,
+    "net": 2129.12,
+    "pf": 1.918,
+    "win_rate": 0.405,
+    "fees": 46.02
+   },
+   "validation": {
+    "trades": 41,
+    "net": 229.77,
+    "pf": 1.417,
+    "win_rate": 0.341,
+    "fees": 9.23
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 5,
+     "net": 54.31,
+     "pf": 1.849,
+     "win_rate": 0.4,
+     "fees": 2.52
+    },
+    "ETHUSDT": {
+     "trades": 2,
+     "net": 123.1,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.37
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 122.42,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.89
+    },
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.06,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.38
+    },
+    "NEARUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": -39.94,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.28
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.61,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.66
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": 38.19,
+     "pf": 2.887,
+     "win_rate": 0.5,
+     "fees": 0.48
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": 17.37,
+     "pf": 1.423,
+     "win_rate": 0.333,
+     "fees": 0.53
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": 17.54,
+     "pf": 1.428,
+     "win_rate": 0.333,
+     "fees": 0.38
+    },
+    "ADAUSDT": {
+     "trades": 3,
+     "net": 17.44,
+     "pf": 1.424,
+     "win_rate": 0.333,
+     "fees": 0.47
+    },
+    "DOTUSDT": {
+     "trades": 2,
+     "net": -16.4,
+     "pf": 0.186,
+     "win_rate": 0.5,
+     "fees": 0.28
+    },
+    "SOLUSDT": {
+     "trades": 3,
+     "net": 17.3,
+     "pf": 1.421,
+     "win_rate": 0.333,
+     "fees": 0.58
+    },
+    "DOGEUSDT": {
+     "trades": 4,
+     "net": 78.24,
+     "pf": 2.854,
+     "win_rate": 0.5,
+     "fees": 0.67
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -39.83,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.19
+    },
+    "APTUSDT": {
+     "trades": 1,
+     "net": -20.31,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.25
+    }
+   }
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 127,
+    "net": 1967.87,
+    "pf": 2.26,
+    "win_rate": 0.441,
+    "fees": 29.47
+   },
+   "validation": {
+    "trades": 22,
+    "net": 84.48,
+    "pf": 1.292,
+    "win_rate": 0.318,
+    "fees": 4.1
+   },
+   "per_coin_val": {
+    "APTUSDT": {
+     "trades": 2,
+     "net": -39.95,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.29
+    },
+    "XRPUSDT": {
+     "trades": 2,
+     "net": 38.17,
+     "pf": 2.886,
+     "win_rate": 0.5,
+     "fees": 0.49
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": 38.37,
+     "pf": 2.899,
+     "win_rate": 0.5,
+     "fees": 0.33
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": -26.94,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.33
+    },
+    "LINKUSDT": {
+     "trades": 2,
+     "net": 38.48,
+     "pf": 2.916,
+     "win_rate": 0.5,
+     "fees": 0.25
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": 17.54,
+     "pf": 1.428,
+     "win_rate": 0.333,
+     "fees": 0.39
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -39.86,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.21
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 94.04,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.21
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": -20.15,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.12
+    },
+    "AVAXUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.11,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.09
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 45.29,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.07
+    }
+   }
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 242,
+    "net": 1709.96,
+    "pf": 1.481,
+    "win_rate": 0.343,
+    "fees": 122.8
+   },
+   "validation": {
+    "trades": 52,
+    "net": 426.99,
+    "pf": 1.639,
+    "win_rate": 0.365,
+    "fees": 24.32
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 35.69,
+     "pf": 2.639,
+     "win_rate": 0.5,
+     "fees": 2.4
+    },
+    "ETHUSDT": {
+     "trades": 3,
+     "net": 189.3,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.24
+    },
+    "SOLUSDT": {
+     "trades": 4,
+     "net": -4.58,
+     "pf": 0.928,
+     "win_rate": 0.25,
+     "fees": 1.87
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 30.54,
+     "pf": 2.061,
+     "win_rate": 0.333,
+     "fees": 1.42
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": 77.97,
+     "pf": 2.844,
+     "win_rate": 0.5,
+     "fees": 0.88
+    },
+    "ADAUSDT": {
+     "trades": 6,
+     "net": 68.72,
+     "pf": 2.09,
+     "win_rate": 0.5,
+     "fees": 2.98
+    },
+    "LINKUSDT": {
+     "trades": 6,
+     "net": -45.63,
+     "pf": 0.548,
+     "win_rate": 0.167,
+     "fees": 3.07
+    },
+    "AVAXUSDT": {
+     "trades": 4,
+     "net": -79.22,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.32
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -40.44,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 5,
+     "net": 54.38,
+     "pf": 1.837,
+     "win_rate": 0.4,
+     "fees": 2.52
+    },
+    "DOTUSDT": {
+     "trades": 2,
+     "net": -40.25,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.53
+    },
+    "DOGEUSDT": {
+     "trades": 5,
+     "net": -24.54,
+     "pf": 0.703,
+     "win_rate": 0.2,
+     "fees": 1.86
+    },
+    "BNBUSDT": {
+     "trades": 3,
+     "net": 187.72,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 2.42
+    },
+    "NEARUSDT": {
+     "trades": 2,
+     "net": 37.63,
+     "pf": 2.829,
+     "win_rate": 0.5,
+     "fees": 0.9
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": -20.29,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.24
+    }
+   }
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 241,
+    "net": 1642.05,
+    "pf": 1.463,
+    "win_rate": 0.34,
+    "fees": 122.57
+   },
+   "validation": {
+    "trades": 52,
+    "net": 426.99,
+    "pf": 1.639,
+    "win_rate": 0.365,
+    "fees": 24.32
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 35.69,
+     "pf": 2.639,
+     "win_rate": 0.5,
+     "fees": 2.4
+    },
+    "ETHUSDT": {
+     "trades": 3,
+     "net": 189.3,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.24
+    },
+    "SOLUSDT": {
+     "trades": 4,
+     "net": -4.58,
+     "pf": 0.928,
+     "win_rate": 0.25,
+     "fees": 1.87
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 30.54,
+     "pf": 2.061,
+     "win_rate": 0.333,
+     "fees": 1.42
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": 77.97,
+     "pf": 2.844,
+     "win_rate": 0.5,
+     "fees": 0.88
+    },
+    "ADAUSDT": {
+     "trades": 6,
+     "net": 68.72,
+     "pf": 2.09,
+     "win_rate": 0.5,
+     "fees": 2.98
+    },
+    "LINKUSDT": {
+     "trades": 6,
+     "net": -45.63,
+     "pf": 0.548,
+     "win_rate": 0.167,
+     "fees": 3.07
+    },
+    "AVAXUSDT": {
+     "trades": 4,
+     "net": -79.22,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.32
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -40.44,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 5,
+     "net": 54.38,
+     "pf": 1.837,
+     "win_rate": 0.4,
+     "fees": 2.52
+    },
+    "DOTUSDT": {
+     "trades": 2,
+     "net": -40.25,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.53
+    },
+    "DOGEUSDT": {
+     "trades": 5,
+     "net": -24.54,
+     "pf": 0.703,
+     "win_rate": 0.2,
+     "fees": 1.86
+    },
+    "BNBUSDT": {
+     "trades": 3,
+     "net": 187.72,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 2.42
+    },
+    "NEARUSDT": {
+     "trades": 2,
+     "net": 37.63,
+     "pf": 2.829,
+     "win_rate": 0.5,
+     "fees": 0.9
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": -20.29,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.24
+    }
+   }
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 406,
+    "net": 1627.5,
+    "pf": 1.258,
+    "win_rate": 0.303,
+    "fees": 222.78
+   },
+   "validation": {
+    "trades": 78,
+    "net": 523.38,
+    "pf": 1.496,
+    "win_rate": 0.346,
+    "fees": 41.09
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 6,
+     "net": 100.78,
+     "pf": 2.481,
+     "win_rate": 0.5,
+     "fees": 7.21
+    },
+    "OPUSDT": {
+     "trades": 4,
+     "net": -81.02,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 2.84
+    },
+    "SUIUSDT": {
+     "trades": 3,
+     "net": 34.0,
+     "pf": 2.326,
+     "win_rate": 0.333,
+     "fees": 0.66
+    },
+    "SOLUSDT": {
+     "trades": 8,
+     "net": -83.96,
+     "pf": 0.407,
+     "win_rate": 0.125,
+     "fees": 3.58
+    },
+    "NEARUSDT": {
+     "trades": 3,
+     "net": 99.39,
+     "pf": 5.559,
+     "win_rate": 0.667,
+     "fees": 1.34
+    },
+    "DOTUSDT": {
+     "trades": 3,
+     "net": -60.43,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.34
+    },
+    "ARBUSDT": {
+     "trades": 5,
+     "net": 55.64,
+     "pf": 1.896,
+     "win_rate": 0.4,
+     "fees": 1.44
+    },
+    "ETHUSDT": {
+     "trades": 4,
+     "net": 165.03,
+     "pf": 7.801,
+     "win_rate": 0.75,
+     "fees": 1.63
+    },
+    "DOGEUSDT": {
+     "trades": 6,
+     "net": 33.76,
+     "pf": 1.385,
+     "win_rate": 0.333,
+     "fees": 2.16
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 30.95,
+     "pf": 2.075,
+     "win_rate": 0.333,
+     "fees": 1.08
+    },
+    "LINKUSDT": {
+     "trades": 8,
+     "net": -9.27,
+     "pf": 0.927,
+     "win_rate": 0.25,
+     "fees": 3.79
+    },
+    "ADAUSDT": {
+     "trades": 7,
+     "net": 132.61,
+     "pf": 2.985,
+     "win_rate": 0.571,
+     "fees": 3.32
+    },
+    "APTUSDT": {
+     "trades": 4,
+     "net": -4.14,
+     "pf": 0.935,
+     "win_rate": 0.25,
+     "fees": 1.48
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.63,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 6,
+     "net": 31.94,
+     "pf": 1.376,
+     "win_rate": 0.333,
+     "fees": 3.48
+    },
+    "BNBUSDT": {
+     "trades": 5,
+     "net": 137.74,
+     "pf": 3.756,
+     "win_rate": 0.6,
+     "fees": 5.07
+    }
+   }
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 281,
+    "net": 1624.91,
+    "pf": 1.386,
+    "win_rate": 0.327,
+    "fees": 80.49
+   },
+   "validation": {
+    "trades": 56,
+    "net": 306.06,
+    "pf": 1.414,
+    "win_rate": 0.357,
+    "fees": 14.31
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 8,
+     "net": -10.19,
+     "pf": 0.919,
+     "win_rate": 0.25,
+     "fees": 4.47
+    },
+    "DOTUSDT": {
+     "trades": 4,
+     "net": -56.08,
+     "pf": 0.06,
+     "win_rate": 0.25,
+     "fees": 0.87
+    },
+    "OPUSDT": {
+     "trades": 4,
+     "net": -78.83,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.01
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": -3.49,
+     "pf": 0.943,
+     "win_rate": 0.25,
+     "fees": 0.92
+    },
+    "XRPUSDT": {
+     "trades": 4,
+     "net": -3.2,
+     "pf": 0.947,
+     "win_rate": 0.25,
+     "fees": 0.69
+    },
+    "NEARUSDT": {
+     "trades": 4,
+     "net": -3.21,
+     "pf": 0.946,
+     "win_rate": 0.25,
+     "fees": 0.67
+    },
+    "ETHUSDT": {
+     "trades": 2,
+     "net": 123.1,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.37
+    },
+    "BNBUSDT": {
+     "trades": 3,
+     "net": 99.66,
+     "pf": 5.379,
+     "win_rate": 0.667,
+     "fees": 1.14
+    },
+    "DOGEUSDT": {
+     "trades": 5,
+     "net": 142.76,
+     "pf": 4.193,
+     "win_rate": 0.6,
+     "fees": 0.83
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 16.98,
+     "pf": 1.41,
+     "win_rate": 0.333,
+     "fees": 0.84
+    },
+    "LINKUSDT": {
+     "trades": 4,
+     "net": -3.31,
+     "pf": 0.946,
+     "win_rate": 0.25,
+     "fees": 0.76
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -40.05,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.36
+    },
+    "ADAUSDT": {
+     "trades": 4,
+     "net": -3.3,
+     "pf": 0.947,
+     "win_rate": 0.25,
+     "fees": 0.78
+    },
+    "SOLUSDT": {
+     "trades": 3,
+     "net": 59.53,
+     "pf": 3.785,
+     "win_rate": 0.667,
+     "fees": 0.42
+    },
+    "AVAXUSDT": {
+     "trades": 1,
+     "net": 59.84,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.12
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": 5.85,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.06
+    }
+   }
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 159,
+    "net": 1580.41,
+    "pf": 1.722,
+    "win_rate": 0.384,
+    "fees": 39.75
+   },
+   "validation": {
+    "trades": 29,
+    "net": 48.35,
+    "pf": 1.119,
+    "win_rate": 0.276,
+    "fees": 5.67
+   },
+   "per_coin_val": {
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.0,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.33
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.39,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.48
+    },
+    "ADAUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "BTCUSDT": {
+     "trades": 1,
+     "net": -20.7,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.56
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": 38.39,
+     "pf": 2.902,
+     "win_rate": 0.5,
+     "fees": 0.32
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": -26.41,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.32
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": 100.26,
+     "pf": 5.983,
+     "win_rate": 0.667,
+     "fees": 0.65
+    },
+    "LINKUSDT": {
+     "trades": 2,
+     "net": 38.46,
+     "pf": 2.916,
+     "win_rate": 0.5,
+     "fees": 0.26
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": 17.54,
+     "pf": 1.428,
+     "win_rate": 0.333,
+     "fees": 0.39
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -39.83,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.19
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 100.43,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.2
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -20.18,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.15
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": -20.16,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.13
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 59.89,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.08
+    }
+   }
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 405,
+    "net": 1540.48,
+    "pf": 1.245,
+    "win_rate": 0.301,
+    "fees": 222.28
+   },
+   "validation": {
+    "trades": 79,
+    "net": 584.76,
+    "pf": 1.554,
+    "win_rate": 0.354,
+    "fees": 41.65
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 6,
+     "net": 100.78,
+     "pf": 2.481,
+     "win_rate": 0.5,
+     "fees": 7.21
+    },
+    "OPUSDT": {
+     "trades": 4,
+     "net": -81.02,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 2.84
+    },
+    "SUIUSDT": {
+     "trades": 4,
+     "net": 95.39,
+     "pf": 4.512,
+     "win_rate": 0.5,
+     "fees": 1.22
+    },
+    "SOLUSDT": {
+     "trades": 8,
+     "net": -83.96,
+     "pf": 0.407,
+     "win_rate": 0.125,
+     "fees": 3.58
+    },
+    "NEARUSDT": {
+     "trades": 3,
+     "net": 99.39,
+     "pf": 5.559,
+     "win_rate": 0.667,
+     "fees": 1.34
+    },
+    "DOTUSDT": {
+     "trades": 3,
+     "net": -60.43,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.34
+    },
+    "ARBUSDT": {
+     "trades": 5,
+     "net": 55.64,
+     "pf": 1.896,
+     "win_rate": 0.4,
+     "fees": 1.44
+    },
+    "ETHUSDT": {
+     "trades": 4,
+     "net": 165.03,
+     "pf": 7.801,
+     "win_rate": 0.75,
+     "fees": 1.63
+    },
+    "DOGEUSDT": {
+     "trades": 6,
+     "net": 33.76,
+     "pf": 1.385,
+     "win_rate": 0.333,
+     "fees": 2.16
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 30.95,
+     "pf": 2.075,
+     "win_rate": 0.333,
+     "fees": 1.08
+    },
+    "LINKUSDT": {
+     "trades": 8,
+     "net": -9.27,
+     "pf": 0.927,
+     "win_rate": 0.25,
+     "fees": 3.79
+    },
+    "ADAUSDT": {
+     "trades": 7,
+     "net": 132.61,
+     "pf": 2.985,
+     "win_rate": 0.571,
+     "fees": 3.32
+    },
+    "APTUSDT": {
+     "trades": 4,
+     "net": -4.14,
+     "pf": 0.935,
+     "win_rate": 0.25,
+     "fees": 1.48
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.63,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 6,
+     "net": 31.94,
+     "pf": 1.376,
+     "win_rate": 0.333,
+     "fees": 3.48
+    },
+    "BNBUSDT": {
+     "trades": 5,
+     "net": 137.74,
+     "pf": 3.756,
+     "win_rate": 0.6,
+     "fees": 5.07
+    }
+   }
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 212,
+    "net": 1461.63,
+    "pf": 1.481,
+    "win_rate": 0.34,
+    "fees": 49.9
+   },
+   "validation": {
+    "trades": 37,
+    "net": 151.22,
+    "pf": 1.323,
+    "win_rate": 0.324,
+    "fees": 7.86
+   },
+   "per_coin_val": {
+    "OPUSDT": {
+     "trades": 2,
+     "net": -40.18,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.48
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": -23.64,
+     "pf": 0.704,
+     "win_rate": 0.2,
+     "fees": 1.07
+    },
+    "ARBUSDT": {
+     "trades": 3,
+     "net": -59.35,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.45
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": 17.09,
+     "pf": 1.424,
+     "win_rate": 0.333,
+     "fees": 0.72
+    },
+    "DOTUSDT": {
+     "trades": 1,
+     "net": 59.64,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.29
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 31.4,
+     "pf": 2.105,
+     "win_rate": 0.333,
+     "fees": 0.39
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": 100.5,
+     "pf": 5.444,
+     "win_rate": 0.667,
+     "fees": 0.49
+    },
+    "NEARUSDT": {
+     "trades": 2,
+     "net": 38.39,
+     "pf": 2.793,
+     "win_rate": 0.5,
+     "fees": 0.33
+    },
+    "BNBUSDT": {
+     "trades": 3,
+     "net": 71.13,
+     "pf": 4.397,
+     "win_rate": 0.667,
+     "fees": 1.94
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.48,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.55
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -32.93,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.19
+    },
+    "ADAUSDT": {
+     "trades": 1,
+     "net": -20.12,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.1
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": 44.88,
+     "pf": 3.101,
+     "win_rate": 0.667,
+     "fees": 0.31
+    },
+    "BTCUSDT": {
+     "trades": 1,
+     "net": -20.53,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.43
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -0.85,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.05
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 45.29,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.07
+    }
+   }
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 246,
+    "net": 1401.03,
+    "pf": 1.386,
+    "win_rate": 0.329,
+    "fees": 65.85
+   },
+   "validation": {
+    "trades": 40,
+    "net": 117.01,
+    "pf": 1.223,
+    "win_rate": 0.3,
+    "fees": 9.24
+   },
+   "per_coin_val": {
+    "DOTUSDT": {
+     "trades": 1,
+     "net": -20.46,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.37
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": -40.33,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.6
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": -24.02,
+     "pf": 0.7,
+     "win_rate": 0.2,
+     "fees": 1.36
+    },
+    "ARBUSDT": {
+     "trades": 3,
+     "net": -59.34,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.44
+    },
+    "XRPUSDT": {
+     "trades": 4,
+     "net": 78.04,
+     "pf": 2.948,
+     "win_rate": 0.5,
+     "fees": 0.79
+    },
+    "AVAXUSDT": {
+     "trades": 4,
+     "net": -78.37,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.61
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": 100.51,
+     "pf": 5.444,
+     "win_rate": 0.667,
+     "fees": 0.49
+    },
+    "NEARUSDT": {
+     "trades": 2,
+     "net": 38.39,
+     "pf": 2.795,
+     "win_rate": 0.5,
+     "fees": 0.33
+    },
+    "BTCUSDT": {
+     "trades": 2,
+     "net": -41.15,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.25
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -32.45,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.19
+    },
+    "ADAUSDT": {
+     "trades": 3,
+     "net": -59.86,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.86
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 100.43,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.2
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": 42.78,
+     "pf": 3.001,
+     "win_rate": 0.667,
+     "fees": 0.33
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": 53.14,
+     "pf": 8.949,
+     "win_rate": 0.5,
+     "fees": 0.29
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 59.89,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.08
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -0.19,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.05
+    }
+   }
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 287,
+    "net": 1289.01,
+    "pf": 1.333,
+    "win_rate": 0.387,
+    "fees": 140.84
+   },
+   "validation": {
+    "trades": 58,
+    "net": 337.78,
+    "pf": 1.489,
+    "win_rate": 0.414,
+    "fees": 25.94
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 15.43,
+     "pf": 1.708,
+     "win_rate": 0.5,
+     "fees": 2.39
+    },
+    "ETHUSDT": {
+     "trades": 4,
+     "net": 174.44,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.64
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": 28.15,
+     "pf": 1.444,
+     "win_rate": 0.4,
+     "fees": 2.01
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 16.62,
+     "pf": 1.586,
+     "win_rate": 0.333,
+     "fees": 1.4
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": 59.96,
+     "pf": 2.425,
+     "win_rate": 0.5,
+     "fees": 0.87
+    },
+    "ADAUSDT": {
+     "trades": 6,
+     "net": 54.97,
+     "pf": 1.884,
+     "win_rate": 0.5,
+     "fees": 2.93
+    },
+    "LINKUSDT": {
+     "trades": 7,
+     "net": -25.31,
+     "pf": 0.751,
+     "win_rate": 0.286,
+     "fees": 3.68
+    },
+    "AVAXUSDT": {
+     "trades": 4,
+     "net": -79.22,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.32
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -40.44,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 5,
+     "net": 27.62,
+     "pf": 1.433,
+     "win_rate": 0.4,
+     "fees": 2.47
+    },
+    "DOTUSDT": {
+     "trades": 2,
+     "net": -40.25,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.53
+    },
+    "DOGEUSDT": {
+     "trades": 5,
+     "net": 20.79,
+     "pf": 1.335,
+     "win_rate": 0.4,
+     "fees": 1.86
+    },
+    "BNBUSDT": {
+     "trades": 4,
+     "net": 105.35,
+     "pf": 5.602,
+     "win_rate": 0.75,
+     "fees": 2.64
+    },
+    "NEARUSDT": {
+     "trades": 3,
+     "net": -1.07,
+     "pf": 0.974,
+     "win_rate": 0.333,
+     "fees": 1.08
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": 20.75,
+     "pf": 1.986,
+     "win_rate": 0.5,
+     "fees": 0.43
+    }
+   }
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_NAT",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 196,
+    "net": 1245.3,
+    "pf": 1.528,
+    "win_rate": 0.444,
+    "fees": 49.76
+   },
+   "validation": {
+    "trades": 44,
+    "net": 2.07,
+    "pf": 1.004,
+    "win_rate": 0.341,
+    "fees": 9.81
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 5,
+     "net": 14.9,
+     "pf": 1.237,
+     "win_rate": 0.4,
+     "fees": 2.46
+    },
+    "ETHUSDT": {
+     "trades": 2,
+     "net": 81.13,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.36
+    },
+    "BNBUSDT": {
+     "trades": 3,
+     "net": 58.6,
+     "pf": 3.68,
+     "win_rate": 0.667,
+     "fees": 1.08
+    },
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.06,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.38
+    },
+    "NEARUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": -39.94,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.28
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.61,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.66
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": 18.6,
+     "pf": 1.92,
+     "win_rate": 0.5,
+     "fees": 0.47
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": -1.83,
+     "pf": 0.955,
+     "win_rate": 0.333,
+     "fees": 0.52
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": -1.65,
+     "pf": 0.959,
+     "win_rate": 0.333,
+     "fees": 0.37
+    },
+    "ADAUSDT": {
+     "trades": 3,
+     "net": -1.75,
+     "pf": 0.957,
+     "win_rate": 0.333,
+     "fees": 0.46
+    },
+    "DOTUSDT": {
+     "trades": 3,
+     "net": -1.79,
+     "pf": 0.956,
+     "win_rate": 0.333,
+     "fees": 0.49
+    },
+    "SOLUSDT": {
+     "trades": 4,
+     "net": 37.64,
+     "pf": 1.907,
+     "win_rate": 0.5,
+     "fees": 0.9
+    },
+    "DOGEUSDT": {
+     "trades": 4,
+     "net": 37.94,
+     "pf": 1.917,
+     "win_rate": 0.5,
+     "fees": 0.65
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -39.83,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.19
+    },
+    "APTUSDT": {
+     "trades": 1,
+     "net": -20.31,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.25
+    }
+   }
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 289,
+    "net": 1242.42,
+    "pf": 1.317,
+    "win_rate": 0.384,
+    "fees": 141.4
+   },
+   "validation": {
+    "trades": 58,
+    "net": 337.78,
+    "pf": 1.489,
+    "win_rate": 0.414,
+    "fees": 25.94
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 15.43,
+     "pf": 1.708,
+     "win_rate": 0.5,
+     "fees": 2.39
+    },
+    "ETHUSDT": {
+     "trades": 4,
+     "net": 174.44,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.64
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": 28.15,
+     "pf": 1.444,
+     "win_rate": 0.4,
+     "fees": 2.01
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 16.62,
+     "pf": 1.586,
+     "win_rate": 0.333,
+     "fees": 1.4
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": 59.96,
+     "pf": 2.425,
+     "win_rate": 0.5,
+     "fees": 0.87
+    },
+    "ADAUSDT": {
+     "trades": 6,
+     "net": 54.97,
+     "pf": 1.884,
+     "win_rate": 0.5,
+     "fees": 2.93
+    },
+    "LINKUSDT": {
+     "trades": 7,
+     "net": -25.31,
+     "pf": 0.751,
+     "win_rate": 0.286,
+     "fees": 3.68
+    },
+    "AVAXUSDT": {
+     "trades": 4,
+     "net": -79.22,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.32
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -40.44,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 5,
+     "net": 27.62,
+     "pf": 1.433,
+     "win_rate": 0.4,
+     "fees": 2.47
+    },
+    "DOTUSDT": {
+     "trades": 2,
+     "net": -40.25,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.53
+    },
+    "DOGEUSDT": {
+     "trades": 5,
+     "net": 20.79,
+     "pf": 1.335,
+     "win_rate": 0.4,
+     "fees": 1.86
+    },
+    "BNBUSDT": {
+     "trades": 4,
+     "net": 105.35,
+     "pf": 5.602,
+     "win_rate": 0.75,
+     "fees": 2.64
+    },
+    "NEARUSDT": {
+     "trades": 3,
+     "net": -1.07,
+     "pf": 0.974,
+     "win_rate": 0.333,
+     "fees": 1.08
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": 20.75,
+     "pf": 1.986,
+     "win_rate": 0.5,
+     "fees": 0.43
+    }
+   }
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 281,
+    "net": 1240.83,
+    "pf": 1.301,
+    "win_rate": 0.313,
+    "fees": 121.85
+   },
+   "validation": {
+    "trades": 76,
+    "net": 896.04,
+    "pf": 1.944,
+    "win_rate": 0.408,
+    "fees": 34.96
+   },
+   "per_coin_val": {
+    "LINKUSDT": {
+     "trades": 6,
+     "net": 33.22,
+     "pf": 1.402,
+     "win_rate": 0.333,
+     "fees": 2.46
+    },
+    "NEARUSDT": {
+     "trades": 7,
+     "net": 12.25,
+     "pf": 1.121,
+     "win_rate": 0.286,
+     "fees": 2.64
+    },
+    "BTCUSDT": {
+     "trades": 6,
+     "net": -59.75,
+     "pf": 0.405,
+     "win_rate": 0.167,
+     "fees": 5.04
+    },
+    "SUIUSDT": {
+     "trades": 5,
+     "net": -23.76,
+     "pf": 0.698,
+     "win_rate": 0.2,
+     "fees": 1.15
+    },
+    "XRPUSDT": {
+     "trades": 7,
+     "net": 94.34,
+     "pf": 2.136,
+     "win_rate": 0.429,
+     "fees": 3.11
+    },
+    "DOTUSDT": {
+     "trades": 7,
+     "net": 94.53,
+     "pf": 2.088,
+     "win_rate": 0.429,
+     "fees": 3.06
+    },
+    "BNBUSDT": {
+     "trades": 5,
+     "net": 48.36,
+     "pf": 1.724,
+     "win_rate": 0.4,
+     "fees": 4.35
+    },
+    "ARBUSDT": {
+     "trades": 3,
+     "net": 100.07,
+     "pf": 5.412,
+     "win_rate": 0.667,
+     "fees": 0.83
+    },
+    "DOGEUSDT": {
+     "trades": 7,
+     "net": 183.62,
+     "pf": 3.614,
+     "win_rate": 0.571,
+     "fees": 3.51
+    },
+    "OPUSDT": {
+     "trades": 5,
+     "net": 54.97,
+     "pf": 1.83,
+     "win_rate": 0.4,
+     "fees": 2.06
+    },
+    "APTUSDT": {
+     "trades": 3,
+     "net": -59.72,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.75
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": 140.8,
+     "pf": 4.107,
+     "win_rate": 0.6,
+     "fees": 2.36
+    },
+    "ADAUSDT": {
+     "trades": 4,
+     "net": 77.23,
+     "pf": 2.813,
+     "win_rate": 0.5,
+     "fees": 1.44
+    },
+    "LTCUSDT": {
+     "trades": 4,
+     "net": 77.01,
+     "pf": 2.804,
+     "win_rate": 0.5,
+     "fees": 1.64
+    },
+    "ETHUSDT": {
+     "trades": 2,
+     "net": 122.88,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.56
+    }
+   }
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 346,
+    "net": 1204.4,
+    "pf": 1.234,
+    "win_rate": 0.303,
+    "fees": 163.96
+   },
+   "validation": {
+    "trades": 89,
+    "net": 775.3,
+    "pf": 1.657,
+    "win_rate": 0.371,
+    "fees": 44.53
+   },
+   "per_coin_val": {
+    "LINKUSDT": {
+     "trades": 8,
+     "net": 71.87,
+     "pf": 1.675,
+     "win_rate": 0.375,
+     "fees": 3.64
+    },
+    "NEARUSDT": {
+     "trades": 7,
+     "net": 12.37,
+     "pf": 1.122,
+     "win_rate": 0.286,
+     "fees": 2.55
+    },
+    "BTCUSDT": {
+     "trades": 8,
+     "net": -106.78,
+     "pf": 0.232,
+     "win_rate": 0.125,
+     "fees": 7.02
+    },
+    "SUIUSDT": {
+     "trades": 6,
+     "net": -44.18,
+     "pf": 0.55,
+     "win_rate": 0.167,
+     "fees": 1.83
+    },
+    "XRPUSDT": {
+     "trades": 7,
+     "net": 94.44,
+     "pf": 2.135,
+     "win_rate": 0.429,
+     "fees": 3.04
+    },
+    "DOGEUSDT": {
+     "trades": 9,
+     "net": 134.61,
+     "pf": 2.199,
+     "win_rate": 0.444,
+     "fees": 4.99
+    },
+    "DOTUSDT": {
+     "trades": 7,
+     "net": 93.5,
+     "pf": 2.101,
+     "win_rate": 0.429,
+     "fees": 3.78
+    },
+    "BNBUSDT": {
+     "trades": 5,
+     "net": 52.09,
+     "pf": 1.775,
+     "win_rate": 0.4,
+     "fees": 4.42
+    },
+    "LTCUSDT": {
+     "trades": 5,
+     "net": 54.79,
+     "pf": 1.84,
+     "win_rate": 0.4,
+     "fees": 2.16
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": 77.26,
+     "pf": 2.763,
+     "win_rate": 0.5,
+     "fees": 1.46
+    },
+    "OPUSDT": {
+     "trades": 6,
+     "net": 32.72,
+     "pf": 1.376,
+     "win_rate": 0.333,
+     "fees": 2.96
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": 141.16,
+     "pf": 4.099,
+     "win_rate": 0.6,
+     "fees": 2.07
+    },
+    "APTUSDT": {
+     "trades": 4,
+     "net": -79.33,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.41
+    },
+    "ADAUSDT": {
+     "trades": 5,
+     "net": 140.93,
+     "pf": 4.212,
+     "win_rate": 0.6,
+     "fees": 2.18
+    },
+    "ETHUSDT": {
+     "trades": 3,
+     "net": 99.86,
+     "pf": 5.358,
+     "win_rate": 0.667,
+     "fees": 1.01
+    }
+   }
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_NAT",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 174,
+    "net": 1038.79,
+    "pf": 1.492,
+    "win_rate": 0.437,
+    "fees": 41.8
+   },
+   "validation": {
+    "trades": 30,
+    "net": -52.07,
+    "pf": 0.872,
+    "win_rate": 0.3,
+    "fees": 5.77
+   },
+   "per_coin_val": {
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.0,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.33
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.39,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.48
+    },
+    "ADAUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "BTCUSDT": {
+     "trades": 1,
+     "net": -20.7,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.56
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": 18.8,
+     "pf": 1.932,
+     "win_rate": 0.5,
+     "fees": 0.31
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": -26.41,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.32
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": 59.15,
+     "pf": 3.939,
+     "win_rate": 0.667,
+     "fees": 0.63
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": -1.68,
+     "pf": 0.959,
+     "win_rate": 0.333,
+     "fees": 0.4
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": -1.65,
+     "pf": 0.959,
+     "win_rate": 0.333,
+     "fees": 0.38
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -39.83,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.19
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 80.07,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.18
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 39.91,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.07
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": 39.8,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.15
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -20.18,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.15
+    }
+   }
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_15R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 219,
+    "net": 945.58,
+    "pf": 1.396,
+    "win_rate": 0.493,
+    "fees": 54.78
+   },
+   "validation": {
+    "trades": 49,
+    "net": 53.17,
+    "pf": 1.093,
+    "win_rate": 0.429,
+    "fees": 10.97
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 6,
+     "net": -24.84,
+     "pf": 0.697,
+     "win_rate": 0.333,
+     "fees": 2.74
+    },
+    "ETHUSDT": {
+     "trades": 3,
+     "net": 92.13,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.45
+    },
+    "BNBUSDT": {
+     "trades": 3,
+     "net": 38.22,
+     "pf": 2.772,
+     "win_rate": 0.667,
+     "fees": 1.16
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 38.94,
+     "pf": 2.88,
+     "win_rate": 0.667,
+     "fees": 0.59
+    },
+    "DOTUSDT": {
+     "trades": 4,
+     "net": 18.05,
+     "pf": 1.432,
+     "win_rate": 0.5,
+     "fees": 0.67
+    },
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.06,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.38
+    },
+    "NEARUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": -39.94,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.28
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.61,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.66
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": -11.42,
+     "pf": 0.718,
+     "win_rate": 0.333,
+     "fees": 0.51
+    },
+    "LINKUSDT": {
+     "trades": 4,
+     "net": 17.96,
+     "pf": 1.438,
+     "win_rate": 0.5,
+     "fees": 0.75
+    },
+    "ADAUSDT": {
+     "trades": 3,
+     "net": 39.07,
+     "pf": 2.942,
+     "win_rate": 0.667,
+     "fees": 0.47
+    },
+    "SOLUSDT": {
+     "trades": 4,
+     "net": 17.75,
+     "pf": 1.432,
+     "win_rate": 0.5,
+     "fees": 0.91
+    },
+    "DOGEUSDT": {
+     "trades": 4,
+     "net": 18.09,
+     "pf": 1.441,
+     "win_rate": 0.5,
+     "fees": 0.64
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": 9.14,
+     "pf": 1.456,
+     "win_rate": 0.5,
+     "fees": 0.21
+    },
+    "APTUSDT": {
+     "trades": 1,
+     "net": -20.31,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.25
+    }
+   }
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_NAT",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 146,
+    "net": 828.93,
+    "pf": 1.474,
+    "win_rate": 0.432,
+    "fees": 31.97
+   },
+   "validation": {
+    "trades": 22,
+    "net": -12.84,
+    "pf": 0.956,
+    "win_rate": 0.318,
+    "fees": 4.06
+   },
+   "per_coin_val": {
+    "APTUSDT": {
+     "trades": 2,
+     "net": -39.95,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.29
+    },
+    "XRPUSDT": {
+     "trades": 2,
+     "net": 18.59,
+     "pf": 1.919,
+     "win_rate": 0.5,
+     "fees": 0.48
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": 18.78,
+     "pf": 1.93,
+     "win_rate": 0.5,
+     "fees": 0.33
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": -26.94,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.33
+    },
+    "LINKUSDT": {
+     "trades": 2,
+     "net": 18.9,
+     "pf": 1.941,
+     "win_rate": 0.5,
+     "fees": 0.24
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": -1.66,
+     "pf": 0.959,
+     "win_rate": 0.333,
+     "fees": 0.38
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -39.86,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.21
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 80.04,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.2
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": -20.15,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.12
+    },
+    "AVAXUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.11,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.09
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 39.91,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.07
+    }
+   }
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_15R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 154,
+    "net": 805.35,
+    "pf": 1.503,
+    "win_rate": 0.506,
+    "fees": 34.11
+   },
+   "validation": {
+    "trades": 25,
+    "net": -57.62,
+    "pf": 0.822,
+    "win_rate": 0.36,
+    "fees": 4.48
+   },
+   "per_coin_val": {
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 39.09,
+     "pf": 2.888,
+     "win_rate": 0.667,
+     "fees": 0.46
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -39.95,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.29
+    },
+    "XRPUSDT": {
+     "trades": 2,
+     "net": 8.79,
+     "pf": 1.435,
+     "win_rate": 0.5,
+     "fees": 0.48
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": 8.99,
+     "pf": 1.445,
+     "win_rate": 0.5,
+     "fees": 0.32
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": -11.23,
+     "pf": 0.722,
+     "win_rate": 0.333,
+     "fees": 0.36
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": -11.25,
+     "pf": 0.721,
+     "win_rate": 0.333,
+     "fees": 0.38
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -39.86,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.21
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 59.37,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.19
+    },
+    "ETHUSDT": {
+     "trades": 2,
+     "net": 9.08,
+     "pf": 1.436,
+     "win_rate": 0.5,
+     "fees": 0.26
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": -20.15,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.12
+    },
+    "AVAXUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.11,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.09
+    }
+   }
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 291,
+    "net": 728.24,
+    "pf": 1.215,
+    "win_rate": 0.46,
+    "fees": 139.5
+   },
+   "validation": {
+    "trades": 58,
+    "net": 361.85,
+    "pf": 1.648,
+    "win_rate": 0.534,
+    "fees": 25.99
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 6.36,
+     "pf": 1.292,
+     "win_rate": 0.5,
+     "fees": 2.39
+    },
+    "ETHUSDT": {
+     "trades": 4,
+     "net": 123.38,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.6
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": -3.91,
+     "pf": 0.937,
+     "win_rate": 0.4,
+     "fees": 1.97
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 37.9,
+     "pf": 2.766,
+     "win_rate": 0.667,
+     "fees": 1.39
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": 17.83,
+     "pf": 1.434,
+     "win_rate": 0.5,
+     "fees": 0.84
+    },
+    "DOGEUSDT": {
+     "trades": 5,
+     "net": 156.57,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 2.03
+    },
+    "ADAUSDT": {
+     "trades": 6,
+     "net": 24.71,
+     "pf": 1.4,
+     "win_rate": 0.5,
+     "fees": 2.9
+    },
+    "LINKUSDT": {
+     "trades": 7,
+     "net": 3.16,
+     "pf": 1.038,
+     "win_rate": 0.429,
+     "fees": 3.78
+    },
+    "AVAXUSDT": {
+     "trades": 4,
+     "net": -32.26,
+     "pf": 0.464,
+     "win_rate": 0.25,
+     "fees": 1.34
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -40.44,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 5,
+     "net": -4.47,
+     "pf": 0.928,
+     "win_rate": 0.4,
+     "fees": 2.42
+    },
+    "DOTUSDT": {
+     "trades": 2,
+     "net": 8.7,
+     "pf": 1.429,
+     "win_rate": 0.5,
+     "fees": 0.55
+    },
+    "BNBUSDT": {
+     "trades": 4,
+     "net": 67.56,
+     "pf": 4.056,
+     "win_rate": 0.75,
+     "fees": 2.59
+    },
+    "NEARUSDT": {
+     "trades": 3,
+     "net": -12.13,
+     "pf": 0.704,
+     "win_rate": 0.333,
+     "fees": 1.08
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": 8.88,
+     "pf": 1.427,
+     "win_rate": 0.5,
+     "fees": 0.42
+    }
+   }
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 289,
+    "net": 720.41,
+    "pf": 1.214,
+    "win_rate": 0.46,
+    "fees": 139.01
+   },
+   "validation": {
+    "trades": 58,
+    "net": 361.85,
+    "pf": 1.648,
+    "win_rate": 0.534,
+    "fees": 25.99
+   },
+   "per_coin_val": {
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 6.36,
+     "pf": 1.292,
+     "win_rate": 0.5,
+     "fees": 2.39
+    },
+    "ETHUSDT": {
+     "trades": 4,
+     "net": 123.38,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.6
+    },
+    "SOLUSDT": {
+     "trades": 5,
+     "net": -3.91,
+     "pf": 0.937,
+     "win_rate": 0.4,
+     "fees": 1.97
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 37.9,
+     "pf": 2.766,
+     "win_rate": 0.667,
+     "fees": 1.39
+    },
+    "ARBUSDT": {
+     "trades": 4,
+     "net": 17.83,
+     "pf": 1.434,
+     "win_rate": 0.5,
+     "fees": 0.84
+    },
+    "DOGEUSDT": {
+     "trades": 5,
+     "net": 156.57,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 2.03
+    },
+    "ADAUSDT": {
+     "trades": 6,
+     "net": 24.71,
+     "pf": 1.4,
+     "win_rate": 0.5,
+     "fees": 2.9
+    },
+    "LINKUSDT": {
+     "trades": 7,
+     "net": 3.16,
+     "pf": 1.038,
+     "win_rate": 0.429,
+     "fees": 3.78
+    },
+    "AVAXUSDT": {
+     "trades": 4,
+     "net": -32.26,
+     "pf": 0.464,
+     "win_rate": 0.25,
+     "fees": 1.34
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -40.44,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.68
+    },
+    "XRPUSDT": {
+     "trades": 5,
+     "net": -4.47,
+     "pf": 0.928,
+     "win_rate": 0.4,
+     "fees": 2.42
+    },
+    "DOTUSDT": {
+     "trades": 2,
+     "net": 8.7,
+     "pf": 1.429,
+     "win_rate": 0.5,
+     "fees": 0.55
+    },
+    "BNBUSDT": {
+     "trades": 4,
+     "net": 67.56,
+     "pf": 4.056,
+     "win_rate": 0.75,
+     "fees": 2.59
+    },
+    "NEARUSDT": {
+     "trades": 3,
+     "net": -12.13,
+     "pf": 0.704,
+     "win_rate": 0.333,
+     "fees": 1.08
+    },
+    "OPUSDT": {
+     "trades": 2,
+     "net": 8.88,
+     "pf": 1.427,
+     "win_rate": 0.5,
+     "fees": 0.42
+    }
+   }
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_15R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 185,
+    "net": 654.15,
+    "pf": 1.318,
+    "win_rate": 0.476,
+    "fees": 43.61
+   },
+   "validation": {
+    "trades": 32,
+    "net": -48.36,
+    "pf": 0.88,
+    "win_rate": 0.375,
+    "fees": 6.09
+   },
+   "per_coin_val": {
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 39.1,
+     "pf": 2.888,
+     "win_rate": 0.667,
+     "fees": 0.46
+    },
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.0,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.33
+    },
+    "AVAXUSDT": {
+     "trades": 3,
+     "net": -59.39,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.48
+    },
+    "ADAUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -39.98,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.31
+    },
+    "BTCUSDT": {
+     "trades": 1,
+     "net": -20.7,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.56
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": 9.01,
+     "pf": 1.446,
+     "win_rate": 0.5,
+     "fees": 0.31
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": 38.88,
+     "pf": 2.932,
+     "win_rate": 0.667,
+     "fees": 0.62
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": -11.28,
+     "pf": 0.721,
+     "win_rate": 0.333,
+     "fees": 0.4
+    },
+    "DOGEUSDT": {
+     "trades": 3,
+     "net": -11.25,
+     "pf": 0.722,
+     "win_rate": 0.333,
+     "fees": 0.37
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": 9.14,
+     "pf": 1.456,
+     "win_rate": 0.5,
+     "fees": 0.21
+    },
+    "BNBUSDT": {
+     "trades": 2,
+     "net": 59.4,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.17
+    },
+    "ETHUSDT": {
+     "trades": 2,
+     "net": 9.05,
+     "pf": 1.434,
+     "win_rate": 0.5,
+     "fees": 0.28
+    },
+    "OPUSDT": {
+     "trades": 1,
+     "net": 29.81,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.15
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -20.18,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.15
+    }
+   }
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 137,
+    "net": 644.05,
+    "pf": 1.326,
+    "win_rate": 0.314,
+    "fees": 35.17
+   },
+   "validation": {
+    "trades": 26,
+    "net": -262.03,
+    "pf": 0.391,
+    "win_rate": 0.154,
+    "fees": 5.87
+   },
+   "per_coin_val": {
+    "SOLUSDT": {
+     "trades": 4,
+     "net": -78.72,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.9
+    },
+    "ARBUSDT": {
+     "trades": 1,
+     "net": -20.3,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.24
+    },
+    "DOGEUSDT": {
+     "trades": 1,
+     "net": -20.22,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.18
+    },
+    "XRPUSDT": {
+     "trades": 3,
+     "net": 17.09,
+     "pf": 1.424,
+     "win_rate": 0.333,
+     "fees": 0.72
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "LTCUSDT": {
+     "trades": 3,
+     "net": 31.13,
+     "pf": 2.091,
+     "win_rate": 0.333,
+     "fees": 0.61
+    },
+    "LINKUSDT": {
+     "trades": 3,
+     "net": -34.09,
+     "pf": 0.148,
+     "win_rate": 0.333,
+     "fees": 0.39
+    },
+    "BNBUSDT": {
+     "trades": 1,
+     "net": -20.94,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.75
+    },
+    "ADAUSDT": {
+     "trades": 1,
+     "net": -20.12,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.09
+    },
+    "APTUSDT": {
+     "trades": 2,
+     "net": -39.95,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.29
+    },
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.31,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.58
+    },
+    "AVAXUSDT": {
+     "trades": 2,
+     "net": -40.15,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.44
+    },
+    "BTCUSDT": {
+     "trades": 1,
+     "net": -20.53,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.43
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 45.29,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.07
+    }
+   }
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 79,
+    "net": 628.88,
+    "pf": 1.591,
+    "win_rate": 0.354,
+    "fees": 18.16
+   },
+   "validation": {
+    "trades": 11,
+    "net": -64.44,
+    "pf": 0.617,
+    "win_rate": 0.182,
+    "fees": 1.99
+   },
+   "per_coin_val": {
+    "XRPUSDT": {
+     "trades": 2,
+     "net": 38.17,
+     "pf": 2.886,
+     "win_rate": 0.5,
+     "fees": 0.49
+    },
+    "LINKUSDT": {
+     "trades": 2,
+     "net": -40.0,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.32
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": -26.93,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.33
+    },
+    "SOLUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.37,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.3
+    },
+    "APTUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "AVAXUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 45.29,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.07
+    }
+   }
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_NAT",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 86,
+    "net": 468.77,
+    "pf": 1.461,
+    "win_rate": 0.43,
+    "fees": 20.07
+   },
+   "validation": {
+    "trades": 11,
+    "net": -89.4,
+    "pf": 0.468,
+    "win_rate": 0.182,
+    "fees": 1.98
+   },
+   "per_coin_val": {
+    "XRPUSDT": {
+     "trades": 2,
+     "net": 18.59,
+     "pf": 1.919,
+     "win_rate": 0.5,
+     "fees": 0.48
+    },
+    "LINKUSDT": {
+     "trades": 2,
+     "net": -40.0,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.32
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": -26.93,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.33
+    },
+    "SOLUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.37,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.3
+    },
+    "APTUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "AVAXUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 39.91,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.07
+    }
+   }
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_15R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 89,
+    "net": 443.72,
+    "pf": 1.486,
+    "win_rate": 0.506,
+    "fees": 21.07
+   },
+   "validation": {
+    "trades": 11,
+    "net": -73.29,
+    "pf": 0.546,
+    "win_rate": 0.273,
+    "fees": 1.99
+   },
+   "per_coin_val": {
+    "XRPUSDT": {
+     "trades": 2,
+     "net": 8.79,
+     "pf": 1.435,
+     "win_rate": 0.5,
+     "fees": 0.48
+    },
+    "LINKUSDT": {
+     "trades": 2,
+     "net": -40.0,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.32
+    },
+    "LTCUSDT": {
+     "trades": 2,
+     "net": 8.96,
+     "pf": 1.443,
+     "win_rate": 0.5,
+     "fees": 0.34
+    },
+    "SOLUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.37,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.3
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": 29.92,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.06
+    },
+    "APTUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "AVAXUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    }
+   }
+  },
+  {
+   "vid": "COMBO_01|LONG|1d|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 93,
+    "net": 387.04,
+    "pf": 1.297,
+    "win_rate": 0.312,
+    "fees": 16.02
+   },
+   "validation": {
+    "trades": 10,
+    "net": -47.33,
+    "pf": 0.632,
+    "win_rate": 0.3,
+    "fees": 2.22
+   },
+   "per_coin_val": {
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.09,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.07
+    },
+    "XRPUSDT": {
+     "trades": 1,
+     "net": 59.44,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.45
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -11.0,
+     "pf": 0.463,
+     "win_rate": 0.5,
+     "fees": 0.46
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": -7.95,
+     "pf": 0.608,
+     "win_rate": 0.5,
+     "fees": 0.34
+    },
+    "DOTUSDT": {
+     "trades": 1,
+     "net": -20.26,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.21
+    },
+    "DOGEUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": -20.42,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.34
+    },
+    "BNBUSDT": {
+     "trades": 1,
+     "net": -6.85,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.2
+    }
+   }
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|1d|RF1|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 93,
+    "net": 387.04,
+    "pf": 1.297,
+    "win_rate": 0.312,
+    "fees": 16.02
+   },
+   "validation": {
+    "trades": 10,
+    "net": -47.33,
+    "pf": 0.632,
+    "win_rate": 0.3,
+    "fees": 2.22
+   },
+   "per_coin_val": {
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.09,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.07
+    },
+    "XRPUSDT": {
+     "trades": 1,
+     "net": 59.44,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.45
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -11.0,
+     "pf": 0.463,
+     "win_rate": 0.5,
+     "fees": 0.46
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": -7.95,
+     "pf": 0.608,
+     "win_rate": 0.5,
+     "fees": 0.34
+    },
+    "DOTUSDT": {
+     "trades": 1,
+     "net": -20.26,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.21
+    },
+    "DOGEUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    },
+    "ETHUSDT": {
+     "trades": 1,
+     "net": -20.42,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.34
+    },
+    "BNBUSDT": {
+     "trades": 1,
+     "net": -6.85,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.2
+    }
+   }
+  },
+  {
+   "vid": "COMBO_01|LONG|1d|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 79,
+    "net": 310.95,
+    "pf": 1.279,
+    "win_rate": 0.304,
+    "fees": 12.87
+   },
+   "validation": {
+    "trades": 8,
+    "net": -20.06,
+    "pf": 0.802,
+    "win_rate": 0.375,
+    "fees": 1.68
+   },
+   "per_coin_val": {
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.09,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.07
+    },
+    "XRPUSDT": {
+     "trades": 1,
+     "net": 59.44,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.45
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -11.0,
+     "pf": 0.463,
+     "win_rate": 0.5,
+     "fees": 0.46
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": -7.95,
+     "pf": 0.608,
+     "win_rate": 0.5,
+     "fees": 0.34
+    },
+    "DOTUSDT": {
+     "trades": 1,
+     "net": -20.26,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.21
+    },
+    "DOGEUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    }
+   }
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|1d|RF2|X_3R",
+   "family": "LONG_CONT",
+   "research": {
+    "trades": 78,
+    "net": 252.55,
+    "pf": 1.227,
+    "win_rate": 0.295,
+    "fees": 12.7
+   },
+   "validation": {
+    "trades": 8,
+    "net": -20.06,
+    "pf": 0.802,
+    "win_rate": 0.375,
+    "fees": 1.68
+   },
+   "per_coin_val": {
+    "SUIUSDT": {
+     "trades": 1,
+     "net": -20.09,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.07
+    },
+    "XRPUSDT": {
+     "trades": 1,
+     "net": 59.44,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.45
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": -11.0,
+     "pf": 0.463,
+     "win_rate": 0.5,
+     "fees": 0.46
+    },
+    "SOLUSDT": {
+     "trades": 2,
+     "net": -7.95,
+     "pf": 0.608,
+     "win_rate": 0.5,
+     "fees": 0.34
+    },
+    "DOTUSDT": {
+     "trades": 1,
+     "net": -20.26,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.21
+    },
+    "DOGEUSDT": {
+     "trades": 1,
+     "net": -20.2,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.16
+    }
+   }
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|SHORT|1h|RF1|X_3R",
+   "family": "SHORT_CONT",
+   "research": {
+    "trades": 471,
+    "net": 1577.42,
+    "pf": 1.231,
+    "win_rate": 0.316,
+    "fees": 325.45
+   },
+   "validation": {
+    "trades": 115,
+    "net": -486.3,
+    "pf": 0.73,
+    "win_rate": 0.226,
+    "fees": 71.23
+   },
+   "per_coin_val": {
+    "ADAUSDT": {
+     "trades": 8,
+     "net": -157.02,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 6.74
+    },
+    "SOLUSDT": {
+     "trades": 6,
+     "net": -117.69,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 2.98
+    },
+    "DOTUSDT": {
+     "trades": 8,
+     "net": -84.09,
+     "pf": 0.408,
+     "win_rate": 0.125,
+     "fees": 3.63
+    },
+    "LTCUSDT": {
+     "trades": 9,
+     "net": -143.16,
+     "pf": 0.086,
+     "win_rate": 0.111,
+     "fees": 8.19
+    },
+    "DOGEUSDT": {
+     "trades": 9,
+     "net": -31.94,
+     "pf": 0.782,
+     "win_rate": 0.222,
+     "fees": 6.0
+    },
+    "ARBUSDT": {
+     "trades": 10,
+     "net": 112.26,
+     "pf": 1.875,
+     "win_rate": 0.4,
+     "fees": 4.61
+    },
+    "XRPUSDT": {
+     "trades": 8,
+     "net": -128.48,
+     "pf": 0.057,
+     "win_rate": 0.125,
+     "fees": 5.73
+    },
+    "ETHUSDT": {
+     "trades": 2,
+     "net": 37.38,
+     "pf": 2.818,
+     "win_rate": 0.5,
+     "fees": 1.11
+    },
+    "LINKUSDT": {
+     "trades": 8,
+     "net": -9.3,
+     "pf": 0.925,
+     "win_rate": 0.25,
+     "fees": 3.69
+    },
+    "NEARUSDT": {
+     "trades": 12,
+     "net": -168.27,
+     "pf": 0.18,
+     "win_rate": 0.083,
+     "fees": 6.47
+    },
+    "OPUSDT": {
+     "trades": 10,
+     "net": 28.39,
+     "pf": 1.182,
+     "win_rate": 0.3,
+     "fees": 4.61
+    },
+    "BNBUSDT": {
+     "trades": 3,
+     "net": 96.27,
+     "pf": 5.08,
+     "win_rate": 0.667,
+     "fees": 3.87
+    },
+    "BTCUSDT": {
+     "trades": 3,
+     "net": 41.0,
+     "pf": 2.771,
+     "win_rate": 0.667,
+     "fees": 3.85
+    },
+    "SUIUSDT": {
+     "trades": 9,
+     "net": 73.72,
+     "pf": 1.653,
+     "win_rate": 0.444,
+     "fees": 4.68
+    },
+    "APTUSDT": {
+     "trades": 10,
+     "net": -35.37,
+     "pf": 0.763,
+     "win_rate": 0.2,
+     "fees": 5.06
+    }
+   }
+  },
+  {
+   "vid": "CANDLE12_V2|SHORT|1h|RF1|X_3R",
+   "family": "SHORT_CONT",
+   "research": {
+    "trades": 196,
+    "net": 883.16,
+    "pf": 1.32,
+    "win_rate": 0.327,
+    "fees": 144.68
+   },
+   "validation": {
+    "trades": 27,
+    "net": -72.91,
+    "pf": 0.825,
+    "win_rate": 0.222,
+    "fees": 14.77
+   },
+   "per_coin_val": {
+    "DOTUSDT": {
+     "trades": 3,
+     "net": -61.07,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.86
+    },
+    "ARBUSDT": {
+     "trades": 2,
+     "net": 37.65,
+     "pf": 2.722,
+     "win_rate": 0.5,
+     "fees": 0.93
+    },
+    "OPUSDT": {
+     "trades": 4,
+     "net": -4.36,
+     "pf": 0.932,
+     "win_rate": 0.25,
+     "fees": 1.66
+    },
+    "APTUSDT": {
+     "trades": 3,
+     "net": 16.52,
+     "pf": 1.384,
+     "win_rate": 0.333,
+     "fees": 1.23
+    },
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 57.74,
+     "pf": 41.615,
+     "win_rate": 0.5,
+     "fees": 1.34
+    },
+    "DOGEUSDT": {
+     "trades": 2,
+     "net": -40.55,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.77
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -21.7,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.36
+    },
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.35,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.61
+    },
+    "ADAUSDT": {
+     "trades": 3,
+     "net": -60.73,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.56
+    },
+    "BNBUSDT": {
+     "trades": 1,
+     "net": 46.28,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.58
+    },
+    "LTCUSDT": {
+     "trades": 1,
+     "net": 59.23,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.62
+    },
+    "SOLUSDT": {
+     "trades": 1,
+     "net": -20.61,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.48
+    },
+    "LINKUSDT": {
+     "trades": 1,
+     "net": -20.57,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.46
+    },
+    "XRPUSDT": {
+     "trades": 1,
+     "net": -20.41,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.32
+    }
+   }
+  },
+  {
+   "vid": "CANDLE12_V2|SHORT|1h|RF1|X_NAT",
+   "family": "SHORT_CONT",
+   "research": {
+    "trades": 200,
+    "net": 725.02,
+    "pf": 1.284,
+    "win_rate": 0.385,
+    "fees": 148.94
+   },
+   "validation": {
+    "trades": 27,
+    "net": -118.44,
+    "pf": 0.661,
+    "win_rate": 0.333,
+    "fees": 14.55
+   },
+   "per_coin_val": {
+    "DOTUSDT": {
+     "trades": 3,
+     "net": -28.42,
+     "pf": 0.319,
+     "win_rate": 0.333,
+     "fees": 1.85
+    },
+    "ARBUSDT": {
+     "trades": 3,
+     "net": 85.38,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.12
+    },
+    "BTCUSDT": {
+     "trades": 2,
+     "net": 1.88,
+     "pf": 2.396,
+     "win_rate": 0.5,
+     "fees": 1.33
+    },
+    "APTUSDT": {
+     "trades": 3,
+     "net": -26.06,
+     "pf": 0.368,
+     "win_rate": 0.333,
+     "fees": 1.21
+    },
+    "OPUSDT": {
+     "trades": 3,
+     "net": -60.41,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.3
+    },
+    "DOGEUSDT": {
+     "trades": 2,
+     "net": 28.03,
+     "pf": 2.36,
+     "win_rate": 0.5,
+     "fees": 0.74
+    },
+    "NEARUSDT": {
+     "trades": 1,
+     "net": -21.7,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.36
+    },
+    "SUIUSDT": {
+     "trades": 2,
+     "net": -40.35,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.61
+    },
+    "ADAUSDT": {
+     "trades": 3,
+     "net": -60.73,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 1.56
+    },
+    "LTCUSDT": {
+     "trades": 1,
+     "net": 38.07,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 0.63
+    },
+    "BNBUSDT": {
+     "trades": 1,
+     "net": 27.45,
+     "pf": 99.0,
+     "win_rate": 1.0,
+     "fees": 1.59
+    },
+    "SOLUSDT": {
+     "trades": 1,
+     "net": -20.61,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.48
+    },
+    "LINKUSDT": {
+     "trades": 1,
+     "net": -20.57,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.46
+    },
+    "XRPUSDT": {
+     "trades": 1,
+     "net": -20.41,
+     "pf": 0.0,
+     "win_rate": 0.0,
+     "fees": 0.32
+    }
+   }
+  }
+ ],
+ "eligible_cells": [
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 54.31,
+   "val_trades": 5,
+   "res_net": 183.52,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 123.1,
+   "val_trades": 2,
+   "res_net": 68.33,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 122.42,
+   "val_trades": 2,
+   "res_net": 50.52,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 38.19,
+   "val_trades": 2,
+   "res_net": 114.2,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 17.37,
+   "val_trades": 3,
+   "res_net": 277.86,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 17.54,
+   "val_trades": 3,
+   "res_net": 92.27,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 17.44,
+   "val_trades": 3,
+   "res_net": 133.9,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 17.3,
+   "val_trades": 3,
+   "res_net": 154.68,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 78.24,
+   "val_trades": 4,
+   "res_net": 202.49,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 38.17,
+   "val_trades": 2,
+   "res_net": 132.79,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 38.37,
+   "val_trades": 2,
+   "res_net": 227.85,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 38.48,
+   "val_trades": 2,
+   "res_net": 186.24,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 17.54,
+   "val_trades": 3,
+   "res_net": 114.73,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 45.29,
+   "val_trades": 1,
+   "res_net": 118.24,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 35.69,
+   "val_trades": 2,
+   "res_net": 91.68,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 189.3,
+   "val_trades": 3,
+   "res_net": 64.21,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF2_X_3R",
+   "priority": 0
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 30.54,
+   "val_trades": 3,
+   "res_net": 1.5,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 68.72,
+   "val_trades": 6,
+   "res_net": 289.48,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 54.38,
+   "val_trades": 5,
+   "res_net": 204.66,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 187.72,
+   "val_trades": 3,
+   "res_net": 217.16,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF2_X_3R",
+   "priority": 1
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 37.63,
+   "val_trades": 2,
+   "res_net": 186.97,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 35.69,
+   "val_trades": 2,
+   "res_net": 91.68,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 189.3,
+   "val_trades": 3,
+   "res_net": 64.21,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 30.54,
+   "val_trades": 3,
+   "res_net": 1.5,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 68.72,
+   "val_trades": 6,
+   "res_net": 289.48,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 54.38,
+   "val_trades": 5,
+   "res_net": 204.66,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 187.72,
+   "val_trades": 3,
+   "res_net": 217.16,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 37.63,
+   "val_trades": 2,
+   "res_net": 186.97,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 100.78,
+   "val_trades": 6,
+   "res_net": 53.18,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "priority": 5
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 99.39,
+   "val_trades": 3,
+   "res_net": 168.67,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "priority": 7
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 165.03,
+   "val_trades": 4,
+   "res_net": 190.32,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 33.76,
+   "val_trades": 6,
+   "res_net": 540.31,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 132.61,
+   "val_trades": 7,
+   "res_net": 310.59,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 31.94,
+   "val_trades": 6,
+   "res_net": 251.36,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 137.74,
+   "val_trades": 5,
+   "res_net": 171.63,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF1|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 123.1,
+   "val_trades": 2,
+   "res_net": 81.82,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF1|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 142.76,
+   "val_trades": 5,
+   "res_net": 174.22,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF1|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 16.98,
+   "val_trades": 3,
+   "res_net": 26.38,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF1|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 59.53,
+   "val_trades": 3,
+   "res_net": 318.6,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF1|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "AVAXUSDT",
+   "val_net": 59.84,
+   "val_trades": 1,
+   "res_net": 154.81,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF1|X_3R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SUIUSDT",
+   "val_net": 5.85,
+   "val_trades": 1,
+   "res_net": 270.93,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 38.39,
+   "val_trades": 2,
+   "res_net": 155.04,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 100.26,
+   "val_trades": 3,
+   "res_net": 79.61,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_4h_RF2_X_3R",
+   "priority": 6
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 38.46,
+   "val_trades": 2,
+   "res_net": 48.83,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 17.54,
+   "val_trades": 3,
+   "res_net": 115.04,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 100.43,
+   "val_trades": 2,
+   "res_net": 90.52,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 59.89,
+   "val_trades": 1,
+   "res_net": 72.77,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 100.78,
+   "val_trades": 6,
+   "res_net": 53.18,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 99.39,
+   "val_trades": 3,
+   "res_net": 168.67,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 165.03,
+   "val_trades": 4,
+   "res_net": 190.32,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 33.76,
+   "val_trades": 6,
+   "res_net": 540.31,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 132.61,
+   "val_trades": 7,
+   "res_net": 310.59,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 31.94,
+   "val_trades": 6,
+   "res_net": 251.36,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 137.74,
+   "val_trades": 5,
+   "res_net": 171.63,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 17.09,
+   "val_trades": 3,
+   "res_net": 109.29,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOTUSDT",
+   "val_net": 59.64,
+   "val_trades": 1,
+   "res_net": 134.06,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 100.5,
+   "val_trades": 3,
+   "res_net": 177.45,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 38.39,
+   "val_trades": 2,
+   "res_net": 68.32,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 71.13,
+   "val_trades": 3,
+   "res_net": 91.09,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 44.88,
+   "val_trades": 3,
+   "res_net": 134.52,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF1|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 45.29,
+   "val_trades": 1,
+   "res_net": 180.0,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF1|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 100.51,
+   "val_trades": 3,
+   "res_net": 129.13,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF1|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 38.39,
+   "val_trades": 2,
+   "res_net": 154.99,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF1|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 100.43,
+   "val_trades": 2,
+   "res_net": 296.88,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF1|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 42.78,
+   "val_trades": 3,
+   "res_net": 41.39,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF1|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 59.89,
+   "val_trades": 1,
+   "res_net": 131.66,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 15.43,
+   "val_trades": 2,
+   "res_net": 27.33,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 28.15,
+   "val_trades": 5,
+   "res_net": 110.96,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "ARBUSDT",
+   "val_net": 59.96,
+   "val_trades": 4,
+   "res_net": 14.02,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_02_LOCAL_4h_RF2_X_NAT",
+   "priority": 9
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 54.97,
+   "val_trades": 6,
+   "res_net": 152.57,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 27.62,
+   "val_trades": 5,
+   "res_net": 191.9,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 20.79,
+   "val_trades": 5,
+   "res_net": 466.95,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 105.35,
+   "val_trades": 4,
+   "res_net": 168.95,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 14.9,
+   "val_trades": 5,
+   "res_net": 96.7,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 58.6,
+   "val_trades": 3,
+   "res_net": 31.36,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 18.6,
+   "val_trades": 2,
+   "res_net": 93.46,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 37.64,
+   "val_trades": 4,
+   "res_net": 181.92,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 37.94,
+   "val_trades": 4,
+   "res_net": 51.19,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 15.43,
+   "val_trades": 2,
+   "res_net": 27.33,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 28.15,
+   "val_trades": 5,
+   "res_net": 88.69,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "ARBUSDT",
+   "val_net": 59.96,
+   "val_trades": 4,
+   "res_net": 14.02,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 54.97,
+   "val_trades": 6,
+   "res_net": 152.57,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 27.62,
+   "val_trades": 5,
+   "res_net": 167.58,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 20.79,
+   "val_trades": 5,
+   "res_net": 466.95,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 105.35,
+   "val_trades": 4,
+   "res_net": 168.95,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 33.22,
+   "val_trades": 6,
+   "res_net": 218.59,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 12.25,
+   "val_trades": 7,
+   "res_net": 348.77,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 94.34,
+   "val_trades": 7,
+   "res_net": 125.88,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 183.62,
+   "val_trades": 7,
+   "res_net": 77.54,
+   "source_family": "OSE_B_acceptance",
+   "new_id": "SLV1_LC_OSE_B_acceptance_1h_RF2_X_3R",
+   "priority": 2
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "OPUSDT",
+   "val_net": 54.97,
+   "val_trades": 5,
+   "res_net": 82.24,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 140.8,
+   "val_trades": 5,
+   "res_net": 140.93,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 77.23,
+   "val_trades": 4,
+   "res_net": 216.46,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 122.88,
+   "val_trades": 2,
+   "res_net": 140.55,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 71.87,
+   "val_trades": 8,
+   "res_net": 162.59,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "priority": 8
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 12.37,
+   "val_trades": 7,
+   "res_net": 316.09,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 94.44,
+   "val_trades": 7,
+   "res_net": 160.81,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "OPUSDT",
+   "val_net": 32.72,
+   "val_trades": 6,
+   "res_net": 77.38,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 141.16,
+   "val_trades": 5,
+   "res_net": 177.42,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "priority": 3
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 140.93,
+   "val_trades": 5,
+   "res_net": 288.38,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "priority": 4
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 99.86,
+   "val_trades": 3,
+   "res_net": 213.7,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 18.8,
+   "val_trades": 2,
+   "res_net": 206.3,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 59.15,
+   "val_trades": 3,
+   "res_net": 210.33,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_15R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 38.22,
+   "val_trades": 3,
+   "res_net": 21.91,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_15R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 17.96,
+   "val_trades": 4,
+   "res_net": 32.45,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_15R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 39.07,
+   "val_trades": 3,
+   "res_net": 72.38,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_15R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 17.75,
+   "val_trades": 4,
+   "res_net": 158.87,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_D_faster_confirmation|LONG|4h|RF2|X_15R",
+   "sid": "OSE_D_faster_confirmation",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 18.09,
+   "val_trades": 4,
+   "res_net": 73.7,
+   "source_family": "OSE_D_faster_confirmation"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 18.59,
+   "val_trades": 2,
+   "res_net": 49.71,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 18.78,
+   "val_trades": 2,
+   "res_net": 184.36,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 18.9,
+   "val_trades": 2,
+   "res_net": 77.16,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 39.91,
+   "val_trades": 1,
+   "res_net": 34.8,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_15R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 39.09,
+   "val_trades": 3,
+   "res_net": 14.99,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_15R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 8.79,
+   "val_trades": 2,
+   "res_net": 9.92,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|4h|RF2|X_15R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 8.99,
+   "val_trades": 2,
+   "res_net": 247.08,
+   "source_family": "OSE_B_acceptance"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 6.36,
+   "val_trades": 2,
+   "res_net": 30.98,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 123.38,
+   "val_trades": 4,
+   "res_net": 6.13,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 37.9,
+   "val_trades": 3,
+   "res_net": 23.72,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ARBUSDT",
+   "val_net": 17.83,
+   "val_trades": 4,
+   "res_net": 22.7,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 156.57,
+   "val_trades": 5,
+   "res_net": 238.38,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 24.71,
+   "val_trades": 6,
+   "res_net": 86.63,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 3.16,
+   "val_trades": 7,
+   "res_net": 13.51,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 67.56,
+   "val_trades": 4,
+   "res_net": 62.65,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 6.36,
+   "val_trades": 2,
+   "res_net": 30.98,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 123.38,
+   "val_trades": 4,
+   "res_net": 6.13,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 37.9,
+   "val_trades": 3,
+   "res_net": 23.72,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ARBUSDT",
+   "val_net": 17.83,
+   "val_trades": 4,
+   "res_net": 22.7,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 156.57,
+   "val_trades": 5,
+   "res_net": 238.38,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 24.71,
+   "val_trades": 6,
+   "res_net": 86.63,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 3.16,
+   "val_trades": 7,
+   "res_net": 13.51,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_15R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 67.56,
+   "val_trades": 4,
+   "res_net": 62.65,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_15R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 39.1,
+   "val_trades": 3,
+   "res_net": 23.74,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_15R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 9.01,
+   "val_trades": 2,
+   "res_net": 232.44,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_15R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 38.88,
+   "val_trades": 3,
+   "res_net": 164.66,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_15R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "ARBUSDT",
+   "val_net": 9.14,
+   "val_trades": 2,
+   "res_net": 14.96,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_15R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 59.4,
+   "val_trades": 2,
+   "res_net": 1.11,
+   "source_family": "OSE_A_corrected_baseline"
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF1|X_3R",
+   "sid": "OSE_C_retest",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 45.29,
+   "val_trades": 1,
+   "res_net": 94.96,
+   "source_family": "OSE_C_retest"
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_3R",
+   "sid": "OSE_C_retest",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 38.17,
+   "val_trades": 2,
+   "res_net": 73.98,
+   "source_family": "OSE_C_retest"
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_3R",
+   "sid": "OSE_C_retest",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 45.29,
+   "val_trades": 1,
+   "res_net": 16.65,
+   "source_family": "OSE_C_retest"
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_NAT",
+   "sid": "OSE_C_retest",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 18.59,
+   "val_trades": 2,
+   "res_net": 14.35,
+   "source_family": "OSE_C_retest"
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_15R",
+   "sid": "OSE_C_retest",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 8.79,
+   "val_trades": 2,
+   "res_net": 35.64,
+   "source_family": "OSE_C_retest"
+  },
+  {
+   "vid": "OSE_C_retest|LONG|4h|RF2|X_15R",
+   "sid": "OSE_C_retest",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_15R",
+   "family": "LONG_CONT",
+   "coin": "LTCUSDT",
+   "val_net": 8.96,
+   "val_trades": 2,
+   "res_net": 17.46,
+   "source_family": "OSE_C_retest"
+  },
+  {
+   "vid": "COMBO_01|LONG|1d|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "1d",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 59.44,
+   "val_trades": 1,
+   "res_net": 119.73,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|1d|RF1|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "1d",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 59.44,
+   "val_trades": 1,
+   "res_net": 119.73,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_01|LONG|1d|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "1d",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 59.44,
+   "val_trades": 1,
+   "res_net": 56.53,
+   "source_family": "COMBO_01|LOCAL"
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|1d|RF2|X_3R",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "1d",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 59.44,
+   "val_trades": 1,
+   "res_net": 56.53,
+   "source_family": "COMBO_01|LOCAL"
+  }
+ ],
+ "excluded_shorts_validation_net_le_0": [
+  "OSE_D_faster_confirmation|SHORT|1h|RF1|X_3R",
+  "CANDLE12_V2|SHORT|1h|RF1|X_3R",
+  "CANDLE12_V2|SHORT|1h|RF1|X_NAT"
+ ],
+ "coin_scores": {
+  "BTCUSDT": 100.78,
+  "ETHUSDT": 189.3,
+  "BNBUSDT": 187.72,
+  "LTCUSDT": 39.1,
+  "XRPUSDT": 100.26,
+  "LINKUSDT": 71.87,
+  "ADAUSDT": 140.93,
+  "SOLUSDT": 141.16,
+  "DOGEUSDT": 183.62,
+  "NEARUSDT": 99.39,
+  "AVAXUSDT": 59.84,
+  "SUIUSDT": 5.85,
+  "DOTUSDT": 59.64,
+  "ARBUSDT": 59.96,
+  "OPUSDT": 54.97
+ },
+ "coins": [
+  "ETHUSDT",
+  "BNBUSDT",
+  "DOGEUSDT",
+  "SOLUSDT",
+  "ADAUSDT",
+  "BTCUSDT",
+  "XRPUSDT",
+  "NEARUSDT",
+  "LINKUSDT",
+  "ARBUSDT"
+ ],
+ "book": [
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "val_net": 189.3,
+   "val_trades": 3,
+   "res_net": 64.21,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF2_X_3R",
+   "priority": 0
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF2|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "val_net": 187.72,
+   "val_trades": 3,
+   "res_net": 217.16,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF2_X_3R",
+   "priority": 1
+  },
+  {
+   "vid": "OSE_B_acceptance|LONG|1h|RF2|X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "val_net": 183.62,
+   "val_trades": 7,
+   "res_net": 77.54,
+   "source_family": "OSE_B_acceptance",
+   "new_id": "SLV1_LC_OSE_B_acceptance_1h_RF2_X_3R",
+   "priority": 2
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "val_net": 141.16,
+   "val_trades": 5,
+   "res_net": 177.42,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "priority": 3
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "val_net": 140.93,
+   "val_trades": 5,
+   "res_net": 288.38,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "priority": 4
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "val_net": 100.78,
+   "val_trades": 6,
+   "res_net": 53.18,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "priority": 5
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|4h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "val_net": 100.26,
+   "val_trades": 3,
+   "res_net": 79.61,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_4h_RF2_X_3R",
+   "priority": 6
+  },
+  {
+   "vid": "COMBO_01|LONG|4h|RF1|X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "val_net": 99.39,
+   "val_trades": 3,
+   "res_net": 168.67,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "priority": 7
+  },
+  {
+   "vid": "OSE_A_corrected_baseline|LONG|1h|RF2|X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "val_net": 71.87,
+   "val_trades": 8,
+   "res_net": 162.59,
+   "source_family": "OSE_A_corrected_baseline",
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "priority": 8
+  },
+  {
+   "vid": "COMBO_02_LOCAL|LONG|4h|RF2|X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "ARBUSDT",
+   "val_net": 59.96,
+   "val_trades": 4,
+   "res_net": 14.02,
+   "source_family": "COMBO_01|LOCAL",
+   "new_id": "SLV1_LC_COMBO_02_LOCAL_4h_RF2_X_NAT",
+   "priority": 9
+  }
+ ],
+ "account": {
+  "base_2pct": {
+   "total_net": 1263.97,
+   "days": 153.0,
+   "avg_per_30d": 247.84,
+   "avg_per_day": 8.26,
+   "months": {
+    "2025-04": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10123.85,
+     "net": 123.85,
+     "withdrawn": 123.85
+    },
+    "2025-05": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10219.24,
+     "net": 219.24,
+     "withdrawn": 219.24
+    },
+    "2025-06": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9972.3,
+     "net": -27.7,
+     "withdrawn": 0.0
+    },
+    "2025-07": {
+     "start_equity": 9972.3,
+     "end_equity_marked": 10926.77,
+     "net": 954.46,
+     "withdrawn": 926.77
+    },
+    "2025-08": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9994.12,
+     "net": -5.88,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 217.98,
+   "withdrawn": 1269.85,
+   "trades": 47,
+   "per_coin": {
+    "ETHUSDT": 189.3,
+    "BNBUSDT": 187.72,
+    "DOGEUSDT": 179.17,
+    "ADAUSDT": 140.93,
+    "SOLUSDT": 138.02,
+    "BTCUSDT": 100.37,
+    "XRPUSDT": 100.26,
+    "NEARUSDT": 97.2,
+    "LINKUSDT": 71.87,
+    "ARBUSDT": 59.13
+   },
+   "best_coin": "ETHUSDT",
+   "best_coin_share": 0.15,
+   "best_month": "2025-07",
+   "best_month_share": 0.755,
+   "worst_month": "2025-06",
+   "worst_month_net": -27.7,
+   "skips": {
+    "coin_busy": 42
+   }
+  },
+  "risk_1pct": {
+   "total_net": 631.42,
+   "days": 153.0,
+   "avg_per_30d": 123.81,
+   "avg_per_day": 4.13,
+   "months": {
+    "2025-04": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10066.78,
+     "net": 66.78,
+     "withdrawn": 66.78
+    },
+    "2025-05": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10109.94,
+     "net": 109.94,
+     "withdrawn": 109.94
+    },
+    "2025-06": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9986.27,
+     "net": -13.73,
+     "withdrawn": 0.0
+    },
+    "2025-07": {
+     "start_equity": 9986.27,
+     "end_equity_marked": 10458.06,
+     "net": 471.79,
+     "withdrawn": 458.06
+    },
+    "2025-08": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9996.64,
+     "net": -3.36,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 107.53,
+   "withdrawn": 634.78,
+   "trades": 47,
+   "per_coin": {
+    "ETHUSDT": 91.92,
+    "BNBUSDT": 91.17,
+    "DOGEUSDT": 88.8,
+    "ADAUSDT": 69.58,
+    "SOLUSDT": 68.91,
+    "BTCUSDT": 55.33,
+    "XRPUSDT": 49.87,
+    "NEARUSDT": 48.89,
+    "LINKUSDT": 36.88,
+    "ARBUSDT": 30.07
+   },
+   "best_coin": "ETHUSDT",
+   "best_coin_share": 0.146,
+   "best_month": "2025-07",
+   "best_month_share": 0.747,
+   "worst_month": "2025-06",
+   "worst_month_net": -13.73,
+   "skips": {
+    "coin_busy": 42
+   }
+  },
+  "costs_1.5x": {
+   "total_net": 1248.44,
+   "days": 153.0,
+   "avg_per_30d": 244.79,
+   "avg_per_day": 8.16,
+   "months": {
+    "2025-04": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10121.15,
+     "net": 121.15,
+     "withdrawn": 121.15
+    },
+    "2025-05": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10216.59,
+     "net": 216.59,
+     "withdrawn": 216.59
+    },
+    "2025-06": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9971.87,
+     "net": -28.13,
+     "withdrawn": 0.0
+    },
+    "2025-07": {
+     "start_equity": 9971.87,
+     "end_equity_marked": 10917.11,
+     "net": 945.24,
+     "withdrawn": 917.11
+    },
+    "2025-08": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9993.59,
+     "net": -6.41,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 218.96,
+   "withdrawn": 1254.85,
+   "trades": 47,
+   "per_coin": {
+    "ETHUSDT": 188.45,
+    "BNBUSDT": 186.1,
+    "DOGEUSDT": 177.01,
+    "ADAUSDT": 139.48,
+    "SOLUSDT": 136.76,
+    "XRPUSDT": 99.83,
+    "BTCUSDT": 96.52,
+    "NEARUSDT": 96.38,
+    "LINKUSDT": 69.55,
+    "ARBUSDT": 58.36
+   },
+   "best_coin": "ETHUSDT",
+   "best_coin_share": 0.151,
+   "best_month": "2025-07",
+   "best_month_share": 0.757,
+   "worst_month": "2025-06",
+   "worst_month_net": -28.13,
+   "skips": {
+    "coin_busy": 42
+   }
+  },
+  "funding_0.01pct_8h": {
+   "total_net": 1240.22,
+   "days": 153.0,
+   "avg_per_30d": 243.18,
+   "avg_per_day": 8.11,
+   "months": {
+    "2025-04": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10123.02,
+     "net": 123.02,
+     "withdrawn": 123.02
+    },
+    "2025-05": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 10214.44,
+     "net": 214.44,
+     "withdrawn": 214.44
+    },
+    "2025-06": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9970.25,
+     "net": -29.75,
+     "withdrawn": 0.0
+    },
+    "2025-07": {
+     "start_equity": 9970.25,
+     "end_equity_marked": 10911.49,
+     "net": 941.24,
+     "withdrawn": 911.49
+    },
+    "2025-08": {
+     "start_equity": 10000.0,
+     "end_equity_marked": 9991.27,
+     "net": -8.73,
+     "withdrawn": 0.0
+    }
+   },
+   "months_ge_1000": 0,
+   "full_months": 5,
+   "median_day": 0.0,
+   "max_drawdown": 222.84,
+   "withdrawn": 1248.95,
+   "trades": 47,
+   "per_coin": {
+    "ETHUSDT": 186.04,
+    "BNBUSDT": 183.71,
+    "DOGEUSDT": 177.55,
+    "ADAUSDT": 138.56,
+    "SOLUSDT": 135.8,
+    "XRPUSDT": 98.85,
+    "NEARUSDT": 95.89,
+    "BTCUSDT": 95.4,
+    "LINKUSDT": 70.19,
+    "ARBUSDT": 58.22
+   },
+   "best_coin": "ETHUSDT",
+   "best_coin_share": 0.15,
+   "best_month": "2025-07",
+   "best_month_share": 0.759,
+   "worst_month": "2025-06",
+   "worst_month_net": -29.75,
+   "skips": {
+    "coin_busy": 42
+   }
+  }
+ }
+}

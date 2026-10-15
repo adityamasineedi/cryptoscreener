@@ -1,0 +1,266 @@
+{
+ "base_2pct": {
+  "total_net": -91.15,
+  "days": 166.0,
+  "avg_per_30d": -16.47,
+  "avg_per_day": -0.55,
+  "months": {
+   "2025-09": {
+    "start_equity": 10000.0,
+    "end_equity_marked": 9937.49,
+    "net": -62.51,
+    "withdrawn": 0.0
+   },
+   "2025-10": {
+    "start_equity": 9937.49,
+    "end_equity_marked": 9974.78,
+    "net": 37.28,
+    "withdrawn": 0.0
+   },
+   "2025-11": {
+    "start_equity": 9974.78,
+    "end_equity_marked": 9934.15,
+    "net": -40.62,
+    "withdrawn": 0.0
+   },
+   "2025-12": {
+    "start_equity": 9934.15,
+    "end_equity_marked": 9914.3,
+    "net": -19.86,
+    "withdrawn": 0.0
+   },
+   "2026-01": {
+    "start_equity": 9914.3,
+    "end_equity_marked": 9908.85,
+    "net": -5.45,
+    "withdrawn": 0.0
+   },
+   "2026-02": {
+    "start_equity": 9908.85,
+    "end_equity_marked": 9908.85,
+    "net": 0.0,
+    "withdrawn": 0.0
+   }
+  },
+  "months_ge_1000": 0,
+  "full_months": 5,
+  "median_day": 0.0,
+  "max_drawdown": 131.42,
+  "withdrawn": 0.0,
+  "trades": 12,
+  "per_coin": {
+   "NEARUSDT": 15.93,
+   "BTCUSDT": 14.7,
+   "DOGEUSDT": -40.37,
+   "LINKUSDT": -40.65,
+   "SOLUSDT": -40.76
+  },
+  "best_coin": "NEARUSDT",
+  "best_coin_share": null,
+  "best_month": "2025-10",
+  "best_month_share": null,
+  "worst_month": "2025-09",
+  "worst_month_net": -62.51,
+  "skips": {
+   "coin_busy": 3
+  }
+ },
+ "risk_1pct": {
+  "total_net": -44.9,
+  "days": 166.0,
+  "avg_per_30d": -8.11,
+  "avg_per_day": -0.27,
+  "months": {
+   "2025-09": {
+    "start_equity": 10000.0,
+    "end_equity_marked": 9968.75,
+    "net": -31.25,
+    "withdrawn": 0.0
+   },
+   "2025-10": {
+    "start_equity": 9968.75,
+    "end_equity_marked": 9987.7,
+    "net": 18.96,
+    "withdrawn": 0.0
+   },
+   "2025-11": {
+    "start_equity": 9987.7,
+    "end_equity_marked": 9967.29,
+    "net": -20.42,
+    "withdrawn": 0.0
+   },
+   "2025-12": {
+    "start_equity": 9967.29,
+    "end_equity_marked": 9957.25,
+    "net": -10.03,
+    "withdrawn": 0.0
+   },
+   "2026-01": {
+    "start_equity": 9957.25,
+    "end_equity_marked": 9955.1,
+    "net": -2.15,
+    "withdrawn": 0.0
+   },
+   "2026-02": {
+    "start_equity": 9955.1,
+    "end_equity_marked": 9955.1,
+    "net": 0.0,
+    "withdrawn": 0.0
+   }
+  },
+  "months_ge_1000": 0,
+  "full_months": 5,
+  "median_day": 0.0,
+  "max_drawdown": 65.59,
+  "withdrawn": 0.0,
+  "trades": 12,
+  "per_coin": {
+   "NEARUSDT": 8.46,
+   "BTCUSDT": 7.85,
+   "DOGEUSDT": -20.29,
+   "LINKUSDT": -20.43,
+   "SOLUSDT": -20.48
+  },
+  "best_coin": "NEARUSDT",
+  "best_coin_share": null,
+  "best_month": "2025-10",
+  "best_month_share": null,
+  "worst_month": "2025-09",
+  "worst_month_net": -31.25,
+  "skips": {
+   "coin_busy": 3
+  }
+ },
+ "costs_1.5x": {
+  "total_net": -95.29,
+  "days": 166.0,
+  "avg_per_30d": -17.22,
+  "avg_per_day": -0.57,
+  "months": {
+   "2025-09": {
+    "start_equity": 10000.0,
+    "end_equity_marked": 9936.26,
+    "net": -63.74,
+    "withdrawn": 0.0
+   },
+   "2025-10": {
+    "start_equity": 9936.26,
+    "end_equity_marked": 9972.79,
+    "net": 36.54,
+    "withdrawn": 0.0
+   },
+   "2025-11": {
+    "start_equity": 9972.79,
+    "end_equity_marked": 9931.67,
+    "net": -41.13,
+    "withdrawn": 0.0
+   },
+   "2025-12": {
+    "start_equity": 9931.67,
+    "end_equity_marked": 9911.68,
+    "net": -19.98,
+    "withdrawn": 0.0
+   },
+   "2026-01": {
+    "start_equity": 9911.68,
+    "end_equity_marked": 9904.71,
+    "net": -6.97,
+    "withdrawn": 0.0
+   },
+   "2026-02": {
+    "start_equity": 9904.71,
+    "end_equity_marked": 9904.71,
+    "net": 0.0,
+    "withdrawn": 0.0
+   }
+  },
+  "months_ge_1000": 0,
+  "full_months": 5,
+  "median_day": 0.0,
+  "max_drawdown": 133.56,
+  "withdrawn": 0.0,
+  "trades": 12,
+  "per_coin": {
+   "NEARUSDT": 14.9,
+   "BTCUSDT": 13.07,
+   "DOGEUSDT": -40.76,
+   "LINKUSDT": -41.17,
+   "SOLUSDT": -41.33
+  },
+  "best_coin": "NEARUSDT",
+  "best_coin_share": null,
+  "best_month": "2025-10",
+  "best_month_share": null,
+  "worst_month": "2025-09",
+  "worst_month_net": -63.74,
+  "skips": {
+   "coin_busy": 3
+  }
+ },
+ "funding_0.01pct_8h": {
+  "total_net": -98.03,
+  "days": 166.0,
+  "avg_per_30d": -17.72,
+  "avg_per_day": -0.59,
+  "months": {
+   "2025-09": {
+    "start_equity": 10000.0,
+    "end_equity_marked": 9936.77,
+    "net": -63.23,
+    "withdrawn": 0.0
+   },
+   "2025-10": {
+    "start_equity": 9936.77,
+    "end_equity_marked": 9971.81,
+    "net": 35.04,
+    "withdrawn": 0.0
+   },
+   "2025-11": {
+    "start_equity": 9971.81,
+    "end_equity_marked": 9930.93,
+    "net": -40.88,
+    "withdrawn": 0.0
+   },
+   "2025-12": {
+    "start_equity": 9930.93,
+    "end_equity_marked": 9910.09,
+    "net": -20.84,
+    "withdrawn": 0.0
+   },
+   "2026-01": {
+    "start_equity": 9910.09,
+    "end_equity_marked": 9901.97,
+    "net": -8.12,
+    "withdrawn": 0.0
+   },
+   "2026-02": {
+    "start_equity": 9901.97,
+    "end_equity_marked": 9901.97,
+    "net": 0.0,
+    "withdrawn": 0.0
+   }
+  },
+  "months_ge_1000": 0,
+  "full_months": 5,
+  "median_day": 0.0,
+  "max_drawdown": 135.39,
+  "withdrawn": 0.0,
+  "trades": 12,
+  "per_coin": {
+   "NEARUSDT": 14.04,
+   "BTCUSDT": 12.32,
+   "LINKUSDT": -40.86,
+   "DOGEUSDT": -41.46,
+   "SOLUSDT": -42.07
+  },
+  "best_coin": "NEARUSDT",
+  "best_coin_share": null,
+  "best_month": "2025-10",
+  "best_month_share": null,
+  "worst_month": "2025-09",
+  "worst_month_net": -63.23,
+  "skips": {
+   "coin_busy": 3
+  }
+ }
+}

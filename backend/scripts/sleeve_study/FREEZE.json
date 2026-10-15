@@ -1,0 +1,259 @@
+{
+ "label": "current-universe retrospective",
+ "frozen_utc": "2026-10-14T14:39:17.545959+00:00",
+ "status_now": "VALIDATED",
+ "status_rule_after_final": "FROZEN_FOR_PAPER is written only after the final test is reported and only if final-test net after base costs is > 0; the $1,000/month objective is reported separately and is not implied by the status. Otherwise the ids stay RESEARCH.",
+ "final_test_window": [
+  "2025-09-01T00:00:00+00:00",
+  "2026-02-14T00:00:00+00:00 (exclusive)"
+ ],
+ "book": [
+  {
+   "new_id": "SLV1_LC_COMBO_01_4h_RF2_X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ETHUSDT",
+   "priority": 0,
+   "val_net": 189.3,
+   "val_trades": 3,
+   "res_net": 64.21
+  },
+  {
+   "new_id": "SLV1_LC_COMBO_01_4h_RF2_X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BNBUSDT",
+   "priority": 1,
+   "val_net": 187.72,
+   "val_trades": 3,
+   "res_net": 217.16
+  },
+  {
+   "new_id": "SLV1_LC_OSE_B_acceptance_1h_RF2_X_3R",
+   "sid": "OSE_B_acceptance",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "DOGEUSDT",
+   "priority": 2,
+   "val_net": 183.62,
+   "val_trades": 7,
+   "res_net": 77.54
+  },
+  {
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "SOLUSDT",
+   "priority": 3,
+   "val_net": 141.16,
+   "val_trades": 5,
+   "res_net": 177.42
+  },
+  {
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "ADAUSDT",
+   "priority": 4,
+   "val_net": 140.93,
+   "val_trades": 5,
+   "res_net": 288.38
+  },
+  {
+   "new_id": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "BTCUSDT",
+   "priority": 5,
+   "val_net": 100.78,
+   "val_trades": 6,
+   "res_net": 53.18
+  },
+  {
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_4h_RF2_X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "XRPUSDT",
+   "priority": 6,
+   "val_net": 100.26,
+   "val_trades": 3,
+   "res_net": 79.61
+  },
+  {
+   "new_id": "SLV1_LC_COMBO_01_4h_RF1_X_3R",
+   "sid": "COMBO_01",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF1",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "NEARUSDT",
+   "priority": 7,
+   "val_net": 99.39,
+   "val_trades": 3,
+   "res_net": 168.67
+  },
+  {
+   "new_id": "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R",
+   "sid": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "tf": "1h",
+   "rf": "RF2",
+   "exit": "X_3R",
+   "family": "LONG_CONT",
+   "coin": "LINKUSDT",
+   "priority": 8,
+   "val_net": 71.87,
+   "val_trades": 8,
+   "res_net": 162.59
+  },
+  {
+   "new_id": "SLV1_LC_COMBO_02_LOCAL_4h_RF2_X_NAT",
+   "sid": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "tf": "4h",
+   "rf": "RF2",
+   "exit": "X_NAT",
+   "family": "LONG_CONT",
+   "coin": "ARBUSDT",
+   "priority": 9,
+   "val_net": 59.96,
+   "val_trades": 4,
+   "res_net": 14.02
+  }
+ ],
+ "coins": [
+  "ETHUSDT",
+  "BNBUSDT",
+  "DOGEUSDT",
+  "SOLUSDT",
+  "ADAUSDT",
+  "BTCUSDT",
+  "XRPUSDT",
+  "NEARUSDT",
+  "LINKUSDT",
+  "ARBUSDT"
+ ],
+ "strategy_ids": {
+  "SLV1_LC_COMBO_01_4h_RF2_X_3R": {
+   "source_id": "COMBO_01",
+   "side": "LONG",
+   "timeframe": "4h",
+   "regime_filter": "RF1 and BTC daily trend (btc_daily_regime.daily_trend over daily bars closed by 00:00 UTC of the signal day) == BULLISH",
+   "exit": "source stop, target 3R from the fill",
+   "coins": [
+    "BNBUSDT",
+    "ETHUSDT"
+   ]
+  },
+  "SLV1_LC_OSE_B_acceptance_1h_RF2_X_3R": {
+   "source_id": "OSE_B_acceptance",
+   "side": "LONG",
+   "timeframe": "1h",
+   "regime_filter": "RF1 and BTC daily trend (btc_daily_regime.daily_trend over daily bars closed by 00:00 UTC of the signal day) == BULLISH",
+   "exit": "source stop, target 3R from the fill",
+   "coins": [
+    "DOGEUSDT"
+   ]
+  },
+  "SLV1_LC_OSE_A_corrected_baseline_1h_RF2_X_3R": {
+   "source_id": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "timeframe": "1h",
+   "regime_filter": "RF1 and BTC daily trend (btc_daily_regime.daily_trend over daily bars closed by 00:00 UTC of the signal day) == BULLISH",
+   "exit": "source stop, target 3R from the fill",
+   "coins": [
+    "ADAUSDT",
+    "LINKUSDT",
+    "SOLUSDT"
+   ]
+  },
+  "SLV1_LC_COMBO_01_4h_RF1_X_3R": {
+   "source_id": "COMBO_01",
+   "side": "LONG",
+   "timeframe": "4h",
+   "regime_filter": "coin 4h (1d for 1d setups) market_structure bucket == UPTREND at the last bar closed by the signal bar's open",
+   "exit": "source stop, target 3R from the fill",
+   "coins": [
+    "BTCUSDT",
+    "NEARUSDT"
+   ]
+  },
+  "SLV1_LC_OSE_A_corrected_baseline_4h_RF2_X_3R": {
+   "source_id": "OSE_A_corrected_baseline",
+   "side": "LONG",
+   "timeframe": "4h",
+   "regime_filter": "RF1 and BTC daily trend (btc_daily_regime.daily_trend over daily bars closed by 00:00 UTC of the signal day) == BULLISH",
+   "exit": "source stop, target 3R from the fill",
+   "coins": [
+    "XRPUSDT"
+   ]
+  },
+  "SLV1_LC_COMBO_02_LOCAL_4h_RF2_X_NAT": {
+   "source_id": "COMBO_02_LOCAL",
+   "side": "LONG",
+   "timeframe": "4h",
+   "regime_filter": "RF1 and BTC daily trend (btc_daily_regime.daily_trend over daily bars closed by 00:00 UTC of the signal day) == BULLISH",
+   "exit": "source stop, source first target",
+   "coins": [
+    "ARBUSDT"
+   ]
+  }
+ },
+ "risk": {
+  "per_trade": "2% of the coin sleeve's equity at entry (reported column: 1%)",
+  "account_open_risk_cap_usd": 200,
+  "leverage_cap": 2.0,
+  "sleeve_usd": 1000,
+  "min_notional_usd": 5.0
+ },
+ "conflict_rule": "one open position per coin; a coin is free after the exec bar that closed it; same-bar signals for a flat coin: higher timeframe wins, same timeframe -> side matching the regime, then lower 'priority' value",
+ "execution": "signal known at bar close; entry at next bar open + slippage, skipped if that open is through the stop or target; exits on 1h bars: open through stop -> open, stop/target touched -> that price, both in one bar -> stop; all taker; no time stop; open positions at window end marked and closed",
+ "cost_model": {
+  "taker": 0.0004,
+  "maker": 0.0002,
+  "slippage_per_side": 0.0002,
+  "stress_column": "fees and slippage x1.5",
+  "funding": "no stored settlement history for the window; sensitivity column 0.01% of notional per 8h held"
+ },
+ "withdrawal": "month end: marked equity above $10,000 withdrawn (from sleeves above $1,000 pro rata to their excess); losses carry; next month starts at min(equity, $10,000)",
+ "selection_notes": [
+  "Selection followed PROTOCOL.md on validation only.",
+  "Added before the freeze, after the first validation pass: the brief's rule that a short's validation net must stand on its own. Excluded: OSE_D_faster_confirmation|SHORT|1h|RF1|X_3R, CANDLE12_V2|SHORT|1h|RF1|X_3R, CANDLE12_V2|SHORT|1h|RF1|X_NAT. No short survives.",
+  "COMBO_01 and COMBO_02_LOCAL are one source family; at most one of them per coin."
+ ],
+ "untouched": [
+  "COMBO_02_V1 / v1-combo02-long-htf and its paper watcher",
+  "REGIME_BOOK_OPEN passed_paper_watcher flag",
+  "short research ids paper_eligible=false",
+  "COMBO_02_V2_1_A catalog status (RESEARCH; not in this book)",
+  "backend/app code"
+ ]
+}
