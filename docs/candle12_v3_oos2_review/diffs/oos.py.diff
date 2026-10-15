@@ -1,0 +1,29 @@
+diff --git "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\oos.py" "b/backend\\app\\research\\candle12_v3_paper\\oos.py"
+index 2fa86d0..6fdbabf 100644
+--- "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\oos.py"
++++ "b/backend\\app\\research\\candle12_v3_paper\\oos.py"
+@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
+ 
+ from app.research import candle12_v3 as v3
+ from app.research.candle12_v3_paper import contract as C
++from app.research.candle12_v3_paper.store import OOS_STORE_MODE
+ from app.signals._candle_utils import candle_time
+ 
+ NON_ACCEPTANCE_DIAGNOSTIC = "NON_ACCEPTANCE_DIAGNOSTIC"
+@@ -84,10 +85,14 @@ def evaluate_oos(
+     root: Path = C.REPO_ROOT,
+     diagnostic: bool = False,
+     read_log: Path | None = None,
++    manifest: Mapping[str, Any] | None = None,
+ ) -> dict[str, Any]:
+-    if store_mode != "PAPER":
++    if store_mode != OOS_STORE_MODE:
+         raise OOSRefused("NOT_A_PAPER_STORE", store_mode=store_mode,
+-                         detail="smoke and dry-run stores never count toward OOS")
++                         detail="only virtual_paper_mainnet stores count toward OOS; smoke, dry-run, "
++                                "testnet_broker_check and legacy PAPER (mainnet data + testnet fills) stores never do")
++    if manifest is not None and not manifest.get("counts_toward_oos"):
++        raise OOSRefused("NOT_OOS_ELIGIBLE", detail="the store was not created OOS-eligible (drift guard or --allow-non-oos)")
+     earliest = C.earliest_evaluation()
+     too_early = now < earliest
+     if too_early and not diagnostic:

@@ -66,3 +66,28 @@
 /docs/candle12_v3_drift_review_2026-10-15/frozen/tracker.py text eol=lf
 /docs/candle12_v3_drift_review_2026-10-15/oos.py.diff text eol=crlf
 /docs/candle12_v3_drift_review_2026-10-15/store.py.diff text eol=crlf
+
+# Candle-1 v3 OOS-2: fingerprinted and launch files, CRLF in the working tree on every checkout.
+# Shared files already pinned above for the LCSC contract keep their pins (e.g. _db.py eol=lf).
+/backend/app/research/candle12_v3.py text eol=crlf
+/backend/app/research/candle12_v3_paper/** text eol=crlf
+/backend/scripts/run_candle12_v3_exec_fix.py text eol=crlf
+/backend/scripts/scan_candle12_v3_gaps.py text eol=crlf
+/backend/tests/test_candle12_v3*.py text eol=crlf
+/docs/candle12_v3_oos_contract.md text eol=crlf
+/docs/candle12_v3_oos_contract.lock.json text eol=crlf
+/backend/app/research/candle12_v2.py text eol=crlf
+/backend/app/research/rolling_structure.py text eol=crlf
+/backend/app/research/combination_backtest.py text eol=crlf
+/backend/app/services/paper_sizing.py text eol=crlf
+/backend/app/signals/config.py text eol=crlf
+/backend/app/signals/schemas.py text eol=crlf
+/backend/app/signals/impulse_engine.py text eol=crlf
+/backend/app/signals/pullback_engine.py text eol=crlf
+/backend/app/signals/stop_engine.py text eol=crlf
+/backend/app/signals/target_engine.py text eol=crlf
+/backend/app/signals/trend_engine.py text eol=crlf
+# bos_engine.py has mixed line endings exactly as OOS-1 hashed it: store its bytes unconverted.
+/backend/app/signals/bos_engine.py -text
+# compiled caches under the package are never text
+/backend/app/research/candle12_v3_paper/**/*.pyc binary

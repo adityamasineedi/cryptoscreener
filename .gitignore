@@ -50,3 +50,6 @@ backend/scripts/strategy_rank/**/*.log
 backend/scripts/ready_scan/
 backend/uv_out.txt
 backend/uv_err.txt
+
+# Candle-1 v3 paper runtime state: stores, watermarks, kill switch
+backend/data/candle12_v3_paper/

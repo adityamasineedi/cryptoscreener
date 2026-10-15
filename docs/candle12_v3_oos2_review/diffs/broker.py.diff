@@ -1,0 +1,123 @@
+diff --git "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\broker.py" "b/backend\\app\\research\\candle12_v3_paper\\broker.py"
+index 520ae41..9ad4800 100644
+--- "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\broker.py"
++++ "b/backend\\app\\research\\candle12_v3_paper\\broker.py"
+@@ -18,10 +18,13 @@ model:
+ from __future__ import annotations
+ 
+ import math
++from collections import deque
+ from dataclasses import asdict, dataclass, field
+ from datetime import datetime
+ from typing import Any, Protocol, Sequence
+ 
++from app.research.candle12_v3_paper.capabilities import require_supported
++
+ ENTRY, STOP, TARGET = "ENTRY", "STOP", "TARGET"
+ MARKET, STOP_MARKET, TAKE_PROFIT_MARKET = "MARKET", "STOP_MARKET", "TAKE_PROFIT_MARKET"
+ OPEN_STATUSES = ("NEW", "PARTIALLY_FILLED")
+@@ -32,7 +35,12 @@ MARGIN_REJECTED = "MARGIN_REJECTED"
+ MIN_NOTIONAL_REJECTED = "MIN_NOTIONAL_REJECTED"
+ QTY_STEP_REJECTED = "QTY_STEP_REJECTED"
+ PRICE_BEYOND_TRIGGER = "PRICE_BEYOND_TRIGGER"
+-REJECT_REASONS = (ORDER_REJECTED, MARGIN_REJECTED, MIN_NOTIONAL_REJECTED, QTY_STEP_REJECTED, PRICE_BEYOND_TRIGGER)
++DUPLICATE_CLIENT_ID = "DUPLICATE_CLIENT_ID"
++UNSUPPORTED_ENDPOINT = "UNSUPPORTED_ENDPOINT"  # -4120: conditional type sent to the plain order endpoint
++AUTH_REJECTED = "AUTH_REJECTED"
++NO_SUCH_ORDER = "NO_SUCH_ORDER"
++REJECT_REASONS = (ORDER_REJECTED, MARGIN_REJECTED, MIN_NOTIONAL_REJECTED, QTY_STEP_REJECTED, PRICE_BEYOND_TRIGGER,
++                  DUPLICATE_CLIENT_ID, UNSUPPORTED_ENDPOINT, AUTH_REJECTED, NO_SUCH_ORDER)
+ 
+ 
+ class BrokerRejected(Exception):
+@@ -44,7 +52,15 @@ class BrokerRejected(Exception):
+ 
+ 
+ class BrokerUnavailable(Exception):
+-    """Network, exchange downtime, or a 5xx. The order state is unknown or unchanged."""
++    """Network, exchange downtime, or a 5xx. The order state is unknown or unchanged.
++
++    ``unknown`` is True when the request may have reached the exchange (a timeout
++    after sending). The caller must look the order up before any retry.
++    """
++
++    def __init__(self, message: str = "", *, unknown: bool = False) -> None:
++        super().__init__(message)
++        self.unknown = unknown
+ 
+ 
+ @dataclass
+@@ -98,6 +114,16 @@ class Broker(Protocol):
+ 
+     def reported_funding(self, computed: float, *, start: datetime, end: datetime) -> float | None: ...
+ 
++    # -- venue state, for restart recovery ------------------------------------
++
++    def lookup(self, client_id: str) -> Order | None: ...
++
++    def open_orders(self) -> list[Order]: ...
++
++    def position_qty(self) -> float: ...
++
++    def recent_fills(self) -> list[dict[str, Any]]: ...
++
+ 
+ def _floor_units(qty: float, step: float) -> float:
+     return math.floor(qty / step + 1e-9) * step
+@@ -140,10 +166,48 @@ class SimulatedBroker:
+         self.position = 0.0  # signed
+         self._entry_phase = False
+         self._fill_seq = 0
++        self.fills: deque[dict[str, Any]] = deque(maxlen=200)
++
++    # -- venue state ---------------------------------------------------------
++
++    def lookup(self, client_id: str) -> Order | None:
++        return self.orders.get(client_id)
++
++    def open_orders(self) -> list[Order]:
++        return [o for o in self.orders.values() if o.status in OPEN_STATUSES]
++
++    def position_qty(self) -> float:
++        return self.position
++
++    def recent_fills(self) -> list[dict[str, Any]]:
++        return list(self.fills)
++
++    def snapshot(self) -> dict[str, Any]:
++        """The virtual venue's state. Persisted with the adapter so a restart sees the same venue."""
++        recent = set(list(self.orders)[-20:])
++        return {
++            "name": self.name,
++            "position": self.position,
++            "fill_seq": self._fill_seq,
++            # Open orders, plus the 20 most recent others (the entry and exits of the trade in hand).
++            "orders": {k: o.to_dict() for k, o in self.orders.items()
++                       if o.status in OPEN_STATUSES or k in recent},
++            "fills": list(self.fills),
++        }
++
++    def restore(self, snap: dict[str, Any]) -> None:
++        self.position = float(snap.get("position", 0.0))
++        self._fill_seq = int(snap.get("fill_seq", 0))
++        self.orders = {k: Order(**v) for k, v in (snap.get("orders") or {}).items()}
++        self.fills = deque(snap.get("fills") or [], maxlen=200)
+ 
+     # -- orders --------------------------------------------------------------
+ 
+     def place_order(self, order: Order, *, bar_index: int, reference_price: float | None = None) -> Order:
++        require_supported(order.type, reduce_only=order.reduce_only)
++        existing = self.orders.get(order.client_id)
++        if existing is not None and existing is not order:
++            raise BrokerRejected(DUPLICATE_CLIENT_ID, -4116, "clientOrderId is duplicated")
+         if self.faults.unavailable_calls > 0:
+             self.faults.unavailable_calls -= 1
+             raise BrokerUnavailable("simulated exchange downtime")
+@@ -205,6 +269,7 @@ class SimulatedBroker:
+         order.status = "FILLED" if order.filled_qty >= order.qty - 1e-12 else "PARTIALLY_FILLED"
+         signed = qty if order.side == "BUY" else -qty
+         self.position += signed
++        self.fills.append({**fill.to_dict(), "purpose": order.purpose})
+         listener.on_fill(order, fill, bar_index)
+         return fill
+ 

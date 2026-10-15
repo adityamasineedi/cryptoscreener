@@ -1,0 +1,390 @@
+diff --git "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\cli.py" "b/backend\\app\\research\\candle12_v3_paper\\cli.py"
+index d0ebd73..e644e2e 100644
+--- "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\cli.py"
++++ "b/backend\\app\\research\\candle12_v3_paper\\cli.py"
+@@ -5,8 +5,15 @@
+   reconcile         reconcile a store against the engine
+   resolve-exception close an exception with an explanation
+   freeze-contract   write docs/candle12_v3_oos_contract.lock.json
+-  oos-evaluate      the contract's OOS read (refuses early / small samples)
+-  run               live loop; simulated broker unless --paper (testnet, guarded)
++  oos-evaluate      the contract's OOS read (refuses early / small samples / non-OOS stores)
++  run               live loop: --mode virtual_paper_mainnet (mainnet data, simulated broker; the only
++                    OOS-eligible mode) or --mode testnet_broker_check (testnet data + testnet broker,
++                    guarded, NON_OOS). --recover resumes a saved store after reconciling the venue.
++  broker-check      supervised testnet order-lifecycle check; prints BROKER_CHECK_PASS or BROKER_CHECK_FAIL
++  backfill-data     idempotent mainnet 1h candle + funding backfill with gap report (--loop for continuous)
++  freeze-oos        clean tree -> lock file with git commit, fingerprints, OOS window; commit + tag it
++  status            store status from disk: mode, state, position, orders, exceptions, OOS eligibility
++  kill-switch       engage / release / show the global kill switch (blocks new entries only)
+ 
+ Run from backend/: python -m app.research.candle12_v3_paper.cli <command> ...
+ """
+@@ -25,10 +32,13 @@ from typing import Any
+ 
+ from app.research import candle12_v3 as v3
+ from app.research.candle12_v3_paper import contract as C
++from app.research.candle12_v3_paper import guard
++from app.research.candle12_v3_paper import modes as M
+ from app.research.candle12_v3_paper.adapter import PaperAdapter
+ from app.research.candle12_v3_paper.broker import SimulatedBroker
+ from app.research.candle12_v3_paper.reconcile import reconcile
+-from app.research.candle12_v3_paper.store import PaperStore
++from app.research.candle12_v3_paper.safety import DEFAULT_KILL_SWITCH, SafetyLimits
++from app.research.candle12_v3_paper.store import OOS_STORE_MODE, PaperStore
+ 
+ UTC = timezone.utc
+ DATA_ROOT = C.BACKEND / "data" / "candle12_v3_paper"
+@@ -109,12 +119,16 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
+ def cmd_reconcile(args: argparse.Namespace) -> int:
+     root = Path(args.store)
+     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
++    if manifest["mode"] == M.spec(M.TESTNET_BROKER_CHECK).store_mode:
++        return _refuse("TESTNET_NOT_COMPARABLE", "testnet fills are never reconciled against the engine under "
++                                                 "OOS tolerances; testnet_broker_check validates the API only")
+     store = PaperStore(root, mode=manifest["mode"])
+     start = datetime.fromisoformat(manifest["history_start"])
+-    end = datetime.now(UTC) if manifest["mode"] == "PAPER" else datetime.fromisoformat(manifest["window_end"])
++    live = manifest["mode"] in ("PAPER", OOS_STORE_MODE)
++    end = datetime.now(UTC) if live else datetime.fromisoformat(manifest["window_end"])
+     db = _db()
+     candles = db.load_candles(C.SYMBOL, C.TIMEFRAME, start, end)
+-    if manifest["mode"] != "PAPER":
++    if not live:
+         v3.check_oos_guard(candles)
+     funding = load_funding(start, end)
+     rec = reconcile(paper_trades=store.read("trades"), paper_signals=store.read("signals"), candles=candles,
+@@ -164,7 +178,7 @@ def cmd_oos(args: argparse.Namespace) -> int:
+     try:
+         read = evaluate_oos(candles=candles, funding_rows=funding, now=now, lock=C.load_lock(),
+                             open_exceptions=store.open_exceptions(), store_mode=manifest["mode"],
+-                            diagnostic=args.diagnostic, read_log=root / "oos_reads.jsonl")
++                            diagnostic=args.diagnostic, read_log=root / "oos_reads.jsonl", manifest=manifest)
+     except OOSRefused as exc:
+         print(f"REFUSED: {exc.reason} {exc.detail}")
+         return 2
+@@ -173,15 +187,43 @@ def cmd_oos(args: argparse.Namespace) -> int:
+ 
+ 
+ def run_live(adapter: PaperAdapter, source: Any, *, funding_source: Any | None, poll_s: float,
+-             clock=lambda: datetime.now(UTC), max_loops: int | None = None) -> None:
+-    """Poll closed klines; open bar k when it starts; close it when it is final."""
++             clock=lambda: datetime.now(UTC), max_loops: int | None = None, state: dict[str, Any] | None = None,
++             first_trade_at: datetime | None = None, history_start: datetime | None = None,
++             heartbeat_minutes: float | None = None, sleep=time.sleep,
++             drift_check: Any | None = None) -> dict[str, Any] | None:
++    """Poll closed klines; open bar k when it starts; close it when it is final.
++
++    With ``state`` the adapter is resumed from its snapshot and reconciled with
++    the venue (recovery.py) before any bar is processed; RecoveryHalted propagates.
++    """
++    from app.research.candle12_v3_paper.recovery import run_recovery
++
++    if getattr(source, "base_url", None):
++        M.check_pair(source.base_url, adapter.broker.name)
++    first_trade_at = first_trade_at or C.OOS_START
+     now = clock()
+-    history = source.history(C.OOS_START - adapter.interval * C.WARMUP_BARS, now)
+-    last = history[-1]["time"]
+-    oos_index = next((i for i, b in enumerate(history) if b["time"] >= C.OOS_START), None)
+-    if oos_index is None:
+-        oos_index = len(history) + int((C.OOS_START - (last + adapter.interval)) / adapter.interval)
+-    adapter.start(history, first_trade_index=oos_index)
++    start_at = history_start or first_trade_at - adapter.interval * C.WARMUP_BARS
++    history = source.history(start_at, now)
++
++    def refresh_funding(at: datetime) -> None:
++        if funding_source is not None:
++            adapter.funding_rows = sorted(
++                ({**r, "time": v3._as_utc(r["time"])} for r in funding_source.settlements(start_at, at)),
++                key=lambda r: r["time"])
++
++    recovery = None
++    if state:
++        refresh_funding(now)
++        adapter.resume(history, int(state["first_trade_index"]), state)
++        recovery = run_recovery(adapter, now=now)
++    else:
++        last = history[-1]["time"]
++        oos_index = next((i for i, b in enumerate(history) if b["time"] >= first_trade_at), None)
++        if oos_index is None:
++            oos_index = len(history) + int((first_trade_at - (last + adapter.interval)) / adapter.interval)
++        adapter.start(history, first_trade_index=oos_index)
++    every = timedelta(minutes=heartbeat_minutes or adapter.safety.heartbeat_minutes)
++    next_beat = clock()
+     opened: int | None = None
+     loops = 0
+     while max_loops is None or loops < max_loops:
+@@ -191,10 +233,7 @@ def run_live(adapter: PaperAdapter, source: Any, *, funding_source: Any | None,
+             k = len(adapter.closed)
+             if opened != k:
+                 adapter.on_bar_open(k, bar["time"], bar["open"], now)
+-            if funding_source is not None:
+-                adapter.funding_rows = sorted(
+-                    ({**r, "time": v3._as_utc(r["time"])}
+-                     for r in funding_source.settlements(history[0]["time"], now)), key=lambda r: r["time"])
++            refresh_funding(now)
+             adapter.on_bar_close(bar, now)
+             opened = None
+         forming = source.forming_bar(now)
+@@ -202,36 +241,190 @@ def run_live(adapter: PaperAdapter, source: Any, *, funding_source: Any | None,
+         if forming and forming["time"] == adapter.closed[-1]["time"] + adapter.interval and opened != k:
+             adapter.on_bar_open(k, forming["time"], forming["open"], now, current_price=source.last_price())
+             opened = k
+-        time.sleep(poll_s)
++        if now >= next_beat:
++            next_beat = now + every
++            drift = drift_check() if drift_check else None
++            if drift:
++                adapter.store.alert("FINGERPRINT_DRIFT", codes=drift)
++                adapter.halt("FINGERPRINT_DRIFT", codes=drift)
++            adapter.store.heartbeat(last_closed=adapter.snapshot()["last_closed_time"], slots=list(adapter.slots),
++                                    halted=adapter.halted, kill_switch=adapter.safety.kill_switch_engaged(),
++                                    inflight=list(adapter.inflight))
++        if max_loops is None or loops < max_loops:
++            sleep(poll_s)
++    return recovery
++
++
++def _refuse(code: str, detail: str = "") -> int:
++    print(f"REFUSED: {code} {detail}".rstrip())
++    return 2
+ 
+ 
+ def cmd_run(args: argparse.Namespace) -> int:
++    from app.research.candle12_v3_paper.binance import PAPER_ENV, BinanceTestnetBroker, PaperGuardError
+     from app.research.candle12_v3_paper.feeds import BinanceFundingSource, BinanceKlineSource
++    from app.research.candle12_v3_paper.recovery import RecoveryHalted
++
++    if args.paper and os.environ.get(PAPER_ENV) != "1":
++        return _refuse("PAPER_ENV", f"--paper needs {PAPER_ENV}=1")
++    if args.paper and args.mode != M.TESTNET_BROKER_CHECK:
++        # The old `run --paper` sent testnet orders against mainnet candles.
++        return _refuse(M.MIXED_DATA_BROKER_MODE, "--paper (testnet fills) needs --mode testnet_broker_check "
++                                                 "(testnet candles); mainnet candles go with the simulated broker")
++    try:
++        spec = M.resolve(args.mode, data_base=args.data_url,
++                         broker_name=M.TESTNET_BROKER if args.mode == M.TESTNET_BROKER_CHECK else M.SIMULATED)
++    except M.ModeError as exc:
++        return _refuse(exc.code, exc.detail)
+ 
+     cfg = C.contract_config()
+     step, _, min_notional, _ = cfg.exchange_filter(C.SYMBOL)
+-    if args.paper:
+-        from app.research.candle12_v3_paper.binance import PAPER_ENV, BinanceTestnetBroker, PaperGuardError
+-
++    root = Path(args.store) if args.store else DATA_ROOT / spec.mode / "live"
++    pre = guard.preflight(spec.mode)
++    eligible = bool(pre["eligible"])
++    if spec.mode == M.VIRTUAL_PAPER_MAINNET and not eligible and not args.allow_non_oos:
++        if (root / "manifest.json").exists():
++            PaperStore(root, mode=spec.store_mode).alert("FINGERPRINT_DRIFT", codes=pre["codes"])
++        return _refuse(pre["status"], f"{pre['codes']}; an OOS-eligible run needs a clean freeze-oos lock "
++                                      "(or pass --allow-non-oos for a NON_OOS virtual run)")
++    if (root / "manifest.json").exists():
++        existing = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
++        if existing.get("counts_toward_oos") and not eligible:
++            return _refuse(pre["status"], "this store counts toward OOS and the fingerprints drifted; it cannot resume")
++
++    if spec.mode == M.TESTNET_BROKER_CHECK:
+         if os.environ.get(PAPER_ENV) != "1":
+-            print(f"REFUSED: --paper needs {PAPER_ENV}=1")
+-            return 2
++            return _refuse("PAPER_ENV", f"testnet_broker_check needs {PAPER_ENV}=1")
+         try:
+             broker: Any = BinanceTestnetBroker(symbol=C.SYMBOL, api_key=os.environ.get("BINANCE_TESTNET_API_KEY", ""),
+-                                               api_secret=os.environ.get("BINANCE_TESTNET_API_SECRET", ""))
++                                               api_secret=os.environ.get("BINANCE_TESTNET_API_SECRET", ""),
++                                               base_url=spec.data_base)
+         except PaperGuardError as exc:
+-            print(f"REFUSED: {exc}")
+-            return 2
+-        mode = "PAPER"
++            return _refuse("PAPER_GUARD", str(exc))
+     else:
+-        broker = SimulatedBroker(slippage=cfg.entry_slippage, fee_rate=cfg.taker_fee, step=step, min_notional=min_notional)
+-        mode = "DRY_RUN"
+-    root = Path(args.store) if args.store else DATA_ROOT / mode.lower() / "live"
+-    store = PaperStore(root, mode=mode, manifest={"contract_id": C.CONTRACT_ID, "config_fingerprint": C.config_fingerprint(),
+-                                                  "code_fingerprint": C.code_fingerprint()["combined"]})
+-    adapter = PaperAdapter(broker=broker, store=store, cfg=cfg)
+-    run_live(adapter, BinanceKlineSource(C.SYMBOL, C.TIMEFRAME), funding_source=BinanceFundingSource(C.SYMBOL),
+-             poll_s=args.poll)
++        broker = SimulatedBroker(slippage=cfg.entry_slippage, fee_rate=cfg.taker_fee, step=step,
++                                 min_notional=min_notional, equity=cfg.account_equity, leverage=cfg.leverage)
++
++    counts = spec.counts_toward_oos and eligible
++    store = PaperStore(root, mode=spec.store_mode, manifest={
++        "execution_mode": spec.mode, "contract_id": C.CONTRACT_ID, "config_fingerprint": C.config_fingerprint(),
++        "code_fingerprint": C.code_fingerprint()["combined"], "data_venue": spec.data_venue, "broker_venue": spec.broker,
++        "counts_toward_oos": counts, "strategy_validation": spec.strategy_validation,
++        "label": M.OOS_ELIGIBLE if counts else M.NON_OOS,
++    })
++    state = store.load_state()
++    if state and not args.recover:
++        return _refuse("RECOVERY_REQUIRED", f"{root} has a saved state; restart with --recover")
++    if args.recover and not state:
++        print(f"nothing to recover in {root}; starting fresh")
++    safety = SafetyLimits(kill_switch_path=Path(args.kill_switch) if args.kill_switch else DEFAULT_KILL_SWITCH,
++                          max_daily_order_attempts=args.max_daily_orders,
++                          max_consecutive_broker_errors=args.max_broker_errors,
++                          heartbeat_minutes=args.heartbeat_minutes)
++    adapter = PaperAdapter(broker=broker, store=store, cfg=cfg, safety=safety,
++                           require_funding=spec.mode == M.VIRTUAL_PAPER_MAINNET)
++    source = BinanceKlineSource(C.SYMBOL, C.TIMEFRAME, base_url=spec.data_base)
++    funding = BinanceFundingSource(C.SYMBOL, base_url=spec.data_base)
++    if spec.mode == M.TESTNET_BROKER_CHECK:
++        now = datetime.now(UTC)
++        first_at = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
++    else:
++        first_at = C.OOS_START
++    hist_start = (datetime.fromisoformat(store.manifest["history_start"])
++                  if state and store.manifest.get("history_start") else None)
++
++    def drift() -> list[str] | None:
++        if not store.manifest.get("counts_toward_oos"):
++            return None
++        return guard.fingerprint_status()["codes"] or None
++
++    try:
++        run_live(adapter, source, funding_source=funding, poll_s=args.poll, state=state if args.recover else None,
++                 first_trade_at=first_at, history_start=hist_start, drift_check=drift)
++    except RecoveryHalted as exc:
++        print(f"HALTED: {exc.code} {json.dumps(exc.detail, default=str)}")
++        return 3
++    return 0
++
++
++def cmd_broker_check(args: argparse.Namespace) -> int:
++    from app.research.candle12_v3_paper.binance import PAPER_ENV, BinanceTestnetBroker, PaperGuardError
++    from app.research.candle12_v3_paper.broker_check import BROKER_CHECK_PASS, run_broker_check
++
++    if os.environ.get(PAPER_ENV) != "1":
++        return _refuse("PAPER_ENV", f"broker-check needs {PAPER_ENV}=1")
++    spec = M.spec(M.TESTNET_BROKER_CHECK)
++    try:
++        broker = BinanceTestnetBroker(symbol=args.symbol, api_key=os.environ.get("BINANCE_TESTNET_API_KEY", ""),
++                                      api_secret=os.environ.get("BINANCE_TESTNET_API_SECRET", ""),
++                                      base_url=args.base_url or spec.data_base)
++    except PaperGuardError as exc:
++        return _refuse("PAPER_GUARD", str(exc))
++    root = Path(args.store) if args.store else DATA_ROOT / "broker_check" / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
++    store = PaperStore(root, mode=spec.store_mode, manifest={
++        "execution_mode": spec.mode, "symbol": args.symbol.upper(), "counts_toward_oos": False,
++        "strategy_validation": False, "label": M.NON_OOS})
++    result = run_broker_check(broker, store, max_trades=args.max_trades, exit_wait_s=args.exit_wait, poll_s=args.poll)
++    store.update_manifest(broker_check_result=result["result"])
++    print(json.dumps(result, indent=1, default=str))
++    print(result["result"])
++    return 0 if result["result"] == BROKER_CHECK_PASS else 1
++
++
++def _parse_when(s: str) -> datetime:
++    if s.lower() == "now":
++        return datetime.now(UTC)
++    t = datetime.fromisoformat(s)
++    return t if t.tzinfo else t.replace(tzinfo=UTC)
++
++
++def cmd_backfill(args: argparse.Namespace) -> int:
++    from app.research.candle12_v3_paper.backfill import PostgresRepository, backfill, run_forever
++
++    symbols = [x.strip().upper() for x in args.symbols.split(",") if x.strip()]
++    state_path = Path(args.state) if args.state else DATA_ROOT / "backfill_state.json"
++    repo = PostgresRepository()
++
++    def once() -> dict[str, Any]:
++        return backfill(symbols, _parse_when(args.start), _parse_when(args.end), repo=repo, state_path=state_path)
++
++    if args.loop:
++        failures = run_forever(once, interval_s=args.interval_s, max_loops=args.max_loops,
++                               emit=lambda r: print(json.dumps(r, default=str), flush=True))
++        return 0 if failures == 0 else 1
++    report = once()
++    print(json.dumps(report, indent=1, default=str))
++    return 0 if report["ok"] else 1
++
++
++def cmd_freeze_oos(args: argparse.Namespace) -> int:
++    from app.research.candle12_v3_paper.freeze import FreezeError, freeze_oos
++
++    try:
++        out = freeze_oos(lock_path=Path(args.lock) if args.lock else None)
++    except FreezeError as exc:
++        detail = exc.detail if isinstance(exc.detail, str) else json.dumps(exc.detail, default=str)
++        return _refuse(exc.code, detail)
++    print(json.dumps(out, indent=1, default=str))
++    return 0
++
++
++def cmd_status(args: argparse.Namespace) -> int:
++    from app.research.candle12_v3_paper.status import build_status
++
++    print(json.dumps(build_status(Path(args.store)), indent=1, default=str))
++    return 0
++
++
++def cmd_kill_switch(args: argparse.Namespace) -> int:
++    from app.research.candle12_v3_paper.safety import engage_kill_switch, release_kill_switch
++
++    path = Path(args.path) if args.path else DEFAULT_KILL_SWITCH
++    if args.action == "engage":
++        engage_kill_switch(path, by=args.by, reason=args.reason or "")
++    elif args.action == "release":
++        release_kill_switch(path)
++    print(json.dumps({"kill_switch": path.exists(), "path": str(path)}))
+     return 0
+ 
+ 
+@@ -261,13 +454,49 @@ def main(argv: list[str] | None = None) -> int:
+     o.add_argument("--diagnostic", action="store_true",
+                    help="NON-ACCEPTANCE diagnostic read: allowed early, logged, never an OOS pass")
+     run = sub.add_parser("run")
+-    run.add_argument("--paper", action="store_true", help="send orders to the futures TESTNET (needs env guard)")
++    run.add_argument("--mode", choices=M.MODES, help="required: virtual_paper_mainnet or testnet_broker_check")
++    run.add_argument("--paper", action="store_true",
++                     help="legacy flag: testnet fills; only valid with --mode testnet_broker_check")
++    run.add_argument("--recover", action="store_true", help="resume a saved store after venue reconciliation")
++    run.add_argument("--allow-non-oos", action="store_true",
++                     help="run virtual_paper_mainnet without a clean freeze; the store is NON_OOS forever")
++    run.add_argument("--data-url", help="override the market-data host (must match the mode's venue)")
+     run.add_argument("--store")
+     run.add_argument("--poll", type=float, default=15.0)
++    run.add_argument("--kill-switch", help=f"kill-switch file (default {DEFAULT_KILL_SWITCH})")
++    run.add_argument("--max-daily-orders", type=int, default=20)
++    run.add_argument("--max-broker-errors", type=int, default=5)
++    run.add_argument("--heartbeat-minutes", type=float, default=5.0)
++    bc = sub.add_parser("broker-check")
++    bc.add_argument("--symbol", default=C.SYMBOL)
++    bc.add_argument("--max-trades", type=int, default=1)
++    bc.add_argument("--store")
++    bc.add_argument("--base-url", help="testnet REST host (default https://demo-fapi.binance.com)")
++    bc.add_argument("--exit-wait", type=float, default=900.0, help="seconds to wait for a tight exit to trigger")
++    bc.add_argument("--poll", type=float, default=5.0)
++    bf = sub.add_parser("backfill-data")
++    bf.add_argument("--symbols", default="BTCUSDT,ETHUSDT")
++    bf.add_argument("--start", required=True)
++    bf.add_argument("--end", default="now")
++    bf.add_argument("--state", help="watermark file (default data/candle12_v3_paper/backfill_state.json)")
++    bf.add_argument("--loop", action="store_true", help="foreground continuous ingestion")
++    bf.add_argument("--interval-s", type=float, default=3600.0)
++    bf.add_argument("--max-loops", type=int)
++    fz = sub.add_parser("freeze-oos")
++    fz.add_argument("--lock")
++    st = sub.add_parser("status")
++    st.add_argument("--store", required=True)
++    ks = sub.add_parser("kill-switch")
++    ks.add_argument("action", choices=("engage", "release", "status"))
++    ks.add_argument("--by", default="operator")
++    ks.add_argument("--reason")
++    ks.add_argument("--path")
+     args = ap.parse_args(argv)
+     return {
+         "smoke": cmd_smoke, "dry-run": cmd_dry_run, "reconcile": cmd_reconcile, "resolve-exception": cmd_resolve,
+-        "freeze-contract": cmd_freeze, "oos-evaluate": cmd_oos, "run": cmd_run,
++        "freeze-contract": cmd_freeze, "oos-evaluate": cmd_oos, "run": cmd_run, "broker-check": cmd_broker_check,
++        "backfill-data": cmd_backfill, "freeze-oos": cmd_freeze_oos, "status": cmd_status,
++        "kill-switch": cmd_kill_switch,
+     }[args.cmd](args)
+ 
+ 

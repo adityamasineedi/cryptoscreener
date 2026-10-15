@@ -1,0 +1,102 @@
+diff --git "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\store.py" "b/backend\\app\\research\\candle12_v3_paper\\store.py"
+index 84ee510..0e7e91f 100644
+--- "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\store.py"
++++ "b/backend\\app\\research\\candle12_v3_paper\\store.py"
+@@ -6,18 +6,32 @@ One directory per run:
+   trades.jsonl      closed paper trades with every reconciliation field
+   signals.jsonl     signals that did not become trades (rejected, no fill, missed, blocked)
+   exceptions.jsonl  reconciliation and operational exceptions, and their resolutions
+-  state.json        latest adapter snapshot (open slot, pending signal), for restarts
++  alerts.jsonl      operator alerts (missed candle, missing funding, rejection, exit failure,
++                    unexpected position, recovery action, fingerprint drift, process restart)
++  heartbeats.jsonl  liveness records written every N minutes while a run is active
++  state.json        latest adapter + venue snapshot (slots, pending, in-flight orders), for restarts
++
++Store modes:
++  VIRTUAL_PAPER_MAINNET  mainnet data + simulated broker; the only mode that can count toward OOS
++  TESTNET_BROKER_CHECK   testnet data + testnet broker; NON_OOS, never strategy validation
++  SMOKE / DRY_RUN        seen bars, simulated broker; NON_OOS
++  PAPER                  legacy (mainnet data + testnet fills); readable, never OOS-eligible
+ """
+ 
+ from __future__ import annotations
+ 
+ import json
++import os
+ from datetime import datetime, timezone
+ from pathlib import Path
+ from typing import Any
+ 
+-MODES = ("DRY_RUN", "PAPER", "SMOKE")
++MODES = ("DRY_RUN", "PAPER", "SMOKE", "VIRTUAL_PAPER_MAINNET", "TESTNET_BROKER_CHECK")
++OOS_STORE_MODE = "VIRTUAL_PAPER_MAINNET"
+ NON_ACCEPTANCE_SMOKE_ONLY = "NON_ACCEPTANCE_SMOKE_ONLY"
++NON_OOS = "NON_OOS"
++ALERT_KINDS = ("MISSED_CANDLE", "MISSING_FUNDING", "ORDER_REJECTION", "EXIT_ORDER_FAILURE", "UNEXPECTED_POSITION",
++               "RECOVERY_ACTION", "FINGERPRINT_DRIFT", "PROCESS_RESTART", "HALTED", "KILL_SWITCH")
+ 
+ 
+ def _dump(obj: Any) -> str:
+@@ -38,13 +52,20 @@ class PaperStore:
+                 raise ValueError(f"store {self.root} is a {existing.get('mode')} store, not {mode}")
+             self.manifest = existing
+         else:
++            label = NON_ACCEPTANCE_SMOKE_ONLY if mode == "SMOKE" else (NON_OOS if mode == "TESTNET_BROKER_CHECK" else mode)
+             self.manifest = {
+                 "mode": mode,
+                 "created_at": datetime.now(timezone.utc).isoformat(),
+-                "non_acceptance": mode == "SMOKE",
+-                "label": NON_ACCEPTANCE_SMOKE_ONLY if mode == "SMOKE" else mode,
++                "non_acceptance": mode in ("SMOKE", "TESTNET_BROKER_CHECK"),
++                "label": label,
++                # Only a VIRTUAL_PAPER_MAINNET store that passed the drift guard may set this True.
++                "counts_toward_oos": False,
++                "strategy_validation": mode == OOS_STORE_MODE,
+                 **(manifest or {}),
+             }
++            if mode != OOS_STORE_MODE:
++                self.manifest["counts_toward_oos"] = False
++                self.manifest["strategy_validation"] = False
+             self._write_manifest()
+         self._seq = len(self.read("events"))
+ 
+@@ -71,8 +92,26 @@ class PaperStore:
+         self._append("events", row)
+         return row
+ 
+-    def trade(self, row: dict[str, Any]) -> None:
++    def trade(self, row: dict[str, Any]) -> bool:
++        """Append a closed trade once. A replayed bar after a restart cannot write it twice."""
++        tid = row.get("trade_id")
++        if tid is not None and any(t.get("trade_id") == tid for t in self.read("trades")):
++            self.event("DUPLICATE_TRADE_SUPPRESSED", trade_id=tid)
++            return False
+         self._append("trades", row)
++        return True
++
++    def alert(self, kind: str, **detail: Any) -> dict[str, Any]:
++        if kind not in ALERT_KINDS:
++            raise ValueError(f"alert kind {kind!r}; allowed {ALERT_KINDS}")
++        row = {"alert": kind, "at": datetime.now(timezone.utc).isoformat(), **detail}
++        self._append("alerts", row)
++        return row
++
++    def heartbeat(self, **detail: Any) -> dict[str, Any]:
++        row = {"at": datetime.now(timezone.utc).isoformat(), **detail}
++        self._append("heartbeats", row)
++        return row
+ 
+     def signal(self, row: dict[str, Any]) -> None:
+         self._append("signals", row)
+@@ -100,7 +139,10 @@ class PaperStore:
+         return [e for e in self.exceptions() if e.get("status") != "RESOLVED"]
+ 
+     def save_state(self, state: dict[str, Any]) -> None:
+-        (self.root / "state.json").write_text(_dump(state), encoding="utf-8")
++        """Atomic: a crash mid-write leaves the previous snapshot, never a torn one."""
++        tmp = self.root / "state.json.tmp"
++        tmp.write_text(_dump(state), encoding="utf-8")
++        os.replace(tmp, self.root / "state.json")
+ 
+     def load_state(self) -> dict[str, Any] | None:
+         path = self.root / "state.json"

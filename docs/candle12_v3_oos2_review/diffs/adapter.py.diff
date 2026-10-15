@@ -1,0 +1,426 @@
+diff --git "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\adapter.py" "b/backend\\app\\research\\candle12_v3_paper\\adapter.py"
+index 474efd5..c67508b 100644
+--- "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\adapter.py"
++++ "b/backend\\app\\research\\candle12_v3_paper\\adapter.py"
+@@ -14,12 +14,19 @@ Per side, a trade moves through:
+ Timing per bar k: ``on_bar_open(k)`` places the entry for a Candle-1 that closed at
+ k-1; ``on_bar_close(bar k)`` syncs the broker, cancels an unfilled Candle-2 entry,
+ then runs detection on the now-closed bar k. Detection only ever sees closed bars.
++
++Persistence: every order request is written to state.json as in-flight before the
++broker is called, and the adapter + venue snapshot is written again before the
++call returns, so a restart can tell a lost request from a placed one
++(recovery.py). Operational limits (safety.py) can only stop an entry; they never
++change a price or a size, and they never stop a protective exit.
+ """
+ 
+ from __future__ import annotations
+ 
++from collections import defaultdict
+ from dataclasses import asdict, dataclass, field
+-from datetime import datetime, timedelta
++from datetime import datetime, timedelta, timezone
+ from typing import Any, Mapping, Sequence
+ 
+ from app.research import candle12_v3 as v3
+@@ -38,6 +45,14 @@ from app.research.candle12_v3_paper.broker import (
+     Order,
+ )
+ from app.research.candle12_v3_paper.contract import SYMBOL, TIMEFRAME, contract_config
++from app.research.candle12_v3_paper.safety import (
++    HALTED,
++    KILL_SWITCH,
++    MAX_CONSECUTIVE_BROKER_ERRORS,
++    MAX_DAILY_ORDER_ATTEMPTS,
++    MAX_OPEN_TRADES,
++    SafetyLimits,
++)
+ from app.research.candle12_v3_paper.store import PaperStore
+ from app.research.candle12_v3_paper.tracker import SignalTracker, entry_prices, is_gap, plan_entry
+ from app.signals._candle_utils import candle_time, ohlc
+@@ -48,6 +63,8 @@ EPS = 1e-12
+ 
+ TAG_PRICE_BEYOND_TRIGGER = "PRICE_BEYOND_TRIGGER_AT_PLACEMENT"
+ TAG_PARTIAL_FILL = "PARTIAL_FILL"
++MISSING_FUNDING_DATA = "MISSING_FUNDING_DATA"
++ORDER_STATE_UNKNOWN = "ORDER_STATE_UNKNOWN"
+ 
+ 
+ def _iso(t: datetime | None) -> str | None:
+@@ -107,6 +124,8 @@ class PaperAdapter:
+         max_placement_delay_s: float = 300.0,
+         stale_after_s: float = 900.0,
+         max_place_attempts: int = 3,
++        safety: SafetyLimits | None = None,
++        require_funding: bool = False,
+     ) -> None:
+         self.broker = broker
+         self.store = store
+@@ -129,6 +148,14 @@ class PaperAdapter:
+         self.first_trade_index: int | None = None
+         self._orders: dict[str, tuple[Slot, str]] = {}
+         self._trade_seq = 0
++        self.safety = safety or SafetyLimits()
++        self.require_funding = require_funding
++        self.inflight: dict[str, dict[str, Any]] = {}
++        self.halted: str | None = None
++        self.halt_exception_id: str | None = None
++        self.consecutive_errors = 0
++        self.attempts_by_day: dict[str, int] = defaultdict(int)
++        self.funding_flagged: set[str] = set()
+ 
+     # ------------------------------------------------------------- helpers
+ 
+@@ -160,14 +187,96 @@ class PaperAdapter:
+ 
+     def snapshot(self) -> dict[str, Any]:
+         last = self.closed[-1] if self.closed else None
++        broker_snap = getattr(self.broker, "snapshot", None)
+         return {
++            "symbol": self.symbol,
++            "timeframe": self.timeframe,
++            "first_trade_index": self.first_trade_index,
+             "last_closed_index": len(self.closed) - 1,
+             "last_closed_time": _iso(candle_time(last)) if last else None,
+             "slots": {k: s.to_dict() for k, s in self.slots.items()},
+             "pending": {k: s.to_dict() for k, s in self.pending.items()},
+             "last_exit_bar": dict(self.last_exit_bar),
++            "orders": {cid: [slot.trade_id, slot.direction, purpose] for cid, (slot, purpose) in self._orders.items()
++                       if self.slots.get(slot.direction) is slot},
++            "inflight": dict(self.inflight),
++            "trade_seq": self._trade_seq,
++            "halted": self.halted,
++            "halt_exception_id": self.halt_exception_id,
++            "consecutive_errors": self.consecutive_errors,
++            "attempts_by_day": dict(self.attempts_by_day),
++            "funding_flagged": sorted(self.funding_flagged),
++            "last_funding_time": _iso(self.funding_rows[-1]["time"]) if self.funding_rows else None,
++            "broker": broker_snap() if callable(broker_snap) else None,
++            "saved_at": datetime.now(timezone.utc).isoformat(),
+         }
+ 
++    def _persist(self) -> None:
++        self.store.save_state(self.snapshot())
++
++    # ------------------------------------------------------------- halt / broker calls
++
++    def halt(self, reason: str, **detail: Any) -> None:
++        """Stop placing entries until an operator resolves the HALTED exception."""
++        if self.halted:
++            return
++        k = len(self.closed) - 1
++        self.halted = reason
++        self.halt_exception_id = f"HALTED:{reason}:{k}"
++        self._ev("HALTED", None, k, reason=reason, **detail)
++        self.store.exception(self.halt_exception_id, HALTED, reason=reason, **detail)
++        self.store.alert("HALTED", reason=reason, **detail)
++        self._persist()
++
++    def _broker_error(self, k: int, exc: Exception) -> None:
++        if isinstance(exc, BrokerRejected) and exc.reason == PRICE_BEYOND_TRIGGER:
++            return  # a market condition, not a venue fault
++        self.consecutive_errors += 1
++        if self.consecutive_errors >= self.safety.max_consecutive_broker_errors:
++            self.halt(MAX_CONSECUTIVE_BROKER_ERRORS, errors=self.consecutive_errors, last_error=str(exc))
++
++    def _lookup(self, client_id: str) -> Order | None:
++        lookup = getattr(self.broker, "lookup", None)
++        return lookup(client_id) if callable(lookup) else None
++
++    def _place(self, order: Order, slot: Slot, purpose: str, k: int, reference_price: float | None = None) -> Order:
++        """Write-ahead, place, persist. Raises the broker's exception when nothing was placed."""
++        cid = order.client_id
++        self.inflight[cid] = {"trade_id": slot.trade_id, "direction": slot.direction, "purpose": purpose,
++                              "order": order.to_dict(), "bar_index": k, "slot": slot.to_dict()}
++        self._persist()
++        try:
++            self.broker.place_order(order, bar_index=k, reference_price=reference_price)
++        except BrokerUnavailable as exc:
++            try:
++                found = self._lookup(cid)
++            except BrokerUnavailable:
++                # Could not tell whether the exchange has it: never guess.
++                self.halt(ORDER_STATE_UNKNOWN, client_id=cid, error=str(exc))
++                raise exc
++            if found is None:
++                self.inflight.pop(cid, None)
++                self._broker_error(k, exc)
++                self._persist()
++                raise
++            self._ev("ORDER_FOUND_AFTER_TIMEOUT", slot, k, client_id=cid, status=found.status)
++            order.exchange_id, order.status = found.exchange_id, found.status
++        except BrokerRejected as exc:
++            self.inflight.pop(cid, None)
++            self._broker_error(k, exc)
++            self._persist()
++            raise
++        self.inflight.pop(cid, None)
++        self.consecutive_errors = 0
++        self._orders[cid] = (slot, purpose)
++        self._persist()
++        return order
++
++    def _cancel(self, client_id: str) -> Order:
++        order = self.broker.cancel_order(client_id)
++        self._persist()
++        return order
++
+     # ------------------------------------------------------------- lifecycle
+ 
+     def start(self, history: Sequence[Mapping[str, Any]], first_trade_index: int) -> None:
+@@ -196,6 +305,67 @@ class PaperAdapter:
+         )
+         self._ev("ADAPTER_STARTED", None, len(self.closed) - 1, first_trade_index=first_trade_index)
+ 
++    def resume(self, history: Sequence[Mapping[str, Any]], first_trade_index: int, state: Mapping[str, Any]) -> None:
++        """Rebuild the adapter from a persisted snapshot after a restart.
++
++        The detector is re-fed the same closed bars up to the last processed one
++        (silently: those bars were handled before the restart), which restores the
++        swing and once-per-level bookkeeping exactly. Slots, pending signals,
++        in-flight requests, counters and the virtual venue come from the snapshot.
++        Bars that closed while the process was down are NOT processed here; the
++        caller feeds them through on_bar_open/on_bar_close, where any entry they
++        carried is late and recorded as missed. Broker state is reconciled
++        afterwards by recovery.py, before anything trades.
++        """
++        last = int(state["last_closed_index"])
++        if len(history) < last + 1:
++            raise ValueError(f"HISTORY_SHORT: state ends at bar {last}, history has {len(history)} bars")
++        saved = state.get("last_closed_time")
++        if saved and _iso(candle_time(history[last])) != saved:
++            raise ValueError(f"HISTORY_MISMATCH: bar {last} is {_iso(candle_time(history[last]))}, state says {saved}")
++        self.first_trade_index = first_trade_index
++        setups: dict[int, Mapping[str, Any]] = {}
++        for bar in history[: last + 1]:
++            self.closed.append(bar)
++            i = len(self.closed) - 1
++            setup = self.tracker.observe(self.closed, i, first_trade_index=first_trade_index)
++            if setup:
++                setups[i] = setup
++
++        self._resume_setups = setups
++        self.slots = {k: self._slot_from_record(d) for k, d in (state.get("slots") or {}).items()}
++        self.pending = {k: self._slot_from_record(d) for k, d in (state.get("pending") or {}).items()}
++        self.last_exit_bar = {k: int(v) for k, v in (state.get("last_exit_bar") or {}).items()}
++        by_trade = {s.trade_id: s for s in self.slots.values()}
++        self._orders = {cid: (by_trade[tid], purpose) for cid, (tid, _d, purpose) in (state.get("orders") or {}).items()
++                        if tid in by_trade}
++        self.inflight = dict(state.get("inflight") or {})
++        self._trade_seq = int(state.get("trade_seq") or 0)
++        self.consecutive_errors = int(state.get("consecutive_errors") or 0)
++        self.attempts_by_day = defaultdict(int, {k: int(v) for k, v in (state.get("attempts_by_day") or {}).items()})
++        self.funding_flagged = set(state.get("funding_flagged") or [])
++        self.halted = state.get("halted")
++        self.halt_exception_id = state.get("halt_exception_id")
++        if self.halted and self.halt_exception_id:
++            open_ids = {e["id"] for e in self.store.open_exceptions()}
++            if self.halt_exception_id not in open_ids:
++                self._ev("HALT_CLEARED", None, last, reason=self.halted, exception_id=self.halt_exception_id)
++                self.halted = None
++                self.halt_exception_id = None
++        restore = getattr(self.broker, "restore", None)
++        if state.get("broker") and callable(restore):
++            restore(state["broker"])
++        self._ev("ADAPTER_RESUMED", None, last, first_trade_index=first_trade_index,
++                 slots=list(self.slots), pending=list(self.pending), inflight=list(self.inflight),
++                 halted=self.halted)
++        self.store.alert("PROCESS_RESTART", last_closed_time=saved, slots=list(self.slots),
++                         inflight=list(self.inflight))
++
++    def _slot_from_record(self, d: Mapping[str, Any]) -> Slot:
++        """A Slot from its persisted dict; the detector setup comes from the resume replay."""
++        setups = getattr(self, "_resume_setups", {})
++        return Slot(**{**d, "setup": setups.get(int(d["candle1_index"]))})
++
+     def replay(self, candles: Sequence[Mapping[str, Any]], first_trade_index: int) -> None:
+         """Dry-run driver: bar opens and closes in order, as a live feed would deliver them."""
+         self.start(candles[:first_trade_index], first_trade_index)
+@@ -223,9 +393,33 @@ class PaperAdapter:
+     ) -> None:
+         if k != len(self.closed):
+             raise ValueError(f"bar {k} opened but {len(self.closed)} bars are closed")
++        handled = False
+         for side in list(self.pending):
+             slot = self.pending.pop(side)
++            handled = True
++            blocked = self._entry_gate(slot, open_time)
++            if blocked:
++                slot.entry_index = k
++                self._missed(slot, k, blocked)
++                if blocked == KILL_SWITCH:
++                    self.store.alert("KILL_SWITCH", trade_id=slot.trade_id)
++                continue
+             self._place_entry(slot, k, open_time, open_price, now, current_price)
++            handled = True
++        if handled:
++            self._persist()
++
++    def _entry_gate(self, slot: Slot, open_time: datetime) -> str | None:
++        """Why a new entry may not be placed now, or None. Never applies to exits."""
++        if self.halted:
++            return HALTED
++        if self.safety.kill_switch_engaged():
++            return KILL_SWITCH
++        if len(self.slots) >= self.safety.max_open_trades_per_symbol:
++            return MAX_OPEN_TRADES
++        if self.attempts_by_day[open_time.date().isoformat()] >= self.safety.max_daily_order_attempts:
++            return MAX_DAILY_ORDER_ATTEMPTS
++        return None
+ 
+     def _missed(self, slot: Slot, k: int, reason: str) -> None:
+         slot.state = "SIGNAL_MISSED"
+@@ -277,13 +471,18 @@ class PaperAdapter:
+             type=MARKET if (gap or moved) else STOP_MARKET, qty=sizing["qty"],
+             stop_price=None if (gap or moved) else f,
+         )
+-        self._submit_entry(slot, order, k, open_price if (gap or moved) else None)
++        self._submit_entry(slot, order, k, open_price if (gap or moved) else None, open_time)
+ 
+-    def _submit_entry(self, slot: Slot, order: Order, k: int, reference_price: float | None) -> None:
++    def _submit_entry(self, slot: Slot, order: Order, k: int, reference_price: float | None,
++                      open_time: datetime | None = None) -> None:
++        day = (open_time or candle_time(self.closed[-1]) or datetime.now(timezone.utc)).date().isoformat()
+         for attempt in range(1, self.max_place_attempts + 1):
++            if self.halted:
++                break
++            self.attempts_by_day[day] += 1
+             self._ev("ORDER_REQUESTED", slot, k, order=order.to_dict(), attempt=attempt)
+             try:
+-                self.broker.place_order(order, bar_index=k, reference_price=reference_price)
++                self._place(order, slot, ENTRY, k, reference_price)
+             except BrokerRejected as exc:
+                 if exc.reason == PRICE_BEYOND_TRIGGER and order.type == STOP_MARKET:
+                     # The stop would trigger at once: the market already passed it.
+@@ -297,6 +496,7 @@ class PaperAdapter:
+                 slot.state = "ORDER_REJECTED"
+                 slot.tags.append(exc.reason)
+                 self._ev("ORDER_REJECTED", slot, k, reason=exc.reason, code=exc.code, message=exc.message)
++                self.store.alert("ORDER_REJECTION", trade_id=slot.trade_id, reason=exc.reason, code=exc.code)
+                 self._signal_outcome(slot, "ORDER_REJECTED", rejection=exc.reason, code=exc.code)
+                 self.store.exception(f"{slot.trade_id}:{exc.reason}", exc.reason, trade_id=slot.trade_id,
+                                      code=exc.code, detail="exchange refused an entry the engine would take")
+@@ -307,10 +507,10 @@ class PaperAdapter:
+             slot.state = "ORDER_ACCEPTED"
+             slot.entry_id = order.client_id
+             self.slots[slot.direction] = slot
+-            self._orders[order.client_id] = (slot, ENTRY)
+             self._ev("ORDER_ACCEPTED", slot, k, order=order.to_dict())
++            self._persist()
+             return
+-        self._missed(slot, k, "BROKER_UNAVAILABLE")
++        self._missed(slot, k, HALTED if self.halted else "BROKER_UNAVAILABLE")
+ 
+     # ------------------------------------------------------------- bar close
+ 
+@@ -323,13 +523,17 @@ class PaperAdapter:
+             if t is None or prev is None or t - prev != self.interval:
+                 self._ev("DATA_GAP", None, k, previous=_iso(prev), current=_iso(t))
+                 self.store.exception(f"DATA_GAP:{_iso(t)}", "DATA_GAP", previous=_iso(prev), current=_iso(t))
++                self.store.alert("MISSED_CANDLE", previous=_iso(prev), current=_iso(t))
+         if t is not None and (now - (t + self.interval)).total_seconds() > self.stale_after_s:
+             self._ev("DATA_STALE", None, k, bar_close=_iso(t + self.interval), now=_iso(now))
+         try:
+             self.broker.sync(k, ohlc(self.closed, k), self)
+         except BrokerUnavailable as exc:
+             self._ev("BROKER_UNAVAILABLE", None, k, error=str(exc), during="sync")
++            self._broker_error(k, exc)
+         self._entry_deadline(k)
++        if self.require_funding and t is not None:
++            self._check_funding(k, t)
+         if self.first_trade_index is None:
+             raise RuntimeError("start() must run before bars close")
+         setup = self.tracker.observe(self.closed, k, first_trade_index=self.first_trade_index)
+@@ -342,14 +546,42 @@ class PaperAdapter:
+             else:
+                 self._ev("SIGNAL_DETECTED", slot, k, c1=slot.c1, prices=slot.prices)
+                 self.pending[slot.direction] = slot
+-        self.store.save_state(self.snapshot())
++        self._persist()
++
++    def _check_funding(self, k: int, t: datetime) -> None:
++        """Every settlement an open position has lived through must be in the funding feed.
++
++        Settlements t_in < s <= t (t = open of the bar that just closed), on the
++        contract's funding interval. A missing one is MISSING_FUNDING_DATA: an open
++        exception, so it blocks OOS acceptance until explained. Nothing is filled in.
++        """
++        interval = timedelta(hours=self.cfg.funding_interval_hours)
++        have = [r["time"] for r in self.funding_rows]
++        epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
++        for slot in self.slots.values():
++            if slot.entry_index is None or slot.entry_qty <= EPS:
++                continue
++            t_in = candle_time(self.closed[slot.entry_index])
++            if t_in is None:
++                continue
++            s = epoch + (int((t_in - epoch) // interval) + 1) * interval
++            while s <= t:
++                key = f"{slot.trade_id}:{s.isoformat()}"
++                if key not in self.funding_flagged and not any(abs((h - s).total_seconds()) < 60 for h in have):
++                    self.funding_flagged.add(key)
++                    self._ev(MISSING_FUNDING_DATA, slot, k, settlement=s.isoformat())
++                    self.store.exception(f"{MISSING_FUNDING_DATA}:{key}", MISSING_FUNDING_DATA,
++                                         trade_id=slot.trade_id, settlement=s.isoformat(),
++                                         detail="funding settlement missing for an open position; blocks OOS")
++                    self.store.alert("MISSING_FUNDING", trade_id=slot.trade_id, settlement=s.isoformat())
++                s += interval
+ 
+     def _entry_deadline(self, k: int) -> None:
+         """Candle-2 has closed: whatever of the entry did not fill is cancelled."""
+         for side, slot in list(self.slots.items()):
+             if slot.entry_index != k or slot.state not in ("ORDER_ACCEPTED", "ORDER_PARTIALLY_FILLED"):
+                 continue
+-            self.broker.cancel_order(slot.entry_id)  # type: ignore[arg-type]
++            self._cancel(slot.entry_id)  # type: ignore[arg-type]
+             self._ev("ORDER_CANCELED", slot, k, client_id=slot.entry_id, reason="CANDLE2_CLOSED",
+                      filled_qty=slot.entry_qty)
+             if slot.entry_qty <= EPS:
+@@ -391,7 +623,7 @@ class PaperAdapter:
+             return
+         for cid in (slot.stop_id, slot.target_id, slot.entry_id):
+             if cid and cid != order.client_id:
+-                o = self.broker.cancel_order(cid)
++                o = self._cancel(cid)
+                 if o.status == "CANCELED":
+                     self._ev("ORDER_CANCELED", slot, bar_index, client_id=cid, reason="POSITION_CLOSED")
+         self._finalize(slot, bar_index)
+@@ -403,7 +635,7 @@ class PaperAdapter:
+         assert slot.plan is not None
+         for cid in (slot.stop_id, slot.target_id):
+             if cid:
+-                self.broker.cancel_order(cid)
++                self._cancel(cid)
+                 self._ev("ORDER_CANCELED", slot, bar_index, client_id=cid, reason="RESIZED_FOR_FILL")
+         slot.exit_seq += 1
+         qty = slot.entry_qty
+@@ -414,14 +646,15 @@ class PaperAdapter:
+                        type=TAKE_PROFIT_MARKET, qty=qty, stop_price=slot.plan["target"], reduce_only=True)
+         for order in (stop, target):
+             try:
+-                self.broker.place_order(order, bar_index=bar_index)
++                self._place(order, slot, order.purpose, bar_index)
+             except (BrokerRejected, BrokerUnavailable) as exc:
+                 self._ev("EXIT_ORDER_FAILED", slot, bar_index, order=order.to_dict(), error=str(exc))
+                 self.store.exception(f"{slot.trade_id}:EXIT_ORDER_FAILED:{order.client_id}", "EXIT_ORDER_FAILED",
+                                      trade_id=slot.trade_id, error=str(exc),
+                                      detail="position is not protected; close it by hand")
++                self.store.alert("EXIT_ORDER_FAILURE", trade_id=slot.trade_id, client_id=order.client_id,
++                                 error=str(exc))
+                 continue
+-            self._orders[order.client_id] = (slot, order.purpose)
+         slot.stop_id, slot.target_id = stop.client_id, target.client_id
+         self._ev("EXIT_ORDERS_PLACED", slot, bar_index, stop=stop.to_dict(), target=target.to_dict())
+ 
+@@ -498,6 +731,11 @@ class PaperAdapter:
+             "tags": list(dict.fromkeys(slot.tags)),
+             "rejection_tags": [],
+         }
++        if self.require_funding and self.cfg.funding_enabled and coverage != "FULL":
++            self.store.exception(f"{MISSING_FUNDING_DATA}:{slot.trade_id}:coverage", MISSING_FUNDING_DATA,
++                                 trade_id=slot.trade_id, coverage=coverage,
++                                 detail="closed trade without full funding coverage; blocks OOS")
++            self.store.alert("MISSING_FUNDING", trade_id=slot.trade_id, coverage=coverage)
+         slot.state = "POSITION_CLOSED"
+         self._ev("POSITION_CLOSED", slot, exit_index, net_pnl_usd=net, exit_reason=record["exit_reason"])
+         self.store.trade(record)
