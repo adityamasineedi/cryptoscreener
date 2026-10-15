@@ -72,6 +72,11 @@ class SignalConfig:
     oi_mandatory: bool = False
     liquidation_mandatory: bool = False
 
+    # Trend classifier mode for infer_trend / HTF.
+    # "legacy" = last-two-swing HH+HL / LH+LL (COMBO_02 v1 fingerprint parity).
+    # "choch_persistent" = persist until opposite CHOCH vs active HL/LH.
+    trend_mode: str = "legacy"
+
     # Research gates — default OFF. Opt-in only; do not enable in production
     # until larger-sample SHORT/HTF studies are reviewed.
     research_gate_enabled: bool = False

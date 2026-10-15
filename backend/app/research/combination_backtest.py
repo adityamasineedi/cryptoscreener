@@ -9,6 +9,8 @@ from __future__ import annotations
 import time
 from typing import Any, Mapping, Sequence
 
+import numpy as np
+
 from app.config import get_settings
 from app.engines.mtf.indicators import atr_series
 from app.engines.supply_demand.engine import SupplyDemandEngine
@@ -20,6 +22,8 @@ from app.research.bos_strategy_comparison.htf import (
 )
 from app.research.combination_engine import (
     _clone_signal_config,
+    begin_signal_config_clone_reuse,
+    end_signal_config_clone_reuse,
     evaluate_combination_at_bar,
 )
 from app.research.entry_diagnostics import (
@@ -67,6 +71,48 @@ from app.signals.swing_detector import detect_swings, extend_swings
 from app.signals.trend_engine import infer_trend
 
 
+def _bos_break_levels(
+    swings: Sequence[Any],
+    end: int,
+) -> tuple[str, float, float] | None:
+    """Trend plus last confirmed swing high/low visible at ``end``.
+
+    Same inputs as ``_bos_break_possible``. Trend uses the full swing list;
+    the level prices ignore a swing that is not yet confirmed before ``end``.
+    """
+    if not swings or end < 1:
+        return None
+    trend = infer_trend(swings if isinstance(swings, list) else list(swings))
+    trend_state = str(trend.get("trend") or "")
+    high_px: float | None = None
+    low_px: float | None = None
+    for swing in swings:
+        if swing.bar_index >= end:
+            continue
+        if swing.swing_type == "HIGH":
+            high_px = float(swing.price)
+        elif swing.swing_type == "LOW":
+            low_px = float(swing.price)
+    if high_px is None or low_px is None:
+        return None
+    return trend_state, high_px, low_px
+
+
+def _close_breaks_level(
+    trend_state: str,
+    close: float,
+    high_px: float,
+    low_px: float,
+    direction_filter: str | None,
+) -> bool:
+    df = (direction_filter or "").upper()
+    if trend_state == TrendState.BULLISH.value and close > high_px:
+        return df != "SHORT"
+    if trend_state == TrendState.BEARISH.value and close < low_px:
+        return df != "LONG"
+    return False
+
+
 def _bos_break_possible(
     candles: Sequence[Mapping[str, Any]],
     as_of_index: int,
@@ -75,24 +121,36 @@ def _bos_break_possible(
     direction_filter: str | None,
 ) -> bool:
     """Cheap pre-filter matching detect_bos break conditions (no full analyze)."""
-    if not swings:
-        return False
     end = min(as_of_index, len(candles) - 1)
-    if end < 1:
+    levels = _bos_break_levels(swings, end)
+    if levels is None:
         return False
-    trend = infer_trend(list(swings))
-    trend_state = str(trend.get("trend") or "")
-    close = ohlc(candles, end)[3]
-    highs_sw = [s for s in swings if s.swing_type == "HIGH" and s.bar_index < end]
-    lows_sw = [s for s in swings if s.swing_type == "LOW" and s.bar_index < end]
-    if not highs_sw or not lows_sw:
-        return False
-    df = (direction_filter or "").upper()
-    if trend_state == TrendState.BULLISH.value and close > highs_sw[-1].price:
-        return df != "SHORT"
-    if trend_state == TrendState.BEARISH.value and close < lows_sw[-1].price:
-        return df != "LONG"
-    return False
+    trend_state, high_px, low_px = levels
+    return _close_breaks_level(
+        trend_state, ohlc(candles, end)[3], high_px, low_px, direction_filter
+    )
+
+
+def _rolling_mean_inclusive(
+    values: Sequence[float], window: int = 20
+) -> np.ndarray:
+    """Vectorized trailing mean including the current bar.
+
+    This mirrors the BOS diagnostic's historical ``vols[-20:]`` mean. It is
+    precomputed once for the research walk instead of rebuilding candle-prefix
+    arrays for every candidate bar.
+    """
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.size == 0:
+        return np.empty(0, dtype=np.float64)
+    cumulative = np.cumsum(arr, dtype=np.float64)
+    totals = cumulative.copy()
+    if arr.size > window:
+        totals[window:] = cumulative[window:] - cumulative[:-window]
+    denominators = np.minimum(
+        np.arange(1, arr.size + 1, dtype=np.float64), float(window)
+    )
+    return totals / denominators
 
 
 def _bar_hits_levels(
@@ -103,16 +161,22 @@ def _bar_hits_levels(
     stop: float,
     targets: list[float],
 ) -> tuple[bool, bool, int | None]:
-    """Return (stop_hit, any_tp_hit, first_tp_index)."""
+    """Return (stop_hit, any_tp_hit, tp_index).
+
+    ``tp_index`` is the slot of the reached target nearest the entry side
+    (LONG: lowest reached price, SHORT: highest). Slots can be out of
+    distance order; price passes the nearest level first. Ties keep the
+    lower slot, so distance-ordered targets resolve exactly as slot order.
+    """
     stop_hit = (low <= stop) if direction == "LONG" else (high >= stop)
     tp_idx = None
     for i, tp in enumerate(targets):
         if direction == "LONG" and high >= tp:
-            tp_idx = i
-            break
-        if direction == "SHORT" and low <= tp:
-            tp_idx = i
-            break
+            if tp_idx is None or tp < targets[tp_idx]:
+                tp_idx = i
+        elif direction == "SHORT" and low <= tp:
+            if tp_idx is None or tp > targets[tp_idx]:
+                tp_idx = i
     return stop_hit, tp_idx is not None, tp_idx
 
 
@@ -213,18 +277,15 @@ def _simulate_trade(
                 trade.r_multiple = (trade.entry_price - exit_px) / risk
         else:
             trade.r_multiple = 0.0
-        # time_to metrics
+        # time_to metrics — only the level actually exited at
         bars = trade.holding_bars
         if outcome == "SL":
             trade.time_to_sl = bars
         elif outcome == "TP1":
             trade.time_to_tp1 = bars
         elif outcome == "TP2":
-            trade.time_to_tp1 = bars  # must have passed TP1 zone conceptually
             trade.time_to_tp2 = bars
         elif outcome == "TP3":
-            trade.time_to_tp1 = bars
-            trade.time_to_tp2 = bars
             trade.time_to_tp3 = bars
         mae, mfe, mae_r, mfe_r = _excursions(
             direction=trade.direction,
@@ -292,7 +353,16 @@ def evaluate_candidate_trades(
     return out
 
 
-def run_combination_backtest(
+def run_combination_backtest(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Run one combination. Clone reuse is scoped to this call only."""
+    token = begin_signal_config_clone_reuse()
+    try:
+        return _run_combination_backtest_impl(*args, **kwargs)
+    finally:
+        end_signal_config_clone_reuse(token)
+
+
+def _run_combination_backtest_impl(
     symbol: str,
     timeframe: str,
     candles: Sequence[Mapping[str, Any]],
@@ -309,6 +379,8 @@ def run_combination_backtest(
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
     candles_15m: Sequence[Mapping[str, Any]] | None = None,
+    candles_5m: Sequence[Mapping[str, Any]] | None = None,
+    candles_1d: Sequence[Mapping[str, Any]] | None = None,
     progress_callback: Any | None = None,
     job_id: str | None = None,
     prebuilt_context: Any | None = None,
@@ -343,10 +415,15 @@ def run_combination_backtest(
 
     rcfg = research_config or ResearchConfig()
     scfg = signal_config or SignalConfig()
+    from app.research.sd_structure.evaluate import clear_structure_cache
+
+    clear_structure_cache()
     # Keep HTF references (no deep copy) — gate must not mutate series.
     htf_1h = list(candles_1h) if candles_1h is not None else None
     htf_4h = list(candles_4h) if candles_4h is not None else None
     series_15m = list(candles_15m) if candles_15m is not None else None
+    series_5m = list(candles_5m) if candles_5m is not None else None
+    series_1d = list(candles_1d) if candles_1d is not None else None
     # Setup TF may itself be 1h/4h — reuse when HTF series not supplied.
     tf_l = (timeframe or "").lower()
     if combo.require_htf_alignment:
@@ -434,6 +511,7 @@ def run_combination_backtest(
     swing_cfg = local_cfg.swing_for(timeframe)
     _, highs_arr, lows_arr, closes_arr, vols_arr = series_ohlcv(series)
     atr_arr = atr_series(highs_arr, lows_arr, closes_arr, local_cfg.atr_period)
+    volume_avg_ref_arr = _rolling_mean_inclusive(vols_arr, 20)
     swings = detect_swings(
         series,
         left=swing_cfg.swing_left_bars,
@@ -463,6 +541,7 @@ def run_combination_backtest(
     v2_context = prebuilt_context
     from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
     from app.research.combo03_transition.variants import COMBO_03_FAMILY
+    from app.research.sd_structure.variants import MAX_HOLD_BARS, SD_STRUCTURE_FAMILY
 
     if v2_context is None and combo.combination_id in COMBO_V2_FAMILY:
         from app.research.combo02_v2.context import Combo02V2Context
@@ -539,6 +618,80 @@ def run_combination_backtest(
 
     last_hb = time.perf_counter()
     hb_every_bars = 500
+    # Break levels change only when a new swing confirms. Reuse them across
+    # the bars in between instead of re-inferring trend on every candle.
+    bos_level_n = -1
+    bos_levels: tuple[str, float, float] | None = None
+
+    def _manage_open_trade(i: int) -> bool:
+        """Test bar ``i`` against the open trade; True when it closed there."""
+        nonlocal open_trade, prev_break
+        _simulate_partial = True
+        with research_stage_profiler.time("trade_simulation"):
+            c = series[i]
+            high = float(c.get("high") or c.get("h") or 0)
+            low = float(c.get("low") or c.get("l") or 0)
+            targets = [t for t in (open_trade.tp1, open_trade.tp2, open_trade.tp3) if t is not None]
+            # accumulate excursions
+            if not hasattr(open_trade, "_highs"):
+                open_trade._highs = []  # type: ignore[attr-defined]
+                open_trade._lows = []  # type: ignore[attr-defined]
+            open_trade._highs.append(high)  # type: ignore[attr-defined]
+            open_trade._lows.append(low)  # type: ignore[attr-defined]
+            outcome, exit_px, ambiguous = resolve_intrabar_outcome(
+                direction=open_trade.direction,
+                high=high,
+                low=low,
+                stop=open_trade.stop_price,
+                targets=targets,
+                handling=rcfg.ambiguous_handling,
+            )
+            if outcome is None and combo.combination_id in SD_STRUCTURE_FAMILY:
+                if i - open_trade.entry_index >= MAX_HOLD_BARS:
+                    outcome = "TIME_STOP"
+                    exit_px = float(c.get("close") or c.get("c") or 0)
+                    ambiguous = False
+        if outcome:
+            open_trade.exit_index = i
+            ts = candle_time(c)
+            open_trade.exit_time = ts.isoformat() if ts else None
+            open_trade.exit_price = exit_px
+            open_trade.outcome = outcome
+            open_trade.ambiguous = ambiguous
+            open_trade.holding_bars = i - open_trade.entry_index
+            risk = abs(open_trade.entry_price - open_trade.stop_price)
+            if outcome == "AMBIGUOUS_INTRABAR" and rcfg.ambiguous_handling == AMBIGUOUS_EXCLUDE:
+                open_trade.r_multiple = None
+            elif outcome == "AMBIGUOUS_INTRABAR" and rcfg.ambiguous_handling == AMBIGUOUS_NEUTRAL:
+                open_trade.r_multiple = 0.0
+            elif exit_px is not None and risk > 0:
+                if open_trade.direction == "LONG":
+                    open_trade.r_multiple = (exit_px - open_trade.entry_price) / risk
+                else:
+                    open_trade.r_multiple = (open_trade.entry_price - exit_px) / risk
+            if outcome == "SL":
+                open_trade.time_to_sl = open_trade.holding_bars
+            elif outcome.startswith("TP"):
+                # Only the level actually exited at.
+                setattr(open_trade, f"time_to_tp{int(outcome[-1])}", open_trade.holding_bars)
+            mae, mfe, mae_r, mfe_r = _excursions(
+                direction=open_trade.direction,
+                entry=open_trade.entry_price,
+                stop=open_trade.stop_price,
+                highs=open_trade._highs,  # type: ignore[attr-defined]
+                lows=open_trade._lows,  # type: ignore[attr-defined]
+            )
+            open_trade.mae, open_trade.mfe = mae, mfe
+            open_trade.mae_r, open_trade.mfe_r = mae_r, mfe_r
+            if not (
+                open_trade.outcome == "AMBIGUOUS_INTRABAR"
+                and rcfg.ambiguous_handling == AMBIGUOUS_EXCLUDE
+            ):
+                trades.append(open_trade)
+            open_trade = None
+            prev_break = False
+            return True
+        return False
 
     for i in range(loop_start, end):
         if should_cancel is not None and i % 64 == 0 and should_cancel():
@@ -596,93 +749,39 @@ def run_combination_backtest(
         prev_swing_n = len(swings)
         if open_trade is not None:
             # Manage with current bar (after entry)
-            _simulate_partial = True
-            with research_stage_profiler.time("trade_simulation"):
-                c = series[i]
-                high = float(c.get("high") or c.get("h") or 0)
-                low = float(c.get("low") or c.get("l") or 0)
-                targets = [t for t in (open_trade.tp1, open_trade.tp2, open_trade.tp3) if t is not None]
-                # accumulate excursions
-                if not hasattr(open_trade, "_highs"):
-                    open_trade._highs = []  # type: ignore[attr-defined]
-                    open_trade._lows = []  # type: ignore[attr-defined]
-                open_trade._highs.append(high)  # type: ignore[attr-defined]
-                open_trade._lows.append(low)  # type: ignore[attr-defined]
-                outcome, exit_px, ambiguous = resolve_intrabar_outcome(
-                    direction=open_trade.direction,
-                    high=high,
-                    low=low,
-                    stop=open_trade.stop_price,
-                    targets=targets,
-                    handling=rcfg.ambiguous_handling,
-                )
-            if outcome:
-                open_trade.exit_index = i
-                ts = candle_time(c)
-                open_trade.exit_time = ts.isoformat() if ts else None
-                open_trade.exit_price = exit_px
-                open_trade.outcome = outcome
-                open_trade.ambiguous = ambiguous
-                open_trade.holding_bars = i - open_trade.entry_index
-                risk = abs(open_trade.entry_price - open_trade.stop_price)
-                if outcome == "AMBIGUOUS_INTRABAR" and rcfg.ambiguous_handling == AMBIGUOUS_EXCLUDE:
-                    open_trade.r_multiple = None
-                elif outcome == "AMBIGUOUS_INTRABAR" and rcfg.ambiguous_handling == AMBIGUOUS_NEUTRAL:
-                    open_trade.r_multiple = 0.0
-                elif exit_px is not None and risk > 0:
-                    if open_trade.direction == "LONG":
-                        open_trade.r_multiple = (exit_px - open_trade.entry_price) / risk
-                    else:
-                        open_trade.r_multiple = (open_trade.entry_price - exit_px) / risk
-                if outcome == "SL":
-                    open_trade.time_to_sl = open_trade.holding_bars
-                elif outcome.startswith("TP"):
-                    n = int(outcome[-1])
-                    open_trade.time_to_tp1 = open_trade.holding_bars
-                    if n >= 2:
-                        open_trade.time_to_tp2 = open_trade.holding_bars
-                    if n >= 3:
-                        open_trade.time_to_tp3 = open_trade.holding_bars
-                mae, mfe, mae_r, mfe_r = _excursions(
-                    direction=open_trade.direction,
-                    entry=open_trade.entry_price,
-                    stop=open_trade.stop_price,
-                    highs=open_trade._highs,  # type: ignore[attr-defined]
-                    lows=open_trade._lows,  # type: ignore[attr-defined]
-                )
-                open_trade.mae, open_trade.mfe = mae, mfe
-                open_trade.mae_r, open_trade.mfe_r = mae_r, mfe_r
-                if not (
-                    open_trade.outcome == "AMBIGUOUS_INTRABAR"
-                    and rcfg.ambiguous_handling == AMBIGUOUS_EXCLUDE
-                ):
-                    trades.append(open_trade)
-                open_trade = None
-                prev_break = False
-                entry_diagnostics[i] = record_for_bar(
-                    i, classified=classify_position_bar(exited=True)
-                )
-            else:
-                entry_diagnostics[i] = record_for_bar(
-                    i, classified=classify_position_bar(exited=False)
-                )
+            entry_diagnostics[i] = record_for_bar(
+                i, classified=classify_position_bar(exited=_manage_open_trade(i))
+            )
             continue
 
         # COMBO_* that require BOS: skip full structure scan when break impossible.
         # Also skip sticky same-level breaks until structure (swings) updates —
         # otherwise uptrends re-evaluate thousands of identical BOS bars.
+        # Pullback combinations confirm on later bars of that same break, so
+        # they must keep evaluating until the close is back inside the level.
         if combo.require_bos:
             with research_stage_profiler.time("bos_prefilter"):
-                brk = _bos_break_possible(
-                    series, i, swings, direction_filter=direction_filter
-                )
+                if len(swings) != bos_level_n:
+                    bos_level_n = len(swings)
+                    bos_levels = _bos_break_levels(swings, i)
+                if bos_levels is None:
+                    brk = False
+                else:
+                    trend_state, high_px, low_px = bos_levels
+                    brk = _close_breaks_level(
+                        trend_state,
+                        float(closes_arr[i]),
+                        high_px,
+                        low_px,
+                        direction_filter,
+                    )
             if not brk:
                 prev_break = False
                 entry_diagnostics[i] = record_for_bar(
                     i, classified=classify_bos_prefilter_skip()
                 )
                 continue
-            if prev_break and not swing_grew:
+            if prev_break and not swing_grew and not combo.require_pullback:
                 entry_diagnostics[i] = record_for_bar(
                     i, classified=classify_sticky_bos_skip()
                 )
@@ -704,9 +803,12 @@ def run_combination_backtest(
                 compute_sd=bool(combo.require_sd),
                 atr_value=atr_arr[i],
                 volumes=vols_arr,
+                avg_volume_ref=float(volume_avg_ref_arr[i]),
                 candles_1h=htf_1h,
                 candles_4h=htf_4h,
                 candles_15m=series_15m,
+                candles_5m=series_5m,
+                candles_1d=series_1d,
                 htf_trend_cache=htf_trend_cache,
                 htf_idx_1h_map=htf_idx_1h_map,
                 htf_idx_4h_map=htf_idx_4h_map,
@@ -803,8 +905,21 @@ def run_combination_backtest(
                     if combo.combination_id in COMBO_03_FAMILY
                     else {}
                 ),
+                **(
+                    {
+                        "playbook": setup.get("playbook"),
+                        "sd_structure": setup.get("sd_structure"),
+                    }
+                    if combo.combination_id in SD_STRUCTURE_FAMILY
+                    else {}
+                ),
             },
         )
+        if setup.get("entry_type") == "NEXT_OPEN":
+            # Filled at this bar's open, so its high/low print after the
+            # fill: manage the trade on its own fill bar. A same-bar exit has
+            # holding_bars == 0; the bar keeps its entry diagnostics record.
+            _manage_open_trade(i)
 
     # Drop still-open trades from closed metrics (record as OPEN for transparency)
     if open_trade is not None:
@@ -876,6 +991,8 @@ def run_combination_backtest(
         "htf_cache_entries": len(htf_trend_cache),
         "label": "RESEARCH_COMPARISON",
         "disclaimer": result.disclaimer,
+        "execution_model": rcfg.execution_model,
+        "htf_fully_closed": bool(rcfg.htf_fully_closed),
     }
 
 

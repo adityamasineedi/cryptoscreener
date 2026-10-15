@@ -22,6 +22,13 @@ def _swing_type(s: Any) -> str | None:
     return getattr(s, "swing_type", None) or (s.get("swing_type") if isinstance(s, dict) else None)
 
 
+def _swing_bar_index(s: Any) -> int | None:
+    raw = getattr(s, "bar_index", None)
+    if raw is None and isinstance(s, dict):
+        raw = s.get("bar_index")
+    return int(raw) if raw is not None else None
+
+
 def compute_targets(
     *,
     direction: str,
@@ -31,11 +38,24 @@ def compute_targets(
     supply_zone: tuple[float, float] | None = None,
     demand_zone: tuple[float, float] | None = None,
     config: SignalConfig | None = None,
+    min_swing_bar_index: int | None = None,
 ) -> list[dict[str, Any]]:
+    """Targets from prior swings, then R multiples.
+
+    ``min_swing_bar_index`` limits structural swing targets to swings at or
+    after that bar. None (default) uses every swing passed in.
+    """
     cfg = config or SignalConfig()
     risk = float(stop.get("risk_per_unit") or 0)
     if entry_price <= 0 or risk <= 0:
         return []
+    if min_swing_bar_index is not None:
+        # A swing with no bar index cannot be placed, so it stays.
+        swings = [
+            s
+            for s in swings
+            if (_swing_bar_index(s) is None or _swing_bar_index(s) >= min_swing_bar_index)
+        ]
 
     min_r = float(cfg.min_rr)
     structural_candidates: list[TargetLevel] = []

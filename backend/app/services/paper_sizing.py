@@ -152,17 +152,26 @@ def size_paper_long(
     fee_rate: float = DEFAULT_TAKER_FEE,
     slippage_rate: float = DEFAULT_PAPER_SLIPPAGE_RATE,
     preferred_quantity: float | None = None,
+    rounding: str = "adverse",
 ) -> dict[str, Any]:
     """Size a paper LONG with tick/lot rounding and max-leverage notional cap.
 
     ``risk_usd`` is recomputed after rounding: abs(entry - stop) * qty.
+
+    ``rounding="plan"`` snaps entry and stop to the nearest tick so the fill
+    stays on the backtest plan. ``adverse`` buys the entry up and the stop down.
     """
     tick, step, filter_source = resolve_symbol_filters(symbol)
     lev = max(1.0, float(leverage or DEFAULT_PAPER_LEVERAGE))
+    on_plan = str(rounding or "adverse").lower() == "plan"
 
-    # LONG adverse rounding: buy up, stop down (tighter risk distance).
-    entry_r = round_price_to_tick(float(entry), tick, mode="up")
-    stop_r = round_price_to_tick(float(stop), tick, mode="down")
+    if on_plan:
+        entry_r = round_price_to_tick(float(entry), tick, mode="nearest")
+        stop_r = round_price_to_tick(float(stop), tick, mode="nearest")
+    else:
+        # LONG adverse rounding: buy up, stop down (tighter risk distance).
+        entry_r = round_price_to_tick(float(entry), tick, mode="up")
+        stop_r = round_price_to_tick(float(stop), tick, mode="down")
     if stop_r >= entry_r:
         # Degenerate after rounding — keep geometry by nudging stop one tick.
         stop_r = round_price_to_tick(entry_r - tick, tick, mode="down")
@@ -181,6 +190,7 @@ def size_paper_long(
             "entry_fee_usd": 0.0,
             "slippage_rate": float(slippage_rate),
             "fee_rate": float(fee_rate),
+            "rounding": "plan" if on_plan else "adverse",
             "reason": "invalid_geometry_after_rounding",
         }
 
@@ -228,6 +238,7 @@ def size_paper_long(
             "fee_rate": float(fee_rate),
             "min_notional": float(min_notional),
             "min_notional_source": min_notional_source,
+            "rounding": "plan" if on_plan else "adverse",
             "reason": "notional_below_min",
         }
     notional = qty * entry_r
@@ -257,6 +268,135 @@ def size_paper_long(
         "entry_fee_usd": entry_fee,
         "slippage_rate": float(slippage_rate),
         "fee_rate": float(fee_rate),
+        "rounding": "plan" if on_plan else "adverse",
+        "reason": None if qty > 0 else "zero_quantity",
+    }
+
+
+def size_paper_short(
+    *,
+    symbol: str,
+    account_equity: float,
+    risk_percent: float,
+    entry: float,
+    stop: float,
+    leverage: float = DEFAULT_PAPER_LEVERAGE,
+    fee_rate: float = DEFAULT_TAKER_FEE,
+    slippage_rate: float = DEFAULT_PAPER_SLIPPAGE_RATE,
+    preferred_quantity: float | None = None,
+    rounding: str = "adverse",
+) -> dict[str, Any]:
+    """Size a paper SHORT with tick/lot rounding and max-leverage notional cap.
+
+    Mirror of ``size_paper_long`` for SHORT geometry (entry below stop).
+    ``rounding="plan"`` keeps the backtest entry and stop on the nearest tick.
+    """
+    tick, step, filter_source = resolve_symbol_filters(symbol)
+    lev = max(1.0, float(leverage or DEFAULT_PAPER_LEVERAGE))
+    on_plan = str(rounding or "adverse").lower() == "plan"
+
+    if on_plan:
+        entry_r = round_price_to_tick(float(entry), tick, mode="nearest")
+        stop_r = round_price_to_tick(float(stop), tick, mode="nearest")
+    else:
+        # SHORT adverse rounding: sell down, stop up (tighter risk distance).
+        entry_r = round_price_to_tick(float(entry), tick, mode="down")
+        stop_r = round_price_to_tick(float(stop), tick, mode="up")
+    if stop_r <= entry_r:
+        stop_r = round_price_to_tick(entry_r + tick, tick, mode="up")
+    if stop_r <= entry_r or entry_r <= 0:
+        return {
+            "entry_price": entry_r,
+            "stop_price": stop_r,
+            "quantity": 0.0,
+            "risk_usd": 0.0,
+            "notional": 0.0,
+            "leverage": lev,
+            "tick_size": tick,
+            "lot_step": step,
+            "filter_source": filter_source,
+            "capped_by_leverage": False,
+            "entry_fee_usd": 0.0,
+            "slippage_rate": float(slippage_rate),
+            "fee_rate": float(fee_rate),
+            "rounding": "plan" if on_plan else "adverse",
+            "reason": "invalid_geometry_after_rounding",
+        }
+
+    sized = position_size(
+        account_equity=float(account_equity),
+        risk_percent=float(risk_percent),
+        entry=entry_r,
+        stop=stop_r,
+        contract_quantity_step=step,
+        minimum_quantity=step,
+        leverage=lev,
+        fee_rate=float(fee_rate),
+        slippage_rate=float(slippage_rate),
+        direction="SHORT",
+    )
+    risk_qty = float(sized.get("final_quantity") or 0.0)
+    if preferred_quantity is not None and float(preferred_quantity) > 0:
+        risk_qty = floor_qty_to_step(float(preferred_quantity), step)
+
+    max_notional = float(account_equity) * lev
+    max_qty = floor_qty_to_step(max_notional / entry_r, step) if entry_r > 0 else 0.0
+    capped = risk_qty > max_qty + 1e-15
+    qty = min(risk_qty, max_qty) if max_qty > 0 else 0.0
+    qty = floor_qty_to_step(qty, step)
+
+    risk_per = stop_r - entry_r
+    risk_usd = risk_per * qty if qty > 0 else 0.0
+    notional = qty * entry_r
+    min_notional, min_notional_source = resolve_min_notional(symbol)
+    if qty > 0 and notional + 1e-12 < float(min_notional):
+        return {
+            "entry_price": entry_r,
+            "stop_price": stop_r,
+            "quantity": 0.0,
+            "risk_usd": 0.0,
+            "notional": 0.0,
+            "leverage": lev,
+            "tick_size": tick,
+            "lot_step": step,
+            "filter_source": filter_source,
+            "capped_by_leverage": False,
+            "entry_fee_usd": 0.0,
+            "slippage_rate": float(slippage_rate),
+            "fee_rate": float(fee_rate),
+            "min_notional": float(min_notional),
+            "min_notional_source": min_notional_source,
+            "rounding": "plan" if on_plan else "adverse",
+            "reason": "notional_below_min",
+        }
+    notional = qty * entry_r
+    entry_fee = 0.0
+    if qty > 0 and entry_r > 0:
+        entry_fee = calculate_execution_fee(
+            price=entry_r,
+            quantity=qty,
+            fee_type=FEE_TYPE_TAKER,
+            taker_rate=float(fee_rate),
+        )
+
+    return {
+        "entry_price": entry_r,
+        "stop_price": stop_r,
+        "quantity": qty,
+        "risk_usd": risk_usd,
+        "risk_per_unit": risk_per,
+        "notional": notional,
+        "leverage": lev,
+        "tick_size": tick,
+        "lot_step": step,
+        "filter_source": filter_source,
+        "capped_by_leverage": capped,
+        "raw_risk_quantity": risk_qty,
+        "max_leverage_quantity": max_qty,
+        "entry_fee_usd": entry_fee,
+        "slippage_rate": float(slippage_rate),
+        "fee_rate": float(fee_rate),
+        "rounding": "plan" if on_plan else "adverse",
         "reason": None if qty > 0 else "zero_quantity",
     }
 
@@ -269,6 +409,7 @@ def paper_execution_snippet(sized: dict[str, Any]) -> dict[str, Any]:
         "filter_source": sized.get("filter_source"),
         "leverage": sized.get("leverage"),
         "capped_by_leverage": bool(sized.get("capped_by_leverage")),
+        "rounding": sized.get("rounding") or "adverse",
         "entry_fee_usd": sized.get("entry_fee_usd"),
         "fee_rate": sized.get("fee_rate"),
         "slippage_rate": sized.get("slippage_rate"),
