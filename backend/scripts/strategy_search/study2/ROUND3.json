@@ -1,0 +1,782 @@
+{
+ "round": 3,
+ "registered_utc": "2026-10-14T17:45:55.679870+00:00",
+ "window": "research 2023-06-01 -> 2025-09-01",
+ "informed_by": "round-1 gates and round-2 screen (research only); no validation or test data read",
+ "risk": 0.02,
+ "variant_sets": "as ROUND1.json / ROUND2.json (PYR class for pyramiding bases)",
+ "bases": [
+  {
+   "id": "R3-01",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-02",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "NOTCOUNTER",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-03",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 100,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-04",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-05",
+   "fam": "TPB",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-06",
+   "fam": "TPB",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 100,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-07",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-08",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-09",
+   "fam": "TPB",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 100,
+    "m": 5,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-10",
+   "fam": "TPB",
+   "tf": "1d",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-11",
+   "fam": "TPB",
+   "tf": "1d",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-12",
+   "fam": "TPB",
+   "tf": "15m",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-13",
+   "fam": "TPB",
+   "tf": "15m",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-14",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 20,
+    "m": 5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-15",
+   "fam": "BRKR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 40,
+    "w": 8,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-16",
+   "fam": "BRKR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 55,
+    "w": 12
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-17",
+   "fam": "BRKR",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 40,
+    "w": 8,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-18",
+   "fam": "BRKR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 40,
+    "w": 8,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-19",
+   "fam": "BRKR",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 40,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-20",
+   "fam": "BRKR",
+   "tf": "15m",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 40,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-21",
+   "fam": "BRKR",
+   "tf": "1d",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-22",
+   "fam": "ENG_C01",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "rs_n": 60,
+    "rs_q": 0.5
+   },
+   "class": "ENG",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-23",
+   "fam": "ENG_C01",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "ENG",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-24",
+   "fam": "ENG_OSEA",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "ENG",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-25",
+   "fam": "TFD",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 100
+   },
+   "class": "TF",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-26",
+   "fam": "TFD",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 100
+   },
+   "class": "TF",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-27",
+   "fam": "TFD",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 55,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TF",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-28",
+   "fam": "TFE",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "fast": 50,
+    "slow": 200
+   },
+   "class": "TF",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-29",
+   "fam": "TFE",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "fast": 50,
+    "slow": 200
+   },
+   "class": "TF",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-30",
+   "fam": "VEX",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "pct": 20,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-31",
+   "fam": "VEX",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "pct": 20,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-32",
+   "fam": "VEX",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "pct": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-33",
+   "fam": "VEX",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "pct": 20,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-34",
+   "fam": "VEX",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "ANY",
+   "p": {
+    "pct": 10,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-35",
+   "fam": "VNR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "nr": 4
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-36",
+   "fam": "VNR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "nr": 4
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-37",
+   "fam": "BRKA",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 55,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-38",
+   "fam": "BRKA",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 55,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-39",
+   "fam": "FBR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "n": 40,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "FBR",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-40",
+   "fam": "FBR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "FBR",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-41",
+   "fam": "FBR",
+   "tf": "15m",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 40
+   },
+   "class": "FBR",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-42",
+   "fam": "FBR",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "n": 40,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "FBR",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-43",
+   "fam": "RMR",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "NOTCOUNTER",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30
+   },
+   "class": "REV",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-44",
+   "fam": "RMR",
+   "tf": "15m",
+   "side": "LONG",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.5,
+    "rsi": 20
+   },
+   "class": "REV",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-45",
+   "fam": "RMR",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "NOTCOUNTER",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "REV",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-46",
+   "fam": "RMR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.5,
+    "rsi": 25
+   },
+   "class": "REV",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-47",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5
+   },
+   "class": "PYR",
+   "map": "C",
+   "pyramid": true,
+   "note": "R2-02 + pyramiding"
+  },
+  {
+   "id": "R3-48",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 5,
+    "rs_n": 60,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-49",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "NOTCOUNTER",
+   "p": {
+    "anchor": 50,
+    "m": 5,
+    "rs_n": 30,
+    "rs_q": 0.5
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  },
+  {
+   "id": "R3-50",
+   "fam": "BRKR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "NOTCOUNTER",
+   "p": {
+    "n": 40,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "pyramid": false,
+   "note": ""
+  }
+ ]
+}

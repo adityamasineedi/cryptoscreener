@@ -1,0 +1,47 @@
+BTC daily 1469
+{
+ "as_of": "2026-10-13T00:00:00+00:00",
+ "start": "2026-07-01T00:00:00+00:00",
+ "events": [
+  {
+   "t": 1787155200,
+   "event": "daily_pause",
+   "eq": 9459.547469513727,
+   "day_start": 9720.15753966974
+  }
+ ],
+ "signals_due_next_open": [
+  {
+   "coin": "ETHUSDT",
+   "tf": "4h",
+   "side": "SHORT",
+   "stop": 2492.538880218063
+  }
+ ],
+ "evaluation": {
+  "elapsed_days": 104.0,
+  "full_months": 3,
+  "closed_trades": 33,
+  "net_30day_usd": -161.61,
+  "gap_to_500": 661.61,
+  "gap_to_1000": 1161.61,
+  "status": "NOT_YET_TESTABLE",
+  "reasons": [],
+  "robust_floor": "needs >= 6 full months and >= 100 closed trades; positive expectancy interval; risk limits respected; positive at 1.5x costs (recompute with study2 tools)"
+ },
+ "data_quality": "ok",
+ "metrics": {
+  "trades": 33,
+  "net": -560.25,
+  "usd30_10k": -161.61,
+  "max_dd_pct": 5.69,
+  "withdrawn": 0.0,
+  "final_equity": 9439.75,
+  "months": {
+   "2026-07": -106.31,
+   "2026-08": -434.14,
+   "2026-09": -19.8,
+   "2026-10": 0.0
+  }
+ }
+}

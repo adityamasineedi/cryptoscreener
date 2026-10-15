@@ -1,0 +1,35 @@
+{
+ "source": "sleeve_study/out/signals P1+P2 (2023-06-01 -> 2026-02-13), all cached coins",
+ "pairs": {
+  "COMBO_01 vs COMBO_02_LOCAL": {
+   "1d": {
+    "COMBO_01_signals": 304,
+    "COMBO_02_LOCAL_signals": 300,
+    "same_side_and_close": 300,
+    "same_side_close_and_stop": 300,
+    "jaccard": 0.987
+   },
+   "1h": {
+    "COMBO_01_signals": 5861,
+    "COMBO_02_LOCAL_signals": 5782,
+    "same_side_and_close": 5741,
+    "same_side_close_and_stop": 5741,
+    "jaccard": 0.973
+   },
+   "4h": {
+    "COMBO_01_signals": 1588,
+    "COMBO_02_LOCAL_signals": 1577,
+    "same_side_and_close": 1570,
+    "same_side_close_and_stop": 1570,
+    "jaccard": 0.984
+   },
+   "15m": {
+    "COMBO_01_signals": 11642,
+    "COMBO_02_LOCAL_signals": 11607,
+    "same_side_and_close": 11464,
+    "same_side_close_and_stop": 11464,
+    "jaccard": 0.973
+   }
+  }
+ }
+}

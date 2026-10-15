@@ -1,0 +1,26 @@
+{
+ "written_utc": "2026-10-14 (before any study-2 strategy run)",
+ "purpose": "Which stored dates/coins were already inspected, by whom, and for what. Renaming a strategy, changing a split or switching coins does not make these dates untouched.",
+ "prior_exposure": [
+  {"study": "COMBO_02_V1 / v1_1 risk-controlled (docs/combo02_v1_1_risk_controlled.md)", "coins": "BTC ETH SOL (+V1_SYMBOLS paper watch)",
+   "windows": {"base": "2022-10-05 -> 2024-12-31", "oos_dev": "2025-01-01 -> 2025-06-30", "failed_v1_oos": "2025-07-01 -> 2026-09-30", "formal_acceptance_forward": "2026-10-06 -> 2027-03-31 (not elapsed)"}},
+  {"study": "short research windows (app/research/short_research_windows.py)", "windows": {"base": "2025-01-01 -> 2025-04-30", "oos_dev": "2025-05-01 -> 2025-06-30", "oos_val": "2025-07-01 -> 2026-01-31"}},
+  {"study": "strategy_rank (scripts/strategy_rank/REPORT.md, ranked.json)", "coins": "BTC ETH BNB SOL XRP DOGE ADA TRX AVAX LINK", "windows": {"published_in_sample_rank": "2026-02-14 -> 2026-10-12"}},
+  {"study": "sleeve_study (PROTOCOL.md, FREEZE.json, REPORT.md)", "coins": "16-coin universe (same as study 2)",
+   "windows": {"research": "2023-06-01 -> 2025-03-31", "validation": "2025-04-01 -> 2025-08-31", "final_test_used_once": "2025-09-01 -> 2026-02-13 (failed, -$16/30d)"}},
+  {"study": "strategy_search (DECLARATIONS.md, FREEZE_20261014.json, REPORT.md)", "coins": "discovery = same 16 coins; holdout = the 11 LATE coins",
+   "windows": {"discovery_in_sample": "2023-06-01 -> 2026-10-08 (4,656 variants: DON PB BRT SWP BB RSI2 SQZ + COMBO_01/OSE engines; 15m-1d)", "holdout_used_once": "11 LATE coins, 2024-10-09 -> 2026-10-08 (best +$76/30d)"},
+   "note": "Study 2's author read that report (monthly per-$10k P&L of three 4h books across 2024-10..2026-10) before writing this protocol."}
+ ],
+ "study2_windows": {
+  "warmup_only": {"dates": "stored start (2021-10-15 BTC/ETH/SOL 4h; 2022-10 BTC/ETH/SOL 1h/15m/1d; 2023-01 most others) -> 2023-05-31", "class": "indicator/regime warm-up only; never scored",
+                  "note": "2021-10 -> 2022-10 exists only on 4h for BTC/ETH/SOL (no 1h exec bars, no 1d BTC regime) and is not used for scoring."},
+  "research": {"dates": "2023-06-01 -> 2025-09-01 (exclusive)", "class": "previously inspected development data", "use": "discovery rounds, tuning, folds, walk-forward"},
+  "validation": {"dates": "2025-09-01 -> 2026-03-24 (exclusive)", "class": "previously inspected; validation used for selection in study 2", "note": "overlaps the sleeve-study final test, strategy_search discovery and the strategy_rank window"},
+  "test": {"dates": "2026-03-24 -> 2026-10-13 (exclusive)", "class": "previously inspected (strategy_rank in-sample window, strategy_search discovery, COMBO_02 failed OOS); NOT untouched",
+           "use": "one historical re-check after the freeze, labelled contaminated; cannot produce a target pass"},
+  "cross_asset": {"dates": "LATE coins 2024-10-09 -> 2026-10-13", "class": "cross-asset evaluation with overlapping market dates, already used once as the strategy_search holdout; not used in study 2"},
+  "genuinely_untouched_chronological": {"dates": "none usable", "note": "bars after 2026-10-12 exist for ~1.3 days at study start; too short for any test"},
+  "prospective_paper": {"dates": "from the written freeze timestamp onward", "class": "prospective paper data - the only eligible evidence for a target pass"}
+ }
+}

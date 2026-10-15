@@ -1,0 +1,241 @@
+{
+ "frozen_utc": "2026-10-14T18:01:11.589175+00:00",
+ "protocol": "PROTOCOL.md",
+ "protocol_sha256": "3d19bf4940868372e33bdf327e9f9584347658e6bfbdf98d5e26ee1de77f1a2c",
+ "data": {
+  "ohlcv_sha256_all_v1_symbols": "eb8033c01da2ea081819e4886c1dafb431b2d83dff320a8e43867bd56720c28f",
+  "manifest_generated": "2026-10-14T17:18:59.249751+00:00"
+ },
+ "code": {
+  "git_head": "9e96798e6904edf513fd0d2baa6d8b7b33fee351",
+  "uncommitted_diff_sha256": "673d9ab6674bebda0545f085dc7f4663b2259d8a4740a3440c6190e388cb67d6",
+  "study_files_sha256": {
+   "common2.py": "94735b2e98786cb01903347ee31e2eae4c5118bda9061fa7896179a154e8700f",
+   "data_manifest.py": "773760bde3a0f1f84e127ae62fd7fd726cf3689b00374977a7b350d76a29d1a6",
+   "final2.py": "222208632674cdce227ab8cb177e6822850d59141758051bfc947f3b7560d0c3",
+   "metrics2.py": "9197f1473c8393e073a625ad546513a4c3de56d408b7ee5c807b68279554e7a2",
+   "regime_cmp.py": "2a77aea7b214facd15aadc015dd5233fada4d73687d4a1a23f294947c9661a65",
+   "regimes2.py": "639a82455e05f6d166c05cefd385620caa129cafb05894e6bc2450cfe01ef692",
+   "report2.py": "a502768ba0cefc085cb150a8218736f768a7182f6e7cf1bb15647e19e10308dd",
+   "search2.py": "b7da26c1548404737c6e21a7e574407e8db9450a916118f2a3b223170b7dff50",
+   "select2.py": "6c8ca32f7747f01377f7bd9d4525072ee303427e107e0937c6bd24c7b0a9b8a4",
+   "signals2.py": "d683d9c383b331b2a6049e4cdc4d13cccda311502e066bfbe4071228543d7f6a",
+   "sim2.py": "8940d98f8cf4f3a680c646c8f70354dc40bc4e6bd0199a8f0f1ed893b5711154",
+   "sim_effects.py": "7dc7fd0292bc6d414abc331ee3e51eace6015510162e6fa3ba51f5ffd9225a0e",
+   "test_sim2.py": "a99829ab65066737eedfbf4ad5113705e6fa7344d51b7f2d0edd6dac4e5e98fa",
+   "wf2.py": "ea09c5f1aa783076852a70fadb548b940a6dd199f1c207521e4206cedbc7ace6",
+   "PROTOCOL.md": "3d19bf4940868372e33bdf327e9f9584347658e6bfbdf98d5e26ee1de77f1a2c"
+  },
+  "app_files_sha256": {
+   "app/research/market_structure/regime.py": "12787c8927ee3bfdf4050c3b78beae5e87252562a6aab4274ec40898bce241ee",
+   "app/research/market_structure/structure.py": "0a9dddee65e3e0b322d4990a21649ad3ce2767cfb84452c886b3b02336ec93bf",
+   "app/research/passed_regime_backtest.py": "c606c67d3d2bb28a3629a65c6e6005d4b63064d07d0fc18fd6d540d7b43a5273",
+   "app/research/btc_daily_regime.py": "6a68ef9423f30a8f4afeaba38ffc535f73570e954041093031d0902ed4f027f6"
+  }
+ },
+ "seeds": {
+  "bootstrap": 20261014
+ },
+ "windows": {
+  "research": [
+   "2023-06-01T00:00:00+00:00",
+   "2025-09-01T00:00:00+00:00"
+  ],
+  "validation": [
+   "2025-09-01T00:00:00+00:00",
+   "2026-03-24T00:00:00+00:00"
+  ],
+  "historical_recheck_contaminated": [
+   "2026-03-24T00:00:00+00:00",
+   "2026-10-13T00:00:00+00:00"
+  ],
+  "prospective_paper_from": "2026-10-14T18:01:11.589175+00:00"
+ },
+ "accounting": {
+  "engine": "study2/sim2.py",
+  "account_usd": 10000,
+  "sleeves": 10,
+  "sleeve_usd": 1000,
+  "leverage_cap": 2.0,
+  "open_risk_cap": "min($200, 2% of marked account equity)",
+  "daily_pause": 0.02,
+  "weekly_pause": 0.05,
+  "dd_stop": 0.2,
+  "taker": 0.0004,
+  "execution_per_side": 0.0002,
+  "funding_hypothetical_per_8h": 0.0001,
+  "withdrawal": "PROTOCOL.md section 7",
+  "conflicts": "PROTOCOL.md section 6",
+  "lot_step": "10^-qty_precision (symbols snapshot)",
+  "min_notional": 5.0
+ },
+ "regime_map": "MAP_CORRECTED unless a component says map B (PROTOCOL.md section 3)",
+ "books": [
+  {
+   "role": "BACKUP_1",
+   "id": "S2_P2_20261014",
+   "status": "NOT_YET_TESTABLE",
+   "selected_risk": 0.03,
+   "benchmark_risk": 0.02,
+   "coins": [
+    "AVAXUSDT",
+    "BNBUSDT",
+    "ARBUSDT",
+    "SUIUSDT",
+    "DOTUSDT",
+    "OPUSDT",
+    "ADAUSDT",
+    "NEARUSDT",
+    "BTCUSDT",
+    "ETHUSDT"
+   ],
+   "components": [
+    {
+     "base": "R3-16",
+     "fam": "BRKR",
+     "tf": "4h",
+     "side": "LONG",
+     "regime": "TREND",
+     "map": "C",
+     "btc": 1,
+     "p": {
+      "n": 55,
+      "w": 12
+     },
+     "stop_k": 2.5,
+     "exit": {
+      "kind": "R",
+      "r": 2.0
+     },
+     "exit_name": "R2",
+     "pyramid": false,
+     "vid": "R3-16|s2.5|R2|btc1",
+     "round": 3,
+     "priority": 0
+    },
+    {
+     "base": "R3-04",
+     "fam": "TPB",
+     "tf": "4h",
+     "side": "SHORT",
+     "regime": "TREND",
+     "map": "C",
+     "btc": 0,
+     "p": {
+      "anchor": 50,
+      "m": 8
+     },
+     "stop_k": 1.5,
+     "exit": {
+      "kind": "TRAIL",
+      "trail": 3.0
+     },
+     "exit_name": "TRAIL3",
+     "pyramid": false,
+     "vid": "R3-04|s1.5|TRAIL3|btc0",
+     "round": 3,
+     "priority": 1
+    }
+   ],
+   "validation_usd30_selected": 80.08,
+   "validation_usd30_2pct": 48.96,
+   "research_usd30_selected": 237.77,
+   "rationale": "highest validation $/30d among eligible portfolios at its selected risk"
+  },
+  {
+   "role": "BACKUP_2",
+   "id": "S2_P3_20261014",
+   "status": "NOT_YET_TESTABLE",
+   "selected_risk": 0.02,
+   "benchmark_risk": 0.02,
+   "coins": [
+    "AVAXUSDT",
+    "DOTUSDT",
+    "BNBUSDT",
+    "SUIUSDT",
+    "DOGEUSDT",
+    "ADAUSDT",
+    "ARBUSDT",
+    "XRPUSDT",
+    "OPUSDT",
+    "NEARUSDT"
+   ],
+   "components": [
+    {
+     "base": "R3-04",
+     "fam": "TPB",
+     "tf": "4h",
+     "side": "SHORT",
+     "regime": "TREND",
+     "map": "C",
+     "btc": 0,
+     "p": {
+      "anchor": 50,
+      "m": 8
+     },
+     "stop_k": 1.5,
+     "exit": {
+      "kind": "TRAIL",
+      "trail": 3.0
+     },
+     "exit_name": "TRAIL3",
+     "pyramid": false,
+     "vid": "R3-04|s1.5|TRAIL3|btc0",
+     "round": 3,
+     "priority": 0
+    },
+    {
+     "base": "R3-16",
+     "fam": "BRKR",
+     "tf": "4h",
+     "side": "LONG",
+     "regime": "TREND",
+     "map": "C",
+     "btc": 1,
+     "p": {
+      "n": 55,
+      "w": 12
+     },
+     "stop_k": 2.5,
+     "exit": {
+      "kind": "R",
+      "r": 2.0
+     },
+     "exit_name": "R2",
+     "pyramid": false,
+     "vid": "R3-16|s2.5|R2|btc1",
+     "round": 3,
+     "priority": 1
+    },
+    {
+     "base": "R1-22",
+     "fam": "FBR",
+     "tf": "4h",
+     "side": "SHORT",
+     "regime": "ANY",
+     "map": "C",
+     "btc": 1,
+     "p": {
+      "n": 20,
+      "buf": 0.25
+     },
+     "stop_k": 1.0,
+     "exit": {
+      "kind": "R",
+      "r": 1.5,
+      "hold": 12
+     },
+     "exit_name": "R15T",
+     "pyramid": false,
+     "vid": "R1-22|b0.25|R15T|btc1",
+     "round": 1,
+     "priority": 2
+    }
+   ],
+   "validation_usd30_selected": 58.98,
+   "validation_usd30_2pct": 58.98,
+   "research_usd30_selected": 217.98,
+   "rationale": "highest validation $/30d among eligible portfolios at its selected risk"
+  }
+ ]
+}

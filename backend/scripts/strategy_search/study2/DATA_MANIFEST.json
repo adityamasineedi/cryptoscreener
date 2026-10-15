@@ -1,0 +1,2673 @@
+{
+ "generated_utc": "2026-10-14T17:18:59.249751+00:00",
+ "source": "postgres ohlcv, read-only session",
+ "read_only": {
+  "default_transaction_read_only": "on"
+ },
+ "v1_symbols": [
+  "AAVEUSDT",
+  "ADAUSDT",
+  "APTUSDT",
+  "ARBUSDT",
+  "ATOMUSDT",
+  "AVAXUSDT",
+  "BCHUSDT",
+  "BNBUSDT",
+  "BTCUSDT",
+  "DOGEUSDT",
+  "DOTUSDT",
+  "ETCUSDT",
+  "ETHUSDT",
+  "FILUSDT",
+  "ICPUSDT",
+  "INJUSDT",
+  "LINKUSDT",
+  "LTCUSDT",
+  "NEARUSDT",
+  "OPUSDT",
+  "RENDERUSDT",
+  "SOLUSDT",
+  "SUIUSDT",
+  "TONUSDT",
+  "TRXUSDT",
+  "UNIUSDT",
+  "XRPUSDT"
+ ],
+ "common_window": [
+  "2023-06-01T00:00:00+00:00",
+  "2026-10-13T00:00:00+00:00"
+ ],
+ "series": [
+  {
+   "symbol": "AAVEUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "AAVEUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "AAVEUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "AAVEUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "ADAUSDT",
+   "tf": "15m",
+   "first": "2023-11-15T21:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 102089,
+   "expected": 102089,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.796,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ADAUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ADAUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ADAUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "APTUSDT",
+   "tf": "15m",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 132701,
+   "expected": 132701,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "APTUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "APTUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "APTUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ARBUSDT",
+   "tf": "15m",
+   "first": "2023-09-30T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 106589,
+   "expected": 106589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.853,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ARBUSDT",
+   "tf": "1h",
+   "first": "2023-03-23T15:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 31216,
+   "expected": 31216,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 69.4,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ARBUSDT",
+   "tf": "4h",
+   "first": "2023-03-23T12:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 7804,
+   "expected": 7804,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 69.5,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ARBUSDT",
+   "tf": "1d",
+   "first": "2023-03-23T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1300,
+   "expected": 1300,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 70.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ATOMUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ATOMUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ATOMUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ATOMUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "AVAXUSDT",
+   "tf": "15m",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 132701,
+   "expected": 132701,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "AVAXUSDT",
+   "tf": "1h",
+   "first": "2024-04-04T12:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 22147,
+   "expected": 22147,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.6252,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "AVAXUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "AVAXUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BCHUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BCHUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BCHUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BCHUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "BNBUSDT",
+   "tf": "15m",
+   "first": "2024-08-08T20:15:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 76460,
+   "expected": 76460,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.4716,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BNBUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BNBUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BNBUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BTCUSDT",
+   "tf": "15m",
+   "first": "2022-10-15T07:30:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 140159,
+   "expected": 140159,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 228.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BTCUSDT",
+   "tf": "1h",
+   "first": "2022-10-15T08:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 35039,
+   "expected": 35039,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 228.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BTCUSDT",
+   "tf": "4h",
+   "first": "2021-10-15T08:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 10949,
+   "expected": 10949,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 593.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "BTCUSDT",
+   "tf": "1d",
+   "first": "2022-10-05T00:00:00+00:00",
+   "last": "2026-10-13T00:00:00+00:00",
+   "n": 1470,
+   "expected": 1470,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 239.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOGEUSDT",
+   "tf": "15m",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 132701,
+   "expected": 132701,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOGEUSDT",
+   "tf": "1h",
+   "first": "2023-02-22T12:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 31915,
+   "expected": 31915,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 98.5,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOGEUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOGEUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOTUSDT",
+   "tf": "15m",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 132701,
+   "expected": 132701,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOTUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOTUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "DOTUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ETCUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ETCUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ETCUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ETCUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "ETHUSDT",
+   "tf": "15m",
+   "first": "2022-10-15T07:30:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 140159,
+   "expected": 140159,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 228.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ETHUSDT",
+   "tf": "1h",
+   "first": "2022-10-15T08:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 35039,
+   "expected": 35039,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 228.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ETHUSDT",
+   "tf": "4h",
+   "first": "2021-10-15T08:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 10949,
+   "expected": 10949,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 593.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ETHUSDT",
+   "tf": "1d",
+   "first": "2022-10-08T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1466,
+   "expected": 1466,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 236.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "FILUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "FILUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "FILUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "FILUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "ICPUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ICPUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ICPUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "ICPUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "INJUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "INJUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "INJUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "INJUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "LINKUSDT",
+   "tf": "15m",
+   "first": "2024-04-05T20:15:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 88460,
+   "expected": 88460,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.6235,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "LINKUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "LINKUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "LINKUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "LTCUSDT",
+   "tf": "15m",
+   "first": "2024-06-06T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 82589,
+   "expected": 82589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.5492,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "LTCUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "LTCUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "LTCUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "NEARUSDT",
+   "tf": "15m",
+   "first": "2024-05-21T09:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 84089,
+   "expected": 84089,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.5682,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "NEARUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "NEARUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "NEARUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "OPUSDT",
+   "tf": "15m",
+   "first": "2023-11-15T21:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 102089,
+   "expected": 102089,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.796,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "OPUSDT",
+   "tf": "1h",
+   "first": "2023-03-26T12:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 31147,
+   "expected": 31147,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 66.5,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "OPUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "OPUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "RENDERUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "RENDERUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "RENDERUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "RENDERUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "SOLUSDT",
+   "tf": "15m",
+   "first": "2022-10-15T07:30:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 140159,
+   "expected": 140159,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 228.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "SOLUSDT",
+   "tf": "1h",
+   "first": "2022-10-15T08:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 35039,
+   "expected": 35039,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 228.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "SOLUSDT",
+   "tf": "4h",
+   "first": "2021-10-15T08:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 10949,
+   "expected": 10949,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 593.7,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "SOLUSDT",
+   "tf": "1d",
+   "first": "2022-10-08T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1466,
+   "expected": 1466,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 236.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "SUIUSDT",
+   "tf": "15m",
+   "first": "2023-12-17T03:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 99089,
+   "expected": 99089,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.758,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "SUIUSDT",
+   "tf": "1h",
+   "first": "2023-05-03T16:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 30231,
+   "expected": 30231,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 28.3,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "SUIUSDT",
+   "tf": "4h",
+   "first": "2023-05-03T16:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 7557,
+   "expected": 7557,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 28.3,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "SUIUSDT",
+   "tf": "1d",
+   "first": "2023-05-03T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1259,
+   "expected": 1259,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 29.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "TONUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70333,
+   "expected": 70589,
+   "missing_bars": 256,
+   "gap_count": 21,
+   "largest_gaps": [
+    {
+     "after": "2026-10-08T03:15:00+00:00",
+     "next": "2026-10-08T18:15:00+00:00",
+     "missing": 59
+    },
+    {
+     "after": "2026-10-08T19:00:00+00:00",
+     "next": "2026-10-09T05:00:00+00:00",
+     "missing": 39
+    },
+    {
+     "after": "2026-10-05T17:00:00+00:00",
+     "next": "2026-10-06T02:45:00+00:00",
+     "missing": 38
+    },
+    {
+     "after": "2026-10-07T03:15:00+00:00",
+     "next": "2026-10-07T11:15:00+00:00",
+     "missing": 31
+    },
+    {
+     "after": "2026-10-06T06:15:00+00:00",
+     "next": "2026-10-06T12:45:00+00:00",
+     "missing": 25
+    }
+   ],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9869
+   }
+  },
+  {
+   "symbol": "TONUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "TONUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "TONUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "TRXUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "TRXUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "TRXUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "TRXUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "UNIUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "UNIUSDT",
+   "tf": "1h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 17647,
+   "expected": 17647,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "UNIUSDT",
+   "tf": "4h",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 4411,
+   "expected": 4411,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "UNIUSDT",
+   "tf": "1d",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-08T00:00:00+00:00",
+   "n": 730,
+   "expected": 730,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 0.9803
+   }
+  },
+  {
+   "symbol": "XRPUSDT",
+   "tf": "15m",
+   "first": "2024-10-09T00:00:00+00:00",
+   "last": "2026-10-14T07:00:00+00:00",
+   "n": 70589,
+   "expected": 70589,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 0.0,
+   "coverage": {
+    "research": 0.3973,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "XRPUSDT",
+   "tf": "1h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T06:00:00+00:00",
+   "n": 33175,
+   "expected": 33175,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "XRPUSDT",
+   "tf": "4h",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-14T00:00:00+00:00",
+   "n": 8293,
+   "expected": 8293,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  },
+  {
+   "symbol": "XRPUSDT",
+   "tf": "1d",
+   "first": "2023-01-01T00:00:00+00:00",
+   "last": "2026-10-12T00:00:00+00:00",
+   "n": 1381,
+   "expected": 1381,
+   "missing_bars": 0,
+   "gap_count": 0,
+   "largest_gaps": [],
+   "duplicates": 0,
+   "misaligned": 0,
+   "invalid_ohlc": 0,
+   "nonpositive": 0,
+   "warmup_days_before_common": 151.0,
+   "coverage": {
+    "research": 1.0,
+    "validation": 1.0,
+    "test": 1.0
+   }
+  }
+ ],
+ "excluded": {
+  "AAVEUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "ATOMUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "BCHUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "ETCUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "FILUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "ICPUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "INJUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "RENDERUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "TONUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "TRXUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins",
+  "UNIUSDT": "stored bars start 2024-10-09 on every timeframe: no bars in research folds F1-F3 (2023-06..2025-01); also the 2026-10-14 strategy-search holdout coins"
+ },
+ "notes": [
+  "Five-year coverage is NOT present: only BTC/ETH/SOL 4h start 2021-10-15; BTC/ETH/SOL 1h/15m start 2022-10-15; most other coins start 2023-01-01; SUI 2023-05-03; ARB 2023-03-23; the 11 LATE coins 2024-10-09.",
+  "1d bars end 2026-10-12 (10-13 for BTC); the common window ends 2026-10-13 00:00 UTC (exclusive).",
+  "1m and 5m are excluded from this study.",
+  "Listing/delisting history: symbols.listed_at and delisted_at are NULL for every row, every row is status TRADING (current snapshot only). The ~500 other perpetuals have 1d bars only from 2026. A verified historical annual top-20 quote-volume universe cannot be built -> not researched.",
+  "Funding: stored settlements cover BTCUSDT from 2025-09-01 only (grid_funding_settlements) and live snapshots from 2026-10-01 (funding_rates). Not verified for the study window -> hypothetical funding 0.01% of notional per 00/08/16 UTC boundary, charged to both sides (a stress cost, not history).",
+  "Lot sizes: symbols.qty_precision (current snapshot) is used as the lot step 10^-precision; historical lot-size changes are not stored. Minimum notional is not stored: assumed 5 USDT (repo paper_sizing default)."
+ ],
+ "contracts": {
+  "RENDERUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 7,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "OPUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 7,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "INJUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 6,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "ICPUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 6,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "APTUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 5,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "ARBUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 6,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "SUIUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 6,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "DOGEUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 6,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "DOTUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 6,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "SOLUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 4,
+   "qty_precision": 2,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "UNIUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 4,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "AVAXUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 4,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "NEARUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 4,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "AAVEUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 3,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "FILUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 6,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "ETCUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 3,
+   "qty_precision": 2,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "LINKUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 3,
+   "qty_precision": 2,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "ADAUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 5,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "BNBUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 3,
+   "qty_precision": 2,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "ATOMUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 3,
+   "qty_precision": 2,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "BTCUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 2,
+   "qty_precision": 3,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "ETHUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 2,
+   "qty_precision": 3,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "BCHUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 2,
+   "qty_precision": 3,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "XRPUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 4,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "LTCUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 2,
+   "qty_precision": 3,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  },
+  "TRXUSDT": {
+   "status": "TRADING",
+   "contract_type": "PERPETUAL",
+   "price_precision": 5,
+   "qty_precision": 1,
+   "listed_at": null,
+   "delisted_at": null,
+   "snapshot_utc": "2026-10-14T07:24:12.826436+00:00"
+  }
+ },
+ "symbols_table": {
+  "rows": 528,
+  "with_listed_at": 0,
+  "with_delisted_at": 0,
+  "statuses": {
+   "TRADING": 528
+  }
+ },
+ "funding": {
+  "grid_funding_settlements": [
+   {
+    "symbol": "BTCUSDT",
+    "first": "2025-09-01T00:00:00+00:00",
+    "last": "2026-10-11T00:00:00+00:00",
+    "n": 1216
+   },
+   {
+    "symbol": "LPTUSDT",
+    "first": "2026-10-08T00:00:00+00:00",
+    "last": "2026-10-11T08:00:00+00:00",
+    "n": 21
+   }
+  ],
+  "funding_rates_btc": [
+   {
+    "source": "binance_rest",
+    "first": "2026-10-01T04:07:02.001000+00:00",
+    "last": "2026-10-14T07:23:28.966770+00:00"
+   },
+   {
+    "source": "binance_ws",
+    "first": "2026-10-02T14:28:08+00:00",
+    "last": "2026-10-14T17:20:01.002000+00:00"
+   }
+  ]
+ },
+ "ohlcv_sha256": "eb8033c01da2ea081819e4886c1dafb431b2d83dff320a8e43867bd56720c28f",
+ "eligible": {
+  "universe": [
+   "ADAUSDT",
+   "APTUSDT",
+   "ARBUSDT",
+   "AVAXUSDT",
+   "BNBUSDT",
+   "BTCUSDT",
+   "DOGEUSDT",
+   "DOTUSDT",
+   "ETHUSDT",
+   "LINKUSDT",
+   "LTCUSDT",
+   "NEARUSDT",
+   "OPUSDT",
+   "SOLUSDT",
+   "SUIUSDT",
+   "XRPUSDT"
+  ],
+  "15m_setups": [
+   "APTUSDT",
+   "AVAXUSDT",
+   "BTCUSDT",
+   "DOGEUSDT",
+   "DOTUSDT",
+   "ETHUSDT",
+   "SOLUSDT"
+  ],
+  "15m_excluded": {
+   "ADAUSDT": "15m starts 2023-11-15",
+   "ARBUSDT": "15m starts 2023-09-30",
+   "BNBUSDT": "15m starts 2024-08-08",
+   "LINKUSDT": "15m starts 2024-04-05",
+   "LTCUSDT": "15m starts 2024-06-06",
+   "NEARUSDT": "15m starts 2024-05-21",
+   "OPUSDT": "15m starts 2023-11-15",
+   "SUIUSDT": "15m starts 2023-12-17",
+   "XRPUSDT": "15m starts 2024-10-09"
+  },
+  "1h_note": {
+   "AVAXUSDT": "stored 1h starts 2024-04-04; earlier 1h bars are built from complete groups of four stored 15m bars (common2.hourly)"
+  }
+ }
+}

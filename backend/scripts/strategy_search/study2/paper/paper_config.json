@@ -1,0 +1,6 @@
+{
+ "enabled": false,
+ "freeze_file": "FREEZE_S2_PRIMARY_20261014T180111Z.json",
+ "freeze_sha256": "21b0fe52a223ee170ee186811325398f46ac27e2cbbcd611b620d2e452c86171",
+ "note": "Off by default. Arming requires the owner to set enabled=true; nothing else may change. Study-2 recommendation: do NOT arm - validation net was $142/30d per $10k, far below the $500 target."
+}

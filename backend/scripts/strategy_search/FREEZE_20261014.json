@@ -1,0 +1,250 @@
+{
+ "frozen_utc": "2026-10-14T16:55:53.713172+00:00",
+ "declarations": "DECLARATIONS.md",
+ "universe_rule": "rules are coin-agnostic; holdout runs every rule on all 11 holdout coins, 2024-10-09 -> 2026-10-08",
+ "accounting": {
+  "engine": "scripts/sleeve_study/sim.py",
+  "entry": "next bar open",
+  "taker": 0.0004,
+  "slippage_per_side": 0.0002,
+  "sensitivity": [
+   "slippage 0.05%",
+   "slippage 0.10%",
+   "1.5x taker+slippage",
+   "funding 0.01%/8h"
+  ],
+  "leverage_cap": 3.0,
+  "sleeve_usd": 1000,
+  "withdrawal": "month end, equity above N x $1,000; losses carry",
+  "pyramiding": "none"
+ },
+ "regime_map": {
+  "UPTREND": "BULL_TREND + HVT bull reason",
+  "DOWNTREND": "BEAR_TREND + HVT bear reason",
+  "RANGE": "RANGE, HIGH_VOLATILITY_RANGE, LOW_VOLATILITY_COMPRESSION",
+  "NO_TRADE": "CHOPPY, TRANSITION, UNKNOWN"
+ },
+ "books": [
+  {
+   "label": "CANDIDATE",
+   "vid": "PB|50|4h|SHORT|ANY|btc0|s1.5|TRAIL2",
+   "rule": {
+    "fam": "PB",
+    "p": 50,
+    "tf": "4h",
+    "side": "SHORT",
+    "rf": "ANY",
+    "btc": 0,
+    "stop_k": 1.5,
+    "exit": "TRAIL2",
+    "trail": 2.0,
+    "vid": "PB|50|4h|SHORT|ANY|btc0|s1.5|TRAIL2"
+   },
+   "frozen_risk": 0.05,
+   "discovery": {
+    "base": {
+     "trades": 1145,
+     "net": 7274.49,
+     "pf": 1.254,
+     "win_rate": 0.351,
+     "avg_win": 89.42,
+     "avg_loss": -38.59,
+     "exp_r": 0.138,
+     "trades_per_30d": 28.02,
+     "usd_per_30d_10k": 111.25,
+     "max_dd": 3599.56,
+     "max_dd_pct": 22.5,
+     "worst_month": -1254.04,
+     "worst_month_10k": -783.78,
+     "longest_losing_streak": 26,
+     "fees": 1412.62,
+     "folds": {
+      "F1": 1455.49,
+      "F2": 4001.44,
+      "F3": 3557.31,
+      "F4": -1739.76
+     },
+     "folds_pos": 3,
+     "fall_fold": 3557.31,
+     "fall_win": 2005.35,
+     "best_coin_share": 0.335,
+     "best_month_share": 0.259,
+     "months_ge_500_10k": 10,
+     "months_ge_1000_10k": 2,
+     "n_months": 41,
+     "risk": 0.05,
+     "by_regime": {
+      "DOWNTREND": {
+       "trades": 660,
+       "net": 4301.0,
+       "win_rate": 0.326
+      },
+      "RANGE": {
+       "trades": 199,
+       "net": 942.03,
+       "win_rate": 0.347
+      },
+      "UPTREND": {
+       "trades": 286,
+       "net": 2031.46,
+       "win_rate": 0.413
+      }
+     }
+    },
+    "fails": [],
+    "cost_1.5x_net": 6201.43,
+    "stop_kx0.8_net": 7963.8,
+    "stop_kx1.2_net": 6102.82,
+    "trailx0.8_net": 5097.25,
+    "trailx1.2_net": 7880.19,
+    "dd_ok": true
+   }
+  },
+  {
+   "label": "CANDIDATE",
+   "vid": "BRT|55|4h|BOTH|TREND|btc0|s2.5|R2",
+   "rule": {
+    "fam": "BRT",
+    "p": 55,
+    "tf": "4h",
+    "side": "BOTH",
+    "rf": "TREND",
+    "btc": 0,
+    "stop_k": 2.5,
+    "exit": "R2",
+    "r": 2.0,
+    "vid": "BRT|55|4h|BOTH|TREND|btc0|s2.5|R2"
+   },
+   "frozen_risk": 0.05,
+   "discovery": {
+    "base": {
+     "trades": 1346,
+     "net": 6950.67,
+     "pf": 1.164,
+     "win_rate": 0.378,
+     "avg_win": 96.94,
+     "avg_loss": -50.65,
+     "exp_r": 0.117,
+     "trades_per_30d": 32.94,
+     "usd_per_30d_10k": 106.3,
+     "max_dd": 2737.72,
+     "max_dd_pct": 17.11,
+     "worst_month": -1113.1,
+     "worst_month_10k": -695.69,
+     "longest_losing_streak": 24,
+     "fees": 922.71,
+     "folds": {
+      "F1": 2918.06,
+      "F2": 476.28,
+      "F3": 1816.82,
+      "F4": 1739.51
+     },
+     "folds_pos": 4,
+     "fall_fold": 1816.82,
+     "fall_win": 2599.83,
+     "best_coin_share": 0.209,
+     "best_month_share": 0.298,
+     "months_ge_500_10k": 10,
+     "months_ge_1000_10k": 1,
+     "n_months": 41,
+     "risk": 0.05,
+     "by_regime": {
+      "UPTREND": {
+       "trades": 820,
+       "net": 4936.39,
+       "win_rate": 0.385
+      },
+      "DOWNTREND": {
+       "trades": 526,
+       "net": 2014.28,
+       "win_rate": 0.367
+      }
+     }
+    },
+    "fails": [],
+    "cost_1.5x_net": 6479.51,
+    "stop_kx0.8_net": 5981.34,
+    "stop_kx1.2_net": 4451.11,
+    "rx0.8_net": 6321.9,
+    "rx1.2_net": 6131.85,
+    "dd_ok": true
+   }
+  },
+  {
+   "label": "CANDIDATE",
+   "vid": "SQZ|20|4h|SHORT|ANY|btc0|s1.5|R2",
+   "rule": {
+    "fam": "SQZ",
+    "p": 20,
+    "tf": "4h",
+    "side": "SHORT",
+    "rf": "ANY",
+    "btc": 0,
+    "stop_k": 1.5,
+    "exit": "R2",
+    "r": 2.0,
+    "vid": "SQZ|20|4h|SHORT|ANY|btc0|s1.5|R2"
+   },
+   "frozen_risk": 0.05,
+   "discovery": {
+    "base": {
+     "trades": 827,
+     "net": 5351.48,
+     "pf": 1.214,
+     "win_rate": 0.397,
+     "avg_win": 92.44,
+     "avg_loss": -50.04,
+     "exp_r": 0.149,
+     "trades_per_30d": 20.24,
+     "usd_per_30d_10k": 81.84,
+     "max_dd": 1750.55,
+     "max_dd_pct": 10.94,
+     "worst_month": -844.14,
+     "worst_month_10k": -527.59,
+     "longest_losing_streak": 24,
+     "fees": 1060.48,
+     "folds": {
+      "F1": -1218.66,
+      "F2": 2114.96,
+      "F3": 3246.1,
+      "F4": 1209.08
+     },
+     "folds_pos": 3,
+     "fall_fold": 3246.1,
+     "fall_win": 2226.57,
+     "best_coin_share": 0.23,
+     "best_month_share": 0.276,
+     "months_ge_500_10k": 6,
+     "months_ge_1000_10k": 0,
+     "n_months": 41,
+     "risk": 0.05,
+     "by_regime": {
+      "DOWNTREND": {
+       "trades": 518,
+       "net": 4168.62,
+       "win_rate": 0.4
+      },
+      "UPTREND": {
+       "trades": 246,
+       "net": 2428.87,
+       "win_rate": 0.435
+      },
+      "RANGE": {
+       "trades": 63,
+       "net": -1246.01,
+       "win_rate": 0.222
+      }
+     }
+    },
+    "fails": [],
+    "cost_1.5x_net": 4698.54,
+    "stop_kx0.8_net": 7920.42,
+    "stop_kx1.2_net": 5138.15,
+    "rx0.8_net": 5579.35,
+    "rx1.2_net": 5397.22,
+    "dd_ok": true
+   }
+  }
+ ],
+ "candidates_passing_all_gates": 15
+}

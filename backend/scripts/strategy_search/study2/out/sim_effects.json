@@ -1,0 +1,80 @@
+{
+ "reference_variant": "R1-06|s1.5|TRAIL3|btc0",
+ "rows": {
+  "sleeve_study_sim.py": {
+   "trades": 412,
+   "net": 3024.64,
+   "usd30_10k": 68.91
+  },
+  "sim2_full": {
+   "trades": 412,
+   "net": 2708.55,
+   "usd30_10k": 61.71,
+   "funding_hyp": 263.18,
+   "max_dd_pct": 5.24,
+   "skips": {
+    "coin_busy": 390
+   }
+  },
+  "no_hypothetical_funding": {
+   "trades": 412,
+   "net": 2977.57,
+   "usd30_10k": 67.84,
+   "funding_hyp": 0.0,
+   "max_dd_pct": 4.96,
+   "skips": {
+    "coin_busy": 390
+   }
+  },
+  "no_lot_rounding": {
+   "trades": 412,
+   "net": 2719.33,
+   "usd30_10k": 61.95,
+   "funding_hyp": 264.3,
+   "max_dd_pct": 5.24,
+   "skips": {
+    "coin_busy": 390
+   }
+  },
+  "no_loss_pauses": {
+   "trades": 412,
+   "net": 2708.55,
+   "usd30_10k": 61.71,
+   "funding_hyp": 263.18,
+   "max_dd_pct": 5.24,
+   "skips": {
+    "coin_busy": 390
+   }
+  },
+  "no_dd_stop": {
+   "trades": 412,
+   "net": 2708.55,
+   "usd30_10k": 61.71,
+   "funding_hyp": 263.18,
+   "max_dd_pct": 5.24,
+   "skips": {
+    "coin_busy": 390
+   }
+  },
+  "no_account_risk_cap": {
+   "trades": 412,
+   "net": 2708.55,
+   "usd30_10k": 61.71,
+   "funding_hyp": 263.18,
+   "max_dd_pct": 5.24,
+   "skips": {
+    "coin_busy": 390
+   }
+  },
+  "all_new_limits_off": {
+   "trades": 412,
+   "net": 2988.82,
+   "usd30_10k": 68.09,
+   "funding_hyp": 0.0,
+   "max_dd_pct": 4.96,
+   "skips": {
+    "coin_busy": 390
+   }
+  }
+ }
+}

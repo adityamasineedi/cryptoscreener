@@ -1,0 +1,678 @@
+{
+ "round": 1,
+ "registered_utc": "2026-10-14T17:32:00.715297+00:00",
+ "window": "research 2023-06-01 -> 2025-09-01",
+ "risk": 0.02,
+ "account": "16 x $1,000 sleeves (15m: 7 coins), cap $20 x sleeves, base costs incl. hypothetical funding",
+ "variant_sets": {
+  "TREND": "stop_k 1.5|2.5 x exits R2|TRAIL3|PT(50% at 1R, BE, trail 2.5 ATR) x btc 0|1",
+  "TF": "stop_k 2.5|3.5 x exits TRAIL3|TRAIL4|PT3(50% at 1R, BE, trail 3 ATR) x btc 0|1",
+  "REV": "stop_k 1.0|1.5 x exits R1|R15T(1.5R, 12-bar time exit)|MIDT(Bollinger mid at signal, 24-bar time exit) x btc 0|1",
+  "FBR": "structural stop (sweep extreme + buf ATR), buf 0.25|0.5 x exits R1|R15T|MIDT(range mid) x btc 0|1",
+  "ENG": "native stop distance x exits R2|TRAIL3|PT x btc 0|1"
+ },
+ "gates": "PROTOCOL.md section 4",
+ "bases": [
+  {
+   "id": "R1-01",
+   "fam": "TPB",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 20,
+    "m": 3
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-02",
+   "fam": "TPB",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 20,
+    "m": 3
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-03",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 20,
+    "m": 3
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-04",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 20,
+    "m": 3
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-05",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 3
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-06",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "anchor": 50,
+    "m": 3
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-07",
+   "fam": "BRKA",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-08",
+   "fam": "BRKA",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-09",
+   "fam": "BRKA",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-10",
+   "fam": "BRKA",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-11",
+   "fam": "BRKA",
+   "tf": "1d",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-12",
+   "fam": "BRKA",
+   "tf": "1d",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-13",
+   "fam": "BRKR",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-14",
+   "fam": "BRKR",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 20,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-15",
+   "fam": "BRKR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-16",
+   "fam": "BRKR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 20,
+    "w": 8
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-17",
+   "fam": "FBR",
+   "tf": "15m",
+   "side": "LONG",
+   "regime": "ANY",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-18",
+   "fam": "FBR",
+   "tf": "15m",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-19",
+   "fam": "FBR",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "ANY",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-20",
+   "fam": "FBR",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-21",
+   "fam": "FBR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "ANY",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-22",
+   "fam": "FBR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-23",
+   "fam": "FBR",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "RANGE",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-24",
+   "fam": "FBR",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "RANGE",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-25",
+   "fam": "FBR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "RANGE",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-26",
+   "fam": "FBR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "RANGE",
+   "p": {
+    "n": 20
+   },
+   "class": "FBR",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-27",
+   "fam": "RMR",
+   "tf": "15m",
+   "side": "LONG",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30
+   },
+   "class": "REV",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-28",
+   "fam": "RMR",
+   "tf": "15m",
+   "side": "SHORT",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30
+   },
+   "class": "REV",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-29",
+   "fam": "RMR",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30
+   },
+   "class": "REV",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-30",
+   "fam": "RMR",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30
+   },
+   "class": "REV",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-31",
+   "fam": "RMR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30
+   },
+   "class": "REV",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-32",
+   "fam": "RMR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "RANGE",
+   "p": {
+    "bbk": 2.0,
+    "rsi": 30
+   },
+   "class": "REV",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-33",
+   "fam": "VEX",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "ANY",
+   "p": {
+    "pct": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-34",
+   "fam": "VEX",
+   "tf": "1h",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "pct": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-35",
+   "fam": "VEX",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "ANY",
+   "p": {
+    "pct": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-36",
+   "fam": "VEX",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "ANY",
+   "p": {
+    "pct": 20
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-37",
+   "fam": "VNR",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "nr": 7
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-38",
+   "fam": "VNR",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "nr": 7
+   },
+   "class": "TREND",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-39",
+   "fam": "TFD",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 55
+   },
+   "class": "TF",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-40",
+   "fam": "TFD",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 55
+   },
+   "class": "TF",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-41",
+   "fam": "TFD",
+   "tf": "1d",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 55
+   },
+   "class": "TF",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-42",
+   "fam": "TFD",
+   "tf": "1d",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "n": 55
+   },
+   "class": "TF",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-43",
+   "fam": "TFE",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "fast": 20,
+    "slow": 100
+   },
+   "class": "TF",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-44",
+   "fam": "TFE",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {
+    "fast": 20,
+    "slow": 100
+   },
+   "class": "TF",
+   "map": "C",
+   "note": ""
+  },
+  {
+   "id": "R1-45",
+   "fam": "ENG_C01",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {},
+   "class": "ENG",
+   "map": "C",
+   "note": "existing COMBO_01 signals (reference weak book)"
+  },
+  {
+   "id": "R1-46",
+   "fam": "ENG_C01",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {},
+   "class": "ENG",
+   "map": "C",
+   "note": "existing COMBO_01 signals (reference weak book)"
+  },
+  {
+   "id": "R1-47",
+   "fam": "ENG_OSEA",
+   "tf": "1h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {},
+   "class": "ENG",
+   "map": "C",
+   "note": "existing OSE_A signals (reference weak book)"
+  },
+  {
+   "id": "R1-48",
+   "fam": "ENG_OSEA",
+   "tf": "4h",
+   "side": "SHORT",
+   "regime": "TREND",
+   "p": {},
+   "class": "ENG",
+   "map": "C",
+   "note": "existing OSE_A signals (reference weak book)"
+  },
+  {
+   "id": "R1-49",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "anchor": 20,
+    "m": 3
+   },
+   "class": "TREND",
+   "map": "B",
+   "note": "regime-map comparison: baseline map, same rule as R1-03"
+  },
+  {
+   "id": "R1-50",
+   "fam": "BRKA",
+   "tf": "4h",
+   "side": "LONG",
+   "regime": "TREND",
+   "p": {
+    "n": 20
+   },
+   "class": "TREND",
+   "map": "B",
+   "note": "regime-map comparison: baseline map, same rule as R1-09"
+  }
+ ]
+}

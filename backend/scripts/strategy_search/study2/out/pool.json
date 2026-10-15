@@ -1,0 +1,291 @@
+{
+ "label": "CANDIDATE",
+ "passing_variants": 135,
+ "pool": [
+  {
+   "vid": "R3-04|s1.5|TRAIL3|btc0",
+   "round": "3",
+   "base": "R3-04",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "SHORT",
+   "trades": 642,
+   "net": 3675.67,
+   "usd30_10k": 83.74,
+   "folds_pos": 3,
+   "F4": 337.06,
+   "coin_share": "0.201",
+   "month_share": "0.199",
+   "max_dd_pct": 8.09,
+   "exp_r": "0.2843",
+   "pf": "1.478",
+   "fails": [],
+   "cost15_net": 3171.95,
+   "neighbors": {
+    "{\"anchor\": 0.8}": 2142.55,
+    "{\"anchor\": 1.2}": 3558.1,
+    "{\"m\": 0.8}": 2972.08,
+    "{\"m\": 1.2}": 3221.41,
+    "{\"stop_k\": 0.8}": 4408.22,
+    "{\"stop_k\": 1.2}": 2615.05,
+    "{\"trail\": 0.8}": 4026.09,
+    "{\"trail\": 1.2}": 2654.35
+   },
+   "pass": true,
+   "label": "CANDIDATE"
+  },
+  {
+   "vid": "R3-16|s2.5|R2|btc1",
+   "round": "3",
+   "base": "R3-16",
+   "fam": "BRKR",
+   "tf": "4h",
+   "side": "LONG",
+   "trades": 487,
+   "net": 1947.03,
+   "usd30_10k": 44.36,
+   "folds_pos": 3,
+   "F4": 633.55,
+   "coin_share": "0.199",
+   "month_share": "0.267",
+   "max_dd_pct": 5.15,
+   "exp_r": "0.205",
+   "pf": "1.337",
+   "fails": [],
+   "cost15_net": 1758.84,
+   "neighbors": {
+    "{\"n\": 0.8}": 1765.55,
+    "{\"n\": 1.2}": 2003.67,
+    "{\"w\": 0.8}": 1947.03,
+    "{\"w\": 1.2}": 1947.03,
+    "{\"stop_k\": 0.8}": 1533.63,
+    "{\"stop_k\": 1.2}": 1628.18,
+    "{\"r\": 0.8}": 1711.93,
+    "{\"r\": 1.2}": 2035.44
+   },
+   "pass": true,
+   "label": "CANDIDATE"
+  },
+  {
+   "vid": "R2-29|s1.5|R2|btc0",
+   "round": "2",
+   "base": "R2-29",
+   "fam": "VEX",
+   "tf": "4h",
+   "side": "SHORT",
+   "trades": 358,
+   "net": 1429.4,
+   "usd30_10k": 32.57,
+   "folds_pos": 3,
+   "F4": 796.81,
+   "coin_share": "0.192",
+   "month_share": "0.209",
+   "max_dd_pct": 3.67,
+   "exp_r": "0.1988",
+   "pf": "1.346",
+   "fails": [],
+   "cost15_net": 1245.65,
+   "neighbors": {
+    "{\"pct\": 0.8}": 1235.12,
+    "{\"pct\": 1.2}": 1412.63,
+    "{\"stop_k\": 0.8}": 2182.31,
+    "{\"stop_k\": 1.2}": 1181.21,
+    "{\"r\": 0.8}": 1444.28,
+    "{\"r\": 1.2}": 1440.8
+   },
+   "pass": true,
+   "label": "CANDIDATE"
+  },
+  {
+   "vid": "R1-22|b0.25|R15T|btc1",
+   "round": "1",
+   "base": "R1-22",
+   "fam": "FBR",
+   "tf": "4h",
+   "side": "SHORT",
+   "trades": 1052,
+   "net": 1041.8,
+   "usd30_10k": 23.73,
+   "folds_pos": 3,
+   "F4": 987.11,
+   "coin_share": "0.227",
+   "month_share": "0.177",
+   "max_dd_pct": 7.04,
+   "exp_r": "0.0479",
+   "pf": "1.103",
+   "fails": [],
+   "cost15_net": 475.27,
+   "neighbors": {
+    "{\"n\": 0.8}": 1446.62,
+    "{\"n\": 1.2}": 618.49,
+    "{\"buf\": 0.8}": 921.17,
+    "{\"buf\": 1.2}": 1267.28,
+    "{\"r\": 0.8}": 788.39,
+    "{\"r\": 1.2}": 871.11,
+    "{\"hold\": 0.8}": 932.27,
+    "{\"hold\": 1.2}": 1019.46
+   },
+   "pass": true,
+   "label": "CANDIDATE"
+  },
+  {
+   "vid": "R2-08|s2.0|TRAIL4|btc0",
+   "round": "2",
+   "base": "R2-08",
+   "fam": "TPB",
+   "tf": "4h",
+   "side": "LONG",
+   "trades": 408,
+   "net": 929.22,
+   "usd30_10k": 21.17,
+   "folds_pos": 3,
+   "F4": 623.84,
+   "coin_share": "0.309",
+   "month_share": "0.195",
+   "max_dd_pct": 6.04,
+   "exp_r": "0.1116",
+   "pf": "1.169",
+   "fails": [],
+   "cost15_net": 677.85,
+   "neighbors": {
+    "{\"anchor\": 0.8}": 938.36,
+    "{\"anchor\": 1.2}": 1081.68,
+    "{\"m\": 0.8}": 845.69,
+    "{\"m\": 1.2}": 1041.08,
+    "{\"stop_k\": 0.8}": 1326.22,
+    "{\"stop_k\": 1.2}": 902.24,
+    "{\"trail\": 0.8}": 550.65,
+    "{\"trail\": 1.2}": 1024.67
+   },
+   "pass": true,
+   "label": "CANDIDATE"
+  }
+ ],
+ "duplicates": [
+  {
+   "vid": "R2-02|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 0.998
+  },
+  {
+   "vid": "R3-02|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 0.877
+  },
+  {
+   "vid": "R3-47|s2.0|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 1.0
+  },
+  {
+   "vid": "R1-06|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 1.0
+  },
+  {
+   "vid": "R2-03|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 0.868
+  },
+  {
+   "vid": "R3-19|s2.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 0.713
+  },
+  {
+   "vid": "R2-01|s2.0|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 1.0
+  },
+  {
+   "vid": "R3-48|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 1.0
+  },
+  {
+   "vid": "R3-36|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 0.79
+  },
+  {
+   "vid": "R3-50|s2.5|R2|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.984
+  },
+  {
+   "vid": "R2-46|s1.0|TRAIL3|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.708
+  },
+  {
+   "vid": "R2-15|s2.5|R2|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.984
+  },
+  {
+   "vid": "R1-46|s1.0|TRAIL3|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.715
+  },
+  {
+   "vid": "R3-01|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 1.0
+  },
+  {
+   "vid": "R2-34|s1.0|TRAIL3|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.74
+  },
+  {
+   "vid": "R3-03|s1.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 0.943
+  },
+  {
+   "vid": "R3-25|s3.5|TRAIL4|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.897
+  },
+  {
+   "vid": "R1-15|s2.5|TRAIL3|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.971
+  },
+  {
+   "vid": "R1-39|s3.5|TRAIL4|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.901
+  },
+  {
+   "vid": "R2-21|s2.5|TRAIL4|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.819
+  },
+  {
+   "vid": "R1-36|s1.5|R2|btc0",
+   "duplicate_of": "R2-29|s1.5|R2|btc0",
+   "overlap": 1.0
+  },
+  {
+   "vid": "R3-15|s1.5|TRAIL3|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.899
+  },
+  {
+   "vid": "R2-04|s2.5|TRAIL3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 1.0
+  },
+  {
+   "vid": "R3-35|s2.5|R2|btc1",
+   "duplicate_of": "R3-16|s2.5|R2|btc1",
+   "overlap": 0.832
+  },
+  {
+   "vid": "R1-40|s2.5|PT3|btc0",
+   "duplicate_of": "R3-04|s1.5|TRAIL3|btc0",
+   "overlap": 0.761
+  }
+ ]
+}

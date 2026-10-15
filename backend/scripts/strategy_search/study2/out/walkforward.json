@@ -1,0 +1,132 @@
+[
+ {
+  "candidate": "R3-04|s1.5|TRAIL3|btc0",
+  "steps": [
+   {
+    "test_fold": "F2",
+    "chosen": "R3-04|s1.5|R2|btc0",
+    "in_sample": 1180.74,
+    "oos_net": 902.85
+   },
+   {
+    "test_fold": "F3",
+    "chosen": "R3-04|s1.5|TRAIL3|btc0",
+    "in_sample": 3758.43,
+    "oos_net": -419.82
+   },
+   {
+    "test_fold": "F4",
+    "chosen": "R3-04|s1.5|TRAIL3|btc0",
+    "in_sample": 3338.61,
+    "oos_net": 337.06
+   }
+  ],
+  "wf_oos_net_F2_F4": 820.09,
+  "candidate_net_F2_F4": 2532.34,
+  "neighbourhood_size": 12
+ },
+ {
+  "candidate": "R3-16|s2.5|R2|btc1",
+  "steps": [
+   {
+    "test_fold": "F2",
+    "chosen": "R3-16|s2.5|R2|btc1",
+    "in_sample": 904.71,
+    "oos_net": -161.08
+   },
+   {
+    "test_fold": "F3",
+    "chosen": "R3-16|s2.5|R2|btc0",
+    "in_sample": 769.35,
+    "oos_net": 361.71
+   },
+   {
+    "test_fold": "F4",
+    "chosen": "R3-16|s2.5|R2|btc1",
+    "in_sample": 1313.49,
+    "oos_net": 633.55
+   }
+  ],
+  "wf_oos_net_F2_F4": 834.18,
+  "candidate_net_F2_F4": 1042.33,
+  "neighbourhood_size": 12
+ },
+ {
+  "candidate": "R2-29|s1.5|R2|btc0",
+  "steps": [
+   {
+    "test_fold": "F2",
+    "chosen": "R2-29|s1.5|PT|btc1",
+    "in_sample": -70.48,
+    "oos_net": 50.47
+   },
+   {
+    "test_fold": "F3",
+    "chosen": "R2-29|s1.5|PT|btc0",
+    "in_sample": 407.95,
+    "oos_net": 177.79
+   },
+   {
+    "test_fold": "F4",
+    "chosen": "R2-29|s1.5|R2|btc0",
+    "in_sample": 632.6,
+    "oos_net": 796.81
+   }
+  ],
+  "wf_oos_net_F2_F4": 1025.07,
+  "candidate_net_F2_F4": 1795.94,
+  "neighbourhood_size": 12
+ },
+ {
+  "candidate": "R1-22|b0.25|R15T|btc1",
+  "steps": [
+   {
+    "test_fold": "F2",
+    "chosen": "R1-22|b0.25|R15T|btc1",
+    "in_sample": 188.79,
+    "oos_net": -185.22
+   },
+   {
+    "test_fold": "F3",
+    "chosen": "R1-22|b0.25|R15T|btc1",
+    "in_sample": 3.57,
+    "oos_net": 51.12
+   },
+   {
+    "test_fold": "F4",
+    "chosen": "R1-22|b0.25|R15T|btc1",
+    "in_sample": 54.69,
+    "oos_net": 987.11
+   }
+  ],
+  "wf_oos_net_F2_F4": 853.01,
+  "candidate_net_F2_F4": 853.01,
+  "neighbourhood_size": 12
+ },
+ {
+  "candidate": "R2-08|s2.0|TRAIL4|btc0",
+  "steps": [
+   {
+    "test_fold": "F2",
+    "chosen": "R2-08|s2.0|TRAIL4|btc1",
+    "in_sample": 556.44,
+    "oos_net": -89.23
+   },
+   {
+    "test_fold": "F3",
+    "chosen": "R2-08|s2.0|PT3|btc1",
+    "in_sample": 516.71,
+    "oos_net": 25.38
+   },
+   {
+    "test_fold": "F4",
+    "chosen": "R2-08|s2.0|PT3|btc1",
+    "in_sample": 542.09,
+    "oos_net": 70.78
+   }
+  ],
+  "wf_oos_net_F2_F4": 6.93,
+  "candidate_net_F2_F4": 517.8,
+  "neighbourhood_size": 12
+ }
+]
