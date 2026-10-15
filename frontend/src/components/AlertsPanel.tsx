@@ -199,13 +199,22 @@ export function AlertsPanel() {
 
     function connect() {
       if (stopped) return;
-      ws = new WebSocket(wsUrl("/ws/alerts"));
-      ws.onopen = () => {
+      if (
+        ws &&
+        (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)
+      ) {
+        return;
+      }
+      const socket = new WebSocket(wsUrl("/ws/alerts"));
+      ws = socket;
+      socket.onopen = () => {
+        if (ws !== socket) return;
         retry = 0;
         setConnected(true);
         setError(null);
       };
-      ws.onmessage = (ev) => {
+      socket.onmessage = (ev) => {
+        if (ws !== socket) return;
         try {
           const msg = JSON.parse(ev.data as string) as {
             type?: string;
@@ -224,17 +233,20 @@ export function AlertsPanel() {
           /* ignore bad frames */
         }
       };
-      ws.onclose = () => {
+      socket.onclose = () => {
+        if (ws !== socket) return;
+        ws = null;
         setConnected(false);
         if (stopped) return;
         const delay = Math.min(15000, 800 * 2 ** retry);
         retry += 1;
         timer = window.setTimeout(connect, delay);
       };
-      ws.onerror = () => {
+      socket.onerror = () => {
+        if (ws !== socket) return;
         setConnected(false);
         try {
-          ws?.close();
+          socket.close();
         } catch {
           /* ignore */
         }
@@ -245,8 +257,10 @@ export function AlertsPanel() {
     return () => {
       stopped = true;
       if (timer) window.clearTimeout(timer);
+      const socket = ws;
+      ws = null;
       try {
-        ws?.close();
+        socket?.close();
       } catch {
         /* ignore */
       }

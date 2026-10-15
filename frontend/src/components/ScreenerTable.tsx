@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMarketStore } from "../store/marketStore";
+import { useBacktestHandoffStore } from "../store/backtestHandoffStore";
 import { FreshCell } from "./FreshCell";
 import { Spinner } from "./Spinner";
 import type { FreshValue, ScreenerRow } from "../types/market";
@@ -583,6 +585,9 @@ function columnsForOtherDomain(domain: string): Col[] {
 }
 
 export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
+  const navigate = useNavigate();
+  const queueBacktest = useBacktestHandoffStore((s) => s.queue);
+  const [picked, setPicked] = useState<string[]>([]);
   const rows = useMarketStore((s) => s.rows);
   const ordered = useMarketStore((s) => s.orderedSymbols);
   const selected = useMarketStore((s) => s.selectedSymbol);
@@ -608,12 +613,51 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
 
   const mode: "trade" | "technical" = technicalView ? "technical" : "trade";
 
+  const pickedSet = useMemo(() => new Set(picked), [picked]);
+
   const columns = useMemo(() => {
-    if (domain === "Futures") {
-      return mode === "technical" ? futuresTechnicalColumns() : futuresTradeColumns();
-    }
-    return columnsForOtherDomain(domain);
-  }, [domain, mode]);
+    const base =
+      domain === "Futures"
+        ? mode === "technical"
+          ? futuresTechnicalColumns()
+          : futuresTradeColumns()
+        : columnsForOtherDomain(domain);
+    return base.map((col) => {
+      if (col.id !== "symbol") return col;
+      const render = col.render;
+      return {
+        ...col,
+        render: (row: ScreenerRow) => {
+          const on = pickedSet.has(row.symbol);
+          return (
+            <div className="flex min-w-0 items-center gap-1">
+              <span
+                role="checkbox"
+                aria-checked={on}
+                aria-label={`Send ${row.symbol} to backtest`}
+                data-testid={`backtest-pick-${row.symbol}`}
+                className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                  on
+                    ? "border-terminal-accent bg-terminal-accent/30"
+                    : "border-terminal-border"
+                }`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setPicked((prev) =>
+                    prev.includes(row.symbol)
+                      ? prev.filter((symbol) => symbol !== row.symbol)
+                      : [...prev, row.symbol],
+                  );
+                }}
+              />
+              {render(row)}
+            </div>
+          );
+        },
+      };
+    });
+  }, [domain, mode, pickedSet]);
 
   useEffect(() => {
     setSwitching(true);
@@ -779,6 +823,30 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
                 <option value={100}>100</option>
               </select>
             </label>
+            <button
+              type="button"
+              className="rounded border border-terminal-accent/50 px-1.5 py-0.5 text-[10px] text-terminal-accent hover:bg-terminal-accent/10 disabled:opacity-40"
+              disabled={picked.length === 0}
+              data-testid="send-selected-to-backtest"
+              onClick={() => {
+                queueBacktest(picked);
+                navigate("/backtest");
+              }}
+            >
+              Backtest selected ({picked.length})
+            </button>
+            <button
+              type="button"
+              className="rounded border border-terminal-border px-1.5 py-0.5 text-[10px] hover:text-terminal-text disabled:opacity-40"
+              disabled={data.length === 0}
+              data-testid="send-shown-to-backtest"
+              onClick={() => {
+                queueBacktest(data.map((row) => row.symbol));
+                navigate("/backtest");
+              }}
+            >
+              Backtest shown ({data.length})
+            </button>
             <label className="inline-flex items-center gap-1">
               Screen filter
               <select

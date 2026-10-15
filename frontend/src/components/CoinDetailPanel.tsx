@@ -849,7 +849,7 @@ function Field({
         {fresh?.source ? <span className="truncate">Source: {fresh.source}</span> : null}
         {updated ? <span className="shrink-0">Updated: {updated}</span> : null}
       </div>
-      {fresh?.methodology ? (
+      {fresh?.methodology && fresh.value != null ? (
         <div className="mt-0.5 truncate text-[9px] text-terminal-muted">Method: {fresh.methodology}</div>
       ) : null}
     </div>

@@ -3,6 +3,7 @@
  */
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   within,
@@ -12,6 +13,12 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startBacktestJob } from "../api/client";
+import {
+  BACKTEST_CAP_SYMBOLS,
+  BACKTEST_LARGE_SYMBOLS,
+  BACKTEST_MID_SYMBOLS,
+} from "../backtest/v1Config";
+import { useBacktestHandoffStore } from "../store/backtestHandoffStore";
 import { useBacktestJobStore } from "../store/backtestJobStore";
 import { BacktestPanel } from "./BacktestPanel";
 
@@ -20,6 +27,27 @@ vi.mock("../api/client", async (importOriginal) => {
   return {
     ...actual,
     fetchResearchOhlcvRange: vi.fn(async () => ({ status: "OK", rows: [] })),
+    fetchCapBookAgents: vi.fn(async () => ({
+      status: "OK",
+      poll_interval_seconds: 3,
+      shards: [
+        ["a", "Agent A", "large"],
+        ["b", "Agent B", "large"],
+        ["c", "Agent C", "mid"],
+        ["d", "Agent D", "mid"],
+      ].map(([shard, agent_name, cap_group]) => ({
+        shard,
+        agent_name,
+        cap_group,
+        coins: [],
+        status: "waiting",
+        market_direction: null,
+        principal_usd: 1000,
+        elapsed_seconds: 0,
+        cells_finished: 0,
+        rows: [],
+      })),
+    })),
     startBacktestJob: vi.fn(async () => ({
       status: "STARTED",
       job: {
@@ -43,15 +71,6 @@ vi.mock("../api/client", async (importOriginal) => {
   };
 });
 
-vi.mock("./CandidateResearchPanel", () => ({
-  CandidateResearchPanel: () => null,
-}));
-vi.mock("./ShortResearchPanel", () => ({
-  ShortResearchPanel: () => null,
-}));
-vi.mock("./DynamicCandidatePipelinePanel", () => ({
-  DynamicCandidatePipelinePanel: () => null,
-}));
 vi.mock("./BacktestTradeChart", () => ({
   BacktestTradeChart: () => null,
 }));
@@ -66,6 +85,14 @@ function renderPanel() {
 
 function isSelected(el: HTMLElement): boolean {
   return el.className.includes("border-terminal-accent");
+}
+
+async function selectFrozenV1(
+  user: ReturnType<typeof userEvent.setup>,
+  root: ReturnType<typeof within>
+) {
+  await user.click(root.getByRole("tab", { name: "Long trades" }));
+  await user.selectOptions(root.getByRole("combobox", { name: /^Strategy/i }), "COMBO_02_V1");
 }
 
 async function selectOnlySymbol(
@@ -94,6 +121,38 @@ async function selectOnlyTimeframe(
   }
 }
 
+const DEFAULT_COINS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
+const CAP_BOOK: readonly string[] = BACKTEST_CAP_SYMBOLS;
+
+/** Symbols on the chips inside a coin container, in DOM order. */
+function coinsIn(root: ReturnType<typeof within>, testId: string): string[] {
+  return within(root.getByTestId(testId))
+    .queryAllByRole("button")
+    .map((btn) => /[A-Z0-9]+USDT/.exec(btn.getAttribute("title") || "")?.[0] ?? `?${btn.textContent}`);
+}
+
+function strategyOptions(root: ReturnType<typeof within>): HTMLOptionElement[] {
+  const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+  return Array.from(select.querySelectorAll("option"));
+}
+
+/** COMBO_02_V1 is the first option and the only one in the Working group. */
+function expectWorkingStrategyFirst(root: ReturnType<typeof within>): string[] {
+  const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+  const options = strategyOptions(root);
+  const values = options.map((o) => o.value);
+  expect(values.length).toBeGreaterThan(1);
+  expect(values[0]).toBe("COMBO_02_V1");
+  expect(values.filter((v) => v === "COMBO_02_V1").length).toBe(1);
+  const group = options[0].parentElement as HTMLElement;
+  expect(group.tagName).toBe("OPTGROUP");
+  expect(group.getAttribute("label")).toBe("Working");
+  expect(Array.from(group.querySelectorAll("option")).map((o) => o.value)).toEqual(["COMBO_02_V1"]);
+  expect(select.firstElementChild).toBe(group);
+  expect(select.querySelectorAll('optgroup[label="Working"]').length).toBe(1);
+  return values;
+}
+
 describe("BacktestPanel interaction paths", () => {
   afterEach(() => {
     cleanup();
@@ -102,11 +161,15 @@ describe("BacktestPanel interaction paths", () => {
   beforeEach(() => {
     useBacktestJobStore.setState({
       job: null,
+      request: null,
+      foreignJob: false,
+      ownJobId: null,
       error: null,
       active: false,
       starting: false,
       _gen: 0,
     });
+    useBacktestHandoffStore.setState({ symbols: [], revision: 0 });
     vi.mocked(startBacktestJob).mockClear();
   });
 
@@ -114,6 +177,7 @@ describe("BacktestPanel interaction paths", () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
+    await selectFrozenV1(user, root);
     await selectOnlySymbol(user, root, "BTCUSDT");
 
     expect(root.getAllByText(/Strategy:\s*COMBO_02 v1/i).length).toBeGreaterThan(0);
@@ -142,6 +206,7 @@ describe("BacktestPanel interaction paths", () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
+    await selectFrozenV1(user, root);
     await selectOnlySymbol(user, root, "ETHUSDT");
 
     await waitFor(() => {
@@ -159,6 +224,7 @@ describe("BacktestPanel interaction paths", () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
+    await selectFrozenV1(user, root);
     await selectOnlySymbol(user, root, "SOLUSDT");
 
     await waitFor(() => {
@@ -175,6 +241,7 @@ describe("BacktestPanel interaction paths", () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
+    await selectFrozenV1(user, root);
     await selectOnlySymbol(user, root, "BTCUSDT");
 
     await user.click(root.getByRole("checkbox", { name: /Research risk override/i }));
@@ -195,39 +262,104 @@ describe("BacktestPanel interaction paths", () => {
     ).toBeTruthy();
   });
 
-  it("5. SHORT research-only select", async () => {
+  it("5. frozen v1 view has no SHORT button and its status reads Paper forward-test", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
+    await selectFrozenV1(user, root);
 
-    const shortBtn = root.getByTitle(/SHORT research-only/i);
-    await user.click(shortBtn);
-
-    expect(
-      root.getByText(/SHORT research-only: COMBO_04_HTF reverse of long/i)
-    ).toBeTruthy();
-    expect(
-      root.getAllByText(/SHORT status:\s*RESEARCH_ONLY/i).length
-    ).toBeGreaterThan(0);
+    expect(root.queryByTitle(/SHORT research-only/i)).toBeNull();
+    expect(root.queryByRole("button", { name: /^SHORT/i })).toBeNull();
     expect(root.getByRole("button", { name: /^LONG$/i })).toBeTruthy();
-    expect(shortBtn.className).toMatch(/border-rose-500\/50/);
-    expect(root.getAllByText(/Direction:\s*SHORT/i).length).toBeGreaterThan(0);
+    expect(root.queryByText(/COMBO_04_HTF reverse of long/i)).toBeNull();
+    expect(root.queryByText(/→ COMBO_04_HTF SHORT/i)).toBeNull();
+    expect(root.getByTestId("backtest-status-chip").textContent).toBe("Status: Paper forward-test");
+    expect(root.queryAllByText(/Production candidate \(frozen v1\)/i)).toHaveLength(0);
+    expect(root.getAllByText(/Direction:\s*LONG/i).length).toBeGreaterThan(0);
   });
 
-  it("6. SHORT sends COMBO_04_HTF research request", async () => {
+  it("6. frozen v1 runs COMBO_02 v1 LONG and never sends COMBO_04_HTF", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await selectFrozenV1(user, root);
+
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalled();
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.direction).toBe("LONG");
+    expect(body?.combination_id).toBe("COMBO_02");
+    expect(body?.strategy_id).toBe("COMBO_02_V1");
+  });
+
+  it("6-direct. a direct book keeps its own SHORT button and runs its own id", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
 
-    await user.click(root.getByTitle(/SHORT research-only/i));
+    await user.selectOptions(root.getByRole("combobox", { name: /^Strategy/i }), "COMBO_02");
+    const shortBtn = root.getByTitle(/SHORT research-only: COMBO_02$/i);
+    await user.click(shortBtn);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
       expect(startBacktestJob).toHaveBeenCalled();
     });
     const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
     expect(body?.direction).toBe("SHORT");
-    expect(body?.combination_id).toBe("COMBO_04_HTF");
-    expect(body?.strategy_id).toBe("COMBO_04_HTF_SHORT");
+    expect(body?.combination_id).toBe("COMBO_02");
+    expect(body?.strategy_id).toBe("COMBO_02");
+  });
+
+  it("6a. COMBO_02_V1 is listed first under Working in the long book only", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    expect(root.getByRole("tab", { name: "Short trades" }).getAttribute("aria-selected")).toBe("true");
+    const shortSelect = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+    const shortValues = Array.from(shortSelect.options).map((o) => o.value);
+    expect(shortValues[0]).toBe("PASSED_AUTO");
+    expect(shortValues).not.toContain("COMBO_02_V1");
+    expect(shortValues).toContain("COMBO_02_V2");
+
+    await user.click(root.getByRole("tab", { name: "Long trades" }));
+    const longValues = expectWorkingStrategyFirst(root);
+    expect(longValues[1]).toBe("PASSED_AUTO");
+    expect(longValues).toContain("COMBO_03_TRANSITION_B");
+    expect(longValues).toContain("COMBO_SD_STRUCTURE");
+  });
+
+  it("6a1. COMBO_02_V1 in the long book posts COMBO_02 v1 LONG", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await selectFrozenV1(user, root);
+
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body).toMatchObject({
+      combination_id: "COMBO_02",
+      strategy_id: "COMBO_02_V1",
+      combo_version: "v1",
+      direction: "LONG",
+      symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+    });
+  });
+
+  it("6a2. the short book does not offer COMBO_02_V1 (its COMBO_04_HTF rewrite made zero trades)", async () => {
+    const { container } = renderPanel();
+    const root = within(container);
+
+    expect(root.getByRole("tab", { name: "Short trades" }).getAttribute("aria-selected")).toBe("true");
+    const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).not.toContain("COMBO_02_V1");
+    expect(values).toContain("COMBO_02");
   });
 
   it("6b. V2.1-A sends research combo id and RESEARCH ONLY label", async () => {
@@ -235,9 +367,7 @@ describe("BacktestPanel interaction paths", () => {
     const { container } = renderPanel();
     const root = within(container);
 
-    const select = root.getByDisplayValue("COMBO_02 V1") as HTMLSelectElement;
-    await user.selectOptions(select, "COMBO_02_V2_1_A");
-
+    await user.click(root.getByRole("tab", { name: "Hedge trades" }));
     expect(root.getAllByText(/COMBO_02 V2\.1-A/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/RESEARCH ONLY/i).length).toBeGreaterThan(0);
     expect(root.getAllByText(/Status:\s*Research/i).length).toBeGreaterThan(0);
@@ -251,6 +381,126 @@ describe("BacktestPanel interaction paths", () => {
     expect(body?.strategy_id).toBe("COMBO_02_V2_1_A");
     expect(body?.combo_version).toBe("v2.1-a-choppy-wait");
     expect(body?.research_risk_override).toBe(true);
+  });
+
+  it("6b1. passed strategies are selected automatically and run COMBO_02_V2 SHORT", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    expect(root.getByDisplayValue("Passed strategies (auto)")).toBeTruthy();
+    expect(root.getByRole("button", { name: "COMBO_02_V2 · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
+    expect(root.getByRole("button", { name: "COMBO_01 · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
+    expect(root.getByRole("button", { name: "COMBO_03_TRANSITION_B · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
+    expect(root.queryByRole("button", { name: "COMBO_02 V2.1-A" })).toBeNull();
+
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalled();
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.direction).toBe("SHORT");
+    expect(body?.combination_id).toBe("COMBO_02_V2");
+    expect(body?.strategy_id).toBe("COMBO_02_V2");
+  });
+
+  it("6b1a. untouched screen keeps the passed-auto option and posts the full COMBO_02_V2 SHORT request", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+    expect(select.value).toBe("PASSED_AUTO");
+    expect(select.selectedOptions[0].textContent).toBe("Passed strategies (auto)");
+    expect(root.getByTestId("passed-strategy-selection")).toBeTruthy();
+
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body).toMatchObject({
+      combination_id: "COMBO_02_V2",
+      strategy_id: "COMBO_02_V2",
+      combo_version: "v2-combo02-adaptive-3-regime",
+      direction: "SHORT",
+      symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+      risk_usd: 20,
+      principal_usd: 1000,
+      leverage: 2,
+      taker_fee_pct: 0.04,
+      maker_fee_pct: 0.02,
+    });
+  });
+
+  it("6b2. passed cap-book strategy is selectable and is not rewritten to COMBO_04", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+    expect(root.getByRole("option", { name: "COMBO_02_V2 · 1h SHORT" })).toBeTruthy();
+    expect(root.getByRole("option", { name: "COMBO_01 · 1h SHORT" })).toBeTruthy();
+    expect(root.getByRole("option", { name: "COMBO_03_TRANSITION_B · 1h SHORT" })).toBeTruthy();
+    await user.selectOptions(select, "COMBO_02_V2");
+
+    expect(root.getAllByText(/COMBO_02_V2 · 1h SHORT/i).length).toBeGreaterThan(0);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalled();
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.direction).toBe("SHORT");
+    expect(body?.combination_id).toBe("COMBO_02_V2");
+    expect(body?.strategy_id).toBe("COMBO_02_V2");
+    expect(body?.combination_id).not.toBe("COMBO_04_HTF");
+  });
+
+  it("6c. SD structure is in the strategy menu and auto-sends COMBO_SD_C", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    await user.click(root.getByRole("tab", { name: "Long trades" }));
+    const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+    await user.selectOptions(select, "COMBO_SD_STRUCTURE");
+
+    expect(root.getByLabelText("Structure variant")).toBeTruthy();
+    expect(root.getByRole("option", { name: /EQH\/EQL sweep/i })).toBeTruthy();
+    expect(root.getAllByText(/SD \+ CHoCH \+ BOS/i).length).toBeGreaterThan(0);
+    expect(root.getAllByText(/RESEARCH ONLY/i).length).toBeGreaterThan(0);
+
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalled();
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.combination_id).toBe("COMBO_SD_C");
+    expect(body?.strategy_id).toBe("COMBO_SD_C");
+    expect(body?.combo_version).toBe("sd-structure");
+    expect(body?.research_risk_override).toBe(true);
+    expect(body?.symbols).toEqual(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
+    expect(body?.direction).toBe("LONG");
+  });
+
+  it("6d. SD structure SHORT stays on the selected variant", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    await user.click(root.getByRole("tab", { name: "Long trades" }));
+    const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+    await user.selectOptions(select, "COMBO_SD_STRUCTURE");
+    await user.selectOptions(root.getByLabelText("Structure variant"), "COMBO_SD_A");
+    await user.click(root.getByTitle(/supply zone, bearish CHoCH/i));
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalled();
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.direction).toBe("SHORT");
+    expect(body?.combination_id).toBe("COMBO_SD_A");
+    expect(body?.strategy_id).toBe("COMBO_SD_A");
   });
 
   it("7. 15m role label", () => {
@@ -342,6 +592,7 @@ describe("BacktestPanel interaction paths", () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
+    await selectFrozenV1(user, root);
     await selectOnlySymbol(user, root, "BTCUSDT");
 
     const heading = root.getByText(/Pre-run configuration summary/i);
@@ -360,11 +611,47 @@ describe("BacktestPanel interaction paths", () => {
     expect(box.getByText(/Leverage:/i)).toBeTruthy();
     expect(box.getByText(/Bars\/date range:/i)).toBeTruthy();
     expect(box.getByText(/Production comparable:/i)).toBeTruthy();
+    expect(summary.textContent).toMatch(/Status:\s*Paper forward-test/);
+    expect(summary.textContent).not.toMatch(/as selected/);
+    expect(root.getByTestId("backtest-status-chip").textContent).toMatch(
+      /^Status:\s*Paper forward-test$/
+    );
+
+    await user.click(root.getByRole("checkbox", { name: /Research risk override/i }));
+    expect(summary.textContent).toMatch(/Status:\s*Research/);
+    expect(summary.textContent).not.toMatch(/Paper forward-test/);
+    expect(summary.textContent).not.toMatch(/as selected/);
   });
 
-  it("17. Frozen v1 banner", () => {
+  it("16a. Status chip follows production comparability, not just direction", async () => {
+    const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
+    await selectFrozenV1(user, root);
+    await selectOnlySymbol(user, root, "BTCUSDT");
+
+    const chip = root.getByTestId("backtest-status-chip");
+    expect(chip.textContent).toMatch(/Paper forward-test/);
+    expect(chip.className).toMatch(/emerald/);
+
+    const leverageInput = (root.getByText("Leverage (x)").parentElement as HTMLElement).querySelector(
+      "input"
+    ) as HTMLInputElement;
+    fireEvent.change(leverageInput, { target: { value: "3" } });
+
+    expect(chip.textContent).toMatch(/^Status:\s*Research$/);
+    expect(chip.textContent).not.toMatch(/Paper forward-test/);
+    expect(chip.className).toMatch(/amber/);
+    expect(root.getByText(/Direction:\s*LONG/, { selector: "span" })).toBeTruthy();
+  });
+
+  it("17. Frozen v1 banner appears after leaving the passed selection", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    expect(root.getByText(/RESEARCH-ONLY CONFIGURATION/i)).toBeTruthy();
+    expect(root.getByTestId("passed-strategy-selection")).toBeTruthy();
+    await selectFrozenV1(user, root);
     expect(root.getByText(/FROZEN V1 CONFIGURATION/i)).toBeTruthy();
     expect(root.getByText(/Production-comparable research run/i)).toBeTruthy();
   });
@@ -481,6 +768,66 @@ describe("BacktestPanel interaction paths", () => {
     ).toBeTruthy();
   });
 
+  it("19a. CANDLE12_V2 rows carry the V2 reporting warnings; V3 rows do not", () => {
+    const engineJob = (strategyId: string) => ({
+      status: "done" as const,
+      job_id: `done-${strategyId}`,
+      symbols: ["BTCUSDT"],
+      timeframes: ["1h"],
+      direction: "LONG",
+      strategy_id: strategyId,
+      combo_version: "engine",
+      source: "V1_RESEARCH_BACKTEST",
+      setup_timeframe: "1h",
+      risk_source: "RESEARCH_OVERRIDE",
+      production_comparable: false,
+      research_only: true,
+      period_mode: "DB_TAIL",
+      paper_trade_created: false,
+      live_trade_created: false,
+      telegram_sent: false,
+      limit: 5760,
+      risk_usd: 20,
+      principal_usd: 1000,
+      leverage: 2,
+      rows: [
+        {
+          combination_id: strategyId,
+          engine_family: strategyId === "CANDLE12_V2" ? "candle12" : "candle12_v3",
+          symbol: "BTCUSDT",
+          timeframe: "1h",
+          direction: "LONG",
+          sample_size: 0,
+          average_R: null,
+          period_start: "2025-01-01T00:00:00+00:00",
+          period_end: "2025-08-29T00:00:00+00:00",
+          bars_loaded: 5760,
+          risk_usd: 20,
+          production_comparable: false,
+          research_only: true,
+          paper_trade_created: false,
+          live_trade_created: false,
+          telegram_sent: false,
+          trades: [],
+          equity_curve_r: [],
+        },
+      ],
+    });
+
+    useBacktestJobStore.setState({ job: engineJob("CANDLE12_V2"), active: false, error: null });
+    const v2 = renderPanel();
+    const warnings = within(v2.container).getByTestId("candle12-v2-warnings");
+    expect(warnings.textContent).toContain("Avg R gross is net R.");
+    expect(warnings.textContent).toContain("market_context uses Candle-2 close.");
+    expect(warnings.textContent).toContain("HTF label is not applicable to CANDLE12_V2.");
+    v2.unmount();
+
+    useBacktestJobStore.setState({ job: engineJob("CANDLE12_V3_EXEC_FIX"), active: false, error: null });
+    const v3 = renderPanel();
+    expect(within(v3.container).queryByTestId("candle12-v2-warnings")).toBeNull();
+    expect(within(v3.container).getAllByText(/none \(no HTF gate\)/).length).toBeGreaterThan(0);
+  });
+
   it("20. No operational side effects", () => {
     useBacktestJobStore.setState({
       job: {
@@ -512,6 +859,608 @@ describe("BacktestPanel interaction paths", () => {
     expect(sideEffects.textContent).toMatch(/paper_trade_created = false/i);
     expect(sideEffects.textContent).toMatch(/live_trade_created = false/i);
     expect(sideEffects.textContent).toMatch(/telegram_sent = false/i);
+    expect(root.getByTestId("backtest-in-sample-warning").textContent).toBe(
+      "In-sample only: every figure is computed on the same history used to pick the strategy and settings. There is no out-of-sample split and no multiple-comparison adjustment, so a positive result is a hypothesis, not evidence of an edge."
+    );
     expect(startBacktestJob).not.toHaveBeenCalled();
+  });
+
+  it("21. A LONG v1 job is not shown as the result of a SHORT request", () => {
+    useBacktestJobStore.setState({
+      job: {
+        status: "done",
+        job_id: "long-v1",
+        symbols: ["BTCUSDT"],
+        timeframes: ["1h"],
+        direction: "LONG",
+        strategy_id: "COMBO_02_V1",
+        production_comparable: true,
+        research_only: false,
+        principal_usd: 1000,
+        rows: [
+          {
+            combination_id: "COMBO_02",
+            symbol: "BTCUSDT",
+            timeframe: "1h",
+            direction: "LONG",
+            sample_size: 2,
+            average_R: 0.5,
+            pnl_usd_net: 40,
+            production_comparable: true,
+            research_only: false,
+            risk_usd: 20,
+            bars_loaded: 100,
+            trades: [],
+          },
+        ],
+      },
+      request: {
+        symbols: ["BTCUSDT"],
+        timeframes: ["1h"],
+        direction: "SHORT",
+        strategy_id: "COMBO_04_HTF_SHORT",
+        research_risk_override: false,
+      },
+      foreignJob: false,
+      ownJobId: "long-v1",
+      active: false,
+      error: null,
+    });
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const banner = root.getByTestId("backtest-run-mismatch");
+    expect(banner.textContent).toMatch(
+      /Direction: the form requested SHORT, the job ran LONG\./
+    );
+    expect(banner.textContent).toMatch(/marked production comparable/);
+    expect(root.queryByTestId("backtest-result-header")).toBeNull();
+    expect(root.queryByTestId("backtest-foreign-run")).toBeNull();
+    expect(container.textContent).not.toMatch(/Net profit/);
+    expect(container.textContent).not.toMatch(/Production comparable:\s*YES/);
+  });
+
+  it("22. A job this form did not start is labeled as a different run", () => {
+    useBacktestJobStore.setState({
+      job: {
+        status: "done",
+        job_id: "other-tab-7",
+        symbols: ["ETHUSDT", "SOLUSDT"],
+        timeframes: ["4h"],
+        direction: "LONG",
+        strategy_id: "COMBO_02_V2_1_A",
+        production_comparable: false,
+        research_only: true,
+        rows: [],
+      },
+      request: null,
+      foreignJob: true,
+      ownJobId: null,
+      active: false,
+      error: null,
+    });
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const banner = root.getByTestId("backtest-foreign-run");
+    expect(banner.textContent).toMatch(/different run than the form/i);
+    expect(banner.textContent).toMatch(/other-tab-7/);
+    expect(banner.textContent).toMatch(/COMBO_02 V2\.1-A/);
+    expect(banner.textContent).toMatch(/LONG\+SHORT \(native\)/);
+    expect(banner.textContent).toMatch(/ETHUSDT, SOLUSDT/);
+    expect(banner.textContent).toMatch(/4h/);
+    expect(root.queryByTestId("backtest-run-mismatch")).toBeNull();
+    expect(root.getByTestId("backtest-result-header").textContent).toMatch(
+      /Direction:\s*LONG\+SHORT \(native\)/
+    );
+  });
+
+  it("23. The result header describes a SHORT research job while the form is on LONG", async () => {
+    const user = userEvent.setup();
+    useBacktestJobStore.setState({
+      job: {
+        status: "done",
+        job_id: "short-research",
+        symbols: ["BTCUSDT"],
+        timeframes: ["1h"],
+        direction: "SHORT",
+        strategy_id: "COMBO_04_HTF_SHORT",
+        combo_version: "v1",
+        production_comparable: false,
+        research_only: true,
+        mismatch_reasons: ["direction_mismatch"],
+        principal_usd: 1000,
+        rows: [
+          {
+            combination_id: "COMBO_04_HTF",
+            symbol: "BTCUSDT",
+            timeframe: "1h",
+            direction: "SHORT",
+            sample_size: 0,
+            production_comparable: false,
+            research_only: true,
+            risk_usd: 20,
+            bars_loaded: 100,
+            trades: [],
+          },
+        ],
+      },
+      request: null,
+      foreignJob: false,
+      active: false,
+      error: null,
+    });
+    const { container } = renderPanel();
+    const root = within(container);
+    await selectFrozenV1(user, root);
+    expect(root.getAllByText(/Direction:\s*LONG/i).length).toBeGreaterThan(0);
+
+    expect(root.queryByTestId("backtest-run-mismatch")).toBeNull();
+    const header = root.getByTestId("backtest-result-header").textContent || "";
+    expect(header).toMatch(/Strategy:\s*COMBO_04_HTF_SHORT/);
+    expect(header).toMatch(/Direction:\s*SHORT/);
+    expect(header).toMatch(/SHORT status:\s*RESEARCH_ONLY/);
+    expect(header).toMatch(/Production comparable:\s*NO/);
+    expect(header).toMatch(/Reasons: direction_mismatch/);
+    expect(header).toMatch(/Research-only status:\s*YES/);
+    expect(header).toMatch(/HTF requirement:\s*1h \+ 4h bearish alignment/);
+    expect(header).not.toMatch(/bullish/);
+  });
+
+  it("23a. The result header status and pooled line follow the job", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const jobWith = (productionComparable: boolean | undefined) => ({
+      status: "done",
+      job_id: "header-labels",
+      symbols: ["BTCUSDT", "ETHUSDT"],
+      timeframes: ["1h"],
+      direction: "LONG",
+      strategy_id: "COMBO_02_V1",
+      combo_version: "v1",
+      production_comparable: productionComparable,
+      principal_usd: 1000,
+      rows: [
+        {
+          combination_id: "COMBO_02",
+          symbol: "BTCUSDT",
+          timeframe: "1h",
+          direction: "LONG",
+          sample_size: 2,
+          average_R: 0.5,
+          pnl_usd: 50,
+          pnl_usd_net: 40,
+          risk_usd: 20,
+          bars_loaded: 100,
+          trades: [],
+          equity_curve_r: [0, 0.5],
+        },
+        {
+          combination_id: "COMBO_02",
+          symbol: "ETHUSDT",
+          timeframe: "1h",
+          direction: "LONG",
+          sample_size: 3,
+          average_R: -0.1,
+          pnl_usd: -5,
+          pnl_usd_net: -12.5,
+          pnl_model: "CAUSAL_NEXT_OPEN",
+          risk_usd: 20,
+          bars_loaded: 100,
+          equity_curve_r: [0, -0.1],
+          trades: [
+            {
+              trade_id: 1,
+              symbol: "ETHUSDT",
+              timeframe: "1h",
+              direction: "LONG",
+              entry_price: 100,
+              exit_price: 99,
+              stop_price: 99,
+              outcome: "SL",
+              net_pnl_usd: -12.5,
+              r_net: -0.63,
+              signal_time: "2026-02-14T22:00:00+00:00",
+              exit_time: "2026-02-14T23:00:00+00:00",
+            },
+          ],
+        },
+      ],
+    });
+    const base = { request: null, foreignJob: false, active: false, error: null };
+
+    useBacktestJobStore.setState({ job: jobWith(true), ...base });
+    const first = renderPanel();
+    const header = within(first.container).getByTestId("backtest-result-header");
+    expect(header.textContent).toMatch(/Status:\s*Paper forward-test/);
+    expect(header.textContent).not.toMatch(/Status:\s*Research/);
+    expect(header.textContent).toContain(
+      "Pooled n=5 · avg R gross=0.14 · gross PnL=+$45.00 · net PnL=+$27.50"
+    );
+
+    const titled = Array.from(first.container.querySelectorAll("td[title]")).filter((td) =>
+      /causal net R/.test(td.getAttribute("title") || "")
+    );
+    expect(titled).toHaveLength(1);
+    expect(titled[0].getAttribute("title")).toBe(
+      "This line is causal net R from the trades, not gross engine R."
+    );
+    expect(titled[0].textContent).toBe("causal net R");
+    expect(titled[0].closest("tr")?.textContent).toMatch(/ETHUSDT/);
+    first.unmount();
+
+    for (const flag of [false, undefined]) {
+      useBacktestJobStore.setState({ job: jobWith(flag), ...base });
+      const next = renderPanel();
+      const text =
+        within(next.container).getByTestId("backtest-result-header").textContent || "";
+      expect(text).toMatch(/Status:\s*Research(?! only)/);
+      expect(text).not.toMatch(/Paper forward-test/);
+      expect(text).toContain("net PnL=+$27.50");
+      next.unmount();
+    }
+  });
+
+  it("24. Blotter win rate and max drawdown in $ come from the cell's trades", () => {
+    const trade = (trade_no: number, net_pnl_usd: number) => ({
+      trade_no,
+      symbol: "BTCUSDT",
+      timeframe: "1h",
+      direction: "LONG",
+      entry_price: 100,
+      stop_price: 99,
+      net_pnl_usd,
+      signal_time: `2026-02-0${trade_no}T00:00:00+00:00`,
+      exit_time: `2026-02-0${trade_no}T04:00:00+00:00`,
+    });
+    useBacktestJobStore.setState({
+      job: {
+        status: "done",
+        job_id: "blotter-stats",
+        symbols: ["BTCUSDT"],
+        timeframes: ["1h"],
+        direction: "LONG",
+        strategy_id: "COMBO_02_V1",
+        principal_usd: 1000,
+        rows: [
+          {
+            combination_id: "COMBO_02",
+            symbol: "BTCUSDT",
+            timeframe: "1h",
+            direction: "LONG",
+            sample_size: 4,
+            pnl_usd_net: 5,
+            win_rate: 0.9,
+            max_drawdown_usd: 999,
+            max_drawdown_R: 3.89,
+            risk_usd: 20,
+            bars_loaded: 100,
+            equity_curve_r: [1, 0.5, -0.25, 0.25],
+            trades: [trade(1, 20), trade(2, -10), trade(3, -15), trade(4, 10)],
+          },
+        ],
+      },
+      request: null,
+      foreignJob: false,
+      active: false,
+      error: null,
+    });
+    const { container } = renderPanel();
+    const root = within(container);
+
+    expect(container.textContent).toMatch(/win rate \(net > 0\) 50%/);
+    expect(container.textContent).toMatch(/max DD \$25\.00 \/ 3\.89R gross/);
+    expect(container.textContent).not.toMatch(/causal R/);
+    expect(container.textContent).toContain("Principal $1000.00 → total $1005.00 · net +$5.00");
+    expect(root.getByTestId("equity-curve-label").textContent).toBe(
+      "Equity curve (gross R, equity_curve_r)"
+    );
+    // $ basis: mean net $1.25 per trade over 1R = $20.
+    expect(container.textContent).toMatch(/\$ basis avg R \(1R = \$20\.00\): gross — · net 0\.06/);
+  });
+
+  it("shows causal P&L as primary and labels the legacy book as optimistic", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    useBacktestJobStore.setState({
+      job: {
+        status: "done",
+        job_id: "causal-display",
+        direction: "SHORT",
+        strategy_id: "COMBO_02_V2",
+        paper_trade_created: false,
+        live_trade_created: false,
+        telegram_sent: false,
+        principal_usd: 1000,
+        limit: 70,
+        rows: [
+          {
+            combination_id: "COMBO_02_V2",
+            symbol: "SOLUSDT",
+            timeframe: "1h",
+            direction: "SHORT",
+            sample_size: 1,
+            average_R: 0.4,
+            average_R_net: -0.069,
+            pnl_usd: 10,
+            pnl_usd_net: -16.03,
+            fees_usd: -1.25,
+            win_rate: 0.3288,
+            max_drawdown_usd: 337.22,
+            max_drawdown_R: 19.27,
+            pnl_model: "CAUSAL_NEXT_OPEN",
+            risk_usd: 20,
+            bars_loaded: 100,
+            warmup_bars: 30,
+            bars_evaluated: 70,
+            optimistic_comparison: {
+              model: "LEGACY_SIGNAL_CLOSE",
+              label:
+                "Optimistic comparison — LEGACY_SIGNAL_CLOSE fills at the signal close and does not apply next-open slippage.",
+              net_pnl: 88.54,
+              net_r: -0.076,
+              fees: -87.2,
+              winners: 24,
+              trades: 73,
+              win_rate: 0.3288,
+              max_drawdown_usd: 295.74,
+              max_drawdown_r: 17.58,
+            },
+            trades: [
+              {
+                trade_id: 7,
+                symbol: "SOLUSDT",
+                timeframe: "1h",
+                direction: "SHORT",
+                entry_price: 88.474,
+                exit_price: 87.62,
+                stop_price: 87.66,
+                outcome: "SL",
+                net_pnl_usd: -19.14,
+                r_net: -1.09,
+                fee_total_usd: -1.59,
+                signal_time: "2026-02-14T22:00:00+00:00",
+                exit_time: "2026-02-14T23:00:00+00:00",
+              },
+            ],
+          },
+        ],
+      },
+      active: false,
+      error: null,
+    });
+    const { container } = renderPanel();
+    const root = within(container);
+    expect(root.getAllByText(/causal next-open/i).length).toBeGreaterThan(0);
+    expect(container.textContent).toMatch(/\$\-16\.03/);
+    expect(container.textContent).toMatch(/net R -0\.07/i);
+    expect(container.textContent).toMatch(/win rate \(net > 0\) 0%/i);
+    expect(container.textContent).toMatch(/max DD \$19\.14 \/ 19\.27 causal R/);
+    expect(container.textContent).not.toMatch(/R gross · fees/);
+    // The total is principal plus the trades' net (1000 - 19.14); net stays the row figure.
+    expect(container.textContent).toContain("Principal $1000.00 → total $980.86 · net $-16.03");
+    // 70 evaluated bars match the 70 requested; the 30 warm-up bars are not a mismatch.
+    expect(container.textContent).toMatch(/SHORT · 70 bars \(plus 30 warm-up, /);
+    expect(container.textContent).not.toMatch(/100 loaded/);
+    expect(container.textContent).toMatch(/\(0 TP, 1 stop-outs\)/);
+    expect(container.textContent).not.toMatch(/\d winners,/);
+    const optimistic = root.getByTestId("optimistic-comparison");
+    expect(optimistic.textContent).toMatch(/Optimistic comparison — LEGACY_SIGNAL_CLOSE/i);
+    expect(optimistic.textContent).toMatch(/\+\$88\.54/);
+    expect(optimistic.textContent).toMatch(/LEGACY_SIGNAL_CLOSE/);
+    const detail = root.getByTestId("causal-trade-detail");
+    expect(detail.textContent).toMatch(/Trade 7 SHORT/);
+    expect(detail.textContent).toMatch(/entry 88\.4740/);
+    expect(detail.textContent).toMatch(/outcome SL/);
+    expect(detail.textContent).toMatch(/net \$\-19\.14/);
+    expect(detail.textContent).toMatch(/R -1\.09/);
+    expect(detail.textContent).toMatch(/fee \$\-1\.59/);
+  });
+
+  it("keeps long, short, hedge, and grid in separate books", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    expect(root.getByRole("tab", { name: "Short trades" }).getAttribute("aria-selected")).toBe("true");
+    expect(root.queryByRole("button", { name: "COMBO_02 V2.1-A" })).toBeNull();
+    expect(root.queryByRole("option", { name: "SD + CHoCH + BOS" })).toBeNull();
+
+    await user.click(root.getByRole("tab", { name: "Long trades" }));
+    expect(root.getByDisplayValue("Passed long strategies (auto)")).toBeTruthy();
+    expect(root.getByRole("button", { name: "COMBO_03_TRANSITION_B · 1h LONG" })).toBeTruthy();
+    expect(root.queryByRole("button", { name: "COMBO_02_V2 · 1h SHORT" })).toBeNull();
+    expect(root.getAllByText(/Direction:\s*LONG/i).length).toBeGreaterThan(0);
+
+    await user.click(root.getByRole("tab", { name: "Hedge trades" }));
+    expect(root.getByRole("button", { name: "COMBO_02 V2.1-A" })).toBeTruthy();
+    expect(root.getByText(/LONG and SHORT together/i)).toBeTruthy();
+    expect(root.queryByRole("button", { name: "COMBO_02_V2 · 1h SHORT" })).toBeNull();
+
+    await user.click(root.getByRole("tab", { name: "Grid trades" }));
+    expect(await root.findByTestId("grid-trading")).toBeTruthy();
+    expect(root.queryByLabelText("Strategy")).toBeNull();
+  });
+
+  it("loads eligible screener coins without dropping the strategy selector", async () => {
+    useBacktestHandoffStore.getState().queue(["WIFUSDT", "LINKUSDT"]);
+    const { container } = renderPanel();
+    const root = within(container);
+    await waitFor(() => {
+      expect(coinsIn(root, "selected-coins")).toEqual(["LINKUSDT"]);
+    });
+    expect(root.getByTitle(/^LINKUSDT/)).toBeTruthy();
+    expect(root.queryByTitle(/WIFUSDT/)).toBeNull();
+    expect(root.getByTestId("coin-filter-notice").textContent).toBe(
+      "WIFUSDT is not in the large-cap or mid-cap book."
+    );
+    expect(root.getByDisplayValue("Passed strategies (auto)")).toBeTruthy();
+    expect(root.getAllByText(/Strategy:\s*Passed strategies \(auto\)/i).length).toBeGreaterThan(0);
+    expect(root.getByTestId("auto-timeframe-note").textContent).toMatch(/Auto timeframe/i);
+  });
+
+  it("opens grid backtest on this page and returns to the strategy book", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("tab", { name: "Grid trades" }));
+    expect(await root.findByTestId("grid-trading")).toBeTruthy();
+    expect(root.queryByLabelText("Strategy")).toBeNull();
+    await user.click(root.getByRole("tab", { name: "Short trades" }));
+    expect(root.getByLabelText("Strategy")).toBeTruthy();
+  });
+
+  it("offers every large and mid cap coin on first render and nothing else", () => {
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const selected = coinsIn(root, "selected-coins");
+    const available = coinsIn(root, "available-coins");
+    expect(selected).toEqual(DEFAULT_COINS);
+    expect(available).toEqual(CAP_BOOK.filter((s) => !DEFAULT_COINS.includes(s)));
+    expect([...selected, ...available].sort()).toEqual([...CAP_BOOK].sort());
+    expect(available.filter((s) => !CAP_BOOK.includes(s))).toEqual([]);
+
+    expect(coinsIn(root, "available-coins-large")).toEqual(
+      BACKTEST_LARGE_SYMBOLS.filter((s) => !DEFAULT_COINS.includes(s))
+    );
+    expect(coinsIn(root, "available-coins-mid")).toEqual([...BACKTEST_MID_SYMBOLS]);
+    for (const s of available) {
+      expect(root.getByTitle(`${s} — not in this run, click to add`)).toBeTruthy();
+    }
+    expect(root.queryByTitle(/WIFUSDT|PEPEUSDT/)).toBeNull();
+    expect(root.getByTestId("coin-rule").textContent).toBe(
+      "Large cap and mid cap coins only (cap book)."
+    );
+    expect(root.queryByTestId("coin-filter-notice")).toBeNull();
+  });
+
+  it("selects every large and mid cap coin from its chip", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const toAdd = CAP_BOOK.filter((s) => !DEFAULT_COINS.includes(s));
+    expect(toAdd.length).toBe(24);
+    for (const s of toAdd) {
+      await user.click(root.getByTitle(`${s} — not in this run, click to add`));
+      expect(coinsIn(root, "selected-coins")).toContain(s);
+    }
+
+    expect(coinsIn(root, "selected-coins")).toEqual([...DEFAULT_COINS, ...toAdd]);
+    expect([...coinsIn(root, "selected-coins")].sort()).toEqual([...CAP_BOOK].sort());
+    expect(coinsIn(root, "available-coins")).toEqual([]);
+    expect(root.queryByTestId("coin-filter-notice")).toBeNull();
+  }, 30000);
+
+  it("does not add a typed coin outside the cap book with the Add button", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    await user.type(root.getByPlaceholderText(/Type a large or mid cap coin/i), "WIF");
+    await user.click(root.getByRole("button", { name: /^Add$/ }));
+
+    const notice = root.getByTestId("coin-filter-notice");
+    expect(notice.textContent).toBe("WIFUSDT is not in the large-cap or mid-cap book.");
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(coinsIn(root, "selected-coins")).toEqual(DEFAULT_COINS);
+    expect(coinsIn(root, "available-coins")).not.toContain("WIFUSDT");
+    expect(root.queryByTitle(/WIFUSDT/)).toBeNull();
+  });
+
+  it("does not add a typed coin outside the cap book with Enter", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    await user.type(root.getByPlaceholderText(/Type a large or mid cap coin/i), "wif{Enter}");
+
+    expect(root.getByTestId("coin-filter-notice").textContent).toBe(
+      "WIFUSDT is not in the large-cap or mid-cap book."
+    );
+    expect(coinsIn(root, "selected-coins")).toEqual(DEFAULT_COINS);
+    expect(root.queryByTitle(/WIFUSDT/)).toBeNull();
+  });
+
+  it("adds a typed mid cap coin that is not in the default selection", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    expect(coinsIn(root, "selected-coins")).not.toContain("INJUSDT");
+    await user.type(root.getByPlaceholderText(/Type a large or mid cap coin/i), "inj");
+    await user.click(root.getByRole("button", { name: /^Add$/ }));
+
+    expect(coinsIn(root, "selected-coins")).toEqual([...DEFAULT_COINS, "INJUSDT"]);
+    expect(coinsIn(root, "available-coins")).not.toContain("INJUSDT");
+    expect(root.queryByTestId("coin-filter-notice")).toBeNull();
+  });
+
+  it("adds only the cap book coin from a mixed typed entry", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    await user.type(root.getByPlaceholderText(/Type a large or mid cap coin/i), "INJ, FOO{Enter}");
+
+    expect(coinsIn(root, "selected-coins")).toEqual([...DEFAULT_COINS, "INJUSDT"]);
+    expect(root.getByTestId("coin-filter-notice").textContent).toBe(
+      "FOOUSDT is not in the large-cap or mid-cap book."
+    );
+    expect(root.queryByTitle(/FOOUSDT/)).toBeNull();
+  });
+
+  it("leaves the current coins selected when a screener handoff has no cap book coin", async () => {
+    useBacktestHandoffStore.getState().queue(["WIFUSDT", "PEPEUSDT"]);
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const notice = await root.findByTestId("coin-filter-notice");
+    expect(notice.textContent).toMatch(/WIFUSDT/);
+    expect(notice.textContent).toMatch(/PEPEUSDT/);
+    expect(notice.textContent).toMatch(/not in the large-cap or mid-cap book/);
+    expect(coinsIn(root, "selected-coins")).toEqual(DEFAULT_COINS);
+    expect(root.queryByTitle(/WIFUSDT|PEPEUSDT/)).toBeNull();
+    expect(root.getByDisplayValue("Passed strategies (auto)")).toBeTruthy();
+  });
+
+  it("posts only cap book symbols after a rejected coin was typed", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    const input = root.getByPlaceholderText(/Type a large or mid cap coin/i);
+    await user.type(input, "WIF{Enter}");
+    await user.type(input, "PEPE, INJ");
+    await user.click(root.getByRole("button", { name: /^Add$/ }));
+    expect(root.getByTestId("coin-filter-notice").textContent).toMatch(/PEPEUSDT/);
+
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.symbols).toEqual([...DEFAULT_COINS, "INJUSDT"]);
+    expect((body?.symbols ?? []).filter((s) => !CAP_BOOK.includes(s))).toEqual([]);
+    expect(body?.combination_id).toBe("COMBO_02_V2");
+    expect(body?.strategy_id).toBe("COMBO_02_V2");
+    expect(body?.direction).toBe("SHORT");
+  });
+
+  it("posts only the cap book coin from a mixed screener handoff", async () => {
+    const user = userEvent.setup();
+    useBacktestHandoffStore.getState().queue(["WIFUSDT", "LINKUSDT"]);
+    const { container } = renderPanel();
+    const root = within(container);
+    await waitFor(() => {
+      expect(coinsIn(root, "selected-coins")).toEqual(["LINKUSDT"]);
+    });
+    expect(root.getByTestId("coin-filter-notice").textContent).toMatch(/WIFUSDT/);
+
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    expect(body?.symbols).toEqual(["LINKUSDT"]);
   });
 });

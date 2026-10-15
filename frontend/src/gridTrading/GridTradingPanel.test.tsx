@@ -17,7 +17,7 @@ vi.mock("./GridChart", () => ({
   GridChart: () => <div data-testid="grid-chart" />,
 }));
 
-import { fetchGridStatus, runGridBacktest } from "./client";
+import { fetchGridStatus, runGridBacktest, runGridScan } from "./client";
 
 afterEach(() => {
   cleanup();
@@ -25,21 +25,42 @@ afterEach(() => {
 
 const status = vi.mocked(fetchGridStatus);
 const backtest = vi.mocked(runGridBacktest);
+const scan = vi.mocked(runGridScan);
+
+const recommended = {
+  market: "binance_usdt_m_futures",
+  rows: [
+    {
+      symbol: "BTCUSDT",
+      timeframe: "1h",
+      score: 42,
+      eligible: true,
+      reason: null,
+      market: "binance_usdt_m_futures",
+      range_low: 100,
+      range_high: 110,
+      stop_price: 99,
+    },
+  ],
+};
 
 describe("GridTradingPanel", () => {
   beforeEach(() => {
     status.mockReset();
     backtest.mockReset();
+    scan.mockReset();
+    scan.mockResolvedValue(recommended);
   });
 
   it("stays hidden when the flag is off", async () => {
     status.mockResolvedValue(null);
     render(<GridTradingPanel />);
     expect(await screen.findByText(/grid trading is off/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "scanner" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run backtest" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Range low")).not.toBeInTheDocument();
   });
 
-  it("runs a futures backtest from Configure", async () => {
+  it("runs a futures backtest from the recommended OHLCV range", async () => {
     status.mockResolvedValue({
       enabled: true,
       market: "binance_usdt_m_futures",
@@ -82,16 +103,88 @@ describe("GridTradingPanel", () => {
     });
     const user = userEvent.setup();
     render(<GridTradingPanel />);
-    expect(await screen.findByRole("button", { name: "scanner" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Run backtest" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Range low")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Grid count")).not.toBeInTheDocument();
     expect(screen.getByText(/binance usdt-m futures/i)).toBeInTheDocument();
     expect(screen.getByText(/not financial advice/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "configure" }));
     await user.click(screen.getByRole("button", { name: "Run backtest" }));
-    expect(backtest).toHaveBeenCalled();
+    expect(scan).toHaveBeenCalled();
+    expect(backtest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "BTCUSDT",
+        range_low: 100,
+        range_high: 110,
+        stop_price: 99,
+        grid_type: "geometric",
+        grid_count: 8,
+      }),
+      { limit: 400 },
+    );
     expect(await screen.findByText(/Accepted/)).toBeInTheDocument();
     expect(screen.getByText("buy")).toBeInTheDocument();
+    expect(screen.getByTestId("grid-trade-blotter")).toBeInTheDocument();
+    expect(screen.getAllByText("100.0000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("110.0000").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Download fills CSV" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Equity curve" })).toBeInTheDocument();
+  });
+
+  it("sends leverage and the open-grid cap and shows the risk counts", async () => {
+    status.mockResolvedValue({
+      enabled: true,
+      market: "binance_usdt_m_futures",
+      mode: "backtest",
+      live: false,
+      paper: false,
+    });
+    backtest.mockResolvedValue({
+      summary: {
+        market: "binance_usdt_m_futures",
+        accepted: true,
+        error: null,
+        halted: "take_profit",
+        fill_count: 2,
+        touch_count: 3,
+        fill_rate: 0.67,
+        round_trips: 1,
+        max_drawdown: 0.02,
+        realized_pnl: 20,
+        leverage: 2,
+        max_open_grids: 5,
+        worst_case_liquidation_price: 61.25,
+        stop_hits: 0,
+        take_profit_exits: 1,
+        liquidations: 0,
+        drawdown_kills: 0,
+        blocked_buys: 1,
+        liquidated_equity: 1020,
+        return: 0.02,
+        buy_and_hold_return: 0.04,
+        excess_return: -0.02,
+        bar_count: 2,
+      },
+      levels: [100, 110],
+      fills: [],
+      equity_curve: [],
+      candles: [],
+      buy_and_hold: { equity: 1040, return: 0.04 },
+    });
+    const user = userEvent.setup();
+    render(<GridTradingPanel />);
+    await screen.findByRole("button", { name: "Run backtest" });
+    await user.selectOptions(screen.getByLabelText("Leverage"), "2");
+    await user.clear(screen.getByLabelText("Max open grids"));
+    await user.type(screen.getByLabelText("Max open grids"), "5");
+    await user.click(screen.getByRole("button", { name: "Run backtest" }));
+    expect(backtest).toHaveBeenCalledWith(
+      expect.objectContaining({ leverage: 2, max_open_grids: 5, exit_above_range: true }),
+      { limit: 400 },
+    );
+    expect(await screen.findByText("Stop hits")).toBeInTheDocument();
+    expect(screen.getByText("2x · 5 open max")).toBeInTheDocument();
+    expect(screen.getByText("61.2500")).toBeInTheDocument();
+    expect(screen.getByText("Take-profit exits")).toBeInTheDocument();
   });
 
   it("shows funding paid and funding coverage", async () => {
@@ -136,8 +229,7 @@ describe("GridTradingPanel", () => {
     });
     const user = userEvent.setup();
     render(<GridTradingPanel />);
-    await user.click(await screen.findByRole("button", { name: "configure" }));
-    await user.click(screen.getByRole("button", { name: "Run backtest" }));
+    await user.click(await screen.findByRole("button", { name: "Run backtest" }));
     expect(await screen.findByText("Funding paid")).toBeInTheDocument();
     expect(screen.getByText("1.2500")).toBeInTheDocument();
     expect(screen.getByText("Funding coverage")).toBeInTheDocument();
@@ -191,8 +283,7 @@ describe("GridTradingPanel", () => {
     });
     const user = userEvent.setup();
     render(<GridTradingPanel />);
-    await user.click(await screen.findByRole("button", { name: "configure" }));
-    await user.click(screen.getByRole("button", { name: "Run backtest" }));
+    await user.click(await screen.findByRole("button", { name: "Run backtest" }));
     expect(await screen.findByText("PnL before funding")).toBeInTheDocument();
     expect(screen.getByText("5.0000")).toBeInTheDocument();
     expect(screen.getByText(/Funding is unavailable/)).toBeInTheDocument();

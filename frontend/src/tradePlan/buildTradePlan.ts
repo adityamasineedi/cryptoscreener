@@ -1023,12 +1023,12 @@ export function buildTradePlan(input: {
     }
   }
   for (const c of unavailableNotConfirmed) {
+    // CHOCH / supply-demand N/A is "not confirmed yet", not a dead feed.
+    if (CONTEXT_NA_IDS.has(c.id)) continue;
     const key = noteKey(c.id || c.label);
     if ([...seenNoteKeys].some((s) => s.includes(key) || key.includes(s))) continue;
     seenNoteKeys.add(key);
-    if (CONTEXT_NA_IDS.has(c.id)) {
-      dataNotes.push(c.detail ? `${c.label}: N/A — ${c.detail}` : `${c.label}: N/A`);
-    } else if (AVAILABILITY_ONLY_IDS.has(c.id)) {
+    if (AVAILABILITY_ONLY_IDS.has(c.id)) {
       dataNotes.push(`${c.label}: N/A — data unavailable`);
     } else {
       dataNotes.push(`${c.label}: N/A — not confirmed`);

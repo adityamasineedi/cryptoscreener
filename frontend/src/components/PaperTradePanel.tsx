@@ -11,6 +11,7 @@ import {
   type PaperStatus,
   type PaperWatcherBookLive,
 } from "../api/client";
+import { PassedRegimePanel } from "./PassedRegimePanel";
 
 function fmt(n: number | null | undefined, digits = 2): string {
   if (n == null || Number.isNaN(n)) return "—";
@@ -291,6 +292,7 @@ export function PaperTradePanel() {
         telegram={telegram}
         status={status}
       />
+      <PassedRegimePanel />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <Stat label="Equity" value={`$${fmt(status?.equity)}`} />
@@ -303,7 +305,7 @@ export function PaperTradePanel() {
         <Stat
           label="Open risk $"
           value={`$${fmt(status?.open_risk_usd)}`}
-          title="Sum of open position risk_usd (v1 books: BTC/ETH/SOL 2% of equity)"
+          title="Sum of open position risk_usd"
         />
         <Stat label="Ready" value={String(oppMeta.ready)} tone={oppMeta.ready > 0 ? "up" : undefined} />
         <Stat label="Near" value={String(oppMeta.near)} />
@@ -400,6 +402,12 @@ function MonitorPanel({
   const liveBooks = watcher?.live?.length ? watcher.live : [];
   const books: Array<PaperWatcherBookLive | { symbol: string; timeframe?: string; tier?: string; risk_percent?: number }> =
     liveBooks.length ? liveBooks : watcher?.books || [];
+  // watcher.last_skip is the last reason noted, even after that book opened and
+  // its row was cleared. Show it only while a book row still carries it.
+  const headerSkip =
+    watcher?.last_skip && liveBooks.some((book) => book.last_skip === watcher.last_skip)
+      ? watcher.last_skip
+      : null;
   const tgReady = Boolean(telegram?.ready);
   const tgReason = telegram?.reason || null;
   const bookRisk =
@@ -447,12 +455,13 @@ function MonitorPanel({
             >
               research default {fmtPct(status?.risk_percent_legacy_research_15m ?? status?.risk_percent)}
             </span>
-            {watcher?.last_skip ? (
+            {headerSkip ? (
               <span
                 className="max-w-full truncate rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-100"
-                title={watcher.last_skip}
+                title={headerSkip}
+                data-testid="watcher-last-skip-chip"
               >
-                last skip: {watcher.last_skip}
+                last skip: {headerSkip}
               </span>
             ) : null}
           </div>
@@ -510,12 +519,18 @@ function MonitorPanel({
                   ? (b as PaperWatcherBookLive)
                   : null;
                 const gates = live?.gates;
-                const gateTxt = gates
-                  ? `T${gates.trend ? "✓" : "·"} B${gates.bos ? "✓" : "·"} H${gates.htf ? "✓" : "·"}`
-                  : "—";
                 const wait = live?.waiting_next_closed_bar;
+                const consumed = wait || live?.tip_status === "WAITING_NEXT_BAR";
+                const gateTxt = !gates
+                  ? "—"
+                  : consumed
+                    ? "consumed"
+                    : `T${gates.trend ? "✓" : "·"} B${gates.bos ? "✓" : "·"} H${gates.htf ? "✓" : "·"}`;
+                const syncing = live?.tip_status === "SYNCING_LIVE";
                 const noData =
-                  live?.tip_status === "NO_1H_DATA" || live?.tip_status === "NO_4H_DATA";
+                  syncing ||
+                  live?.tip_status === "NO_1H_DATA" ||
+                  live?.tip_status === "NO_4H_DATA";
                 return (
                   <tr key={b.symbol} className="border-t border-terminal-border/70">
                     <td className="px-2 py-1.5 text-terminal-text">{b.symbol}</td>
@@ -523,17 +538,38 @@ function MonitorPanel({
                       {b.tier || "—"} · {fmtPct(b.risk_percent)}
                     </td>
                     <td
-                      className={`px-2 py-1.5 ${noData ? "text-rose-300" : ""}`}
+                      className={`px-2 py-1.5 ${syncing ? "text-amber-200" : noData ? "text-rose-300" : ""}`}
                       title={live?.tip_reason || ""}
                     >
                       {live?.tip_status || "—"}
                     </td>
-                    <td className="max-w-[18rem] truncate px-2 py-1.5 text-terminal-muted" title={live?.tip_reason || ""}>
-                      {live?.tip_reason || "—"}
+                    <td className="max-w-[18rem] px-2 py-1.5 text-terminal-muted">
+                      <div className="truncate" title={live?.tip_reason || ""}>
+                        {live?.tip_reason || "—"}
+                      </div>
+                      {live?.last_skip ? (
+                        <div
+                          className="truncate text-amber-100"
+                          title={`${live.last_skip} @ ${live.last_skip_bar || "no closed 1h bar"}`}
+                        >
+                          last skip: {live.last_skip} @ {live.last_skip_bar || "—"}
+                        </div>
+                      ) : null}
                     </td>
-                    <td className="px-2 py-1.5">{gateTxt}</td>
+                    <td
+                      className="px-2 py-1.5"
+                      title={
+                        consumed
+                          ? "This 1h tip is already watermarked. Gates are the consumed bar, not a queued open."
+                          : undefined
+                      }
+                    >
+                      {gateTxt}
+                    </td>
                     <td className="px-2 py-1.5">
-                      {noData
+                      {syncing
+                        ? "syncing live"
+                        : noData
                         ? "needs OHLCV"
                         : wait
                           ? "waiting next 1h close"
@@ -689,8 +725,10 @@ function TradeTable({
           <tr>
             <th className="px-2 py-1.5">Symbol</th>
             <th className="px-2 py-1.5">Stream</th>
+            <th className="px-2 py-1.5">Side</th>
             <th className="px-2 py-1.5">Path</th>
             <th className="px-2 py-1.5">Version</th>
+            <th className="px-2 py-1.5">Price src</th>
             {mode === "cancelled" ? (
               <>
                 <th className="px-2 py-1.5">Range (stop → entry → tp1)</th>
@@ -708,7 +746,7 @@ function TradeTable({
                 {mode === "open" ? (
                   <>
                     <th className="px-2 py-1.5">Mark</th>
-                    <th className="px-2 py-1.5">uPnL</th>
+                    <th className="px-2 py-1.5">Current profit</th>
                     <th className="px-2 py-1.5">uR</th>
                   </>
                 ) : (
@@ -720,6 +758,7 @@ function TradeTable({
                   </>
                 )}
                 <th className="px-2 py-1.5">Opened</th>
+                {mode === "closed" ? <th className="px-2 py-1.5">Closed</th> : null}
               </>
             )}
           </tr>
@@ -738,6 +777,20 @@ function TradeTable({
                     String(snippet.strategy_id || "") === "COMBO_02_V2_RESEARCH"
                   ? "V2"
                   : "LEGACY";
+            // Cap-book rows carry their own stream id (e.g. PASSED|COMBO_02_V2|SHORT).
+            const passedStream =
+              source === "PASSED_CAP_BOOK" &&
+              typeof snippet.stream === "string" &&
+              snippet.stream.trim() !== ""
+                ? snippet.stream
+                : null;
+            const streamLabel =
+              stream === "LEGACY" && passedStream ? passedStream : stream;
+            const side = r.side ? String(r.side) : "—";
+            const priceSource =
+              typeof snippet.price_source === "string" && snippet.price_source.trim() !== ""
+                ? snippet.price_source
+                : "—";
             const riskPct = snippet.risk_percent as number | null | undefined;
             const riskLabel =
               riskPct != null
@@ -755,8 +808,12 @@ function TradeTable({
                       : "text-terminal-muted"
                 }`}
                 title={source || stream}
+                data-testid="paper-stream"
               >
-                {stream}
+                {streamLabel}
+              </td>
+              <td className="px-2 py-1.5 whitespace-nowrap" data-testid="paper-side">
+                {side}
               </td>
               <td className="px-2 py-1.5 whitespace-nowrap" title={path}>
                 {path}
@@ -766,6 +823,13 @@ function TradeTable({
                 title={ver}
               >
                 {ver === "v1-combo02-long-htf" ? "v1" : ver === "experimental-path-b" ? "exp" : ver}
+              </td>
+              <td
+                className="px-2 py-1.5 whitespace-nowrap text-terminal-muted"
+                title={priceSource}
+                data-testid="paper-price-source"
+              >
+                {priceSource}
               </td>
               {mode === "cancelled" ? (
                 <>
@@ -792,8 +856,13 @@ function TradeTable({
                       <td className="px-2 py-1.5">{fmt(r.mark_price, 4)}</td>
                       <td
                         className={`px-2 py-1.5 ${
-                          (r.unrealized_pnl_usd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
+                          r.unrealized_pnl_usd == null
+                            ? "text-terminal-muted"
+                            : r.unrealized_pnl_usd >= 0
+                              ? "text-emerald-300"
+                              : "text-rose-300"
                         }`}
+                        data-testid="paper-current-profit"
                       >
                         {fmt(r.unrealized_pnl_usd)}
                       </td>
@@ -805,8 +874,13 @@ function TradeTable({
                       <td className="px-2 py-1.5">{r.exit_reason || "—"}</td>
                       <td
                         className={`px-2 py-1.5 ${
-                          (r.pnl_usd ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
+                          r.pnl_usd == null
+                            ? "text-terminal-muted"
+                            : r.pnl_usd >= 0
+                              ? "text-emerald-300"
+                              : "text-rose-300"
                         }`}
+                        data-testid="paper-closed-pnl"
                       >
                         {fmt(r.pnl_usd)}
                       </td>
@@ -814,6 +888,14 @@ function TradeTable({
                     </>
                   )}
                   <td className="px-2 py-1.5 text-terminal-muted">{fmtTime(r.opened_at)}</td>
+                  {mode === "closed" ? (
+                    <td
+                      className="px-2 py-1.5 text-terminal-muted whitespace-nowrap"
+                      data-testid="paper-closed-at"
+                    >
+                      {fmtTime(r.closed_at)}
+                    </td>
+                  ) : null}
                 </>
               )}
             </tr>

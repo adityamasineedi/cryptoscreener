@@ -29,6 +29,9 @@ export type GridConfigInput = {
   taker_fee_bps?: number | null;
   slippage_bps: number;
   leverage?: number;
+  maintenance_margin_rate?: number;
+  max_open_grids?: number | null;
+  exit_above_range?: boolean;
   stop_price: number;
   max_drawdown: number;
   max_open_orders: number;
@@ -74,6 +77,15 @@ export type GridBacktest = {
     events?: { type: string; time: number | string | null; price?: number; side?: string }[];
     warnings?: string[];
     funding_included?: boolean;
+    leverage?: number;
+    max_open_grids?: number;
+    worst_case_liquidation_price?: number | null;
+    stop_hits?: number;
+    liquidations?: number;
+    take_profit_exits?: number;
+    drawdown_kills?: number;
+    blocked_buys?: number;
+    liquidation_fee?: number;
     liquidated_equity: number;
     return: number;
     buy_and_hold_return: number;

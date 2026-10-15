@@ -17,11 +17,21 @@ vi.mock("../api/client", () => ({
   cancelBacktestJob: (...args: unknown[]) => cancelBacktestJob(...args),
 }));
 
+const SHORT_REQUEST = {
+  symbols: ["BTCUSDT"],
+  timeframes: ["1h"],
+  direction: "SHORT" as const,
+  strategy_id: "COMBO_04_HTF_SHORT",
+};
+
 describe("backtestJobStore polling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useBacktestJobStore.setState({
       job: null,
+      request: null,
+      foreignJob: false,
+      ownJobId: null,
       error: null,
       active: false,
       starting: false,
@@ -103,6 +113,111 @@ describe("backtestJobStore polling", () => {
     expect(useBacktestJobStore.getState().job?.job_id).toBe("abc");
   });
 
+  it("BUSY shows the in-flight job as foreign and drops the request", async () => {
+    let seenWhileStarting: unknown = undefined;
+    startBacktestJob.mockImplementation(async () => {
+      seenWhileStarting = useBacktestJobStore.getState().request;
+      return {
+        status: "BUSY",
+        error: "Backtest already running (job_id=abc)",
+        job: { status: "running", job_id: "abc", direction: "LONG", rows: [] },
+      };
+    });
+    useBacktestJobStore.setState({ foreignJob: true, ownJobId: "old" });
+    await useBacktestJobStore.getState().start(SHORT_REQUEST);
+    // The request is stored before the API answers.
+    expect(seenWhileStarting).toEqual(SHORT_REQUEST);
+    const state = useBacktestJobStore.getState();
+    expect(state.job?.job_id).toBe("abc");
+    expect(state.foreignJob).toBe(true);
+    expect(state.request).toBeNull();
+    expect(state.ownJobId).toBeNull();
+    expect(state.active).toBe(true);
+  });
+
+  it("STARTED records the returned job_id and keeps the request", async () => {
+    startBacktestJob.mockResolvedValue({
+      status: "STARTED",
+      job: { status: "running", job_id: "mine", direction: "SHORT", rows: [] },
+    });
+    useBacktestJobStore.setState({ foreignJob: true, ownJobId: "old" });
+    await useBacktestJobStore.getState().start(SHORT_REQUEST);
+    const state = useBacktestJobStore.getState();
+    expect(state.ownJobId).toBe("mine");
+    expect(state.foreignJob).toBe(false);
+    expect(state.request).toEqual(SHORT_REQUEST);
+    expect(state.job?.job_id).toBe("mine");
+    expect(state.active).toBe(true);
+  });
+
+  it("poll keeps the request while the status is the job this screen started", async () => {
+    startBacktestJob.mockResolvedValue({
+      status: "STARTED",
+      job: { status: "running", job_id: "mine", rows: [] },
+    });
+    await useBacktestJobStore.getState().start(SHORT_REQUEST);
+    fetchBacktestJobStatus.mockResolvedValue({
+      status: "done",
+      job_id: "mine",
+      direction: "SHORT",
+      rows: [],
+    });
+    await useBacktestJobStore.getState().poll();
+    const state = useBacktestJobStore.getState();
+    expect(state.job?.status).toBe("done");
+    expect(state.foreignJob).toBe(false);
+    expect(state.request).toEqual(SHORT_REQUEST);
+    expect(state.ownJobId).toBe("mine");
+  });
+
+  it("poll marks a job with a different id as foreign", async () => {
+    startBacktestJob.mockResolvedValue({
+      status: "STARTED",
+      job: { status: "running", job_id: "mine", rows: [] },
+    });
+    await useBacktestJobStore.getState().start(SHORT_REQUEST);
+    fetchBacktestJobStatus.mockResolvedValue({
+      status: "running",
+      job_id: "other-tab",
+      direction: "LONG",
+      rows: [],
+    });
+    await useBacktestJobStore.getState().poll();
+    const state = useBacktestJobStore.getState();
+    expect(state.job?.job_id).toBe("other-tab");
+    expect(state.foreignJob).toBe(true);
+    expect(state.request).toBeNull();
+    expect(state.ownJobId).toBeNull();
+  });
+
+  it("a job restored by the first poll after a reload is foreign", async () => {
+    fetchBacktestJobStatus.mockResolvedValue({
+      status: "done",
+      job_id: "before-reload",
+      direction: "LONG",
+      rows: [],
+    });
+    await useBacktestJobStore.getState().poll();
+    const state = useBacktestJobStore.getState();
+    expect(state.job?.job_id).toBe("before-reload");
+    expect(state.foreignJob).toBe(true);
+    expect(state.request).toBeNull();
+  });
+
+  it("setJob clears the request, foreign flag, and own job id", () => {
+    useBacktestJobStore.setState({
+      request: SHORT_REQUEST,
+      foreignJob: true,
+      ownJobId: "mine",
+    });
+    useBacktestJobStore.getState().setJob({ status: "done", job_id: "x", rows: [] });
+    const state = useBacktestJobStore.getState();
+    expect(state.job?.job_id).toBe("x");
+    expect(state.request).toBeNull();
+    expect(state.foreignJob).toBe(false);
+    expect(state.ownJobId).toBeNull();
+  });
+
   it("background poller skips when inactive", async () => {
     fetchBacktestJobStatus.mockResolvedValue({ status: "idle", rows: [] });
     const stop = startBacktestBackgroundPoller();
@@ -125,6 +240,7 @@ describe("backtestJobStore polling", () => {
     });
     expect(useBacktestJobStore.getState().active).toBe(false);
     expect(useBacktestJobStore.getState().job).toBeNull();
+    expect(useBacktestJobStore.getState().request).toBeNull();
     expect(useBacktestJobStore.getState().error).toMatch(/paused|ERROR|short/i);
   });
 

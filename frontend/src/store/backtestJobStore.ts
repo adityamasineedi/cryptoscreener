@@ -6,8 +6,16 @@ import {
   type BacktestJob,
 } from "../api/client";
 
+export type BacktestRunRequest = Parameters<typeof startBacktestJob>[0];
+
 type BacktestStore = {
   job: BacktestJob | null;
+  /** The request this screen sent for `job`. Null when the job was not started here. */
+  request: BacktestRunRequest | null;
+  /** True when `job` is not the result of this screen's last Run (reload, other tab, BUSY). */
+  foreignJob: boolean;
+  /** job_id returned by this screen's last successful start */
+  ownJobId: string | null;
   error: string | null;
   /** True while a start request is in flight or a job is running */
   active: boolean;
@@ -18,49 +26,11 @@ type BacktestStore = {
   setJob: (job: BacktestJob | null) => void;
   setError: (error: string | null) => void;
   poll: () => Promise<void>;
-  start: (body: {
-    symbols: string[];
-    timeframes: string[];
-    direction?: "LONG" | "SHORT";
-    combination_id?: string;
-    strategy_id?: string;
-    combo_version?: string;
-    setup_timeframe?: string;
-    risk_mode?: string;
-    research_risk_override?: boolean;
-    limit?: number;
-    risk_usd?: number;
-    principal_usd?: number;
-    leverage?: number;
-    taker_fee_pct?: number;
-    maker_fee_pct?: number;
-    include_trades?: boolean;
-    start_date?: string;
-    end_date?: string;
-  }) => Promise<void>;
+  start: (body: BacktestRunRequest) => Promise<void>;
   cancel: () => Promise<void>;
 };
 
-function optimisticJob(body: {
-  symbols: string[];
-  timeframes: string[];
-  direction?: "LONG" | "SHORT";
-  combination_id?: string;
-  strategy_id?: string;
-  combo_version?: string;
-  setup_timeframe?: string;
-  risk_mode?: string;
-  research_risk_override?: boolean;
-  limit?: number;
-  risk_usd?: number;
-  principal_usd?: number;
-  leverage?: number;
-  taker_fee_pct?: number;
-  maker_fee_pct?: number;
-  include_trades?: boolean;
-  start_date?: string;
-  end_date?: string;
-}): BacktestJob {
+function optimisticJob(body: BacktestRunRequest): BacktestJob {
   const total = body.symbols.length * body.timeframes.length;
   return {
     status: "running",
@@ -101,6 +71,9 @@ function optimisticJob(body: {
 
 export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
   job: null,
+  request: null,
+  foreignJob: false,
+  ownJobId: null,
   error: null,
   active: false,
   starting: false,
@@ -109,6 +82,9 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
     set({
       job,
       active: job?.status === "running",
+      request: null,
+      foreignJob: false,
+      ownJobId: null,
     }),
   setError: (error) => set({ error }),
   poll: async () => {
@@ -121,7 +97,13 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
       if (!st.status || st.status === "idle") {
         // API restart / no job: clear optimistic "running" so the UI unlocks.
         if (get().active || get().job?.status === "running") {
-          set({ active: false, job: null });
+          set({
+            active: false,
+            job: null,
+            request: null,
+            foreignJob: false,
+            ownJobId: null,
+          });
         }
         return;
       }
@@ -141,9 +123,14 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
         st.status === "cancelled" ||
         st.status === "stalled" ||
         st.status === "idle";
+      // Only the job this screen started keeps its request. A job restored
+      // after a reload or started from another tab is foreign to the form.
+      const { ownJobId, request } = get();
+      const owned = ownJobId != null && st.job_id === ownJobId && request != null;
       set({
         job: st,
         active: st.status === "running",
+        ...(owned ? {} : { foreignJob: true, request: null, ownJobId: null }),
         error:
           st.status === "error" || st.status === "stalled"
             ? st.error || (st.status === "stalled" ? "Backtest stalled (no heartbeat)" : "Backtest failed")
@@ -165,6 +152,9 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
       starting: true,
       _gen: gen,
       job: optimisticJob(body),
+      request: body,
+      foreignJob: false,
+      ownJobId: null,
     });
     try {
       const res = await startBacktestJob(body);
@@ -175,6 +165,10 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
           job: res.job || get().job,
           active: res.job?.status === "running",
           starting: false,
+          // The in-flight job is someone else's run, not the result of this click.
+          foreignJob: true,
+          request: null,
+          ownJobId: null,
         });
         return;
       }
@@ -185,6 +179,9 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
           starting: false,
           // Clear optimistic running job so Run stays usable.
           job: null,
+          request: null,
+          foreignJob: false,
+          ownJobId: null,
         });
         return;
       }
@@ -193,6 +190,8 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
           job: res.job,
           active: res.job.status === "running",
           starting: false,
+          foreignJob: false,
+          ownJobId: res.job.job_id ?? null,
         });
       } else {
         set({ starting: false });
@@ -200,8 +199,9 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
     } catch (e) {
       if (get()._gen !== gen) return;
       const raw = e instanceof Error ? e.message : "Failed to start backtest";
-      const msg =
-        /failed to fetch|networkerror|load failed/i.test(raw)
+      const msg = /signal timed out|timeouterror/i.test(raw)
+        ? "Backtest API did not respond in time. The server is busy or still reloading — retry in a moment."
+        : /failed to fetch|networkerror|load failed/i.test(raw)
           ? "Backend unreachable (Failed to fetch). Restart API on :8000 and retry."
           : raw;
       set({
@@ -209,6 +209,9 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
         active: false,
         starting: false,
         job: null,
+        request: null,
+        foreignJob: false,
+        ownJobId: null,
       });
     }
   },

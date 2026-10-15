@@ -2,13 +2,17 @@
  * Working strategies catalog — clear status, gates, and worked examples.
  * Read-only operator view; does not place orders.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   fetchStrategyCatalog,
+  fetchStrategyRank,
   type StrategyCatalogItem,
   type StrategyCatalogResponse,
+  type StrategyRankResponse,
+  type StrategyRankRow,
 } from "../api/client";
+import { StrategyRankBoard, StrategyRankDetail } from "./StrategyRankBoard";
 
 function statusClass(status: string): string {
   switch (status.toUpperCase()) {
@@ -175,6 +179,36 @@ export function StrategiesPanel() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [rank, setRank] = useState<StrategyRankResponse | null>(null);
+  const [rankError, setRankError] = useState<string | null>(null);
+  const [rankLoading, setRankLoading] = useState(true);
+  const [rankRow, setRankRow] = useState<StrategyRankRow | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
+
+  // Ranking loads on its own so a missing rank file never hides the catalog.
+  useEffect(() => {
+    let cancelled = false;
+    fetchStrategyRank()
+      .then((payload) => {
+        if (!cancelled) setRank(payload);
+      })
+      .catch((e) => {
+        if (!cancelled) setRankError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setRankLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectRankRow = (row: StrategyRankRow) => {
+    setRankRow(row);
+    // Catalog ids open the existing detail pane; other ids show coin results only.
+    setSelectedId(row.catalog_id);
+    detailRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -205,6 +239,19 @@ export function StrategiesPanel() {
     () => data?.strategies?.find((s) => s.id === selectedId) ?? null,
     [data, selectedId]
   );
+
+  const groups = useMemo(() => {
+    const order = [
+      { id: "scalping", label: "Scalping", detail: "1m" },
+      { id: "intraday", label: "Intraday", detail: "5m · 15m" },
+      { id: "swing", label: "Swing", detail: "1h · 4h" },
+    ] as const;
+    const items = data?.strategies || [];
+    return order.map((group) => ({
+      ...group,
+      items: items.filter((item) => (item.horizon || "swing") === group.id),
+    }));
+  }, [data]);
 
   const sizing = data?.sizing_example;
 
@@ -245,23 +292,52 @@ export function StrategiesPanel() {
           </div>
         ) : null}
 
+        <StrategyRankBoard
+          rank={rank}
+          loading={rankLoading}
+          error={rankError}
+          selectedKey={rankRow?.key ?? null}
+          onSelect={selectRankRow}
+        />
+
         {data ? (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-            <aside className="space-y-2">
-              <div className="mb-2 text-[10px] uppercase tracking-wide text-terminal-muted">
+            <aside className="space-y-4">
+              <div className="text-[10px] uppercase tracking-wide text-terminal-muted">
                 Catalog ({data.strategies?.length ?? 0})
               </div>
-              {(data.strategies || []).map((item) => (
-                <StrategyCard
-                  key={item.id}
-                  item={item}
-                  selected={item.id === selectedId}
-                  onSelect={() => setSelectedId(item.id)}
-                />
+              {groups.map((group) => (
+                <section key={group.id} data-testid={`strategy-group-${group.id}`}>
+                  <div className="mb-2 flex items-baseline justify-between gap-2">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-wide text-terminal-text">
+                      {group.label}
+                    </h2>
+                    <span className="font-mono text-[10px] text-terminal-muted">
+                      {group.detail} · {group.items.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {group.items.map((item) => (
+                      <StrategyCard
+                        key={item.id}
+                        item={item}
+                        selected={item.id === selectedId}
+                        onSelect={() => {
+                          setSelectedId(item.id);
+                          setRankRow(null);
+                        }}
+                      />
+                    ))}
+                    {!group.items.length ? (
+                      <p className="text-[11px] text-terminal-muted">None in this catalog.</p>
+                    ) : null}
+                  </div>
+                </section>
               ))}
             </aside>
 
-            <div className="space-y-4">
+            <div className="space-y-4" ref={detailRef}>
+              {rankRow ? <StrategyRankDetail row={rankRow} window={rank?.window} /> : null}
               {selected ? (
                 <>
                   <section className="rounded-lg border border-terminal-border/70 bg-terminal-panel/40 p-4">
@@ -282,6 +358,10 @@ export function StrategiesPanel() {
                     <h2 className="mt-2 text-base font-semibold text-terminal-text">
                       {selected.name}
                     </h2>
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wide text-terminal-muted">
+                      {selected.horizon || "swing"}
+                      {selected.setup_timeframe ? ` · ${selected.setup_timeframe}` : ""}
+                    </p>
                     <p className="mt-1 text-[12px] leading-relaxed text-terminal-muted">
                       {selected.summary}
                     </p>
@@ -390,7 +470,7 @@ export function StrategiesPanel() {
 
                   <ExampleBlock item={selected} />
                 </>
-              ) : (
+              ) : rankRow ? null : (
                 <div className="text-sm text-terminal-muted">
                   Select a strategy to see details and examples.
                 </div>

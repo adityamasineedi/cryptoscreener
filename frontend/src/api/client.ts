@@ -80,6 +80,9 @@ export function fetchFuturesScreener(params?: {
     use_real_data: boolean;
     preset?: string | null;
     total_universe?: number;
+    discovered_universe?: number;
+    active_universe?: number;
+    active_universe_cap?: number;
     eligible_count?: number;
     returned_count?: number;
     limit?: number;
@@ -198,6 +201,7 @@ export type StrategyCatalogItem = {
   combo_version?: string;
   direction?: string;
   setup_timeframe?: string;
+  horizon?: "scalping" | "intraday" | "swing" | string;
   htf_timeframes?: string[];
   summary: string;
   gates?: string[];
@@ -247,6 +251,102 @@ export type StrategyCatalogResponse = {
 
 export function fetchStrategyCatalog() {
   return getJson<StrategyCatalogResponse>("/api/research/strategies");
+}
+
+export type StrategyRankCell = {
+  symbol: string;
+  coin: string;
+  net_pnl_usd: number | null;
+  win_rate: number | null;
+  profit_factor: number | null;
+  trades_closed: number;
+  fees_usd: number | null;
+  max_drawdown_usd: number | null;
+  passes: boolean;
+  fail_reasons: string[];
+};
+
+export type StrategyRankAlias = { id: string; kind: string; note: string };
+
+export type StrategyRankRow = {
+  rank: number;
+  key: string;
+  style: string;
+  family: string;
+  strategy_id: string;
+  direction: string;
+  timeframe: string;
+  in_catalog: boolean;
+  catalog_id: string | null;
+  name: string;
+  description_source: "catalog" | "combination_registry" | "rank_file" | string;
+  summary: string;
+  gates: string[];
+  variant: string | null;
+  coins: number;
+  coins_passing: number;
+  coins_net_positive: number;
+  passing_symbols: string[];
+  trades: number;
+  net_pnl_usd: number | null;
+  fees_usd: number | null;
+  worst_cell_net_usd: number | null;
+  best_cell_net_usd: number | null;
+  execution_models: string[];
+  fill_label: string;
+  risk_usd: number[];
+  leverage: number[];
+  sizing_note: string | null;
+  usd_comparable: boolean;
+  aliases: StrategyRankAlias[];
+  alias_of: StrategyRankAlias | null;
+  do_not_use: boolean;
+  do_not_use_reason: string | null;
+  cells: StrategyRankCell[];
+};
+
+export type StrategyRankGroup = {
+  id: string;
+  label: string;
+  timeframes: string;
+  cells?: number | null;
+  cells_net_positive?: number | null;
+  cells_passing?: number | null;
+  caveats: string[];
+  hidden?: { duplicates: number; failures: number };
+  rows: StrategyRankRow[];
+};
+
+export type StrategyRankResponse = {
+  status: "OK" | "MISSING" | "EMPTY" | "INVALID" | string;
+  error?: string | null;
+  source?: { path?: string; written_by?: string; modified_utc?: string | null };
+  window?: {
+    start: string | null;
+    end: string | null;
+    note?: string;
+    in_sample?: boolean;
+    sample_note?: string;
+    coins: string[];
+    market?: string;
+    account?: {
+      principal_usd?: number | null;
+      risk_usd?: number | null;
+      leverage?: number | null;
+      exceptions?: string;
+    };
+    fees?: { taker_pct?: number | null; maker_pct?: number | null };
+  };
+  pass_rule?: { text?: string; rule?: Record<string, string> };
+  caveats?: string[];
+  cells_ok?: number | null;
+  cells_not_run?: number | null;
+  groups: StrategyRankGroup[];
+  timestamp?: string;
+};
+
+export function fetchStrategyRank() {
+  return getJson<StrategyRankResponse>("/api/research/strategies/rank");
 }
 
 export function fetchBosCombinations() {
@@ -387,6 +487,7 @@ export function fetchBosStrategies(params?: {
 }
 
 export type StrategyTradeRow = {
+  trade_id?: string | number;
   trade_no?: number;
   symbol: string;
   timeframe: string;
@@ -419,9 +520,26 @@ export type StrategyTradeRow = {
   r_net?: number | null;
   mae_r?: number | null;
   mfe_r?: number | null;
+  account_equity?: number | null;
+  capped_by_leverage?: boolean;
+  requested_risk_usd?: number | null;
+  /** Display-only labels at the signal bar (backend trade_context.py). */
+  market_context?: {
+    structure?: "CORRECT" | "WRONG" | "NEUTRAL" | string;
+    trend?: string | null;
+    volume?: string | null;
+    relative_volume?: number | null;
+    zone?: string | null;
+    range_position?: number | null;
+    decision_bar?: string | null;
+    label?: string;
+  } | null;
 };
 
 export type StrategyMatrixRow = {
+  /** Set on rows from a ranked strategy's own engine (CANDLE12, multi-cap, OSE). */
+  engine_family?: string;
+  engine_fill_model?: string;
   combination_id: string;
   name?: string;
   symbol: string;
@@ -445,6 +563,56 @@ export type StrategyMatrixRow = {
   pnl_usd?: number | null;
   pnl_usd_net?: number | null;
   fees_usd?: number | null;
+  pnl_model?: string | null;
+  win_rate?: number | null;
+  max_drawdown_usd?: number | null;
+  average_R_usd_basis_gross?: number | null;
+  average_R_usd_basis_net?: number | null;
+  profit_factor_net?: number | null;
+  win_rate_net?: number | null;
+  max_drawdown_usd_net?: number | null;
+  equity_curve_usd_net?: number[];
+  r_definition?: string | null;
+  warmup_bars?: number | null;
+  bars_evaluated?: number | null;
+  optimistic_comparison?: {
+    model?: string;
+    label?: string;
+    net_pnl?: number | null;
+    gross_pnl?: number | null;
+    fees?: number | null;
+    net_r?: number | null;
+    gross_r?: number | null;
+    winners?: number | null;
+    trades?: number | null;
+    win_rate?: number | null;
+    max_drawdown_usd?: number | null;
+    max_drawdown_r?: number | null;
+  } | null;
+  sd_review?: {
+    min_closed_sample?: number;
+    sample_warning?: boolean;
+    slippage_rate?: number;
+    market_type?: string;
+    session?: string;
+    contract_roll?: string;
+    funding_applied?: boolean;
+    event_days?: string;
+    random_entry_baseline?: string;
+    chronological_split?: {
+      development_n?: number;
+      development_avg_r_net?: number | null;
+      holdout_n?: number;
+      holdout_avg_r_net?: number | null;
+    };
+    daily_loss_slice?: {
+      max_loss_r?: number;
+      kept_n?: number;
+      skipped_n?: number;
+      avg_r_net?: number | null;
+    };
+    regime_counts?: { trend?: number; range?: number; unknown?: number };
+  };
   risk_usd?: number;
   leverage?: number;
   bars_loaded?: number;
@@ -806,6 +974,174 @@ export function fetchCombo02CandidateResults(
   const qs = q.toString();
   return getJson<Combo02CandidateResultsResponse>(
     `/api/research/combo02-candidate-results${qs ? `?${qs}` : ""}`,
+    opts,
+  );
+}
+
+export type CrossSectionalHoldoutRow = {
+  candidate_id: string;
+  family: string;
+  lookback: number;
+  rebalance_hours: number;
+  sides: number;
+  inverse_volatility: boolean;
+  beta_neutral: boolean;
+  robust_score: number;
+  holdout_total_return: number;
+  holdout_cagr: number;
+  holdout_sharpe: number;
+  holdout_sortino: number;
+  holdout_max_drawdown: number;
+  holdout_annualized_volatility: number;
+  holdout_average_turnover: number;
+  holdout_average_gross_exposure: number;
+  holdout_fee_cost: number;
+  holdout_slippage_cost: number;
+  holdout_funding_cost: number;
+  holdout_liquidation_warning_bars: number;
+};
+
+export type CrossSectionalDiscoveryResponse = {
+  status: "OK" | "EMPTY" | "ERROR" | string;
+  research_only: boolean;
+  read_only: boolean;
+  execution_rights: boolean;
+  generated_at_utc?: string;
+  manifest?: Record<string, unknown>;
+  selected?: CrossSectionalHoldoutRow[];
+  trade_signals?: {
+    latest?: {
+      status?: string;
+      validation_status?: string;
+      trade_status?: string;
+      data_status?: string;
+      decision_time?: string;
+      valid_until?: string;
+      selected_model?: Record<string, unknown>;
+      development_metrics?: Record<string, unknown>;
+      holdout_metrics?: Record<string, unknown>;
+      signals?: Array<{
+        symbol: string;
+        action: "BUY" | "SELL" | "NO_TRADE" | string;
+        model_action?: string;
+        momentum?: number | null;
+        symbol_validation_passed?: boolean;
+        holdout_metrics?: Record<string, unknown>;
+        take_profit?: number;
+        stop_loss?: number;
+        max_hold_hours?: number;
+        reason?: string;
+      }>;
+      note?: string;
+    };
+    manifest?: Record<string, unknown>;
+  } | null;
+  breakout_risk?: {
+    latest?: {
+      status?: string;
+      validation_status?: string;
+      trade_status?: string;
+      data_status?: string;
+      decision_time?: string;
+      valid_until?: string;
+      selected_entry?: Record<string, unknown>;
+      selected_risk?: Record<string, unknown>;
+      development_robust_score?: number;
+      holdout_metrics?: Record<string, unknown>;
+      inverted_direction_metrics?: Record<string, unknown>;
+      direction_validated?: boolean;
+      direction_audit_status?: string;
+      side_metrics?: Record<string, Record<string, unknown>>;
+      family_comparison?: Record<string, Record<string, unknown>>;
+      risk_comparison?: Record<string, Record<string, unknown>>;
+      signals?: Array<{
+        symbol: string;
+        action: "BUY" | "SELL" | "NO_TRADE" | string;
+        model_action?: string;
+        reason?: string;
+      }>;
+      note?: string;
+    };
+    manifest?: Record<string, unknown>;
+  } | null;
+  daily_signals?: {
+    latest?: {
+      status?: string;
+      validation_status?: string;
+      trade_status?: string;
+      data_status?: string;
+      decision_time?: string;
+      valid_until?: string;
+      selected_model?: Record<string, unknown>;
+      selected_model_holdout?: Record<string, unknown>;
+      regime?: Record<string, unknown>;
+      signals?: Array<{
+        symbol: string;
+        action: "LONG" | "SHORT" | "FLAT" | string;
+        model_action?: string;
+        target_weight?: number;
+        notional_leverage?: number;
+        momentum?: number | null;
+        eligible?: boolean;
+        reason?: string;
+      }>;
+      note?: string;
+    };
+    manifest?: Record<string, unknown>;
+    holdout?: Array<Record<string, unknown>>;
+  } | null;
+  artifacts?: Record<string, string>;
+  note?: string;
+  error?: string;
+  paper_trade_created?: boolean;
+  live_trade_created?: boolean;
+  telegram_sent?: boolean;
+};
+
+export type DiscoveryRankingRow = {
+  rank?: number | null;
+  symbol?: string | null;
+  combination_id?: string | null;
+  direction?: string | null;
+  sample_size?: number | null;
+  walk_forward_windows?: number | null;
+  oos_profit_factor?: number | null;
+  oos_profit_factors?: Array<number | null> | null;
+  research_passed?: boolean | null;
+  promotion_status?: string | null;
+  sharpe?: number | null;
+  sortino?: number | null;
+  profit?: number | null;
+  operator_approved?: boolean;
+  production_approved?: boolean;
+  paper_eligible?: boolean;
+  live_eligible?: boolean;
+  telegram_eligible?: boolean;
+};
+
+export type DiscoveryRankingResponse = {
+  run_id: string;
+  rows: DiscoveryRankingRow[];
+  disclaimer?: string | null;
+};
+
+/** Stored discovery run id only. This request does not start research. */
+export function fetchLatestDiscoveryRun(opts?: { signal?: AbortSignal }) {
+  return getJson<{ run_id: string | null }>("/api/research/market-structure-discovery-v1/latest", opts);
+}
+
+/** Read-only ranking for one stored research run. */
+export function fetchDiscoveryRunRanking(runId: string, opts?: { signal?: AbortSignal }) {
+  return getJson<DiscoveryRankingResponse>(
+    `/api/research/market-structure-discovery-v1/${encodeURIComponent(runId)}/ranking`,
+    opts,
+  );
+}
+
+/** Saved research output only; this endpoint cannot run or promote a strategy. */
+export function fetchCrossSectionalDiscovery(opts?: { signal?: AbortSignal }) {
+  return getJson<CrossSectionalDiscoveryResponse>(
+    "/api/research/cross-sectional-discovery/latest",
     opts,
   );
 }
@@ -1172,6 +1508,108 @@ export function fetchBacktestJobStatus() {
   );
 }
 
+export type CapBookRow = {
+  combination_id: string;
+  symbol: string;
+  timeframe: string;
+  direction: string;
+  cap_group: string;
+  risk_usd: number;
+  sample_size: number;
+  average_R: number | null;
+  average_R_net: number | null;
+  pnl_usd_net: number | null;
+  max_drawdown_R: number | null;
+  cell_seconds: number;
+};
+
+export type CapBookShard = {
+  shard: string;
+  agent_name: string;
+  cap_group: string;
+  coins: string[];
+  status: string;
+  market_direction: string | null;
+  principal_usd: number;
+  elapsed_seconds: number;
+  cells_finished: number;
+  rows: CapBookRow[];
+};
+
+export type CapBookAgentsResponse = {
+  status: string;
+  poll_interval_seconds: number;
+  timestamp?: string;
+  shards: CapBookShard[];
+};
+
+export function fetchCapBookAgents(signal?: AbortSignal) {
+  return getJson<CapBookAgentsResponse>("/api/research/cap-book-agents", { signal });
+}
+
+export type PassedRegimeTrend = "BULLISH" | "BEARISH" | "NEUTRAL";
+
+export type PassedRegimeSide = {
+  strategy_id: string;
+  timeframe: string;
+  direction: string;
+};
+
+export type PassedRegimeSignal = {
+  strategy_id: string;
+  direction: string;
+  timeframe: string;
+  symbol: string;
+  setup_bar_time: string;
+  trend: string;
+  as_of_daily_bar: string;
+  outcome: "opened" | "not_opened" | string;
+  reason: string;
+  position_id?: string | number | null;
+  recorded_at: string;
+};
+
+export type PassedRegimeEvaluatedBar = {
+  symbol: string;
+  bar: string;
+  trend: string;
+  as_of_daily_bar: string;
+  sides_evaluated: number;
+};
+
+export type PassedRegimeResponse = {
+  enabled: boolean;
+  trend: PassedRegimeTrend;
+  /** False when the BTC daily read failed; the bar is retried and nothing opens. */
+  daily_read_ok: boolean;
+  daily_read_error: string;
+  /** 1h bar the regime was read for, and when the daily bars were read. */
+  regime_bar: string;
+  regime_read_at: string;
+  as_of_daily_bar: string;
+  daily_bars: number;
+  min_daily_bars: number;
+  short_history: boolean;
+  allowed: PassedRegimeSide[];
+  skipped: PassedRegimeSide[];
+  allowed_strategy_ids: string[];
+  skipped_strategy_ids: string[];
+  latest_signals: PassedRegimeSignal[];
+  last_evaluated_bar: PassedRegimeEvaluatedBar | null;
+  last_skip: string | null;
+  opened_count: number;
+  /** False while new passed-regime entries are off; signals are still recorded. */
+  book_open?: boolean;
+  book_note?: string;
+  watcher_loop_enabled?: boolean;
+  timestamp?: string;
+};
+
+/** Read-only: the passed-book regime view. There is no write counterpart. */
+export function fetchPassedRegime(signal?: AbortSignal) {
+  return getJson<PassedRegimeResponse>("/api/paper/passed-regime", { signal });
+}
+
 export async function startBacktestJob(body: {
   symbols: string[];
   timeframes: string[];
@@ -1270,6 +1708,8 @@ export type PaperWatcherBookLive = {
   waiting_next_closed_bar?: boolean;
   tip_status?: string;
   tip_reason?: string;
+  last_skip?: string | null;
+  last_skip_bar?: string | null;
   gates?: { trend?: boolean; bos?: boolean; htf?: boolean };
   htf_alignment?: string | null;
   trend_1h?: string | null;
@@ -1528,6 +1968,14 @@ export function fetchDiagnosticsOverview() {
   return getJson<Record<string, unknown>>("/api/diagnostics/overview");
 }
 
+export async function postDiagnosticsFrontendHeartbeat() {
+  const res = await fetch(`${API_BASE}/api/diagnostics/frontend-heartbeat`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`frontend heartbeat failed: ${res.status}`);
+  return res.json() as Promise<{ ok: boolean; seen_at: string }>;
+}
+
 export function fetchDiagnosticsIssues(params?: {
   status?: string;
   severity?: string;
@@ -1738,4 +2186,140 @@ export function exportDiagnosticsSnapshot(snapshotId: string) {
   return getJson<Record<string, unknown>>(
     `/api/diagnostics/snapshot/${encodeURIComponent(snapshotId)}/export`
   );
+}
+
+export type StructureExperimentMetrics = {
+  candidates: number;
+  qualified: number;
+  fills: number;
+  skips: number;
+  expirations: number;
+  invalidations: number;
+  incomplete_windows: number;
+  net_expectancy_r: number | null;
+  net_pnl_r: number | null;
+  max_drawdown_r: number | null;
+  profit_factor: number | null;
+  win_rate: number | null;
+  target_pct: number | null;
+  stop_pct: number | null;
+  timeout_pct: number | null;
+  close_back_10_pct: number | null;
+  close_back_10_denominator: number;
+  post_entry_close_back_10_pct: number | null;
+  post_entry_close_back_10_denominator: number;
+  average_holding_bars: number | null;
+  fees_r: number | null;
+  funding_r: number | null;
+  by_symbol?: Record<string, StructureExperimentMetrics>;
+  by_call_type?: Record<string, StructureExperimentMetrics>;
+  by_direction?: Record<string, StructureExperimentMetrics>;
+};
+
+export type StructureExperimentExample = {
+  event_id: string;
+  symbol: string;
+  direction: string;
+  call_type: string;
+  variant: string;
+  status: string;
+  provisional_swing: string;
+  pivot_at: string;
+  confirmed_at: string;
+  break_at: string;
+  qualified_at: string | null;
+  entry_at: string | null;
+  invalidated_at: string | null;
+  expired_at: string | null;
+  broken_level: number;
+  stop_price: number | null;
+  target_price: number | null;
+  entry_price: number | null;
+  outcome: string | null;
+  ambiguous: boolean;
+  net_r: number | null;
+  confirmation_delay_bars: number;
+  bars_from_confirmation_to_break: number;
+};
+
+export type StructureExperimentReport = {
+  status: "ready" | "unavailable";
+  research_only: boolean;
+  validation_status: string;
+  reason?: string;
+  assumptions?: Record<string, unknown>;
+  variants?: Array<{
+    id: string;
+    event_count: number;
+    boundary_excluded: number;
+    median_bars_confirmation_to_break: number | null;
+    windows: Record<string, StructureExperimentMetrics>;
+  }>;
+  examples?: StructureExperimentExample[];
+  legacy_reference?: { label: string; not_a_variant: boolean };
+};
+
+export function fetchOhlcvStructureExperiment() {
+  return getJson<StructureExperimentReport>("/api/research/ohlcv-structure-experiment");
+}
+
+export type StructureSwingRef = {
+  swing_id: string;
+  price: number;
+  pivot_time: string | null;
+  confirmation_open_time: string | null;
+  known_at: string | null;
+};
+
+export type StructureLabelSnapshot = {
+  symbol: string;
+  rule_version: string;
+  experimental: boolean;
+  process_id?: number;
+  as_of: string | null;
+  trade_connected: boolean;
+  baseline_notes: string[];
+  timeframes: Record<
+    string,
+    {
+      timeframe: string;
+      dataset_fingerprint: string;
+      range_explanation: string;
+      coverage: {
+        usable_bars: number;
+        start_open: string | null;
+        end_open: string | null;
+        end_known_at: string | null;
+        calculation_bars?: number;
+        calculation_start_open?: string | null;
+        gap_count: number;
+        warmup_bars: number;
+        scored_bars: number;
+      };
+      counts: Record<string, number>;
+      denominator: number;
+      latest: {
+        state: string;
+        reason: string;
+        explanation: string | null;
+        known_at: string | null;
+        state_age: number;
+        bars_since_break: number | null;
+        ambiguity_flags: string[];
+        initialization: string;
+        data_quality: string;
+        expiry_status: string;
+        designated_age_bars: number | null;
+        reversal_evidence: Record<string, string> | null;
+        designated_level: StructureSwingRef | null;
+        supporting_swing: StructureSwingRef | null;
+        resisting_swing: StructureSwingRef | null;
+      } | null;
+    }
+  >;
+};
+
+export function fetchStructureLabels(symbol: string, ruleVersion: string, signal?: AbortSignal) {
+  const q = new URLSearchParams({ symbol, rule_version: ruleVersion });
+  return getJson<StructureLabelSnapshot>(`/api/research/structure-labels?${q.toString()}`, { signal });
 }

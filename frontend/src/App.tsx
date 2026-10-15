@@ -6,7 +6,9 @@ import { ChartsPage } from "./components/ChartsPage";
 import { CoinDetailPanel } from "./components/CoinDetailPanel";
 import { BacktestPanel } from "./components/BacktestPanel";
 import { BosResearchPanel } from "./components/BosResearchPanel";
+import { IntradayBosSdPanel } from "./components/IntradayBosSdPanel";
 import { GridTradingPanel } from "./gridTrading/GridTradingPanel";
+import { RegimeLabPanel } from "./regimeLab/RegimeLabPanel";
 import { BosStrategyResearchPanel } from "./components/BosStrategyResearchPanel";
 import { DataHealthPanel } from "./components/DataHealthPanel";
 import { AlertsPanel } from "./components/AlertsPanel";
@@ -162,12 +164,14 @@ export default function App() {
           <Route path="/strategies" element={<StrategiesPanel />} />
           <Route path="/bos-research" element={<BosResearchPanel />} />
           <Route path="/bos-strategy-research" element={<BosStrategyResearchPanel />} />
+          <Route path="/intraday-bos-sd" element={<IntradayBosSdPanel />} />
           <Route path="/grid-trading" element={<GridTradingPanel />} />
           <Route path="/paper" element={<PaperTradePanel />} />
           <Route path="/watchlist" element={<Placeholder title="Watchlist" />} />
           <Route path="/alerts" element={<AlertsPanel />} />
           <Route path="/charts" element={<ChartsPage />} />
           <Route path="/backtest" element={<BacktestPanel />} />
+          <Route path="/regime-lab" element={<RegimeLabPanel />} />
           <Route path="/ohlcv-history" element={<OhlcvHistoryPanel />} />
           <Route path="/settings" element={<Placeholder title="Settings" />} />
         </Routes>

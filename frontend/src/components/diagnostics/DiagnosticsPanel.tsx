@@ -14,6 +14,7 @@ import {
   fetchDiagnosticsIssues,
   fetchDiagnosticsOverview,
   fetchDiagnosticsResources,
+  postDiagnosticsFrontendHeartbeat,
   postDiagnosticsAiHandoff,
   resolveDiagnosticsIssue,
 } from "../../api/client";
@@ -744,6 +745,11 @@ export function DiagnosticsPanel() {
     let alive = true;
     async function load() {
       try {
+        try {
+          await postDiagnosticsFrontendHeartbeat();
+        } catch {
+          /* overview still loads; the card stays unknown until a heartbeat lands */
+        }
         const o = (await fetchDiagnosticsOverview()) as unknown as DiagnosticsOverview;
         if (alive) setOverview(o);
       } catch {

@@ -10,11 +10,13 @@ const items = [
   { to: "/diagnostics", label: "System Diagnostics", short: "Sy" },
   { to: "/bos-research", label: "BOS Research", short: "BR" },
   { to: "/bos-strategy-research", label: "BOS Strategies", short: "BS" },
+  { to: "/intraday-bos-sd", label: "Intraday BOS SD", short: "IB" },
   { to: "/paper", label: "Paper Trade", short: "Pt" },
   { to: "/watchlist", label: "Watchlist", short: "Wl" },
   { to: "/alerts", label: "Alerts", short: "Al" },
   { to: "/charts", label: "Charts", short: "Ch" },
   { to: "/backtest", label: "Backtest", short: "Bt" },
+  { to: "/regime-lab", label: "Regime Lab", short: "RL" },
   { to: "/ohlcv-history", label: "OHLCV History", short: "OH" },
   { to: "/settings", label: "Settings", short: "Se" },
 ];

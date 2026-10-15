@@ -19,9 +19,12 @@ import {
   chartTimeZoneLabel,
   ensureAscendingByTime,
   localizationForTimeframe,
-  readStoredChartTimeZone,
   timeScaleOptionsForTimeframe,
+  type ChartTimeZone,
 } from "../chart/chartTimeAxis";
+
+/** Blotter times are UTC, so the overlay axis is UTC whatever the stored chart preference is. */
+const OVERLAY_TIME_ZONE: ChartTimeZone = "UTC";
 
 type Props = {
   trade: StrategyTradeRow;
@@ -36,7 +39,7 @@ export function BacktestTradeChart({ trade }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
-  const chartTimeZone = readStoredChartTimeZone();
+  const chartTimeZone = OVERLAY_TIME_ZONE;
   const [status, setStatus] = useState<"LOADING" | "OK" | "EMPTY" | "ERROR">(
     "LOADING",
   );

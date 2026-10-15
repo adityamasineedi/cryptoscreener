@@ -23,8 +23,18 @@ export function useMarketStream() {
   const screenFilter = useMarketStore((s) => s.screenFilter);
   const marketWsRef = useRef<WebSocket | null>(null);
   const screenerWsRef = useRef<WebSocket | null>(null);
+  const socketPhase = useRef<{ market: "connecting" | "open" | "closed"; screener: "connecting" | "open" | "closed" }>({
+    market: "closed",
+    screener: "closed",
+  });
+  const screenerRequestId = useRef(0);
+
+  function publishMarketConnected() {
+    setConnected(socketPhase.current.market === "open");
+  }
 
   useEffect(() => {
+    const requestId = ++screenerRequestId.current;
     let cancelled = false;
 
     const sortBy =
@@ -48,30 +58,28 @@ export function useMarketStream() {
           limit: screenSize,
           screen_filter: screenFilter,
         });
-        if (!cancelled) {
-          setSnapshot(data.rows, data.total, data.ingestion, {
-            total_universe: data.total_universe,
-            discovered_universe: data.discovered_universe,
-            active_universe: data.active_universe,
-            active_universe_cap: data.active_universe_cap,
-            eligible_count: data.eligible_count,
-            returned_count: data.returned_count,
-            limit: data.limit,
-            selection_updated_at: data.selection_updated_at,
-            excluded: data.excluded,
-            search_mode: data.search_mode,
-            screen_filter: data.screen_filter,
-            screen_timeframe: data.screen_timeframe,
-            screener_identity: data.screener_identity,
-            v1_watcher_view: data.v1_watcher_view,
-          });
-        }
+        if (cancelled || requestId !== screenerRequestId.current) return;
+        setSnapshot(data.rows, data.total, data.ingestion, {
+          total_universe: data.total_universe,
+          discovered_universe: data.discovered_universe,
+          active_universe: data.active_universe,
+          active_universe_cap: data.active_universe_cap,
+          eligible_count: data.eligible_count,
+          returned_count: data.returned_count,
+          limit: data.limit,
+          selection_updated_at: data.selection_updated_at,
+          excluded: data.excluded,
+          search_mode: data.search_mode,
+          screen_filter: data.screen_filter,
+          screen_timeframe: data.screen_timeframe,
+          screener_identity: data.screener_identity,
+          v1_watcher_view: data.v1_watcher_view,
+        });
       } catch {
-        if (!cancelled) {
-          setSnapshot([], 0, "api_unavailable");
-        }
+        if (cancelled || requestId !== screenerRequestId.current) return;
+        setSnapshot([], 0, "api_unavailable");
       } finally {
-        if (!cancelled) setDomainLoading(false);
+        if (!cancelled && requestId === screenerRequestId.current) setDomainLoading(false);
       }
     }
 
@@ -89,12 +97,22 @@ export function useMarketStream() {
 
     function connect() {
       if (stopped) return;
+      const existing = marketWsRef.current;
+      if (
+        existing &&
+        (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN)
+      ) {
+        return;
+      }
       const ws = new WebSocket(wsUrl("/ws/market"));
       marketWsRef.current = ws;
+      socketPhase.current.market = "connecting";
 
       ws.onopen = () => {
+        if (marketWsRef.current !== ws) return;
         retry = 0;
-        setConnected(true);
+        socketPhase.current.market = "open";
+        publishMarketConnected();
         const ping = window.setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send("ping");
         }, 15000);
@@ -102,6 +120,7 @@ export function useMarketStream() {
       };
 
       ws.onmessage = (ev) => {
+        if (marketWsRef.current !== ws) return;
         try {
           const msg = JSON.parse(ev.data as string);
           if (msg.type === "market_batch" && Array.isArray(msg.updates)) {
@@ -113,20 +132,35 @@ export function useMarketStream() {
       };
 
       ws.onclose = () => {
-        setConnected(false);
+        if (marketWsRef.current !== ws) return;
+        marketWsRef.current = null;
+        socketPhase.current.market = "closed";
+        publishMarketConnected();
+        if (stopped) return;
         const delay = Math.min(30000, 1000 * 2 ** retry + Math.random() * 400);
         retry += 1;
         timer = window.setTimeout(connect, delay);
       };
 
-      ws.onerror = () => ws.close();
+      ws.onerror = () => {
+        if (marketWsRef.current !== ws) return;
+        ws.close();
+      };
     }
 
     connect();
     return () => {
       stopped = true;
       if (timer) window.clearTimeout(timer);
-      marketWsRef.current?.close();
+      const ws = marketWsRef.current;
+      marketWsRef.current = null;
+      socketPhase.current.market = "closed";
+      publishMarketConnected();
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
     };
   }, [applyBatch, setConnected]);
 
@@ -138,10 +172,25 @@ export function useMarketStream() {
 
     function connect() {
       if (stopped) return;
+      const existing = screenerWsRef.current;
+      if (
+        existing &&
+        (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN)
+      ) {
+        return;
+      }
       const ws = new WebSocket(wsUrl("/ws/screener"));
       screenerWsRef.current = ws;
+      socketPhase.current.screener = "connecting";
+
+      ws.onopen = () => {
+        if (screenerWsRef.current !== ws) return;
+        retry = 0;
+        socketPhase.current.screener = "open";
+      };
 
       ws.onmessage = (ev) => {
+        if (screenerWsRef.current !== ws) return;
         try {
           const msg = JSON.parse(ev.data as string);
           if (msg.type === "screener_snapshot" && Array.isArray(msg.rows)) {
@@ -203,19 +252,33 @@ export function useMarketStream() {
       };
 
       ws.onclose = () => {
+        if (screenerWsRef.current !== ws) return;
+        screenerWsRef.current = null;
+        socketPhase.current.screener = "closed";
+        if (stopped) return;
         const delay = Math.min(30000, 1000 * 2 ** retry + Math.random() * 400);
         retry += 1;
         timer = window.setTimeout(connect, delay);
       };
 
-      ws.onerror = () => ws.close();
+      ws.onerror = () => {
+        if (screenerWsRef.current !== ws) return;
+        ws.close();
+      };
     }
 
     connect();
     return () => {
       stopped = true;
       if (timer) window.clearTimeout(timer);
-      screenerWsRef.current?.close();
+      const ws = screenerWsRef.current;
+      screenerWsRef.current = null;
+      socketPhase.current.screener = "closed";
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
     };
   }, [applyRowPatch, setSnapshot]);
 }
