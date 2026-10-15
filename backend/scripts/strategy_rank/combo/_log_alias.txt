@@ -1,0 +1,11 @@
+[combo_rank] tasks=10 workers=3
+[combo_rank] 1/10 v2_1a_alias_1d ETHUSDT 1d elapsed=48s counts={'OK': 2}
+[combo_rank] 2/10 v2_1a_alias_1d BNBUSDT 1d elapsed=57s counts={'OK': 4}
+[combo_rank] 3/10 v2_1a_alias_1d BTCUSDT 1d elapsed=58s counts={'OK': 6}
+[combo_rank] 4/10 v2_1a_alias_1d SOLUSDT 1d elapsed=80s counts={'OK': 8}
+[combo_rank] 5/10 v2_1a_alias_1d XRPUSDT 1d elapsed=103s counts={'OK': 10}
+[combo_rank] 6/10 v2_1a_alias_1d DOGEUSDT 1d elapsed=107s counts={'OK': 12}
+[combo_rank] 7/10 v2_1a_alias_1d ADAUSDT 1d elapsed=126s counts={'OK': 14}
+[combo_rank] 8/10 v2_1a_alias_1d TRXUSDT 1d elapsed=140s counts={'OK': 16}
+[combo_rank] 9/10 v2_1a_alias_1d AVAXUSDT 1d elapsed=144s counts={'OK': 18}
+[combo_rank] 10/10 v2_1a_alias_1d LINKUSDT 1d elapsed=161s counts={'OK': 20}

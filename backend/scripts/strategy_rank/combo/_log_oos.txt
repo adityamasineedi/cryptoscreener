@@ -1,0 +1,21 @@
+[combo_rank] tasks=20 workers=3
+[combo_rank] 1/20 oos1 ETHUSDT 1h elapsed=12s counts={'OK': 6}
+[combo_rank] 2/20 oos1 BNBUSDT 1h elapsed=13s counts={'OK': 12}
+[combo_rank] 3/20 oos1 BTCUSDT 1h elapsed=13s counts={'OK': 18}
+[combo_rank] 4/20 oos1 XRPUSDT 1h elapsed=24s counts={'OK': 24}
+[combo_rank] 5/20 oos1 DOGEUSDT 1h elapsed=25s counts={'OK': 30}
+[combo_rank] 6/20 oos1 SOLUSDT 1h elapsed=26s counts={'OK': 36}
+[combo_rank] 7/20 oos1 TRXUSDT 1h elapsed=39s counts={'OK': 42}
+[combo_rank] 8/20 oos1 ADAUSDT 1h elapsed=40s counts={'OK': 48}
+[combo_rank] 9/20 oos1 AVAXUSDT 1h elapsed=40s counts={'OK': 54}
+[combo_rank] 10/20 oos2 BTCUSDT 1h elapsed=54s counts={'OK': 60}
+[combo_rank] 11/20 oos1 LINKUSDT 1h elapsed=54s counts={'OK': 66}
+[combo_rank] 12/20 oos2 ETHUSDT 1h elapsed=55s counts={'OK': 72}
+[combo_rank] 13/20 oos2 BNBUSDT 1h elapsed=67s counts={'OK': 78}
+[combo_rank] 14/20 oos2 XRPUSDT 1h elapsed=70s counts={'OK': 84}
+[combo_rank] 15/20 oos2 SOLUSDT 1h elapsed=70s counts={'OK': 90}
+[combo_rank] 16/20 oos2 DOGEUSDT 1h elapsed=82s counts={'OK': 96}
+[combo_rank] 17/20 oos2 TRXUSDT 1h elapsed=83s counts={'OK': 102}
+[combo_rank] 18/20 oos2 ADAUSDT 1h elapsed=84s counts={'OK': 108}
+[combo_rank] 19/20 oos2 AVAXUSDT 1h elapsed=97s counts={'OK': 114}
+[combo_rank] 20/20 oos2 LINKUSDT 1h elapsed=99s counts={'OK': 120}

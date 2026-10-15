@@ -1,9 +1,9 @@
 """Three-label COMBO_02_V1 vs COMBO_02_V1_CLOSED_HTF audit.
 
 Labels (required):
-  original  — lim_4h=limit//16+100 + forming HTF (COMBO_02 / COMBO_02_V1)
-  corrected — lim_4h=limit//4+100  + forming HTF (COMBO_02 / COMBO_02_V1)
-  final     — lim_4h=limit//4+100  + closed HTF  (COMBO_02_CLOSED_HTF)
+  original  — lim_4h=limit//16+100 + closed HTF (COMBO_02)
+  corrected — lim_4h=limit//4+100  + closed HTF (COMBO_02)
+  final     — lim_4h=limit//4+100  + closed HTF (COMBO_02_CLOSED_HTF)
 
 Research-only. No Telegram / paper / live. Does not mutate frozen COMBO_02_V1.
 """
@@ -695,8 +695,8 @@ def main() -> None:
         candles_4h=c4_orig,
         lim_4h=LIM_4H_ORIGINAL,
         coverage_formula="limit//16 + 100",
-        htf_rule="forming: largest 4h with open_time <= setup_open_time",
-        closed_htf=False,
+        htf_rule="closed: last 4h whose close time <= setup bar close",
+        closed_htf=True,
     )
     print("Running corrected...")
     corrected = run_labeled_walk(
@@ -707,8 +707,8 @@ def main() -> None:
         candles_4h=c4_corr,
         lim_4h=LIM_4H_CORRECTED,
         coverage_formula="limit//4 + 100",
-        htf_rule="forming: largest 4h with open_time <= setup_open_time",
-        closed_htf=False,
+        htf_rule="closed: last 4h whose close time <= setup bar close",
+        closed_htf=True,
     )
     print("Running final (closed-HTF)...")
     final = run_labeled_walk(

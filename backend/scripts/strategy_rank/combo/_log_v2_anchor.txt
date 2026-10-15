@@ -1,0 +1,12 @@
+[combo_rank] tasks=11 workers=1
+[combo_rank] 1/11 v2_1h_anchor BTCUSDT 1h elapsed=1097s counts={'OK': 2}
+[combo_rank] 2/11 v2_1d_flagship BTCUSDT 1d elapsed=1182s counts={'OK': 4}
+[combo_rank] 3/11 v2_1d_flagship ETHUSDT 1d elapsed=1257s counts={'OK': 6}
+[combo_rank] 4/11 v2_1d_flagship BNBUSDT 1d elapsed=1348s counts={'OK': 8}
+[combo_rank] 5/11 v2_1d_flagship SOLUSDT 1d elapsed=1404s counts={'OK': 10}
+[combo_rank] 6/11 v2_1d_flagship XRPUSDT 1d elapsed=1466s counts={'OK': 12}
+[combo_rank] 7/11 v2_1d_flagship DOGEUSDT 1d elapsed=1524s counts={'OK': 14}
+[combo_rank] 8/11 v2_1d_flagship ADAUSDT 1d elapsed=1575s counts={'OK': 16}
+[combo_rank] 9/11 v2_1d_flagship TRXUSDT 1d elapsed=1632s counts={'OK': 18}
+[combo_rank] 10/11 v2_1d_flagship AVAXUSDT 1d elapsed=1684s counts={'OK': 20}
+[combo_rank] 11/11 v2_1d_flagship LINKUSDT 1d elapsed=1723s counts={'OK': 22}

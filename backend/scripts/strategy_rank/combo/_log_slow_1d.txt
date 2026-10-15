@@ -1,0 +1,21 @@
+[combo_rank] tasks=20 workers=2
+[combo_rank] 1/20 sd_1d BTCUSDT 1d elapsed=733s counts={'OK': 20}
+[combo_rank] 2/20 sd_1d ETHUSDT 1d elapsed=786s counts={'OK': 40}
+[combo_rank] 3/20 sd_1d BNBUSDT 1d elapsed=1551s counts={'OK': 60}
+[combo_rank] 4/20 sd_1d SOLUSDT 1d elapsed=1559s counts={'OK': 80}
+[combo_rank] 5/20 sd_1d DOGEUSDT 1d elapsed=2237s counts={'OK': 100}
+[combo_rank] 6/20 sd_1d XRPUSDT 1d elapsed=2292s counts={'OK': 120}
+[combo_rank] 7/20 sd_1d ADAUSDT 1d elapsed=2739s counts={'OK': 140}
+[combo_rank] 8/20 sd_1d TRXUSDT 1d elapsed=2860s counts={'OK': 160}
+[combo_rank] 9/20 sd_1d AVAXUSDT 1d elapsed=3146s counts={'OK': 180}
+[combo_rank] 10/20 sd_1d LINKUSDT 1d elapsed=3382s counts={'OK': 200}
+[combo_rank] 11/20 v2_1d BTCUSDT 1d elapsed=3401s counts={'OK': 206}
+[combo_rank] 12/20 v2_1d ETHUSDT 1d elapsed=3510s counts={'OK': 210, 'SKIPPED': 1}
+[combo_rank] 13/20 v2_1d BNBUSDT 1d elapsed=3536s counts={'OK': 214, 'SKIPPED': 2}
+[combo_rank] 14/20 v2_1d SOLUSDT 1d elapsed=3588s counts={'OK': 218, 'SKIPPED': 3}
+[combo_rank] 15/20 v2_1d XRPUSDT 1d elapsed=3631s counts={'OK': 222, 'SKIPPED': 4}
+[combo_rank] 16/20 v2_1d DOGEUSDT 1d elapsed=3697s counts={'OK': 226, 'SKIPPED': 5}
+[combo_rank] 17/20 v2_1d ADAUSDT 1d elapsed=3732s counts={'OK': 230, 'SKIPPED': 6}
+[combo_rank] 18/20 v2_1d TRXUSDT 1d elapsed=3785s counts={'OK': 234, 'SKIPPED': 7}
+[combo_rank] 19/20 v2_1d AVAXUSDT 1d elapsed=3807s counts={'OK': 238, 'SKIPPED': 8}
+[combo_rank] 20/20 v2_1d LINKUSDT 1d elapsed=3850s counts={'OK': 242, 'SKIPPED': 9}
