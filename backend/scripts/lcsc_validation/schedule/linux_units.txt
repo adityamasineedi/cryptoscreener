@@ -1,0 +1,25 @@
+# LCSC forward runner on Linux. Pick cron OR systemd. Paths assume the repo at /srv/cryptoscreener.
+
+# --- cron (crontab -e), minute 20 of every hour, UTC host clock ---
+20 * * * * cd /srv/cryptoscreener/backend && PYTHONPATH=. .venv/bin/python scripts/lcsc_validation/forward.py run >> scripts/lcsc_validation/forward_out/cron.log 2>&1 || echo "$(date -u +%FT%TZ) LCSC forward run failed: exit $?" >> scripts/lcsc_validation/forward_out/ALERTS.log
+# daily backup at 00:40 UTC
+40 0 * * * cd /srv/cryptoscreener/backend && d=/var/backups/lcsc/forward_out_$(date -u +\%Y\%m\%dT\%H\%M\%SZ) && mkdir -p "$d" && cp scripts/lcsc_validation/forward_out/*.jsonl "$d"/ && (cd "$d" && sha256sum *.jsonl > SHA256SUMS) && PYTHONPATH=. .venv/bin/python scripts/lcsc_validation/forward.py verify-records --path "$d"
+
+# --- systemd: /etc/systemd/system/lcsc-forward.service ---
+# [Unit]
+# Description=LCSC v1 ETHUSDT forward-validation run (read-only)
+# [Service]
+# Type=oneshot
+# WorkingDirectory=/srv/cryptoscreener/backend
+# Environment=PYTHONPATH=.
+# ExecStart=/srv/cryptoscreener/backend/.venv/bin/python scripts/lcsc_validation/forward.py run
+# ExecStopPost=/bin/sh -c 'test "$SERVICE_RESULT" = success || echo "$(date -u +%%FT%%TZ) LCSC forward run failed: $EXIT_STATUS" >> scripts/lcsc_validation/forward_out/ALERTS.log'
+#
+# --- /etc/systemd/system/lcsc-forward.timer ---
+# [Timer]
+# OnCalendar=*-*-* *:20:00 UTC
+# Persistent=true
+# [Install]
+# WantedBy=timers.target
+#
+# systemctl enable --now lcsc-forward.timer ; systemctl list-timers lcsc-forward.timer

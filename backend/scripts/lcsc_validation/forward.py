@@ -51,7 +51,7 @@ sys.path.insert(0, str(BACKEND / "scripts" / "strategy_rank" / "multicap"))
 import study as S  # noqa: E402  (the archived simulator: rules, costs, regimes)
 
 UTC = timezone.utc
-CONTRACT_ID = "LCSC_V1_ETHUSDT_LONG/FWD-2"
+CONTRACT_ID = "LCSC_V1_ETHUSDT_LONG/FWD-3"
 SYMBOL = "ETHUSDT"
 SIDE = "LONG"
 FORWARD_START = datetime(2026, 10, 16, tzinfo=UTC)
@@ -71,6 +71,8 @@ FUNDING_INTERVAL = timedelta(hours=8)
 CANDLE_STALE_AFTER = timedelta(minutes=90)  # after the close of the bar that should be the latest
 FUNDING_STALE_AFTER = timedelta(hours=1)  # after a settlement time that should be in the data
 STALE_RUN_LOCK_AFTER = timedelta(hours=2)
+RUN_SCHEDULE = "hourly at minute 20 UTC (scripts/lcsc_validation/schedule/)"
+MAX_RUN_GAP = timedelta(hours=3)  # two missed hourly runs are tolerated; a third is an exception
 GREY_ZONE_LANGUAGE = (
     "A NO_PASS_CONTINUE result at 40 trades is insufficient evidence, not evidence of failure. "
     "It may continue only under the predeclared continuation limit."
@@ -132,7 +134,8 @@ def contract_terms() -> dict[str, Any]:
         "grey_zone": {"continuation_max_closed_trades": CONTINUATION_MAX_TRADES,
                       "continuation_max_time": CONTINUATION_MAX_TIME.isoformat(),
                       "retire_as": "KILL_INSUFFICIENT_EDGE", "language": GREY_ZONE_LANGUAGE},
-        "uptime": {"candle_stale_after_minutes": CANDLE_STALE_AFTER.total_seconds() / 60,
+        "uptime": {"schedule": RUN_SCHEDULE, "max_run_gap_hours": MAX_RUN_GAP.total_seconds() / 3600,
+                   "candle_stale_after_minutes": CANDLE_STALE_AFTER.total_seconds() / 60,
                    "funding_stale_after_minutes": FUNDING_STALE_AFTER.total_seconds() / 60,
                    "funding_interval_hours": FUNDING_INTERVAL.total_seconds() / 3600},
         "data_source": dict(DATA_SOURCE),
@@ -432,6 +435,23 @@ def uptime_checks(candles: Sequence[Mapping[str, Any]], funding: Sequence[Mappin
     return out
 
 
+def missed_run_checks(prev: Mapping[str, Any] | None, *, now: datetime,
+                      forward_start: datetime = FORWARD_START) -> list[dict[str, Any]]:
+    """A gap longer than MAX_RUN_GAP between scheduled runs inside the window is an uptime exception.
+
+    Records are rebuilt from the data on every run, so a missed run loses nothing by itself;
+    the exception exists because a gap also means stale-data and revision checks did not run.
+    """
+    if now < forward_start:
+        return []
+    last = datetime.fromisoformat(prev["as_of"]) if prev and prev.get("as_of") else None
+    since = max(last, forward_start) if last else forward_start
+    if now - since > MAX_RUN_GAP:
+        return [_exc("RUN_MISSED", since.isoformat(),
+                     f"no run between {since.isoformat()} and {now.isoformat()} (limit {MAX_RUN_GAP})")]
+    return []
+
+
 def day_hashes(s: S.Series) -> dict[str, str]:
     days: dict[str, Any] = {}
     for c in s.candles[s.eval_start:]:
@@ -574,7 +594,8 @@ def record_run(candles: Sequence[Mapping[str, Any]], funding: Sequence[Mapping[s
     fates, taken = walk_recorded(s, candidates(s), data_end=len(s.c))
     trades = [trade_record(s, t) for t in taken]
     days = day_hashes(s)
-    exceptions = (data_checks(s, funding, forward_start) + uptime_checks(closed_bars, funding, now=now,
+    exceptions = (missed_run_checks(store.last_run(), now=now, forward_start=forward_start)
+                  + data_checks(s, funding, forward_start) + uptime_checks(closed_bars, funding, now=now,
                                                                           forward_start=forward_start)
                   + revision_checks(store.last_run(), days, trades))
     for e in exceptions:
@@ -724,6 +745,8 @@ def main(argv: list[str] | None = None) -> int:
     ev = sub.add_parser("evaluate")
     ev.add_argument("--diagnostic", action="store_true",
                     help="NON_ACCEPTANCE_DIAGNOSTIC read before the gates; logged, never a pass; cannot bypass drift")
+    vr = sub.add_parser("verify-records")
+    vr.add_argument("--path", default=None, help="a record store or a backup copy (default: forward_out)")
     sub.add_parser("freeze-contract")
     rf = sub.add_parser("refreeze")
     rf.add_argument("--new-version", required=True)
@@ -736,6 +759,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     now = datetime.now(UTC)
 
+    if args.cmd == "verify-records":
+        target = Path(args.path) if args.path else OUT
+        if not target.is_dir():
+            print(f"REFUSED: {target} is not a directory")
+            return 2
+        problems = Store(target).verify()
+        print(json.dumps({"path": str(target), "integrity": "OK" if not problems else "BROKEN", "problems": problems},
+                         indent=1))
+        return 0 if not problems else 4
     if args.cmd == "freeze-contract":
         try:
             lock = write_lock(LOCK_PATH)

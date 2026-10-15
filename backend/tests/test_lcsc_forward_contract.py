@@ -249,3 +249,39 @@ def test_crashed_run_is_recorded_and_concurrent_runs_are_refused(tmp_path):
     later.release()
     assert not (tmp_path / "runner.lock").exists()
     assert later.verify() == []
+
+
+# ---- scheduled runs -------------------------------------------------------------------------------
+
+
+def test_a_missed_scheduled_run_creates_an_uptime_exception():
+    start = F.FORWARD_START
+    on_time = {"as_of": (start + timedelta(hours=5, minutes=20)).isoformat()}
+    assert F.missed_run_checks(on_time, now=start + timedelta(hours=6, minutes=20)) == []
+    late = F.missed_run_checks(on_time, now=start + timedelta(hours=9, minutes=21))  # 4h01 since the last run
+    assert [e["category"] for e in late] == ["RUN_MISSED"]
+    assert late[0]["id"] == f"RUN_MISSED:{(start + timedelta(hours=5, minutes=20)).isoformat()}"
+    # Nothing ran since the window opened.
+    first = F.missed_run_checks({"as_of": (start - timedelta(hours=1)).isoformat()}, now=start + timedelta(hours=4))
+    assert first[0]["id"] == f"RUN_MISSED:{start.isoformat()}"
+    assert F.missed_run_checks(None, now=start - timedelta(hours=10)) == []  # before the window: not checked
+
+
+def test_missed_run_exception_is_recorded_and_blocks_acceptance(tmp_path):
+    store = F.Store(tmp_path)
+    store.add_run({"as_of": (F.FORWARD_START + timedelta(hours=1)).isoformat(), "closed_trades": []})
+    for e in F.missed_run_checks(store.last_run(), now=F.FORWARD_START + timedelta(days=2)):
+        store.add_exception(e)
+    assert [e["category"] for e in store.open_exceptions()] == ["RUN_MISSED"]
+    read = F.evaluate(book(40, 1.9), now=AFTER, open_exceptions=store.open_exceptions(), drift_list=[], data_fp="x")
+    assert read["decision"] == "KILL" and "UNRESOLVED_EXCEPTIONS" in read["kills"]
+
+
+def test_verify_records_checks_a_backup_copy(tmp_path, monkeypatch):
+    store = F.Store(tmp_path / "live")
+    store.add_run({"as_of": "2026-10-16T00:20:00+00:00", "closed_trades": []})
+    backup = tmp_path / "backup"
+    shutil.copytree(tmp_path / "live", backup)
+    assert F.main(["verify-records", "--path", str(backup)]) == 0
+    (backup / "runs.jsonl").write_text((backup / "runs.jsonl").read_text().replace("00:20", "00:21"))
+    assert F.main(["verify-records", "--path", str(backup)]) == 4
