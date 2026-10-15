@@ -93,15 +93,12 @@ class WebSocketConnection:
         self._life("READER_STARTED")
 
     async def stop(self) -> None:
+        from app.core.shutdown import cancel_tasks
+
         self._stop.set()
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
-            self._life("READER_CANCELLED")
+        await cancel_tasks([self._task], label=f"ws:{self.name}")
+        self._task = None
+        self._life("READER_CANCELLED")
         self.connected = False
         self.reader_running = False
 
@@ -116,6 +113,7 @@ class WebSocketConnection:
                     self.url,
                     ping_interval=self.ping_interval,
                     ping_timeout=20,
+                    close_timeout=2,
                     max_queue=1024,
                     open_timeout=self.open_timeout,
                 ) as ws:

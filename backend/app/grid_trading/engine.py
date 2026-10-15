@@ -14,10 +14,13 @@ from typing import Any
 from app.grid_trading.config import (
     GridConfig,
     GridConfigError,
+    liquidation_price,
     maker_fee_rate,
+    open_grid_cap,
     slot_quantity,
     taker_fee_rate,
     validate_config,
+    worst_case_liquidation_price,
 )
 from app.grid_trading.funding import (
     FUNDING_EXCLUDED,
@@ -36,6 +39,7 @@ from app.grid_trading.funding import (
 from app.grid_trading.levels import build_levels
 
 _DUST = 1e-12
+_CLOSED = ("stop", "max_drawdown", "liquidation", "take_profit")
 
 
 def _f(value: Any, name: str) -> float:
@@ -81,6 +85,8 @@ def _new_state(config: GridConfig, levels: list[float], anchor: float) -> dict[s
         "paths": [],
         "events": [],
         "funding_paid": 0.0,
+        "blocked_buys": 0,
+        "liquidation_fee": 0.0,
     }
 
 
@@ -96,9 +102,17 @@ def _buy_slot(state: dict[str, Any], slot: dict[str, Any], config: GridConfig, t
     fee_quote = notional * fee
     debit = notional + fee_quote
     state["touches"] += 1
-    if state["quote"] + max(1e-6, abs(debit) * 1e-9) < debit:
+    if sum(1 for other in state["slots"] if other["long"]) >= open_grid_cap(config):
+        state["blocked_buys"] += 1
         return False
-    state["quote"] = max(0.0, state["quote"] - debit)
+    # Initial margin: equity after the buy covers (base + qty) * px / leverage.
+    # At 1x this is quote >= debit.
+    borrow = (state["base"] + qty) * px * (1.0 - 1.0 / config.leverage)
+    if state["quote"] + borrow + max(1e-6, abs(debit) * 1e-9) < debit:
+        return False
+    state["quote"] -= debit
+    if config.leverage <= 1:
+        state["quote"] = max(0.0, state["quote"])
     state["base"] += qty
     state["cost_basis"] += debit
     slot["long"] = True
@@ -228,9 +242,37 @@ def _apply_orders(
         _buy_slot(state, slot, config, time)
 
 
+def _liquidate_book(state: dict[str, Any], config: GridConfig, price: float, time: Any) -> None:
+    """Close at the liquidation price. The margin left after the close is forfeited."""
+    _flatten(state, config, price, time, "liquidation")
+    left = max(0.0, state["quote"])
+    state["quote"] -= left
+    state["realized"] -= left
+    state["liquidation_fee"] += left
+
+
 def _finish_bar(state: dict[str, Any], config: GridConfig, candle: dict[str, Any]) -> float:
-    if state["halted"] is None and candle["low"] <= config.stop_price and state["base"] > _DUST:
-        _flatten(state, config, config.stop_price, candle.get("time"), "stop")
+    """Price falls from the open to the low: whichever of stop and liquidation is higher fires first."""
+    time = candle.get("time")
+    if state["halted"] is None and state["base"] > _DUST:
+        liq = liquidation_price(state["quote"], state["base"], config)
+        stop_hit = candle["low"] <= config.stop_price
+        if stop_hit and (liq is None or config.stop_price > liq):
+            _flatten(state, config, config.stop_price, time, "stop")
+        elif liq is not None and candle["low"] <= liq:
+            _liquidate_book(state, config, liq, time)
+        elif stop_hit:
+            _flatten(state, config, config.stop_price, time, "stop")
+    if (
+        state["halted"] is None
+        and config.exit_above_range
+        and candle["close"] > config.range_high
+        and _equity(state, candle["close"]) > config.capital
+    ):
+        holding = state["base"] > _DUST
+        _flatten(state, config, candle["close"], time, "take_profit")
+        if not holding:
+            state["events"].append({"type": "take_profit", "time": time, "price": candle["close"]})
     equity = _equity(state, candle["close"])
     return equity
 
@@ -315,10 +357,13 @@ def _buy_and_hold(
     fee = taker_fee_rate(config)
     slip = _slip(config)
     entry = candles[0]["open"] * (1.0 + slip)
-    qty = config.capital / (entry * (1.0 + fee))
+    qty = _hold_qty(config, entry)
+    quote = config.capital - qty * entry * (1.0 + fee)
+    liq = liquidation_price(quote, qty, config)
+    liquidated = liq is not None and min(bar["low"] for bar in candles) <= liq
     exit_px = candles[-1]["close"] * (1.0 - slip)
     credit = qty * exit_px * (1.0 - fee)
-    equity = credit - funding_paid
+    equity = 0.0 if liquidated else quote + credit - funding_paid
     return {
         "qty": qty,
         "entry": entry,
@@ -326,7 +371,14 @@ def _buy_and_hold(
         "equity": equity,
         "return": equity / config.capital - 1.0,
         "funding_paid": funding_paid,
+        "leverage": config.leverage,
+        "liquidated": liquidated,
     }
+
+
+def _hold_qty(config: GridConfig, entry: float) -> float:
+    """Buy-and-hold at the grid's leverage, so the benchmark carries the same exposure."""
+    return config.capital * config.leverage / (entry * (1.0 + taker_fee_rate(config)))
 
 
 def _funding_qty(
@@ -459,13 +511,13 @@ def run_grid(
 
     for index, bar in enumerate(bars):
         opening_base = float(state["base"])
-        already_closed = state["halted"] in ("stop", "max_drawdown")
+        already_closed = state["halted"] in _CLOSED
         _run_bar(state, config, bar)
         _note_range(state, config, bar)
         nxt = stamp(bars[index + 1]["time"]) if index + 1 < len(bars) else None
         bar_time = stamp(bar["time"])
         if rows and not already_closed:
-            stopped = state["halted"] == "stop"
+            stopped = state["halted"] in ("stop", "liquidation", "take_profit")
             for row in due_settlements(
                 rows, bar_time=bar_time, next_time=nxt, window_end=window_end
             ):
@@ -518,7 +570,7 @@ def run_grid(
         if coarse:
             coverage["warnings"] = [*coverage["warnings"], coarse]
         entry = seen[0]["open"] * (1.0 + _slip(config))
-        hold_qty = config.capital / (entry * (1.0 + taker_fee_rate(config)))
+        hold_qty = _hold_qty(config, entry)
         hold_funding = _window_funding(rows, seen, lambda _index: hold_qty)
         payments = [
             (float(event["payment"]) / float(event["rate"]), float(event["rate"]))
@@ -589,6 +641,15 @@ def run_grid(
         "warnings": coverage["warnings"],
         "funding_included": coverage["funding_included"],
         "leverage": config.leverage,
+        "maintenance_margin_rate": config.maintenance_margin_rate,
+        "max_open_grids": open_grid_cap(config),
+        "worst_case_liquidation_price": worst_case_liquidation_price(config, levels),
+        "stop_hits": sum(1 for event in state["events"] if event.get("type") == "stop"),
+        "liquidations": sum(1 for event in state["events"] if event.get("type") == "liquidation"),
+        "take_profit_exits": sum(1 for event in state["events"] if event.get("type") == "take_profit"),
+        "drawdown_kills": sum(1 for event in state["events"] if event.get("type") == "drawdown"),
+        "blocked_buys": state["blocked_buys"],
+        "liquidation_fee": state["liquidation_fee"],
         "quote": state["quote"],
         "base": state["base"],
         "equity": _equity(state, last["close"]) if state["base"] > _DUST else state["quote"],

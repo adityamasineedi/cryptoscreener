@@ -19,6 +19,31 @@ def _base_from_symbol(symbol: str) -> str:
     return symbol.upper()
 
 
+def _lookup_bases(symbol: str) -> list[str]:
+    """Futures tickers often prefix the spot ticker (1000PEPE, 1000000MOG)."""
+    base = _base_from_symbol(symbol)
+    bases = [base]
+    for prefix in ("1000000", "100000", "10000", "1000"):
+        if base.startswith(prefix) and len(base) > len(prefix) + 1:
+            bases.append(base[len(prefix) :])
+    return bases
+
+
+def _protocol_tvl(proto: dict[str, Any]) -> float:
+    try:
+        return float(proto.get("tvl") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _index_put(index: dict[str, dict[str, Any]], key: str, entry: dict[str, Any]) -> None:
+    if not key:
+        return
+    prev = index.get(key)
+    if prev is None or _protocol_tvl(entry) >= _protocol_tvl(prev):
+        index[key] = entry
+
+
 class DefiLlamaProvider(BaseFundamentalsProvider):
     name = "defillama"
 
@@ -44,28 +69,35 @@ class DefiLlamaProvider(BaseFundamentalsProvider):
                 name = p.get("name") or p.get("slug") or ""
                 entry = {**p, "_ts": ts, "_from_cache": from_cache}
                 if sym:
-                    index[str(sym).upper()] = entry
+                    for part in re.split(r"[,/|]+", str(sym)):
+                        token = re.sub(r"[^A-Za-z0-9]", "", part).upper()
+                        _index_put(index, token, entry)
                 if name:
-                    index[_normalize_name(str(name))] = entry
+                    _index_put(index, _normalize_name(str(name)), entry)
                 slug = p.get("slug")
                 if slug:
-                    index[_normalize_name(str(slug))] = entry
+                    _index_put(index, _normalize_name(str(slug)), entry)
         self._protocol_index = index
         return index
 
     def _match_protocol(self, symbol: str, index: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
-        base = _base_from_symbol(symbol)
-        if base in index:
-            return index[base]
-        norm = _normalize_name(base)
-        if norm in index:
-            return index[norm]
-        for key, proto in index.items():
-            if key.isupper() and len(key) <= 6:
+        for base in _lookup_bases(symbol):
+            if base in index:
+                return index[base]
+            norm = _normalize_name(base)
+            if norm in index:
+                return index[norm]
+        # Substring names only for longer tickers — "eth" must not hit "ethereum".
+        for base in _lookup_bases(symbol):
+            norm = _normalize_name(base)
+            if len(norm) < 4:
                 continue
-            pname = _normalize_name(str(proto.get("name", "")))
-            if norm and (norm in pname or pname.startswith(norm)):
-                return proto
+            for key, proto in index.items():
+                if key.isupper() and len(key) <= 6:
+                    continue
+                pname = _normalize_name(str(proto.get("name", "")))
+                if pname.startswith(norm):
+                    return proto
         return None
 
     async def get_market_data(self, symbols: list[str]) -> dict[str, dict[str, FreshValue[Any]]]:

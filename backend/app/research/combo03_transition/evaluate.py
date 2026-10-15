@@ -33,6 +33,7 @@ from app.research.combo03_transition.state_machine import (
     SetupState,
 )
 from app.research.combo03_transition.variants import (
+    block_long_in_bearish_trend,
     require_15m_confirmation,
     require_displacement,
     variant_for_combination_id,
@@ -93,6 +94,7 @@ def evaluate_combo03_transition_at_bar(
     swings: Sequence[Any] | None = None,
     atr_value: float | None = None,
     volumes: Sequence[float] | None = None,
+    avg_volume_ref: float | None = None,
     candles_15m: Sequence[Mapping[str, Any]] | None = None,
     v2_context: Any | None = None,
     **_unused: Any,
@@ -153,6 +155,7 @@ def evaluate_combo03_transition_at_bar(
         swings=swing_list,
         atr_value=atr_value,
         volumes=volumes,
+        avg_volume_ref=avg_volume_ref,
         serialize_swings=False,
     )
     swing_objs = tf_analysis.get("_swings_objs") or []
@@ -558,6 +561,25 @@ def _finalize_entry(
             signal_time=signal_time,
             reason="DUPLICATE_SETUP_ONE_ENTRY",
             regime=setup.regime_at_setup,
+            setup=setup,
+        )
+
+    # Variant B: no LONG against a confirmed downtrend. NEUTRAL, BULLISH and
+    # unavailable trend stay eligible. One attempt per setup, same as a risk reject.
+    if (
+        str(setup.direction) == "LONG"
+        and block_long_in_bearish_trend(variant_for_combination_id(cid))
+        and ctx.trend_at(min(as_of_index, len(ctx.setup_candles) - 1)) == "BEARISH"
+    ):
+        regime_at_setup = setup.regime_at_setup
+        setup.reset(reason="LONG_BLOCKED_BEARISH_TREND")
+        return _no_setup(
+            combination_id=cid,
+            as_of_index=as_of_index,
+            signal_time=signal_time,
+            reason="LONG_BLOCKED_BEARISH_TREND",
+            regime=regime_at_setup,
+            direction="LONG",
             setup=setup,
         )
 

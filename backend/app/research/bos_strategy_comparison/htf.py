@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
-from app.signals._candle_utils import candle_time, series_ohlcv
+from app.signals._candle_utils import candle_time, ohlc, series_ohlcv
 from app.signals.config import SignalConfig
 from app.signals.schemas import SwingRecord
 from app.signals.swing_detector import extend_swings, swings_for_timeframe
@@ -144,7 +144,16 @@ def trend_at_as_of(
         symbol=symbol,
         as_of_index=as_of_index,
     )
-    out = _trend_label_from_infer(infer_trend(swings))
+    close_px = None
+    if 0 <= as_of_index < len(candles):
+        close_px = ohlc(candles, as_of_index)[3]
+    out = _trend_label_from_infer(
+        infer_trend(
+            swings,
+            close=float(close_px) if close_px is not None else None,
+            mode=getattr(cfg, "trend_mode", None),
+        )
+    )
     if cache is not None:
         cache[key] = out
     return out
@@ -171,6 +180,12 @@ def precompute_htf_trend_cache(
     sc = cfg.swing_for(timeframe)
     _, highs, lows, closes, _ = series_ohlcv(list(candles))
     swings: list[SwingRecord] = []
+    mode = getattr(cfg, "trend_mode", None)
+    # Legacy trend depends only on the swing list. Recompute when a swing
+    # confirms. choch_persistent also reads the bar close, so it stays per bar.
+    legacy_trend = str(mode or "legacy").strip().lower() != "choch_persistent"
+    label = "HTF_UNAVAILABLE"
+    prev_n = -1
     for i in range(len(candles)):
         swings = extend_swings(
             swings,
@@ -186,7 +201,17 @@ def precompute_htf_trend_cache(
             lows=lows,
             closes=closes,
         )
-        out[(timeframe, i)] = _trend_label_from_infer(infer_trend(swings))
+        if not legacy_trend or len(swings) != prev_n:
+            prev_n = len(swings)
+            close_px = closes[i] if i < len(closes) else None
+            label = _trend_label_from_infer(
+                infer_trend(
+                    swings,
+                    close=float(close_px) if close_px is not None else None,
+                    mode=mode,
+                )
+            )
+        out[(timeframe, i)] = label
     return out
 
 

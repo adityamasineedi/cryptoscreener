@@ -78,6 +78,27 @@ class TestDateBounds:
         bounds = resolve_date_bounds("2026-10-01", "2026-09-27")
         assert bounds["end_exclusive"] <= bounds["start"]
 
+    def test_tail_warmup_precedes_eval_window(self):
+        series = make_series(1300)
+        window, eval_start, meta = slice_candles_for_research(
+            series, limit=1200, warmup_bars=100
+        )
+        assert len(window) == 1300
+        assert eval_start == 100
+        assert meta["eval_bars"] == 1200
+        assert meta["warmup_bars_applied"] == 100
+        assert window[eval_start]["time"] == series[100]["time"]
+        assert window[-1]["time"] == series[-1]["time"]
+
+    def test_tail_without_extra_history_does_not_shrink_eval(self):
+        series = make_series(1200)
+        window, eval_start, meta = slice_candles_for_research(
+            series, limit=1200, warmup_bars=100
+        )
+        assert len(window) == 1200
+        assert eval_start == 0
+        assert meta["eval_bars"] == 1200
+
     def test_slice_respects_half_open_and_warmup(self):
         series = make_series(96 * 5)  # ~5 days of 15m from 2026-09-20
         start = datetime(2026, 9, 27, tzinfo=timezone.utc)

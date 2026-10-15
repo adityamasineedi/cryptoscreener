@@ -33,6 +33,16 @@ def _candle(sym: str, tf: str, t: datetime) -> Candle:
     )
 
 
+def test_older_history_after_the_live_tip_stays_oldest_first():
+    store = OHLCVStore()
+    tip = datetime(2026, 10, 11, 8, 0, tzinfo=timezone.utc)
+    older = tip - timedelta(hours=13)
+    asyncio.run(store.ingest_history([_candle("ETHUSDT", "1h", tip)]))
+    asyncio.run(store.ingest_history([_candle("ETHUSDT", "1h", older)]))
+    closed = store.get_closed("ETHUSDT", "1h")
+    assert [c.open_time for c in closed] == [older, tip]
+
+
 def test_ranked_symbols_by_volume_not_hardcoded():
     settings = Settings(USE_REAL_DATA=True)
     market = MarketDataStore()
@@ -163,6 +173,74 @@ def test_trailing_stale_detects_frozen_tip():
     assert is_trailing_stale(prev_closed, "1m", now=mid)
 
     # Same series with current open candle is fresh
+    open_c = Candle(
+        symbol="BTCUSDT",
+        timeframe="1m",
+        open_time=datetime(2026, 10, 2, 9, 45, tzinfo=timezone.utc),
+        close_time=datetime(2026, 10, 2, 9, 46, tzinfo=timezone.utc),
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        is_closed=False,
+        timestamp=mid,
+        source="test",
+        status=DataStatus.LIVE,
+    )
+    assert not is_trailing_stale([*prev_closed, open_c], "1m", now=mid)
+
+
+def test_forming_candle_does_not_hide_skipped_prior_close():
+    """Current open candle must not mask a missing close before it."""
+    from app.ingestion.klines import is_trailing_stale
+    from app.models.schemas import DataStatus
+
+    now = datetime(2026, 10, 14, 5, 30, tzinfo=timezone.utc)
+    closed_day = _candle("BTCUSDT", "1d", datetime(2026, 10, 12, tzinfo=timezone.utc))
+    forming_day = Candle(
+        symbol="BTCUSDT",
+        timeframe="1d",
+        open_time=datetime(2026, 10, 14, tzinfo=timezone.utc),
+        close_time=datetime(2026, 10, 15, tzinfo=timezone.utc),
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        is_closed=False,
+        timestamp=now,
+        source="test",
+        status=DataStatus.LIVE,
+    )
+    assert is_trailing_stale([closed_day, forming_day], "1d", now=now)
+
+    now_h = datetime(2026, 10, 14, 7, 10, tzinfo=timezone.utc)
+    closed_hour = _candle(
+        "BTCUSDT", "1h", datetime(2026, 10, 14, 5, tzinfo=timezone.utc)
+    )
+    forming_hour = Candle(
+        symbol="BTCUSDT",
+        timeframe="1h",
+        open_time=datetime(2026, 10, 14, 7, tzinfo=timezone.utc),
+        close_time=datetime(2026, 10, 14, 8, tzinfo=timezone.utc),
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        is_closed=False,
+        timestamp=now_h,
+        source="test",
+        status=DataStatus.LIVE,
+    )
+    assert is_trailing_stale([closed_hour, forming_hour], "1h", now=now_h)
+
+    # Closed tip is the previous bar and the open candle is the current bar.
+    mid = datetime(2026, 10, 2, 9, 45, 30, tzinfo=timezone.utc)
+    prev_closed = [
+        _candle("BTCUSDT", "1m", datetime(2026, 10, 2, 9, 44, tzinfo=timezone.utc))
+    ]
     open_c = Candle(
         symbol="BTCUSDT",
         timeframe="1m",
@@ -408,6 +486,129 @@ async def test_enqueue_skips_complete_and_orders_by_score():
     # Highest urgency should be a P0 TF for the high-volume symbol
     assert first.symbol == "HIUSDT"
     assert first.timeframe in ("1d", "4h", "1h")
+
+
+def _daily_open(now: datetime) -> datetime:
+    step = 86_400_000
+    current_open_ms = (int(now.timestamp() * 1000) // step) * step
+    return datetime.fromtimestamp(current_open_ms / 1000.0, tz=timezone.utc)
+
+
+def _kline_row(open_time: datetime, close_time: datetime) -> list:
+    return [
+        int(open_time.timestamp() * 1000),
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        int(close_time.timestamp() * 1000),
+        "1",
+        1,
+        "1",
+        "1",
+        "0",
+    ]
+
+
+def _forming_daily(open_time: datetime, now: datetime) -> Candle:
+    from app.models.schemas import DataStatus
+
+    return Candle(
+        symbol="BTCUSDT",
+        timeframe="1d",
+        open_time=open_time,
+        close_time=open_time + timedelta(days=1),
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        is_closed=False,
+        timestamp=now,
+        source="test",
+        status=DataStatus.LIVE,
+    )
+
+
+@pytest.mark.asyncio
+async def test_btc_daily_skipped_close_offered_outside_prefer_cap():
+    """BTCUSDT 1d trailing-stale tail runs even when the symbol misses the cap."""
+    now = datetime.now(timezone.utc)
+    current_open = _daily_open(now)
+    closed_tip = current_open - timedelta(days=2)
+    missing_close = current_open - timedelta(days=1)
+
+    settings = Settings(USE_REAL_DATA=True)
+    market = MarketDataStore()
+    ohlcv = OHLCVStore()
+    rest = MagicMock()
+
+    async def _klines(*_args, **_kwargs):
+        return [
+            _kline_row(missing_close, current_open),
+            _kline_row(current_open, current_open + timedelta(days=1)),
+        ]
+
+    rest.futures_klines = _klines
+    svc = ProgressiveBackfillService(settings, rest, market, ohlcv)
+    svc.active_universe_count = 5
+    svc._visible = {f"S{i:02d}USDT" for i in range(25)}
+    for sym in svc._visible:
+        market.tickers[sym] = TickerUpdate(
+            symbol=sym,
+            market_type="futures_perp",
+            price=1.0,
+            quote_volume_24h=1000.0,
+            timestamp=now,
+            source="test",
+        )
+
+    active = svc.select_active_universe()
+    ranked = svc.ranked_symbols(active)
+    prefer = list(
+        dict.fromkeys([*sorted(svc._visible), *sorted(svc._watchlist), *ranked])
+    )
+    capped = prefer[: max(20, min(len(prefer), svc.active_universe_count))]
+    assert "BTCUSDT" not in capped
+
+    await ohlcv.ingest_history([_candle("BTCUSDT", "1d", closed_tip)])
+    await ohlcv.upsert_candle(_forming_daily(current_open, now))
+
+    n = await svc._enqueue_stale_tips()
+    assert n == 1
+    job = await svc._queue.get()
+    assert job.symbol == "BTCUSDT"
+    assert job.timeframe == "1d"
+    assert job.reason == "trailing_stale"
+
+    closed = ohlcv.get_closed("BTCUSDT", "1d")
+    assert missing_close in {c.open_time for c in closed}
+    assert all(c.is_closed and c.open_time < current_open for c in closed)
+    forming = ohlcv.get_open("BTCUSDT", "1d")
+    assert forming is not None
+    assert forming.open_time == current_open
+    assert forming.is_closed is False
+
+    fresh_calls: list[tuple] = []
+
+    async def _fresh_klines(*args, **kwargs):
+        fresh_calls.append((args, kwargs))
+        return []
+
+    fresh_ohlcv = OHLCVStore()
+    fresh_rest = MagicMock()
+    fresh_rest.futures_klines = _fresh_klines
+    fresh = ProgressiveBackfillService(settings, fresh_rest, market, fresh_ohlcv)
+    fresh.active_universe_count = 5
+    fresh._visible = set(svc._visible)
+    await fresh_ohlcv.ingest_history(
+        [_candle("BTCUSDT", "1d", current_open - timedelta(days=1))]
+    )
+    await fresh_ohlcv.upsert_candle(_forming_daily(current_open, now))
+    assert await fresh._enqueue_stale_tips() == 0
+    assert fresh.queue_size == 0
+    assert fresh_calls == []
 
 
 @pytest.mark.asyncio

@@ -182,17 +182,25 @@ def is_trailing_stale(
     max_lag_intervals: float = 1.25,
     now: datetime | None = None,
 ) -> bool:
-    """True when the newest closed/open bar lags wall-clock by > N intervals.
+    """True when the series lags the last completed interval.
 
     Internal gaps are handled by find_gaps / missing_fetch_ranges. This catches
-    the common failure mode where history looks COMPLETE but the tip is frozen
-    because the kline websocket went silent.
+    a frozen tip (kline websocket silent) and a forming candle that skips a
+    close between the last stored bar and the current interval.
 
     Callers SHOULD include the forming/open candle in ``candles`` when present.
     With only closed bars, a series past ~25% into the current interval looks
     stale (lag > 1.25×step) — that is intentional so we pull the forming tip.
-    With the open candle included, tip.open_time is the current interval start
-    and lag stays < 1.0×step for the whole bar (hence not stale).
+    With the open candle included, the series stays fresh when the newest bar
+    before the current interval is that previous interval (lag stays inside
+    the open bar).
+
+    A forming candle for the current interval does not hide a skipped close.
+    If the newest bar strictly before the current interval is older than the
+    last completed interval — or the current bar is present and nothing before
+    it is — the series is trailing-stale so the missing close is fetched.
+    Example: closed 1d tip 2026-10-12, forming candle 2026-10-14, wall clock
+    after 2026-10-14 00:00Z → stale (2026-10-13 must be stored closed).
 
     Default 1.25 intervals: a closed tip must advance into the current bar
     (e.g. daily must pick up today's forming candle once the day opens).
@@ -203,15 +211,33 @@ def is_trailing_stale(
     step = TIMEFRAME_MS.get(tf)
     if not step:
         return False
+    wall = now or datetime.now(timezone.utc)
+    wall_ms = int(wall.timestamp() * 1000)
+    current_open_ms = (wall_ms // step) * step
+    last_completed_open_ms = current_open_ms - step
+
+    def _open_ms(candle: Candle) -> int:
+        ot = candle.open_time
+        if ot.tzinfo is None:
+            ot = ot.replace(tzinfo=timezone.utc)
+        return int(ot.timestamp() * 1000)
+
+    opens = [_open_ms(c) for c in candles]
+    prior = [ms for ms in opens if ms < current_open_ms]
+    # Forming bar at the current open must not conceal a missing close.
+    if prior:
+        if max(prior) < last_completed_open_ms:
+            return True
+    elif max(opens) >= current_open_ms:
+        return True
+
     tip = max(candles, key=lambda c: c.open_time)
     tip_ot = tip.open_time
     if tip_ot.tzinfo is None:
         tip_ot = tip_ot.replace(tzinfo=timezone.utc)
-    wall = now or datetime.now(timezone.utc)
-    # Interval-boundary fast path: tip already covers the current open interval.
-    wall_ms = int(wall.timestamp() * 1000)
     tip_ms = int(tip_ot.timestamp() * 1000)
-    current_open_ms = (wall_ms // step) * step
+    # Interval-boundary fast path: tip already covers the current open interval
+    # and the previous close is present.
     if tip_ms >= current_open_ms:
         return False
     lag_ms = (wall - tip_ot).total_seconds() * 1000.0

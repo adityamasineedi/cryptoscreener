@@ -9,6 +9,7 @@ from app.research.combination_backtest import run_combination_backtest
 from app.research.entry_diagnostics import (
     REASON_BOS_PREFILTER_SKIP,
     REASON_ENTRY_ACCEPTED,
+    REASON_STICKY_BOS_SKIP,
     REASON_NO_STRATEGY_ENTRY,
     REASON_POSITION_ACTIVE,
     STAGE_BOS,
@@ -107,6 +108,53 @@ def test_diagnostics_do_not_change_signal_decisions():
     # Side-channel present but must not alter trades.
     assert isinstance(a.get("entry_diagnostics"), dict)
     assert len(a["entry_diagnostics"]) > 0
+
+
+def test_pullback_combinations_keep_evaluating_the_same_break():
+    """COMBO_02 may skip later bars of one break. Pullback combos must not."""
+    t0 = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    candles = []
+    for i in range(110):
+        close = 100.0
+        high = 100.2
+        low = 99.8
+        candles.append(
+            {
+                "time": t0 + timedelta(hours=i),
+                "open": close,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": 1000.0,
+            }
+        )
+    # Two higher highs and two higher lows, then a close that stays above
+    # the last confirmed high without printing another swing.
+    candles[55]["high"] = 140.0
+    candles[62]["low"] = 90.0
+    candles[70]["high"] = 150.0
+    candles[78]["low"] = 95.0
+    for i in range(85, 110):
+        candles[i]["open"] = 160.0
+        candles[i]["high"] = 160.2
+        candles[i]["low"] = 159.5
+        candles[i]["close"] = 160.0
+    bos_only = run_combination_backtest(
+        "BTCUSDT", "1h", candles, get_combination("COMBO_02")
+    )
+    pullback = run_combination_backtest(
+        "BTCUSDT", "1h", candles, get_combination("COMBO_03")
+    )
+
+    def _sticky(out: dict) -> int:
+        return sum(
+            1
+            for row in (out.get("entry_diagnostics") or {}).values()
+            if row.get("primary_rejection_reason") == REASON_STICKY_BOS_SKIP
+        )
+
+    assert _sticky(bos_only) > 0
+    assert _sticky(pullback) == 0
 
 
 def test_no_confirmed_bos_prefilter_classified():

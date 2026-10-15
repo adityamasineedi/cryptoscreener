@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -36,6 +37,23 @@ def _synth_candles(n: int = 120) -> list[dict]:
             }
         )
     return rows
+
+
+def test_spawn_python_skips_a_zero_byte_store_alias(monkeypatch, tmp_path):
+    alias = tmp_path / "WindowsApps" / "python.exe"
+    alias.parent.mkdir()
+    alias.write_bytes(b"")
+    real = tmp_path / "Scripts" / "python.exe"
+    real.parent.mkdir()
+    real.write_bytes(b"venv")
+    monkeypatch.setattr(sys, "executable", str(alias))
+    monkeypatch.setattr(sys, "prefix", str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["uvicorn"])
+    monkeypatch.setenv("VIRTUAL_ENV", str(tmp_path))
+    monkeypatch.setenv("__PYVENV_LAUNCHER__", str(real))
+    from app.research.backtest_cpu_pool import _spawn_python_executable
+
+    assert _spawn_python_executable() == str(real)
 
 
 def test_pool_is_bounded_single_worker():

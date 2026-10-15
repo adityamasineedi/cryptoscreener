@@ -194,14 +194,11 @@ class OIScheduler:
         self._task = asyncio.create_task(self._run_loop(), name="oi_scheduler")
 
     async def stop(self) -> None:
+        from app.core.shutdown import cancel_tasks
+
         self._stop.set()
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        await cancel_tasks([self._task], label="oi")
+        self._task = None
 
     def _ranked_universe(self) -> list[str]:
         """Rank discovered symbols for large-cap selection."""

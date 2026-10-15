@@ -16,6 +16,7 @@ from app.research.trade_fees import (
     calculate_execution_fee,
     enrich_trade_execution,
     enrich_trades,
+    summarize_net_trades,
 )
 
 
@@ -356,3 +357,130 @@ def test_limit_retest_uses_maker_on_entry():
     assert row["fee_exit_rate"] == 0.0004
     assert row["entry_fee_type"] == "MAKER"
     assert row["exit_fee_type"] == "TAKER"
+
+
+def _tight_loser(signal_time: str, exit_time: str) -> dict:
+    return {
+        "direction": "LONG",
+        "entry_price": 100.0,
+        "stop_price": 99.9,
+        "exit_price": 99.0,
+        "outcome": "SL",
+        "signal_time": signal_time,
+        "exit_time": exit_time,
+        "condition_snapshot": {"entry_type": "MARKET"},
+    }
+
+
+def _wide_trade(exit_price: float, signal_time: str, exit_time: str) -> dict:
+    return {
+        "direction": "LONG",
+        "entry_price": 100.0,
+        "stop_price": 95.0,
+        "exit_price": exit_price,
+        "outcome": "TP1" if exit_price > 100.0 else "SL",
+        "signal_time": signal_time,
+        "exit_time": exit_time,
+        "condition_snapshot": {"entry_type": "MARKET"},
+    }
+
+
+def test_running_equity_caps_against_equity_at_entry():
+    trades = [
+        _tight_loser("2025-01-01T00:00:00Z", "2025-01-01T01:00:00Z"),
+        _tight_loser("2025-01-01T02:00:00", "2025-01-01T03:00:00+00:00"),
+    ]
+    kwargs = dict(risk_usd=20.0, leverage=2.0, account_equity=1000.0)
+
+    legacy = enrich_trades(trades, **kwargs)
+    assert [t["margin_usd"] for t in legacy] == [
+        pytest.approx(1000.0),
+        pytest.approx(1000.0),
+    ]
+
+    running = enrich_trades(trades, running_equity=True, **kwargs)
+    first, second = running
+    assert first["account_equity"] == pytest.approx(1000.0)
+    assert first["capped_by_leverage"] is True
+    equity = 1000.0 + first["net_pnl_usd"]
+    assert second["account_equity"] == pytest.approx(equity)
+    assert second["margin_usd"] == pytest.approx(equity)
+    assert second["margin_usd"] < 1000.0
+    assert second["notional_entry_usd"] <= equity * 2.0 + 1e-9
+
+
+def test_running_equity_ignores_trades_still_open_at_entry():
+    trades = [
+        _tight_loser("2025-01-01T00:00:00Z", "2025-01-01T05:00:00Z"),
+        _tight_loser("2025-01-01T02:00:00Z", "2025-01-01T06:00:00Z"),
+    ]
+    running = enrich_trades(
+        trades, risk_usd=20.0, leverage=2.0, account_equity=1000.0, running_equity=True
+    )
+    assert running[1]["account_equity"] == pytest.approx(1000.0)
+    assert running[1]["margin_usd"] == pytest.approx(1000.0)
+
+
+def test_running_equity_leaves_uncapped_trades_unchanged():
+    trades = [
+        _wide_trade(110.0, "2025-01-01T00:00:00Z", "2025-01-01T01:00:00Z"),
+        _wide_trade(95.0, "2025-01-01T02:00:00Z", "2025-01-01T03:00:00Z"),
+    ]
+    kwargs = dict(risk_usd=20.0, leverage=2.0, account_equity=1000.0)
+    legacy = enrich_trades(trades, **kwargs)
+    running = enrich_trades(trades, running_equity=True, **kwargs)
+    for a, b in zip(legacy, running):
+        assert b["capped_by_leverage"] is False
+        assert b["qty"] == a["qty"]
+        assert b["net_pnl_usd"] == a["net_pnl_usd"]
+
+
+def test_summarize_net_trades_two_r_bases():
+    enriched = enrich_trades(
+        [
+            _tight_loser("2025-01-01T00:00:00Z", "2025-01-01T01:00:00Z"),
+            _wide_trade(110.0, "2025-01-01T02:00:00Z", "2025-01-01T03:00:00Z"),
+        ],
+        risk_usd=20.0,
+        leverage=2.0,
+        account_equity=1000.0,
+        running_equity=True,
+    )
+    loser, winner = enriched
+    assert loser["capped_by_leverage"] is True
+    assert winner["capped_by_leverage"] is False
+    nets = [loser["net_pnl_usd"], winner["net_pnl_usd"]]
+
+    s = summarize_net_trades(enriched, risk_usd=20.0)
+    assert s["average_R_usd_basis_net"] * 2 * 20.0 == pytest.approx(sum(nets))
+    assert s["average_R_usd_basis_gross"] * 2 * 20.0 == pytest.approx(
+        loser["gross_pnl_usd"] + winner["gross_pnl_usd"]
+    )
+    # Capped trade: realized risk shrinks, so R on realized risk is more negative.
+    assert loser["risk_usd"] < 20.0
+    assert loser["r_net"] < loser["net_pnl_usd"] / 20.0
+    assert s["average_R_net"] == pytest.approx((loser["r_net"] + winner["r_net"]) / 2)
+    assert s["profit_factor_net"] == pytest.approx(nets[1] / -nets[0])
+    assert s["win_rate_net"] == pytest.approx(0.5)
+    assert s["max_drawdown_usd_net"] == pytest.approx(-nets[0])
+    assert s["equity_curve_usd_net"][-1] == pytest.approx(sum(nets))
+    assert s["r_definition"] == "REALIZED_RISK"
+
+
+def test_summarize_net_trades_no_losses_or_empty():
+    winner = enrich_trades(
+        [_wide_trade(110.0, "2025-01-01T00:00:00Z", "2025-01-01T01:00:00Z")],
+        risk_usd=20.0,
+    )
+    s = summarize_net_trades(winner, risk_usd=20.0)
+    assert s["profit_factor_net"] is None
+    assert s["win_rate_net"] == 1.0
+    assert s["max_drawdown_usd_net"] == 0.0
+
+    empty = summarize_net_trades([], risk_usd=20.0)
+    assert empty["profit_factor_net"] is None
+    assert empty["win_rate_net"] is None
+    assert empty["max_drawdown_usd_net"] is None
+    assert empty["average_R_net"] is None
+    assert empty["equity_curve_usd_net"] == []
+    assert empty["r_definition"] == "REALIZED_RISK"

@@ -30,6 +30,7 @@ def fetch_htf_trends(
     htf_trend_cache: dict[tuple[str, int], str] | None = None,
     htf_idx_1h_map: Sequence[int | None] | None = None,
     htf_idx_4h_map: Sequence[int | None] | None = None,
+    htf_require_fully_closed: bool = False,
 ) -> dict[str, Any]:
     tf = (timeframe or "").lower()
     series_1h = candles_1h if candles_1h is not None else (candles if tf == "1h" else None)
@@ -54,7 +55,7 @@ def fetch_htf_trends(
         idx_1h_map=htf_idx_1h_map,
         idx_4h_map=htf_idx_4h_map,
         setup_timeframe=tf or "1h",
-        htf_require_fully_closed=False,
+        htf_require_fully_closed=bool(htf_require_fully_closed),
     )
     t4 = _norm(htf.get("trend_4h"))
     t1 = _norm(htf.get("trend_1h"))

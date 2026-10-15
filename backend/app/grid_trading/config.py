@@ -14,6 +14,7 @@ MARKET = "binance_usdt_m_futures"
 GRID_COUNT_MIN = 1
 GRID_COUNT_MAX = 200
 BPS_MAX = 500.0
+LEVERAGE_MAX = 5.0
 
 
 class GridConfigError(ValueError):
@@ -43,6 +44,9 @@ class GridConfig(BaseModel):
     taker_fee_bps: float | None = None
     slippage_bps: float = Field(default=1.0, ge=0)
     leverage: float = 1.0
+    maintenance_margin_rate: float = 0.005
+    max_open_grids: int | None = None
+    exit_above_range: bool = False
     stop_price: float
     max_drawdown: float = 0.5
     max_open_orders: int = 50
@@ -97,8 +101,12 @@ def validate_config(config: GridConfig, levels: list[float]) -> None:
     taker_bps = config.fee_bps if config.taker_fee_bps is None else config.taker_fee_bps
     if config.fee_bps > BPS_MAX or taker_bps > BPS_MAX or config.slippage_bps > BPS_MAX:
         raise GridConfigError("fees", f"fee_bps, taker_fee_bps, and slippage_bps must be <= {BPS_MAX}")
-    if config.leverage <= 0 or config.leverage > 1:
-        raise GridConfigError("leverage", "leverage must be in (0, 1]; this book is unleveraged")
+    if config.leverage < 1 or config.leverage > LEVERAGE_MAX:
+        raise GridConfigError("leverage", f"leverage must be between 1 and {LEVERAGE_MAX:g}")
+    if not (0 < config.maintenance_margin_rate < 0.5):
+        raise GridConfigError("maintenance_margin", "maintenance_margin_rate must be in (0, 0.5)")
+    if config.max_open_grids is not None and config.max_open_grids < 1:
+        raise GridConfigError("max_open_grids", "max_open_grids must be >= 1")
     if not (0 < config.max_drawdown <= 1):
         raise GridConfigError("max_drawdown", "max_drawdown must be in (0, 1]")
     if config.max_open_orders < 1:
@@ -110,6 +118,14 @@ def validate_config(config: GridConfig, levels: list[float]) -> None:
         )
     if config.stop_price <= 0 or config.stop_price >= config.range_low:
         raise GridConfigError("stop", "stop must be > 0 and below the range")
+    liquidation = worst_case_liquidation_price(config, levels)
+    if liquidation is not None and liquidation >= config.stop_price:
+        raise GridConfigError(
+            "liquidation",
+            f"stop {config.stop_price:.8g} is at or below the worst-case liquidation price "
+            f"{liquidation:.8g} at {config.leverage:g}x with {open_grid_cap(config)} open grids; "
+            "lower leverage, lower max_open_grids, or raise the stop",
+        )
 
     round_trip = 2.0 * maker_fee_rate(config)
     spacing = min(levels[i + 1] / levels[i] - 1.0 for i in range(len(levels) - 1))
@@ -120,9 +136,39 @@ def validate_config(config: GridConfig, levels: list[float]) -> None:
         )
 
 
+def open_grid_cap(config: GridConfig) -> int:
+    if config.max_open_grids is None:
+        return config.grid_count
+    return min(config.max_open_grids, config.grid_count)
+
+
+def liquidation_price(quote: float, base: float, config: GridConfig) -> float | None:
+    """Price where margin equity ``quote + base * p`` falls to maintenance margin.
+
+    ``quote`` is negative once a leveraged buy borrows. None when it cannot liquidate.
+    """
+    if base <= 0 or quote >= 0:
+        return None
+    return -quote / (base * (1.0 - config.maintenance_margin_rate))
+
+
+def worst_case_liquidation_price(config: GridConfig, levels: list[float]) -> float | None:
+    """All capped slots held from their buys, highest slots first, no realized profit."""
+    cap = open_grid_cap(config)
+    held = range(config.grid_count - cap, config.grid_count)
+    fee = maker_fee_rate(config)
+    quote = float(config.capital)
+    base = 0.0
+    for i in held:
+        qty = slot_quantity(config.capital, config.grid_count, levels[i], config)
+        quote -= qty * levels[i] * (1.0 + fee)
+        base += qty
+    return liquidation_price(quote, base, config)
+
+
 def slot_quantity(capital: float, grid_count: int, buy_level: float, config: GridConfig) -> float:
-    """Size each slot so the slipped, fee-inclusive buy spends an equal quote slice."""
-    quote = capital / grid_count
+    """Size each slot so the fee-inclusive buy spends an equal slice of capital * leverage."""
+    quote = capital * config.leverage / grid_count
     fee = maker_fee_rate(config)
     denom = buy_level * (1.0 + fee)
     if denom <= 0:

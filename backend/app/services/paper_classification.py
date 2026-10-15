@@ -173,6 +173,24 @@ def classification_fields_from_position(pos: dict[str, Any]) -> dict[str, Any]:
         strategy_id = STRATEGY_COMBO_02_V1
         source = SOURCE_V1_PAPER_WATCHER
 
+    # COMBO_02 V2.1-A paper stream — preserve identity; Telegram gate is separate.
+    if (
+        str(strategy_id or "") == "COMBO_02_V2_1_A"
+        and str(source or "") == "V21A_PAPER_WATCHER"
+    ):
+        return {
+            "strategy_id": "COMBO_02_V2_1_A",
+            "source": "V21A_PAPER_WATCHER",
+            "combo_id": snip.get("combo_id") or "COMBO_02_V2_1_A",
+            "combo_version": snip.get("combo_version") or "v2.1-a-choppy-wait",
+            "path": snip.get("path") or "V21A",
+            "symbol": symbol,
+            "timeframe": timeframe or "1h",
+            "telegram_eligible": True,
+            "htf_alignment": snip.get("htf_alignment"),
+            "v1_tier": None,
+        }
+
     if not strategy_id or not source:
         # Never infer v1 from combo_version/title. Default to research legacy.
         strategy_id = STRATEGY_RESEARCH_15M
@@ -253,6 +271,8 @@ def alert_badge_category(alert: dict[str, Any]) -> str:
             return BADGE_V1_VERIFIED
         sid = str(fields.get("strategy_id") or "")
         src = str(fields.get("source") or "")
+        if sid == "COMBO_02_V2_1_A" or src == "V21A_PAPER_WATCHER":
+            return BADGE_EXPERIMENTAL
         if sid == "COMBO_02_V2_RESEARCH" or src in (
             "V2_CANDIDATE_PAPER_WATCHER",
             "DYNAMIC_CANDIDATE_PIPELINE",
@@ -278,6 +298,8 @@ def alert_subtitle(alert: dict[str, Any]) -> str:
         tf = fields.get("timeframe") or alert.get("timeframe") or "15m"
         return f"RESEARCH ONLY • {tf} • Not Telegram eligible"
     if cat == BADGE_EXPERIMENTAL:
+        if str(fields.get("strategy_id") or "") == "COMBO_02_V2_1_A":
+            return "COMBO_02 V2.1-A • PAPER ONLY"
         if str(fields.get("strategy_id") or "") == "COMBO_02_V2_RESEARCH":
             return "EXPERIMENTAL — NOT COMBO_02 v1 • PAPER ONLY"
         return "EXPERIMENTAL • Path B • Not Telegram eligible"

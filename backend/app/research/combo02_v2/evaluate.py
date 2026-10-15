@@ -87,6 +87,7 @@ def evaluate_combo02_v2_at_bar(
     swings: Sequence[Any] | None = None,
     atr_value: float | None = None,
     volumes: Sequence[float] | None = None,
+    avg_volume_ref: float | None = None,
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
     candles_15m: Sequence[Mapping[str, Any]] | None = None,
@@ -176,6 +177,7 @@ def evaluate_combo02_v2_at_bar(
         swings=swing_list,
         atr_value=atr_value,
         volumes=volumes,
+        avg_volume_ref=avg_volume_ref,
         serialize_swings=False,
     )
     swing_objs = tf_analysis.get("_swings_objs") or []
@@ -221,6 +223,9 @@ def evaluate_combo02_v2_at_bar(
         htf_trend_cache=htf_trend_cache,
         htf_idx_1h_map=htf_idx_1h_map,
         htf_idx_4h_map=htf_idx_4h_map,
+        htf_require_fully_closed=bool(
+            getattr(research_config, "htf_fully_closed", False)
+        ),
     )
 
     setup: dict[str, Any] | None = None

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import inspect
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -113,10 +114,13 @@ async def _seed_v2_paper_candidate(symbol: str, **field_overrides) -> None:
     await strategy_candidate_registry.update_fields(symbol, fields)
 
 
-def _candles(n: int = 60) -> list[dict]:
+def _candles(n: int = 60, *, hours: int = 1) -> list[dict]:
+    """Contiguous closed bars from 2026-01-01. ``_candles(15, hours=4)`` is the
+    4h series closed at the close of the ``_candles(60)`` 1h tip."""
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     return [
         {
-            "time": f"2026-01-01T{i:02d}:00:00+00:00",
+            "time": start + timedelta(hours=hours * i),
             "open": 100.0,
             "high": 101.0,
             "low": 99.0,
@@ -211,7 +215,7 @@ async def test_validation_bnb_lifecycle_research_to_paper_watcher():
         pos = await watcher.on_closed_1h(
             "BNBUSDT",
             candles_1h=_candles(60),
-            candles_4h=_candles(30),
+            candles_4h=_candles(15, hours=4),
             force=True,
         )
     finally:
@@ -307,7 +311,7 @@ async def test_validation_sui_oos_failed_blocked_path():
         pos = await watcher2.on_closed_1h(
             "SUIUSDT",
             candles_1h=_candles(60),
-            candles_4h=_candles(30),
+            candles_4h=_candles(15, hours=4),
             force=True,
         )
     finally:
@@ -444,7 +448,7 @@ async def test_validation_duplicate_watcher_and_one_open_protections():
         pos1 = await w1.on_closed_1h(
             "BNBUSDT",
             candles_1h=_candles(60),
-            candles_4h=_candles(30),
+            candles_4h=_candles(15, hours=4),
             force=True,
         )
         assert pos1 is not None
@@ -452,7 +456,7 @@ async def test_validation_duplicate_watcher_and_one_open_protections():
         pos2 = await w1.on_closed_1h(
             "BNBUSDT",
             candles_1h=_candles(60),
-            candles_4h=_candles(30),
+            candles_4h=_candles(15, hours=4),
             force=True,
         )
         assert pos2 is None
@@ -464,7 +468,7 @@ async def test_validation_duplicate_watcher_and_one_open_protections():
             return await w1.on_closed_1h(
                 "BNBUSDT",
                 candles_1h=_candles(60),
-                candles_4h=_candles(30),
+                candles_4h=_candles(15, hours=4),
                 force=force,
             )
 
@@ -593,7 +597,7 @@ async def test_validation_restart_persistence_no_duplicate_open():
         again = await watcher.on_closed_1h(
             "BNBUSDT",
             candles_1h=_candles(60),
-            candles_4h=_candles(30),
+            candles_4h=_candles(15, hours=4),
             force=True,
         )
     finally:
@@ -697,7 +701,7 @@ async def test_validation_blocked_reason_and_peak_concurrent():
         pos = await watcher.on_closed_1h(
             "BNBUSDT",
             candles_1h=_candles(60),
-            candles_4h=_candles(30),
+            candles_4h=_candles(15, hours=4),
             force=True,
         )
     finally:

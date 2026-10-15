@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.paper_risk import PaperRiskPolicy
-from app.services.paper_trade import PaperTradeEngine
+from app.services.paper_trade import PaperPosition, PaperTradeEngine
 
 # Path A HTF / COMBO_02 v1 tests share this marker with research HTF suite.
 pytestmark = pytest.mark.v1_freeze
@@ -66,8 +66,14 @@ def _candidate(
         "direction": "LONG",
         "timeframe": "15m",
         "entry": {"entry_price": entry, "status": status},
-        "stop": {"final_stop": stop},
-        "targets": [{"target_price": tp1, "r_multiple": 2.0}],
+        "stop": {
+            "final_stop": stop,
+            "provisional": False,
+            "reason": "structural pullback low",
+        },
+        "targets": [{"target_price": tp1, "r_multiple": 2.0, "target_type": "previous_swing_high"}],
+        "impulse": {"is_impulse": True},
+        "pullback": {"pullback_state": "CONFIRMED"},
         "risk_management": {
             "final_quantity": qty,
             "entry": entry,
@@ -211,19 +217,17 @@ def test_no_open_on_no_setup():
     assert eng.status()["open_count"] == 0
 
 
-def test_opens_on_path_a_trend_bos(monkeypatch):
+def test_waiting_path_a_does_not_open(monkeypatch):
     import app.services.paper_trade as paper_mod
 
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
     eng = PaperTradeEngine(entry_mode="path_a", starting_equity=1000, risk_percent=0.02)
     pos = eng.on_setup_signal("BATUSDT", _path_a_payload())
-    assert pos is not None
-    assert pos.entry_price == 100.0
-    assert pos.stop_price == 98.0
-    assert pos.tp1_price == 104.0
-    assert pos.signal_snippet.get("path") == "LEGACY"
-    assert pos.signal_snippet.get("strategy_id") == "RESEARCH_15M"
-    assert eng.status()["entry_mode"] == "path_a"
+    assert pos is None
+    reason = eng.status()["last_skip_reason"] or ""
+    assert "path_a_rejected" in reason
+    assert "closed_eval_WAITING" in reason
+    assert eng.status()["open_count"] == 0
 
 
 def test_path_a_blocks_without_htf_bullish(monkeypatch):
@@ -327,35 +331,46 @@ def test_skip_trailing_stale_ohlcv(monkeypatch):
     assert pos is None
 
 
-def test_skip_when_live_already_through_stop(monkeypatch):
+def test_plan_fills_when_live_already_through_stop(monkeypatch):
     import app.services.paper_trade as paper_mod
 
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 0.2387)
     eng = PaperTradeEngine(entry_mode="path_a")
     pos = eng.on_setup_signal(
         "EIGENUSDT",
-        _path_a_payload(entry_bos=0.2486, stop=0.2411, tp1=0.2643, freshness="OK"),
+        _candidate(symbol="EIGENUSDT", entry=0.2486, stop=0.2411, tp1=0.2643, qty=0),
     )
-    assert pos is None
+    assert pos is not None
+    assert pos.signal_snippet.get("execution") == "backtest_plan"
+    # Generic tick is 0.01, so the plan is kept on the nearest tick.
+    assert pos.entry_price == pytest.approx(0.25)
+    assert pos.stop_price == pytest.approx(0.24)
+    assert pos.tp1_price == pytest.approx(0.26)
 
 
-def test_skip_missed_entry_deep_into_risk(monkeypatch):
+def test_plan_fills_when_live_is_deep_into_risk(monkeypatch):
     import app.services.paper_trade as paper_mod
 
-    # Live below entry by >10% of risk distance, but still above stop
+    # Live below entry by more than 10% of the risk distance, still above stop.
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 99.5)
     eng = PaperTradeEngine(entry_mode="path_a")
-    # entry 100, stop 98, risk=2; 10% = 0.2 → live must be >= 99.8
-    pos = eng.on_setup_signal("BATUSDT", _path_a_payload())
-    assert pos is None
+    pos = eng.on_setup_signal("BATUSDT", _candidate(symbol="BATUSDT"))
+    assert pos is not None
+    assert pos.entry_price == pytest.approx(100.0)
+    assert pos.stop_price == pytest.approx(98.0)
+    assert pos.tp1_price == pytest.approx(104.0)
 
 
-def test_skip_when_no_live_price(monkeypatch):
+def test_plan_fills_without_live_price(monkeypatch):
     import app.services.paper_trade as paper_mod
 
     monkeypatch.setattr(paper_mod, "_live_price", lambda _s: None)
     eng = PaperTradeEngine()
-    assert eng.on_setup_signal("BTCUSDT", _candidate()) is None
+    pos = eng.on_setup_signal("BTCUSDT", _candidate())
+    assert pos is not None
+    assert pos.entry_price == pytest.approx(100.0)
+    assert pos.stop_price == pytest.approx(98.0)
+    assert pos.tp1_price == pytest.approx(104.0)
 
 
 def test_invalidated_setup_does_not_cancel_open(monkeypatch):
@@ -492,29 +507,62 @@ def test_hydrate_from_rows_restores_book_and_equity(monkeypatch):
     )
 
 
-def test_hydrate_skipped_when_book_already_live(monkeypatch):
-    import app.services.paper_trade as paper_mod
-
-    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
-    eng = PaperTradeEngine()
-    eng.on_setup_signal("BTCUSDT", _candidate())
-    before = eng.status()["open_count"]
+def test_hydrate_adopts_ledger_open_without_clobbering_live_book():
+    eng = PaperTradeEngine(risk_policy=PaperRiskPolicy(enabled=False))
+    live = PaperPosition(
+        id="live-btc",
+        symbol="BTCUSDT",
+        side="LONG",
+        status="OPEN",
+        entry_price=100.0,
+        stop_price=90.0,
+        tp1_price=120.0,
+        quantity=1.0,
+        risk_usd=10.0,
+        opened_at="2026-10-02T09:00:00+00:00",
+        timeframe="15m",
+        signal_snippet={"source": "RESEARCH_15M"},
+    )
+    eng._open[eng.book_key("BTCUSDT", "LEGACY")] = live
     out = eng.hydrate_from_rows(
         [
             {
                 "id": "x",
                 "symbol": "SOLUSDT",
+                "side": "SHORT",
                 "status": "OPEN",
                 "entry_price": 1,
-                "stop_price": 0.5,
+                "stop_price": 1.1,
                 "quantity": 1,
                 "opened_at": "2026-10-02T10:00:00+00:00",
+                "source_candle_ts": "2026-10-02T09:00:00+00:00",
+                "timeframe": "1h",
+                "signal_snippet": {
+                    "source": "PASSED_CAP_BOOK",
+                    "stream": "PASSED|COMBO_01|SHORT",
+                    "strategy_id": "COMBO_01",
+                },
             }
         ]
     )
-    assert out.get("skipped") == 1
-    assert eng.status()["open_count"] == before
-    assert "SOLUSDT" not in eng._open  # noqa: SLF001
+    assert out.get("adopted") == 1
+    assert eng.get_open("BTCUSDT", "LEGACY") is live
+    assert eng.get_open("SOLUSDT", "PASSED|COMBO_01|SHORT") is not None
+    again = eng.open_passed_position(
+        symbol="SOLUSDT",
+        combination_id="COMBO_01",
+        timeframe="1h",
+        direction="SHORT",
+        eval_result={
+            "status": "SHORT_ENTRY_CANDIDATE",
+            "entry_price": 1.0,
+            "stop_price": 1.1,
+            "tp1": 0.8,
+        },
+        risk_percent=0.02,
+        setup_bar_time_utc="2026-10-02T09:00:00+00:00",
+    )
+    assert again is None
 
 
 def test_list_opportunities_tiers(monkeypatch):
@@ -585,7 +633,53 @@ def test_list_opportunities_tiers(monkeypatch):
     rows = paper_mod.list_trade_opportunities(limit=10, include_waiting=True)
     tiers = {r["symbol"]: r["tier"] for r in rows}
     assert tiers.get("AAAUSDT") == "READY"
-    # Path A mode: Trend+BOS+stop is READY (research gate), not merely NEAR
-    assert tiers.get("BBBUSDT") == "READY"
+    # NO_SETUP is not an auto entry, even with Trend+BOS+HTF and a stop.
+    assert tiers.get("BBBUSDT") == "NEAR"
     assert tiers.get("WAITUSDT") == "WAITING"
     assert rows[0]["symbol"] == "AAAUSDT"
+
+
+def test_chance_words_match_bearish_columns_and_skip_non_ascii(monkeypatch):
+    import app.services.engine_store as es
+    import app.services.paper_trade as paper_mod
+    from app.services.engine_store import EngineStore
+
+    store = EngineStore()
+    store.set_setup_signal(
+        "ARBUSDT",
+        {
+            "status": "NO_SETUP",
+            "direction": "SHORT",
+            "timeframe": "15m",
+            "trend": {"15m": {"trend": "BEARISH"}},
+            "bos": {"state": "CONFIRMED", "direction": "BEARISH_BOS"},
+            "impulse": {},
+            "pullback": {},
+            "retest": {},
+            "entry": {},
+            "stop": {},
+            "targets": [],
+            "data_dependencies": {"15m": "LIVE"},
+        },
+    )
+    store.set_setup_signal(
+        "WAITUSDT",
+        {
+            "status": "WAITING",
+            "timeframe": "15m",
+            "trend": {},
+            "bos": {},
+            "data_dependencies": {"15m": "LIVE"},
+        },
+    )
+    store.set_setup_signal("龙虾USDT", {"status": "NO_SETUP", "timeframe": "15m"})
+    monkeypatch.setattr(es, "engine_store", store)
+    monkeypatch.setattr(paper_mod, "engine_store", store, raising=False)
+
+    rows = paper_mod.list_trade_opportunities(limit=20, include_waiting=True)
+    by_sym = {r["symbol"]: r for r in rows}
+    assert "龙虾USDT" not in by_sym
+    assert "BEARISH" in by_sym["ARBUSDT"]["chance"]
+    assert "BEARISH_BOS" in by_sym["ARBUSDT"]["chance"]
+    assert "missing: trend" not in by_sym["ARBUSDT"]["chance"]
+    assert by_sym["WAITUSDT"]["chance"] == "Not ready — setup conditions unmet (OHLCV LIVE)"

@@ -18,7 +18,7 @@ def retention_days_map(settings: Settings) -> dict[str, int]:
     # defaults if yaml missing keys
     defaults = {
         "1m": 60,
-        "5m": 270,
+        "5m": 800,
         "15m": 545,
         "1h": 1095,
         "4h": 1825,

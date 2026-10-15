@@ -208,6 +208,99 @@ _SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_setup_events_sym ON setup_events (symbol, timeframe, time DESC)",
     "CREATE INDEX IF NOT EXISTS idx_paper_trades_sym ON paper_trades (symbol, opened_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_paper_trades_status ON paper_trades (status, opened_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS paper_trade_dedupe (
+        dedupe_key      TEXT PRIMARY KEY,
+        trade_id        TEXT NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    # One key per symbol + candle + stream + timeframe. The earliest id owns
+    # the key. A later ticket for that same bar is not a second trade.
+    """
+    INSERT INTO paper_trade_dedupe (dedupe_key, trade_id)
+    SELECT dedupe_key, trade_id
+    FROM (
+        SELECT DISTINCT ON (dedupe_key)
+            dedupe_key,
+            id AS trade_id,
+            opened_at
+        FROM (
+            SELECT
+                id,
+                opened_at,
+                upper(symbol) || '|' ||
+                to_char(
+                    (source_candle_ts::timestamptz AT TIME ZONE 'UTC'),
+                    'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'
+                ) || '|' ||
+                CASE
+                    WHEN signal_snippet->>'source' = 'PASSED_CAP_BOOK'
+                        THEN upper(COALESCE(NULLIF(signal_snippet->>'stream', ''), 'PASSED'))
+                    WHEN signal_snippet->>'source' = 'V1_PAPER_WATCHER'
+                        OR signal_snippet->>'strategy_id' = 'COMBO_02_V1'
+                        THEN 'V1'
+                    WHEN signal_snippet->>'source' = 'V21A_PAPER_WATCHER'
+                        OR signal_snippet->>'strategy_id' = 'COMBO_02_V2_1_A'
+                        THEN 'V21A'
+                    WHEN signal_snippet->>'source' IN (
+                        'V2_CANDIDATE_PAPER_WATCHER',
+                        'DYNAMIC_CANDIDATE_PIPELINE'
+                    ) OR signal_snippet->>'strategy_id' = 'COMBO_02_V2_RESEARCH'
+                        THEN 'V2'
+                    ELSE 'LEGACY'
+                END || '|' ||
+                lower(COALESCE(timeframe, '')) AS dedupe_key
+            FROM paper_trades
+            WHERE source_candle_ts IS NOT NULL
+              AND btrim(source_candle_ts) <> ''
+              AND source_candle_ts::timestamptz IS NOT NULL
+        ) parsed
+        ORDER BY dedupe_key, opened_at ASC, id ASC
+    ) earliest
+    ON CONFLICT (dedupe_key) DO NOTHING
+    """,
+    # Drop the second ticket for a bar. The earliest id already owns the key.
+    # PnL on the extra row is not a second trade, so it leaves the closed book.
+    """
+    UPDATE paper_trades AS t
+    SET status = 'CANCELLED',
+        exit_reason = 'duplicate_fill',
+        pnl_usd = 0,
+        r_multiple = 0,
+        closed_at = COALESCE(t.closed_at, NOW()),
+        updated_at = NOW()
+    WHERE t.status IN ('OPEN', 'CLOSED')
+      AND EXISTS (
+        SELECT 1
+        FROM paper_trade_dedupe d
+        WHERE d.trade_id <> t.id
+          AND d.dedupe_key = (
+            upper(t.symbol) || '|' ||
+            to_char(
+                (t.source_candle_ts::timestamptz AT TIME ZONE 'UTC'),
+                'YYYY-MM-DD"T"HH24:MI:SS"+00:00"'
+            ) || '|' ||
+            CASE
+                WHEN t.signal_snippet->>'source' = 'PASSED_CAP_BOOK'
+                    THEN upper(COALESCE(NULLIF(t.signal_snippet->>'stream', ''), 'PASSED'))
+                WHEN t.signal_snippet->>'source' = 'V1_PAPER_WATCHER'
+                    OR t.signal_snippet->>'strategy_id' = 'COMBO_02_V1'
+                    THEN 'V1'
+                WHEN t.signal_snippet->>'source' = 'V21A_PAPER_WATCHER'
+                    OR t.signal_snippet->>'strategy_id' = 'COMBO_02_V2_1_A'
+                    THEN 'V21A'
+                WHEN t.signal_snippet->>'source' IN (
+                    'V2_CANDIDATE_PAPER_WATCHER',
+                    'DYNAMIC_CANDIDATE_PIPELINE'
+                ) OR t.signal_snippet->>'strategy_id' = 'COMBO_02_V2_RESEARCH'
+                    THEN 'V2'
+                ELSE 'LEGACY'
+            END || '|' ||
+            lower(COALESCE(t.timeframe, ''))
+          )
+      )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_symbols_market ON symbols (market_type, status)",
     "CREATE INDEX IF NOT EXISTS idx_sd_zones_symbol ON supply_demand_zones (symbol, timeframe, status)",
     "CREATE INDEX IF NOT EXISTS idx_volume_history_sym ON volume_history (symbol, timeframe, time DESC)",

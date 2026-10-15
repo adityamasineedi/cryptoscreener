@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import traceback
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -324,6 +325,18 @@ class BacktestJobService:
         start_s = str(start_date).strip()[:10] if start_date else None
         end_s = str(end_date).strip()[:10] if end_date else None
 
+        # Ranked strategies with their own engine (CANDLE12, multi-cap, OSE).
+        from app.research.engine_backtest import engine_request_error, engine_strategy_id
+
+        engine_id = engine_strategy_id(combination_id) or engine_strategy_id(strategy_id)
+        if engine_id is not None:
+            reason = engine_request_error(engine_id, str(direction or ""), tfs)
+            if reason:
+                raise BacktestConfigError("engine_request_unsupported", reason)
+            combination_id = strategy_id = engine_id
+            # Never a v1 production profile: sizing is the request's own.
+            risk_mode, research_risk_override = "RESEARCH_OVERRIDE", True
+
         resolved = validate_backtest_request(
             symbols=syms,
             timeframes=tfs,
@@ -350,6 +363,12 @@ class BacktestJobService:
             or combination_id
             or "COMBO_02"
         ).upper().strip()
+        if engine_id is not None:
+            resolved_combo = engine_id
+            # validate_backtest_request upper-cases ids; keep the engine's own spelling.
+            for key in ("strategy_id", "combination_id"):
+                if key in identity:
+                    identity[key] = engine_id
 
         async with self._lock:
             if self._job is not None and self._job.status == "running":
@@ -569,26 +588,51 @@ class BacktestJobService:
                     if isinstance(payload.get("timing"), dict):
                         job.timing.update(payload["timing"])
 
-                payload = await svc.strategy_matrix(
-                    combination_id=job.combination_id,
-                    symbols=[sym],
-                    timeframes=[tf],
-                    direction=job.direction,
-                    limit=job.limit,
-                    risk_usd=cell_risk,
-                    principal_usd=float(job.principal_usd),
-                    start_date=job.start_date,
-                    end_date=job.end_date,
-                    taker_fee=job.taker_fee_pct / 100.0,
-                    maker_fee=job.maker_fee_pct / 100.0,
-                    leverage=float(job.leverage),
-                    include_trades=job.include_trades,
-                    should_cancel=lambda: job._cancel,
-                    progress_callback=_on_progress,
-                    job_id=job.job_id,
-                    use_research_cache=False,
-                    cancel_event=job._cancel_event,
+                from app.research.engine_backtest import (
+                    engine_strategy_id,
+                    engine_strategy_matrix,
                 )
+
+                engine_id = engine_strategy_id(job.combination_id)
+                if engine_id is not None:
+                    payload = await engine_strategy_matrix(
+                        strategy_id=engine_id,
+                        symbol=sym,
+                        timeframe=tf,
+                        direction=job.direction,
+                        limit=job.limit,
+                        risk_usd=cell_risk,
+                        principal_usd=float(job.principal_usd),
+                        start_date=job.start_date,
+                        end_date=job.end_date,
+                        taker_fee=job.taker_fee_pct / 100.0,
+                        maker_fee=job.maker_fee_pct / 100.0,
+                        leverage=float(job.leverage),
+                        include_trades=job.include_trades,
+                        should_cancel=lambda: job._cancel,
+                        progress_callback=_on_progress,
+                    )
+                else:
+                    payload = await svc.strategy_matrix(
+                        combination_id=job.combination_id,
+                        symbols=[sym],
+                        timeframes=[tf],
+                        direction=job.direction,
+                        limit=job.limit,
+                        risk_usd=cell_risk,
+                        principal_usd=float(job.principal_usd),
+                        start_date=job.start_date,
+                        end_date=job.end_date,
+                        taker_fee=job.taker_fee_pct / 100.0,
+                        maker_fee=job.maker_fee_pct / 100.0,
+                        leverage=float(job.leverage),
+                        include_trades=job.include_trades,
+                        should_cancel=lambda: job._cancel,
+                        progress_callback=_on_progress,
+                        job_id=job.job_id,
+                        use_research_cache=False,
+                        cancel_event=job._cancel_event,
+                    )
                 if payload.get("status") == "CANCELLED":
                     job.status = "cancelled"
                     job.phase = JOB_CANCELLED
@@ -688,7 +732,7 @@ class BacktestJobService:
             job.snapshot_elapsed()
         except Exception as exc:  # noqa: BLE001
             job.status = "error"
-            job.error = str(exc)
+            job.error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1200:]}"
             job.error_code = "runtime_error"
             job.phase = JOB_FAILED
             job.finished_at = datetime.now(timezone.utc).isoformat()

@@ -7,6 +7,7 @@ background promotion to PAPER_VALIDATING / APPROVED.
 from __future__ import annotations
 
 import ast
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,26 @@ from app.services.v2_candidate_paper_watcher import (
     classify_v2_candidate,
     reset_v2_candidate_paper_watcher,
 )
+
+
+def _closed_series() -> tuple[list[dict], list[dict]]:
+    """60 contiguous 1h bars and the 15 4h bars fully closed at the 1h tip's close."""
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def _bars(n: int, hours: int) -> list[dict]:
+        return [
+            {
+                "time": start + timedelta(hours=hours * i),
+                "open": 1,
+                "high": 1,
+                "low": 1,
+                "close": 1,
+                "volume": 1,
+            }
+            for i in range(n)
+        ]
+
+    return _bars(60, 1), _bars(15, 4)
 
 
 @pytest.fixture(autouse=True)
@@ -840,14 +861,7 @@ async def test_risk_cap_persists_blocked_portfolio_risk_cap():
     )
     # Force past entry gate by stubbing evaluate + entry check path:
     # call _persist via the combined-risk branch using on_closed_1h with mocked eval.
-    candles = [
-        {"time": f"2026-01-01T{i:02d}:00:00+00:00", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}
-        for i in range(60)
-    ]
-    candles_4h = [
-        {"time": f"2026-01-01T{i:02d}:00:00+00:00", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}
-        for i in range(30)
-    ]
+    candles, candles_4h = _closed_series()
 
     # Monkeypatch evaluate / entry to force open attempt
     watcher.evaluate_closed_bar = lambda *a, **k: {  # type: ignore[method-assign]
@@ -1112,28 +1126,7 @@ async def test_watcher_persists_blocked_portfolio_risk_cap_fields():
         max_v1_book_risk_percent=0.05,
         max_total_risk_percent=0.01,
     )
-    candles = [
-        {
-            "time": f"2026-01-01T{i:02d}:00:00+00:00",
-            "open": 1,
-            "high": 1,
-            "low": 1,
-            "close": 1,
-            "volume": 1,
-        }
-        for i in range(60)
-    ]
-    candles_4h = [
-        {
-            "time": f"2026-01-01T{i:02d}:00:00+00:00",
-            "open": 1,
-            "high": 1,
-            "low": 1,
-            "close": 1,
-            "volume": 1,
-        }
-        for i in range(30)
-    ]
+    candles, candles_4h = _closed_series()
     watcher.evaluate_closed_bar = lambda *a, **k: {  # type: ignore[method-assign]
         "status": "SETUP",
         "htf": {

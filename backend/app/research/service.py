@@ -101,6 +101,7 @@ async def _load_research_candles(
     end_date: str | None = None,
     warmup_bars: int = 100,
     use_research_cache: bool = True,
+    tail_warmup: bool = False,
 ) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     """Load OHLCV for BOS combination research from PostgreSQL when available.
 
@@ -121,6 +122,10 @@ async def _load_research_candles(
     sym = normalize_research_symbol(symbol)
     tf = normalize_research_timeframe(timeframe)
     bounds = resolve_date_bounds(start_date, end_date)
+    dated = bounds["start"] is not None or bounds["end_exclusive"] is not None
+    # Tail jobs have no calendar start. When requested, fetch lookback in
+    # front of `limit` so the first eval bar is not INSUFFICIENT_BARS_BEFORE_WALK.
+    apply_warmup = int(warmup_bars) if dated or tail_warmup else 0
     source = "postgresql_ohlcv"
     raw: list[dict[str, Any]] = []
 
@@ -166,10 +171,14 @@ async def _load_research_candles(
                     warmup_bars=warmup_bars,
                 )
             else:
-                raw = await load_ohlcv_series_tail(sym, tf, limit=max(limit, 1))
+                fetch_n = max(int(limit), 1) + (apply_warmup if tail_warmup else 0)
+                raw = await load_ohlcv_series_tail(sym, tf, limit=fetch_n)
         elif not raw:
             source = "ohlcv_store_memory"
-            raw = _load_candles_memory(sym, tf, limit if not bounds["start"] else 50_000)
+            mem_limit = 50_000 if bounds["start"] else max(int(limit), 1)
+            if tail_warmup and not dated:
+                mem_limit += apply_warmup
+            raw = _load_candles_memory(sym, tf, mem_limit)
             if not raw:
                 # Last resort: empty
                 raw = []
@@ -183,7 +192,7 @@ async def _load_research_candles(
         start=bounds["start"],
         end_exclusive=bounds["end_exclusive"],
         limit=None if (bounds["start"] or bounds["end_exclusive"]) else limit,
-        warmup_bars=warmup_bars if (bounds["start"] or bounds["end_exclusive"]) else 0,
+        warmup_bars=apply_warmup,
     )
     meta = {
         **{k: v for k, v in bounds.items() if k not in ("start", "end_exclusive")},
@@ -192,9 +201,7 @@ async def _load_research_candles(
         "symbol": sym,
         "timeframe": tf,
         "limit": limit,
-        "warmup_bars_requested": warmup_bars
-        if (bounds["start"] or bounds["end_exclusive"])
-        else 0,
+        "warmup_bars_requested": apply_warmup,
     }
     logger.info(
         "bos_research_candles_loaded",
@@ -219,6 +226,7 @@ async def _load_htf_candles_for_combo(
     end_date: str | None,
     warmup_bars: int,
     use_research_cache: bool = True,
+    tail_warmup: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, list[dict[str, Any]] | None]:
     """Load 1h/4h series for combo HTF gate. Returns (None, None) when not required."""
     if not require_htf:
@@ -241,6 +249,7 @@ async def _load_htf_candles_for_combo(
             end_date=end_date,
             warmup_bars=warmup_bars,
             use_research_cache=use_research_cache,
+            tail_warmup=tail_warmup,
         )
     if tf != "4h":
         c4h, _, _ = await _load_research_candles(
@@ -251,6 +260,7 @@ async def _load_htf_candles_for_combo(
             end_date=end_date,
             warmup_bars=max(warmup_bars // 4, 50),
             use_research_cache=use_research_cache,
+            tail_warmup=tail_warmup,
         )
     return c1h, c4h
 
@@ -429,6 +439,7 @@ class BosResearchService:
             start_date=start_date,
             end_date=end_date,
             warmup_bars=warmup,
+            tail_warmup=True,
         )
         # Load HTF once for any combo that requires the hard gate (e.g. COMBO_02).
         ids = list(combination_ids) if combination_ids else list(COMBINATIONS.keys())
@@ -444,6 +455,7 @@ class BosResearchService:
             start_date=start_date,
             end_date=end_date,
             warmup_bars=warmup,
+            tail_warmup=True,
         )
         sym = load_meta["symbol"]
         tf = load_meta["timeframe"]
@@ -756,6 +768,7 @@ class BosResearchService:
             start_date=start_date,
             end_date=end_date,
             warmup_bars=warmup,
+            tail_warmup=True,
         )
         combo = get_combination(combination_id)
         c1h, c4h = await _load_htf_candles_for_combo(
@@ -766,6 +779,7 @@ class BosResearchService:
             start_date=start_date,
             end_date=end_date,
             warmup_bars=warmup,
+            tail_warmup=True,
         )
         sym = load_meta["symbol"]
         tf = load_meta["timeframe"]
@@ -938,7 +952,11 @@ class BosResearchService:
                 "combination_id": combination_id,
                 "rows": [],
             }
-        rcfg = ResearchConfig()
+        rcfg = (
+            ResearchConfig.for_new_combo02_v2_run()
+            if str(combo.combination_id) == "COMBO_02_V2"
+            else ResearchConfig()
+        )
         warmup = max(int(rcfg.min_bars), 100)
         direction_u = direction.upper().strip() if direction else "LONG"
         if direction_u not in {"LONG", "SHORT"}:
@@ -990,6 +1008,7 @@ class BosResearchService:
                     end_date=end_date,
                     warmup_bars=warmup,
                     use_research_cache=use_research_cache,
+                    tail_warmup=True,
                 )
                 db_seconds = time.perf_counter() - t_db
                 timing["db_query_seconds"] = round(db_seconds, 6)
@@ -1051,22 +1070,28 @@ class BosResearchService:
                 _notify(HTF_DATA_LOAD_START, symbol=sym, timeframe=tf)
                 t_htf = time.perf_counter()
                 from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
+                from app.research.sd_structure.variants import SD_STRUCTURE_FAMILY
 
                 is_v2_family = str(combo.combination_id) in COMBO_V2_FAMILY
+                is_sd = str(combo.combination_id) in SD_STRUCTURE_FAMILY
                 # V2 family needs soft HTF (4h) even though require_htf_alignment
-                # is False — same inputs as research runners.
+                # is False — same inputs as research runners. SD needs 4h as director.
                 c1h, c4h = await _load_htf_candles_for_combo(
                     sym,
-                    require_htf=bool(combo.require_htf_alignment) or is_v2_family,
+                    require_htf=bool(combo.require_htf_alignment) or is_v2_family or is_sd,
                     setup_timeframe=tf,
                     limit=limit,
                     start_date=start_date,
                     end_date=end_date,
                     warmup_bars=warmup,
                     use_research_cache=use_research_cache,
+                    tail_warmup=True,
                 )
                 c15m_strategy: list[dict[str, Any]] | None = None
-                if is_v2_family:
+                c5m_strategy: list[dict[str, Any]] | None = None
+                c1d_strategy: list[dict[str, Any]] | None = None
+                needs_ltf = is_sd and str(tf).lower() not in {"5m", "15m"}
+                if is_v2_family or needs_ltf:
                     c15m_strategy, _, _ = await _load_research_candles(
                         sym,
                         "15m",
@@ -1075,6 +1100,29 @@ class BosResearchService:
                         end_date=end_date,
                         warmup_bars=max(warmup, 200),
                         use_research_cache=use_research_cache,
+                        tail_warmup=True,
+                    )
+                if needs_ltf:
+                    c5m_strategy, _, _ = await _load_research_candles(
+                        sym,
+                        "5m",
+                        limit=max(int(limit) * 12, 500),
+                        start_date=start_date,
+                        end_date=end_date,
+                        warmup_bars=max(warmup, 200),
+                        use_research_cache=use_research_cache,
+                        tail_warmup=True,
+                    )
+                if is_sd and str(tf).lower() != "1d":
+                    c1d_strategy, _, _ = await _load_research_candles(
+                        sym,
+                        "1d",
+                        limit=max(int(limit) // 4, 200),
+                        start_date=start_date,
+                        end_date=end_date,
+                        warmup_bars=max(warmup // 4, 40),
+                        use_research_cache=use_research_cache,
+                        tail_warmup=True,
                     )
                 htf_seconds = time.perf_counter() - t_htf
                 timing["htf_load_seconds"] = round(htf_seconds, 6)
@@ -1121,6 +1169,8 @@ class BosResearchService:
                     candles_1h=c1h,
                     candles_4h=c4h,
                     candles_15m=c15m_strategy,
+                    candles_5m=c5m_strategy,
+                    candles_1d=c1d_strategy,
                     progress_callback=progress_callback,
                     job_id=job_id,
                     cancel_event=cancel_event,
@@ -1173,6 +1223,7 @@ class BosResearchService:
                                 end_date=end_date,
                                 warmup_bars=warmup,
                                 use_research_cache=use_research_cache,
+                                tail_warmup=True,
                             )
                         except Exception:  # noqa: BLE001
                             c15m = None
@@ -1230,6 +1281,9 @@ class BosResearchService:
                     )
                     # Fall back to strategy row without analytics rather than empty.
                     from app.research.trade_fees import enrich_trades as _enrich
+                    from app.research.trade_fees import (
+                        summarize_net_trades as _summarize_net,
+                    )
 
                     enriched = _enrich(
                         out.get("trades") or [],
@@ -1239,9 +1293,12 @@ class BosResearchService:
                         leverage=lev,
                         account_equity=principal,
                         closed_only=True,
+                        running_equity=True,
                     )
                     r = out.get("result") or {}
                     n = int(out.get("sample_size") or r.get("sample_size") or 0)
+                    net_summary = _summarize_net(enriched, risk_usd=risk_usd)
+                    warmup_bars = int(idx0 or 0)
                     row_payload = {
                         "combination_id": combination_id,
                         "name": combo.name,
@@ -1250,6 +1307,20 @@ class BosResearchService:
                         "direction": direction_u,
                         "sample_size": n,
                         "average_R": r.get("average_R"),
+                        "average_R_net": net_summary["average_R_net"],
+                        "average_R_usd_basis_gross": net_summary[
+                            "average_R_usd_basis_gross"
+                        ],
+                        "average_R_usd_basis_net": net_summary[
+                            "average_R_usd_basis_net"
+                        ],
+                        "profit_factor_net": net_summary["profit_factor_net"],
+                        "win_rate_net": net_summary["win_rate_net"],
+                        "max_drawdown_usd_net": net_summary["max_drawdown_usd_net"],
+                        "equity_curve_usd_net": net_summary["equity_curve_usd_net"],
+                        "r_definition": net_summary["r_definition"],
+                        "warmup_bars": warmup_bars,
+                        "bars_evaluated": max(0, len(candles) - warmup_bars),
                         "trades": enriched if include_trades else [],
                         "status": out.get("status") or ("OK" if n else "SUCCESS_EMPTY"),
                         "market_structure": {
@@ -1262,6 +1333,15 @@ class BosResearchService:
                         },
                     }
 
+                if job_id and row_payload.get("execution_run"):
+                    from app.research.causal_execution import write_execution_run_artifact
+                    from app.research.market_structure.artifacts import ROOT as _reports_parent
+
+                    write_execution_run_artifact(
+                        str(job_id),
+                        row_payload,
+                        reports_root=_reports_parent / "reports",
+                    )
                 rows.append(row_payload)
         return {
             "status": "OK",

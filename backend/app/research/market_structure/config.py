@@ -10,7 +10,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-ANALYTICS_VERSION = "market_structure_v1_1"
+ANALYTICS_VERSION = "market_structure_v1_2"
 
 # Module-level defaults matching the user brief. Settings may override via env.
 ENABLE_MARKET_STRUCTURE_ANALYTICS = True
@@ -46,15 +46,51 @@ class MarketStructureFeatureConfig:
     trend_vote_required: int = 2
     swing_left: int = 2
     swing_right: int = 2
+    # Analytics display default: CHOCH-persistent (fixes stale BEARISH during
+    # rally reclaims). Does not enter strategy fingerprints / trade gates.
+    trend_mode: str = "choch_persistent"
     bos_lookback_bars: int = 30
     pullback_atr_shallow: float = 1.0
     pullback_atr_deep: float = 2.5
     min_bars_basic: int = 30
     min_bars_adx: int = 30
     min_bars_ema_slow: int = 200
+    # Two-axis analytics. Not used by strategy gates.
+    percentile_lookback_days: int = 90
+    fng_lag_days: int = 1
+    funding_staleness_hours: float = 8.0
+    open_interest_staleness_hours: float = 1.0
+    tier_large_min: float = 10_000_000_000.0
+    tier_mid_min: float = 1_000_000_000.0
+    tier_small_min: float = 50_000_000.0
+    tier_hysteresis_days: int = 7
+    tier_threshold_overrides_enabled: bool = False
+    low_sample_bars: int = 30
+    fills_warning_below: int = 100
+    opportunity_atr_up: float = 1.5
+    opportunity_atr_down: float = 1.0
+    opportunity_bars: int = 24
+    volume_median_lookback: int = 20
+    book_interval_s: int = 60
+    book_depth_limit: int = 1000
+    book_storage_band_pct: float = 2.0
+    book_bands_pct: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0)
+    book_top_n: int = 20
+    book_retention_days: int = 14
+    book_weight_budget_fraction: float = 0.5
+
+    def percentile_lookback_bars(self, timeframe: str) -> int:
+        minutes = {"15m": 15, "1h": 60, "4h": 240, "5m": 5, "1d": 1440}.get(
+            str(timeframe).lower(), 60
+        )
+        return int(self.percentile_lookback_days * (1440 / minutes))
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        bands = payload.get("book_bands_pct")
+        if isinstance(bands, tuple):
+            payload["book_bands_pct"] = list(bands)
+        return payload
 
     def fingerprint(self) -> str:
         payload = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))

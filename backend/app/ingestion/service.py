@@ -85,22 +85,18 @@ class MarketDataIngestionService:
         logger.info("ingestion_started", symbols=len(self._known_symbols))
 
     async def stop(self) -> None:
+        from app.core.shutdown import cancel_tasks, finish_within
+
         self._running = False
-        for task in self._tasks:
-            task.cancel()
-        for task in self._tasks:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        await cancel_tasks(self._tasks, label="ingestion")
         self._tasks.clear()
         if self.orchestrator is not None:
             await self.orchestrator.stop()
             self.orchestrator = None
             orch_mod.orchestrator = None
-        await self.store.stop_flusher()
-        await self.ws.stop_all()
-        await self.rest.close()
+        await finish_within(self.store.stop_flusher(), label="market_flusher")
+        await finish_within(self.ws.stop_all(), label="market_ws")
+        await finish_within(self.rest.close(), label="rest_client")
         self.store.ingestion_status = "stopped"
 
     async def _subscribe_all_market_streams(self) -> None:

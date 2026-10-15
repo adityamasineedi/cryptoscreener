@@ -66,3 +66,21 @@ async def test_defillama_matches_by_symbol(settings: Settings):
     out = await provider.get_tvl(["AAVEUSDT"])
     assert out["AAVEUSDT"].value == 5000000000.0
     assert out["AAVEUSDT"].status == DataStatus.LIVE
+
+
+@pytest.mark.asyncio
+async def test_defillama_keeps_highest_tvl_and_strips_1000_prefix(settings: Settings):
+    provider = DefiLlamaProvider(settings)
+
+    async def fake_get_json(path, **kwargs):
+        ts = datetime.now(timezone.utc)
+        return [
+            {"name": "Pepe Clone", "symbol": "PEPE", "tvl": 10},
+            {"name": "Pepe", "symbol": "PEPE", "tvl": 900},
+        ], ts, False
+
+    provider._get_json = AsyncMock(side_effect=fake_get_json)
+    provider._protocol_index = None
+    out = await provider.get_tvl(["1000PEPEUSDT"])
+    assert out["1000PEPEUSDT"].value == 900.0
+    assert out["1000PEPEUSDT"].status == DataStatus.LIVE

@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     paper_trade_enabled: bool = Field(default=True, alias="PAPER_TRADE_ENABLED")
     paper_starting_equity: float = Field(default=1000.0, alias="PAPER_STARTING_EQUITY")
     paper_risk_percent: float = Field(default=0.02, alias="PAPER_RISK_PERCENT")
+    # Shared secret for POST /paper/reset, /paper/disable, /paper/close-legacy from a
+    # non-loopback peer (header X-Paper-Admin). Unset = loopback only.
+    paper_admin_token: str | None = Field(default=None, alias="PAPER_ADMIN_TOKEN")
     # path_a = Trend+BOS (research COMBO_02); path_b = full LONG_ENTRY_CANDIDATE
     paper_entry_mode: str = Field(default="path_a", alias="PAPER_ENTRY_MODE")
     # Legacy 15m setup → PaperTradeEngine.on_setup_signal auto-entry.
@@ -161,6 +164,36 @@ class Settings(BaseSettings):
         default=False, alias="PAPER_V1_TELEGRAM_ENABLED"
     )
     paper_v1_replay_mode: bool = Field(default=False, alias="PAPER_V1_REPLAY_MODE")
+
+    # COMBO_02 V2.1-A paper watcher (PAPER ONLY — never live orders)
+    paper_v21a_watcher_enabled: bool = Field(
+        default=False, alias="PAPER_V21A_WATCHER_ENABLED"
+    )
+    paper_v21a_telegram_enabled: bool = Field(
+        default=False, alias="PAPER_V21A_TELEGRAM_ENABLED"
+    )
+    paper_v21a_replay_mode: bool = Field(default=False, alias="PAPER_V21A_REPLAY_MODE")
+    paper_v21a_symbols: str = Field(
+        default="",
+        alias="PAPER_V21A_SYMBOLS",
+        description="Comma-separated symbols; empty = default research universe",
+    )
+    paper_v21a_daily_summary_enabled: bool = Field(
+        default=False, alias="PAPER_V21A_DAILY_SUMMARY_ENABLED"
+    )
+    # Every cap-book side with net > $0 and at least 5 trades (paper only).
+    # Off unless set: those sides fail the strategy_rank pass rule.
+    paper_passed_watcher_enabled: bool = Field(
+        default=False, alias="PAPER_PASSED_WATCHER_ENABLED"
+    )
+    # Explicit trading mode separation (V2.1-A LIVE is never auto-enabled)
+    trading_mode: str = Field(default="PAPER", alias="TRADING_MODE")
+
+    # Read-only closed-candle discovery; publication remains fail-closed behind
+    # historical, forward-paper, and current portfolio-risk gates.
+    scalping_watcher_enabled: bool = Field(
+        default=True, alias="SCALPING_WATCHER_ENABLED"
+    )
 
     # Dynamic COMBO_02 v2 research candidate pipeline (never joins v1)
     dynamic_candidate_discovery_enabled: bool = Field(

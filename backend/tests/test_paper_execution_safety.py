@@ -106,7 +106,13 @@ def test_legacy_auto_entry_on_persists_research_15m_classification(monkeypatch):
         v1_profile_enabled=False,
     )
     eng.legacy_auto_entry_enabled = True
-    pos = eng.on_setup_signal("QNTUSDT", _path_a_payload("QNTUSDT"))
+    payload = _path_a_payload("QNTUSDT")
+    payload["status"] = "LONG_ENTRY_CANDIDATE"
+    payload["entry"] = {"entry_price": 100.0}
+    payload["stop"] = {"final_stop": 98.0, "provisional": False, "reason": "structural pullback low"}
+    payload["impulse"] = {"is_impulse": True}
+    payload["pullback"] = {"pullback_state": "CONFIRMED"}
+    pos = eng.on_setup_signal("QNTUSDT", payload)
     assert pos is not None
     snip = pos.signal_snippet
     assert snip["strategy_id"] == STRATEGY_RESEARCH_15M
@@ -121,7 +127,7 @@ def test_legacy_auto_entry_on_persists_research_15m_classification(monkeypatch):
 def test_v1_watcher_trade_classified_telegram_eligible(monkeypatch):
     import app.services.paper_trade as paper_mod
 
-    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    monkeypatch.setattr(paper_mod, "_live_price_with_source", lambda _s: (100.0, "mark_price"))
     eng = PaperTradeEngine(
         enabled=True,
         risk_policy=PaperRiskPolicy(enabled=False),
@@ -137,6 +143,8 @@ def test_v1_watcher_trade_classified_telegram_eligible(monkeypatch):
         emit_alert=False,
     )
     assert pos is not None
+    assert pos.signal_snippet["price_source"] == "mark_price"
+    assert pos.entry_price == pytest.approx(100.0)
     snip = pos.signal_snippet
     assert snip["strategy_id"] == STRATEGY_COMBO_02_V1
     assert snip["source"] == SOURCE_V1_PAPER_WATCHER
@@ -338,14 +346,20 @@ def test_v1_monitor_excludes_non_v1_records(tmp_path: Path):
 def test_close_legacy_requires_confirm_and_skips_v1(monkeypatch):
     import app.services.paper_trade as paper_mod
 
-    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    monkeypatch.setattr(paper_mod, "_live_price_with_source", lambda _s: (100.0, "mark_price"))
     eng = PaperTradeEngine(
         enabled=True,
         risk_policy=PaperRiskPolicy(enabled=False),
         v1_profile_enabled=False,
     )
     eng.legacy_auto_entry_enabled = True
-    legacy = eng.on_setup_signal("ARBUSDT", _path_a_payload("ARBUSDT"))
+    payload = _path_a_payload("ARBUSDT")
+    payload["status"] = "LONG_ENTRY_CANDIDATE"
+    payload["entry"] = {"entry_price": 100.0}
+    payload["stop"] = {"final_stop": 98.0, "provisional": False, "reason": "structural pullback low"}
+    payload["impulse"] = {"is_impulse": True}
+    payload["pullback"] = {"pullback_state": "CONFIRMED"}
+    legacy = eng.on_setup_signal("ARBUSDT", payload)
     assert legacy is not None
 
     book = V1Book("BTCUSDT", "1h", "core", 0.02, True)
@@ -358,6 +372,8 @@ def test_close_legacy_requires_confirm_and_skips_v1(monkeypatch):
         emit_alert=False,
     )
     assert v1 is not None
+    assert v1.signal_snippet["price_source"] == "mark_price"
+    assert v1.entry_price == pytest.approx(100.0)
 
     denied = eng.close_legacy_paper_positions(confirm=False)
     assert denied["ok"] is False

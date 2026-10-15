@@ -39,6 +39,20 @@ def test_catalog_has_working_combo02_v1():
     assert all(link.get("kind") == "repo_path" for link in v11["where_to_run"])
 
 
+def test_catalog_splits_scalping_intraday_and_swing():
+    cat = build_strategy_catalog()
+    by_horizon: dict[str, set[str]] = {"scalping": set(), "intraday": set(), "swing": set()}
+    for item in cat["strategies"]:
+        horizon = item["horizon"]
+        assert horizon in by_horizon
+        by_horizon[horizon].add(item["id"])
+    assert "scalp_bos_retest_v1" in by_horizon["scalping"]
+    assert "INTRADAY_BOS_SD_V1" in by_horizon["intraday"]
+    assert "PATH_B_EXPERIMENTAL" in by_horizon["intraday"]
+    assert "COMBO_02_V1" in by_horizon["swing"]
+    assert "COMBO_03_TRANSITION" in by_horizon["swing"]
+
+
 def test_catalog_marks_short_and_local_as_non_production():
     cat = build_strategy_catalog()
     short = next(s for s in cat["strategies"] if s["id"] == "COMBO_02_SHORT_RESEARCH")

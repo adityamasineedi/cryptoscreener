@@ -112,14 +112,11 @@ class _TradeShard:
         self.forensics.note_task_created(f"trade_tip:{self.name}")
 
     async def stop(self) -> None:
+        from app.core.shutdown import cancel_tasks
+
         self._stop.set()
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        await cancel_tasks([self._task], label=f"trade_tip:{self.name}")
+        self._task = None
         self.connected = False
 
     def _url(self) -> str:
@@ -144,6 +141,7 @@ class _TradeShard:
                     url,
                     ping_interval=20,
                     ping_timeout=20,
+                    close_timeout=2,
                     max_queue=4096,
                     open_timeout=30,
                     max_size=2**23,

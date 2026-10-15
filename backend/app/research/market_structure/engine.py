@@ -30,7 +30,17 @@ from app.research.entry_diagnostics import (
     format_funnel_markdown,
     merge_diag_into_bar_row,
 )
-from app.research.market_structure.mtf import classify_mtf_alignment
+from app.research.market_structure.funnel import build_regime_funnel
+from app.research.market_structure.mtf import (
+    classify_mtf_alignment,
+    combined_structure_key,
+    trigger_token,
+)
+from app.research.market_structure.regime import (
+    classify_two_axis,
+    prior_percentile_threshold_series,
+    unknown_share_after_warmup,
+)
 from app.research.market_structure.research_labels import suggest_research_opportunity
 from app.research.market_structure.structure import (
     StructureSnapshot,
@@ -39,6 +49,73 @@ from app.research.market_structure.structure import (
     snapshot_at_index,
 )
 from app.signals._candle_utils import candle_time
+
+
+_IDLE_REJECTION = {
+    None,
+    "",
+    "NO_STRATEGY_ENTRY_AT_BAR",
+    "NOT_EXPORTED",
+    "UNKNOWN_NOT_EXPORTED",
+    "NO_STRATEGY_ENTRY",
+}
+
+
+def _axis_at(
+    table: Any,
+    index: int | None,
+    snap: StructureSnapshot,
+    thresholds: tuple[list[float | None], list[float | None]] | None,
+):
+    cfg = getattr(table, "config", None) or default_feature_config()
+    if table is None or index is None or index < 0:
+        return classify_two_axis(
+            {"data_quality_state": snap.data_quality_state or "UNKNOWN_DATA_MISSING"},
+            atr_high=None,
+            atr_low=None,
+            config=cfg,
+        )
+    return classify_two_axis(
+        {
+            "data_quality_state": snap.data_quality_state,
+            "trend_state": snap.trend_state,
+            "structure_state": snap.structure_state,
+            "ema_alignment": snap.ema_alignment,
+            "choppiness_index": snap.choppiness_index,
+            "atr": snap.atr,
+        },
+        atr_high=(thresholds[0][index] if thresholds is not None else None),
+        atr_low=(thresholds[1][index] if thresholds is not None else None),
+        config=cfg,
+    )
+
+
+def _axis_thresholds(
+    table: Any,
+) -> tuple[list[float | None], list[float | None]] | None:
+    if table is None:
+        return None
+    cfg = getattr(table, "config", None) or default_feature_config()
+    high, low = prior_percentile_threshold_series(
+        table.atr,
+        cfg.percentile_lookback_bars(table.timeframe),
+        (cfg.atr_high_percentile, cfg.atr_low_percentile),
+    )
+    return high, low
+
+
+def _stamp_funnel_flags(row: dict[str, Any]) -> None:
+    """Record stages that already exist on the row. Idle bars stay uncounted."""
+    reason = row.get("rejection_reason")
+    is_fill = row.get("entry_attribution_type") == "EXECUTION_BAR"
+    accepted = bool(row.get("accepted_signal")) or is_fill
+    rejected = reason not in _IDLE_REJECTION and not accepted
+    row["signal_attempted"] = bool(accepted or rejected or is_fill)
+    row["signal_accepted"] = accepted
+    row["signal_rejected"] = rejected
+    row["rejection_reason"] = reason if rejected else row.get("rejection_reason")
+    row["order_placed"] = is_fill
+    row["filled"] = is_fill
 
 
 def _aware(ts: datetime | None) -> datetime | None:
@@ -158,6 +235,9 @@ def compute_market_structure_analytics(
         if series_15m
         else None
     )
+    thresholds_1h = _axis_thresholds(table_1h)
+    thresholds_4h = _axis_thresholds(table_4h)
+    thresholds_15m = _axis_thresholds(table_15m)
 
     # Always use fully-closed as-of maps for analytics features.
     idx_4h_map: list[int | None] = [None] * n
@@ -305,6 +385,15 @@ def compute_market_structure_analytics(
             pit_error = str(exc)
             break
 
+        axis_1h = _axis_at(
+            table_1h, i1 if table_1h is not None else None, snap_1h, thresholds_1h
+        )
+        axis_4h = _axis_at(
+            table_4h, i4 if table_4h is not None else None, snap_4h, thresholds_4h
+        )
+        axis_15 = _axis_at(
+            table_15m, i15 if table_15m is not None else None, snap_15m, thresholds_15m
+        )
         mtf = classify_mtf_alignment(snap_4h, snap_1h, snap_15m)
         research = suggest_research_opportunity(
             structure_4h=snap_4h,
@@ -474,11 +563,28 @@ def compute_market_structure_analytics(
                 "15m_status": status_15["15m_status"],
                 "15m_last_closed_candle_time": status_15["15m_last_closed_candle_time"],
                 "15m_missing_reason": status_15["15m_missing_reason"],
+                "symbol": symbol.upper(),
+                "trend_axis": axis_1h.trend_state,
+                "vol_state": axis_1h.vol_state,
+                "combined_regime": axis_1h.combined,
+                "warmup": axis_1h.warmup,
+                "unclassified_reason": axis_1h.unclassified_reason,
+                "bias_4h": axis_4h.trend_state,
+                "vol_state_4h": axis_4h.vol_state,
+                "trend_axis_15m": axis_15.trend_state,
+                "trigger_15m": trigger_token(snap_15m.pullback_state, snap_15m.bos_state),
+                "structure_key": combined_structure_key(
+                    axis_4h.trend_state,
+                    axis_1h.trend_state,
+                    snap_15m.pullback_state,
+                    snap_15m.bos_state,
+                ),
             }
         )
         merge_diag_into_bar_row(
             by_bar[-1], diag_by_bar.get(i), entry_attr=entry_attr
         )
+        _stamp_funnel_flags(by_bar[-1])
 
     # Attribution quality invariants
     for tid, cnt in execution_counts.items():
@@ -585,6 +691,8 @@ def compute_market_structure_analytics(
 
     trade_regime = build_trade_regime_summary(by_bar, trades or [])
     opportunity = build_opportunity_summary(by_bar)
+    regime_funnel = build_regime_funnel(by_bar)
+    quality["unknown_share_after_warmup"] = unknown_share_after_warmup(by_bar)
     mtf_summary = build_mtf_alignment_summary(by_bar)
     entry_funnel = build_entry_funnel_reports(by_bar)
     quality["entry_diagnostics_bars"] = len(diag_by_bar)
@@ -648,6 +756,7 @@ def compute_market_structure_analytics(
         "ambiguous_trade_context": ambiguous,
         "trade_regime_summary": trade_regime,
         "regime_opportunity_summary": opportunity,
+        "regime_funnel": regime_funnel,
         "mtf_alignment_summary": mtf_summary,
         "entry_funnel": entry_funnel,
         "entry_funnel_markdown": format_funnel_markdown(entry_funnel),

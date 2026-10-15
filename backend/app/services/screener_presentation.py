@@ -394,6 +394,18 @@ def enrich_screener_row_dict(
     out["potential_levels"] = build_potential_levels(row)
     out["v1_status"] = v1_status
     out["is_telegram_eligible"] = False
+    try:
+        from app.services.scalping_watcher import get_scalping_watcher
+
+        # Cache read only: a screener refresh never runs strategy evaluation.
+        out["scalping"] = get_scalping_watcher().snapshot(sym)
+    except Exception as exc:  # noqa: BLE001
+        out["scalping"] = {
+            "symbol": sym,
+            "status": "DATA_UNAVAILABLE",
+            "reason": f"watcher_unavailable:{type(exc).__name__}",
+            "signals": [],
+        }
     if trades.get(sym):
         out["v1_paper_trade"] = {
             "open": True,

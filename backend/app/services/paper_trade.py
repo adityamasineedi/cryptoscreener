@@ -26,6 +26,7 @@ from app.services.paper_sizing import (
     resolve_symbol_filters,
     round_price_to_tick,
     size_paper_long,
+    size_paper_short,
 )
 from app.signals.schemas import SignalStatus
 
@@ -44,12 +45,73 @@ PATH_B = "path_b"
 STREAM_LEGACY = "LEGACY"
 STREAM_V1 = "V1"
 STREAM_V2 = "V2"
+STREAM_V21A = "V21A"
+
+
+def canonical_source_candle(value: Any) -> str:
+    """UTC second timestamp. Equal strings are the same closed bar."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    text = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return raw
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    parsed = parsed.astimezone(timezone.utc).replace(microsecond=0)
+    return parsed.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+def ledger_dedupe_key(
+    symbol: str,
+    source_candle_ts: Any,
+    stream: str,
+    timeframe: str,
+) -> str:
+    """One booked bar per symbol + candle + stream + timeframe."""
+    return "|".join(
+        (
+            str(symbol or "").upper(),
+            canonical_source_candle(source_candle_ts),
+            str(stream or STREAM_LEGACY).upper(),
+            str(timeframe or "").lower(),
+        )
+    )
+
+
+def _parse_utc(value: Any) -> datetime | None:
+    """Aware UTC datetime from a datetime or ISO string. None when unreadable."""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith("Z") else raw)
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def exit_bar_open(closed_at: Any, timeframe: str) -> datetime | None:
+    """Open time (UTC) of the ``timeframe`` bar that contains ``closed_at``."""
+    from app.ingestion.klines import TIMEFRAME_MS, normalize_timeframe
+
+    closed = _parse_utc(closed_at)
+    step = int(TIMEFRAME_MS.get(normalize_timeframe(timeframe)) or 0)
+    if closed is None or step <= 0:
+        return None
+    closed_ms = int(closed.timestamp() * 1000)
+    return datetime.fromtimestamp((closed_ms // step) * step / 1000, tz=timezone.utc)
+
 
 # Do not open paper trades on stale / incomplete OHLCV tips
 _STALE_OHLCV = frozenset({"TRAILING_STALE", "STALE", "WAITING", "UNAVAILABLE"})
-
-# Long may open slightly below planned entry (spread), but not deep into stop risk
-_MAX_ADVERSE_ENTRY_FRAC = 0.10
 
 PersistFn = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -133,6 +195,43 @@ class PaperTradeEngine:
         self._persist: PersistFn | None = None
         self._pending_persist: list[dict[str, Any]] = []
         self._last_skip_reason: str | None = None
+        self._last_path_a_diagnostics: dict[str, Any] | None = None
+        # Full closed-trade PnL from the ledger. Truncated hydrate rows must
+        # not replace this. In-process closes add to _pnl_since_reconcile.
+        self._book_realized_pnl: float | None = None
+        self._pnl_since_reconcile: float = 0.0
+        # (SYMBOL, STREAM) -> open time of the bar its last stop/target exit fell in.
+        # The backtest walk re-enters on exit bar + 1 at the earliest.
+        self._last_exit_bar_open: dict[tuple[str, str], datetime] = {}
+        # Overridable clock for the close stamp (tests).
+        self._now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+        # False until the orchestrator has loaded the ledger. Standalone engines stay True.
+        self.ledger_ready: bool = True
+        # False when another backend process holds the paper writer lock.
+        self.writer_lock_held: bool = True
+
+    def _writes_blocked(self, sym: str) -> bool:
+        """True (with the skip reason set) while this process must not open paper trades."""
+        if not self.writer_lock_held:
+            self._last_skip_reason = f"{sym}:paper_writer_lock_not_held"
+            return True
+        if not self.ledger_ready:
+            self._last_skip_reason = f"{sym}:ledger_not_ready"
+            return True
+        return False
+
+    def _reentry_blocked_locked(
+        self, sym: str, key: tuple[str, str], setup_bar_time_utc: Any
+    ) -> bool:
+        """True when the setup bar is not after the bar this stream last exited on."""
+        last_exit = self._last_exit_bar_open.get(key)
+        if last_exit is None:
+            return False
+        setup_bar = _parse_utc(canonical_source_candle(setup_bar_time_utc))
+        if setup_bar is None or setup_bar > last_exit:
+            return False
+        self._last_skip_reason = f"{sym}:reentry_not_after_exit_bar"
+        return True
 
     def _halt_kwargs(self, symbol: str | None = None) -> dict[str, Any]:
         """Snapshot for evaluate_paper_entry_risk kill switches."""
@@ -192,8 +291,12 @@ class PaperTradeEngine:
                 snip = {}
         source = str(snip.get("source") or "")
         strategy = str(snip.get("strategy_id") or "")
+        if source == "PASSED_CAP_BOOK":
+            return str(snip.get("stream") or "PASSED")
         if source == "V1_PAPER_WATCHER" or strategy == "COMBO_02_V1":
             return STREAM_V1
+        if source == "V21A_PAPER_WATCHER" or strategy == "COMBO_02_V2_1_A":
+            return STREAM_V21A
         if source in (
             "V2_CANDIDATE_PAPER_WATCHER",
             "DYNAMIC_CANDIDATE_PIPELINE",
@@ -234,6 +337,25 @@ class PaperTradeEngine:
     def equity(self) -> float:
         return self.starting_equity + self.realized_pnl
 
+    def _equity_for_new_risk(self) -> float:
+        """Size from every closed trade, including rows outside the hydrate window."""
+        if self._book_realized_pnl is not None:
+            self.realized_pnl = float(self._book_realized_pnl) + float(self._pnl_since_reconcile)
+        return self.equity
+
+    def remember_dedupe_keys(self, keys: list[str]) -> None:
+        """Block a second booking after restart, including rows outside the hydrate window."""
+        with self._lock:
+            self._opened_keys.update(str(key) for key in keys if key)
+
+    def drop_rejected_duplicate(self, trade_id: str) -> None:
+        """Remove an in-memory open that the ledger refused. Keeps the dedupe key."""
+        with self._lock:
+            for key, pos in list(self._open.items()):
+                if pos.id == trade_id:
+                    del self._open[key]
+                    return
+
     def enable(self) -> None:
         self.enabled = True
         self.scan_cached_setups()
@@ -263,8 +385,27 @@ class PaperTradeEngine:
             self._closed.clear()
             self._opened_keys.clear()
             self.realized_pnl = 0.0
+            # Fresh account: clear kill-switch trackers so a reset is not still halted.
+            self.peak_equity = float(self.starting_equity)
+            self._day_key = None
+            self._day_pnl_r = 0.0
+            self._consecutive_losses = 0
+            self._symbol_consecutive_losses.clear()
+            self._strategy_equity_r = 0.0
+            self._strategy_peak_r = 0.0
+            self._pending_persist.clear()
+            self._last_skip_reason = None
+            self._last_path_a_diagnostics = None
+            self._book_realized_pnl = None
+            self._pnl_since_reconcile = 0.0
+            self._last_exit_bar_open.clear()
 
-    def hydrate_from_rows(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+    def hydrate_from_rows(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        closed_pnl_total: float | None = None,
+    ) -> dict[str, int]:
         """Restore open/closed book from DB rows after restart (no re-persist)."""
         if not rows:
             return {"open": 0, "closed": 0}
@@ -288,17 +429,16 @@ class PaperTradeEngine:
                 return None
 
         closed_rows: list[PaperPosition] = []
+        halt_rows: list[PaperPosition] = []
         realized = 0.0
         keys: set[str] = set()
+        last_exits: dict[tuple[str, str], datetime] = {}
 
         with self._lock:
-            # Only hydrate into an empty book — never clobber a live session
-            if self._open or self._closed:
-                return {
-                    "open": len(self._open),
-                    "closed": len(self._closed),
-                    "skipped": 1,
-                }
+            # A live book keeps its positions and PnL. Opens that exist only in
+            # the ledger are adopted so a second process cannot book them again.
+            live = bool(self._open or self._closed)
+            adopted = 0
 
             for raw in rows:
                 if not isinstance(raw, dict):
@@ -353,32 +493,160 @@ class PaperTradeEngine:
                     or "PATH_A"
                 )
                 bos_level = snippet.get("bos_level")
-                src = pos.source_candle_ts or pos.opened_at or ""
-                keys.add(f"{sym}|{src}|{path}|{bos_level if bos_level is not None else ''}")
+                raw_src = pos.source_candle_ts or pos.opened_at or ""
+                src = canonical_source_candle(pos.source_candle_ts) or raw_src
+                stream = self.stream_of(pos)
+                if str(snippet.get("source") or "") == "PASSED_CAP_BOOK":
+                    tf = str(pos.timeframe or "1h").lower()
+                    keys.add(ledger_dedupe_key(sym, src, stream, tf))
+                elif stream == STREAM_V21A:
+                    side = str(pos.side or "LONG").upper()
+                    tf = str(pos.timeframe or "1h").lower()
+                    keys.add(f"{sym}|{src}|{STREAM_V21A}|{side}|{tf}")
+                    if status == "OPEN":
+                        logger.info(
+                            "paper_position_recovered",
+                            strategy_id="COMBO_02_V2_1_A",
+                            symbol=sym,
+                            trade_id=pid,
+                            mode="PAPER",
+                        )
+                else:
+                    keys.add(
+                        f"{sym}|{src}|{path}|{bos_level if bos_level is not None else ''}"
+                    )
+                    if stream == STREAM_V1:
+                        # Same key open_v1_combo_position writes, so the bar
+                        # stays deduped after a restart.
+                        tf = str(pos.timeframe or "1h").lower()
+                        keys.add(f"{sym}|{src}|{STREAM_V1}|{tf}")
 
                 if status == "OPEN":
                     # Newest first from SQL — keep first per (symbol, stream)
-                    key = self.book_key(sym, self.stream_of(pos))
+                    key = self.book_key(sym, stream)
                     if key not in self._open:
                         self._open[key] = pos
-                else:
+                        if live:
+                            adopted += 1
+                elif not live:
                     closed_rows.append(pos)
+                    if status == "CLOSED":
+                        # Real exits only, the same rows _close_locked feeds the halts.
+                        halt_rows.append(pos)
                     if pos.pnl_usd is not None and status == "CLOSED":
                         realized += float(pos.pnl_usd)
+                    if status == "CLOSED" and pos.closed_at:
+                        # Real exits only. A CANCELLED row is not a strategy exit.
+                        exit_open = exit_bar_open(pos.closed_at, pos.timeframe)
+                        exit_key = self.book_key(sym, stream)
+                        if exit_open is not None and (
+                            exit_key not in last_exits or exit_open > last_exits[exit_key]
+                        ):
+                            last_exits[exit_key] = exit_open
+
+            if live:
+                self._opened_keys.update(keys)
+                logger.info(
+                    "paper_hydrated_from_db",
+                    open=len(self._open),
+                    closed=len(self._closed),
+                    adopted=adopted,
+                    live=True,
+                )
+                return {
+                    "open": len(self._open),
+                    "closed": len(self._closed),
+                    "adopted": adopted,
+                }
 
             # Newest closed first
             closed_rows.sort(key=lambda p: p.closed_at or p.opened_at or "", reverse=True)
             self._closed = closed_rows[: self.max_closed]
             self._opened_keys = keys
+            self._last_exit_bar_open = last_exits
+            if closed_pnl_total is not None:
+                realized = float(closed_pnl_total)
+                self._book_realized_pnl = realized
+                self._pnl_since_reconcile = 0.0
             self.realized_pnl = realized
+            self._rebuild_halts_locked(halt_rows, closed_pnl_total)
 
         logger.info(
             "paper_hydrated_from_db",
             open=len(self._open),
             closed=len(self._closed),
             realized_pnl=round(realized, 4),
+            peak_equity=round(self.peak_equity, 4),
+            day_pnl_r=round(self._day_pnl_r, 4),
+            consecutive_losses=self._consecutive_losses,
+            strategy_drawdown_r=round(
+                self._strategy_equity_r - self._strategy_peak_r, 4
+            ),
         )
         return {"open": len(self._open), "closed": len(self._closed)}
+
+    def _rebuild_halts_locked(
+        self,
+        closed: list[PaperPosition],
+        closed_pnl_total: float | None,
+    ) -> None:
+        """Rebuild the kill-switch trackers from CLOSED ledger rows after a restart.
+
+        Walks the rows oldest close first, the way ``_note_close_for_halts`` saw
+        them. ``closed`` may be only the newest window of a longer ledger. PnL
+        closed before the window is ``closed_pnl_total`` minus the window sum, so
+        the equity walk starts at the true level. A peak, streak or R drawdown
+        that lies wholly before the window cannot be rebuilt: the values here are
+        then lower bounds, never higher than the real ones, and a halt the window
+        shows still holds.
+        """
+        floor = datetime.min.replace(tzinfo=timezone.utc)
+        ordered = sorted(
+            closed,
+            key=lambda p: (
+                _parse_utc(p.closed_at) or _parse_utc(p.opened_at) or floor,
+                p.id,
+            ),
+        )
+        window_pnl = sum(float(p.pnl_usd or 0.0) for p in ordered)
+        before_window = (
+            float(closed_pnl_total) - window_pnl if closed_pnl_total is not None else 0.0
+        )
+        eq = self.starting_equity + before_window
+        # The account started at starting_equity, so the peak is never below it.
+        peak = max(self.starting_equity, eq)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day_r = 0.0
+        strat_r = 0.0
+        strat_peak = 0.0
+        streak = 0
+        sym_streak: dict[str, int] = {}
+        for pos in ordered:
+            r = float(pos.r_multiple or 0.0)
+            closed_dt = _parse_utc(pos.closed_at)
+            # Daily halt counts closes on the current UTC date only.
+            if closed_dt is not None and closed_dt.strftime("%Y-%m-%d") == today:
+                day_r += r
+            strat_r += r
+            if strat_r > strat_peak:
+                strat_peak = strat_r
+            eq += float(pos.pnl_usd or 0.0)
+            if eq > peak:
+                peak = eq
+            sym = str(pos.symbol or "").upper()
+            if r < 0:
+                streak += 1
+                sym_streak[sym] = int(sym_streak.get(sym, 0)) + 1
+            else:
+                streak = 0
+                sym_streak[sym] = 0
+        self.peak_equity = max(float(peak), float(self.equity))
+        self._day_key = today
+        self._day_pnl_r = day_r
+        self._consecutive_losses = streak
+        self._symbol_consecutive_losses = sym_streak
+        self._strategy_equity_r = strat_r
+        self._strategy_peak_r = strat_peak
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -387,6 +655,7 @@ class PaperTradeEngine:
                 STREAM_LEGACY: 0,
                 STREAM_V1: 0,
                 STREAM_V2: 0,
+                STREAM_V21A: 0,
             }
             for p in self._open.values():
                 stream = self.stream_of(p)
@@ -427,6 +696,9 @@ class PaperTradeEngine:
                     "combo_version": "v1-combo02-long-htf",
                 },
                 "last_skip_reason": self._last_skip_reason,
+                "ledger_ready": self.ledger_ready,
+                "writer_lock_held": self.writer_lock_held,
+                "last_path_a_diagnostics": self._last_path_a_diagnostics,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -441,9 +713,10 @@ class PaperTradeEngine:
     def on_setup_signal(self, symbol: str, payload: dict[str, Any] | None) -> PaperPosition | None:
         """Open a paper long under the active entry mode.
 
-        Path A (default, COMBO_02 v1): always requires ``_is_path_a_long``
-        (setup BULLISH + confirmed BULLISH_BOS + 4h/1h HTF + stop). A live
-        ``LONG_ENTRY_CANDIDATE`` status does **not** bypass the HTF gate.
+        Path A requires a fresh closed-candle entry candidate. Cached
+        WAITING payloads, provisional stops, and out-of-window targets do
+        not open. HTF, impulse, pullback, stop, and target must match that
+        evaluation. A mismatch rejects the entry.
 
         Path B (experimental): opens only on ``LONG_ENTRY_CANDIDATE`` /
         ``ENTRY_CANDIDATE`` via live entry-engine MTF — not COMBO_02 v1.
@@ -454,6 +727,8 @@ class PaperTradeEngine:
 
         # Phase 2: SHORT / SHORT research identity never opens paper.
         assert_short_research_only_boundary(payload, detail="on_setup_signal")
+        if self._writes_blocked(str(symbol).upper()):
+            return None
         # Kill switch: screener/BOS/liq/UI alerts continue; only skip paper opens.
         if not self.legacy_auto_entry_enabled:
             self._last_skip_reason = f"{str(symbol).upper()}:legacy_auto_entry_disabled"
@@ -480,6 +755,7 @@ class PaperTradeEngine:
 
         path_a = False
         path_b = False
+        path_a_gate = None
         if self.entry_mode == PATH_B:
             # Experimental only — not COMBO_02 v1 HTF-gated research path.
             if status not in ENTRY_STATUSES:
@@ -487,8 +763,25 @@ class PaperTradeEngine:
             path_b = True
             path_label = "PATH_B"
         else:
-            # RESEARCH_15M Path A: HTF hard gate (Trend+BOS+HTF). Not COMBO_02 v1.
-            if not _is_path_a_long(payload):
+            # RESEARCH_15M Path A: same closed-candle evaluator as SignalEngine.
+            from app.services.path_a_paper_validation import (
+                analyze_closed_path_a,
+                validate_path_a_paper_entry,
+            )
+
+            closed_eval = analyze_closed_path_a(sym, payload)
+            path_a_gate = validate_path_a_paper_entry(payload, closed_eval)
+            if not path_a_gate.ok:
+                self._last_path_a_diagnostics = path_a_gate.diagnostics
+                self._last_skip_reason = (
+                    f"{sym}:path_a_rejected:{';'.join(path_a_gate.reasons)}"
+                )
+                logger.info(
+                    "paper_path_a_rejected",
+                    symbol=sym,
+                    reasons=path_a_gate.reasons,
+                    diagnostics=path_a_gate.diagnostics,
+                )
                 return None
             path_a = True
             path_label = "PATH_A"
@@ -518,15 +811,20 @@ class PaperTradeEngine:
         )
 
         entry_price = _f(entry.get("entry_price")) or _f(risk.get("entry"))
-        if entry_price is None and bos_level is not None and bos_level > 0:
-            # Path A: prefer retest of broken level when formal entry not set
-            entry_price = bos_level
-        if entry_price is None:
-            entry_price = _live_price(sym)
+        if path_a_gate is None:
+            if entry_price is None and bos_level is not None and bos_level > 0:
+                entry_price = bos_level
+            if entry_price is None:
+                entry_price = _live_price(sym)
         stop_price = _f(stop.get("final_stop")) or _f(risk.get("stop"))
         tp1 = None
         if targets:
             tp1 = _f(targets[0].get("target_price") if isinstance(targets[0], dict) else None)
+        if path_a_gate is not None:
+            # Closed-candle prices only. Do not invent a stop or target.
+            entry_price = path_a_gate.entry
+            stop_price = path_a_gate.stop
+            tp1 = path_a_gate.target
         rr = payload.get("risk_reward") or {}
         rr_ok = str(rr.get("RISK_REWARD") or "").upper() == "PASS"
 
@@ -547,38 +845,16 @@ class PaperTradeEngine:
             )
             return None
 
+        # Fill the backtest plan. A drifted mark is recorded, not used as the fill
+        # and not used to skip the trade.
         live = _live_price(sym)
-        if live is None or live <= 0:
-            # Cannot validate against market — avoid opening into a ghost fill
-            logger.info("paper_skip_no_live_price", symbol=sym, path=path_label)
-            return None
-        if live <= stop_price:
-            logger.info(
-                "paper_skip_already_stopped",
-                symbol=sym,
-                path=path_label,
-                live=live,
-                stop=stop_price,
-                entry=entry_price,
-            )
-            return None
         risk_dist = entry_price - stop_price
-        if risk_dist > 0 and live < entry_price:
-            adverse_frac = (entry_price - live) / risk_dist
-            if adverse_frac > _MAX_ADVERSE_ENTRY_FRAC:
-                logger.info(
-                    "paper_skip_missed_entry",
-                    symbol=sym,
-                    path=path_label,
-                    live=live,
-                    entry=entry_price,
-                    stop=stop_price,
-                    adverse_frac=round(adverse_frac, 3),
-                )
-                return None
 
         if tp1 is None:
-            # Synthesize min_rr target when engine didn't attach TP1 yet
+            if path_a:
+                self._last_skip_reason = f"{sym}:path_a_rejected:target_fallback_forbidden"
+                logger.info("paper_skip_target_fallback", symbol=sym, path=path_label)
+                return None
             tp1 = entry_price + self.min_rr * risk_dist
             rr_ok = True
         elif not rr_ok:
@@ -666,14 +942,16 @@ class PaperTradeEngine:
             setup_qty = _f(risk.get("final_quantity")) or 0.0
             if setup_qty > 0:
                 preferred_qty = setup_qty
+        account_equity = self._equity_for_new_risk() if path_a else self.equity
         sized = size_paper_long(
             symbol=sym,
-            account_equity=self.equity,
+            account_equity=account_equity,
             risk_percent=eff_risk_pct,
             entry=entry_price,
             stop=stop_price,
             leverage=self.max_leverage,
             preferred_quantity=preferred_qty,
+            rounding="plan",
         )
         entry_price = float(sized["entry_price"])
         stop_price = float(sized["stop_price"])
@@ -684,7 +962,8 @@ class PaperTradeEngine:
             tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
 
         if qty <= 0:
-            logger.info("paper_skip_zero_qty", symbol=sym)
+            self._last_skip_reason = f"{sym}:zero_qty:{sized.get('reason') or 'no_quantity'}"
+            logger.info("paper_skip_zero_qty", symbol=sym, reason=sized.get("reason"))
             return None
 
         # Re-check book headroom with planned risk
@@ -749,6 +1028,8 @@ class PaperTradeEngine:
                     "htf_alignment": htf_alignment,
                     "legacy_entry_mode": path_label,
                     "paper_execution": paper_execution_snippet(sized),
+                    "execution": "backtest_plan",
+                    "live_mark": live if live and live > 0 else None,
                 },
             )
             pos = PaperPosition(
@@ -768,6 +1049,10 @@ class PaperTradeEngine:
             )
             self._open[legacy_key] = pos
             self._opened_keys.add(dedupe_key)
+            if source_ts:
+                self._opened_keys.add(
+                    ledger_dedupe_key(sym, source_ts, STREAM_LEGACY, setup_tf)
+                )
             self._queue_persist(pos)
             self._last_skip_reason = None
             logger.info(
@@ -820,6 +1105,8 @@ class PaperTradeEngine:
         )
 
         sym = str(symbol or "").upper()
+        if self._writes_blocked(sym):
+            return None
         tf = str(timeframe or "1h").lower()
         tier = str(getattr(book, "tier", "") or "core")
         risk_pct = float(getattr(book, "risk_percent", 0.0) or 0.0)
@@ -856,21 +1143,13 @@ class PaperTradeEngine:
                 self._last_skip_reason = f"{sym}:v1_rr"
                 return None
 
+        # Fill stays at the plan; the source only labels where live_mark came from.
+        live: float | None = None
+        live_price_source = "plan"
         if not replay:
-            live = _live_price(sym)
-            if live is None or live <= 0:
-                self._last_skip_reason = f"{sym}:v1_no_live_price"
-                return None
-            if live <= stop_price:
-                self._last_skip_reason = f"{sym}:v1_already_stopped"
-                return None
-            if risk_dist > 0 and live < entry_price:
-                adverse_frac = (entry_price - live) / risk_dist
-                if adverse_frac > _MAX_ADVERSE_ENTRY_FRAC:
-                    self._last_skip_reason = f"{sym}:v1_missed_entry"
-                    return None
+            live, live_price_source = _live_price_with_source(sym)
 
-        dedupe_key = f"{sym}|{setup_bar_time_utc}|V1|{tf}"
+        dedupe_key = ledger_dedupe_key(sym, setup_bar_time_utc, STREAM_V1, tf)
         with self._lock:
             open_count = len(self._open)
             open_risk = sum(p.risk_usd for p in self._open.values())
@@ -878,6 +1157,10 @@ class PaperTradeEngine:
             if v1_key in self._open:
                 return None
             if dedupe_key in self._opened_keys:
+                return None
+            if not replay and self._reentry_blocked_locked(
+                sym, v1_key, setup_bar_time_utc
+            ):
                 return None
 
         if not replay:
@@ -908,6 +1191,7 @@ class PaperTradeEngine:
             entry=entry_price,
             stop=stop_price,
             leverage=self.max_leverage,
+            rounding="plan",
         )
         entry_price = float(sized["entry_price"])
         stop_price = float(sized["stop_price"])
@@ -962,6 +1246,9 @@ class PaperTradeEngine:
                     "status": str(eval_result.get("status") or ""),
                     "direction": "LONG",
                     "paper_execution": paper_execution_snippet(sized),
+                    "execution": "backtest_plan",
+                    "live_mark": live if live and live > 0 else None,
+                    "price_source": live_price_source,
                 },
             )
             pos = PaperPosition(
@@ -979,6 +1266,8 @@ class PaperTradeEngine:
                 timeframe=tf,
                 signal_snippet=v1_snip,
             )
+            if live and live > 0:
+                pos.mark_price = float(live)
             self._open[v1_key] = pos
             self._opened_keys.add(dedupe_key)
             self._queue_persist(pos)
@@ -1040,6 +1329,8 @@ class PaperTradeEngine:
         )
 
         sym = str(symbol or "").upper()
+        if self._writes_blocked(sym):
+            return None
         tf = str(timeframe or "1h").lower()
         risk_pct = float(risk_percent or 0.0)
         if risk_pct <= 0 or risk_pct > MAX_OVERRIDE_RISK + 1e-15:
@@ -1077,22 +1368,36 @@ class PaperTradeEngine:
             tp1 = entry_price + self.min_rr * risk_dist
 
         live: float | None = None
-        live_price_source = "unavailable"
+        live_price_source = "replay" if replay else "unavailable"
         if not replay:
             live, live_price_source = _live_price_with_source(sym)
-            if live is None or live <= 0:
-                self._last_skip_reason = f"{sym}:v2_no_live_price"
-                return None
-            if live <= stop_price:
-                self._last_skip_reason = f"{sym}:v2_already_stopped"
-                return None
 
-        dedupe_key = f"{sym}|{setup_bar_time_utc}|V2|{tf}"
+        dedupe_key = ledger_dedupe_key(sym, setup_bar_time_utc, STREAM_V2, tf)
         with self._lock:
+            open_count = len(self._open)
+            open_risk = sum(p.risk_usd for p in self._open.values())
             v2_key = self.book_key(sym, STREAM_V2)
             if v2_key in self._open:
                 return None
             if dedupe_key in self._opened_keys:
+                return None
+            if not replay and self._reentry_blocked_locked(
+                sym, v2_key, setup_bar_time_utc
+            ):
+                return None
+
+        # Same book limits and kill switches as open_v1_combo_position.
+        if not replay:
+            gate = evaluate_paper_entry_risk(
+                sym,
+                policy=self.risk_policy,
+                open_count=open_count,
+                open_risk_usd=open_risk,
+                equity=self.equity,
+                **self._halt_kwargs(sym),
+            )
+            if not gate.ok:
+                self._last_skip_reason = f"{sym}:{gate.reason}"
                 return None
 
         # V2 experimental paper still uses LONG-only openers in this phase.
@@ -1104,6 +1409,7 @@ class PaperTradeEngine:
             entry=entry_price,
             stop=stop_price,
             leverage=self.max_leverage,
+            rounding="plan",
         )
         paper_fill = float(sized["entry_price"])
         stop_price = float(sized["stop_price"])
@@ -1114,6 +1420,20 @@ class PaperTradeEngine:
         if qty <= 0:
             self._last_skip_reason = f"{sym}:v2_zero_qty"
             return None
+
+        if not replay:
+            gate2 = evaluate_paper_entry_risk(
+                sym,
+                policy=self.risk_policy,
+                open_count=open_count,
+                open_risk_usd=open_risk,
+                equity=self.equity,
+                planned_risk_usd=risk_usd,
+                **self._halt_kwargs(sym),
+            )
+            if not gate2.ok:
+                self._last_skip_reason = f"{sym}:{gate2.reason}"
+                return None
 
         # Preserve BACKTEST_ENTRY / LIVE_SIGNAL_PRICE / PAPER_ENTRY distinctly.
         backtest_entry = float(entry_price)
@@ -1195,18 +1515,440 @@ class PaperTradeEngine:
                     pass
             return pos
 
+    def open_v21a_position(
+        self,
+        *,
+        symbol: str,
+        timeframe: str,
+        eval_result: dict[str, Any],
+        risk_percent: float,
+        signal_snippet: dict[str, Any],
+        setup_bar_time_utc: str,
+        replay: bool = False,
+        emit_alert: bool = True,
+    ) -> PaperPosition | None:
+        """Open COMBO_02 V2.1-A paper LONG/SHORT — never places exchange orders.
+
+        Uses existing sizing helpers + paper ledger only. LIVE execution is
+        intentionally unsupported (``LIVE_EXECUTION_ALLOWED=False``).
+        """
+        from app.research.combo02_v21a_paper_constants import (
+            COMBINATION_ID,
+            COMBO_VERSION,
+            LIVE_EXECUTION_ALLOWED,
+            MODE,
+            SOURCE_WATCHER,
+            STRATEGY_ID,
+            STREAM_ID,
+        )
+
+        if LIVE_EXECUTION_ALLOWED:
+            raise RuntimeError("v21a_live_execution_forbidden")
+        if not self.enabled and not replay:
+            return None
+
+        sym = str(symbol or "").upper()
+        if self._writes_blocked(sym):
+            return None
+        tf = str(timeframe or "1h").lower()
+        status = str(eval_result.get("status") or "")
+        if status == "LONG_ENTRY_CANDIDATE":
+            side = "LONG"
+        elif status == "SHORT_ENTRY_CANDIDATE":
+            side = "SHORT"
+        else:
+            self._last_skip_reason = f"{sym}:v21a_not_entry"
+            return None
+
+        risk_pct = float(risk_percent or 0.0)
+        if risk_pct <= 0 or risk_pct > 0.05 + 1e-15:
+            self._last_skip_reason = f"{sym}:v21a_risk_out_of_bounds"
+            return None
+
+        snip = dict(signal_snippet or {})
+        if str(snip.get("strategy_id") or "") != STRATEGY_ID:
+            self._last_skip_reason = f"{sym}:v21a_bad_strategy_id"
+            return None
+        if str(snip.get("source") or "") != SOURCE_WATCHER:
+            self._last_skip_reason = f"{sym}:v21a_bad_source"
+            return None
+
+        entry_price = _f(eval_result.get("entry_price"))
+        stop_price = _f(eval_result.get("stop_price"))
+        tp1 = _f(eval_result.get("tp1"))
+        if tp1 is None:
+            targets = eval_result.get("targets") or []
+            if targets and isinstance(targets[0], dict):
+                tp1 = _f(targets[0].get("target_price"))
+        if entry_price is None or stop_price is None or entry_price <= 0:
+            self._last_skip_reason = f"{sym}:v21a_missing_prices"
+            return None
+        if side == "LONG" and stop_price >= entry_price:
+            self._last_skip_reason = f"{sym}:v21a_bad_long_stop"
+            return None
+        if side == "SHORT" and stop_price <= entry_price:
+            self._last_skip_reason = f"{sym}:v21a_bad_short_stop"
+            return None
+
+        risk_dist = abs(entry_price - stop_price)
+        if tp1 is None and risk_dist > 0:
+            if side == "LONG":
+                tp1 = entry_price + self.min_rr * risk_dist
+            else:
+                tp1 = entry_price - self.min_rr * risk_dist
+
+        live: float | None = None
+        live_price_source = "replay" if replay else "unavailable"
+        if not replay:
+            live, live_price_source = _live_price_with_source(sym)
+
+        dedupe_key = ledger_dedupe_key(
+            sym, setup_bar_time_utc, f"{STREAM_ID}|{side}", tf
+        )
+        with self._lock:
+            open_count = len(self._open)
+            open_risk = sum(p.risk_usd for p in self._open.values())
+            stream_key = self.book_key(sym, STREAM_V21A)
+            if stream_key in self._open:
+                return None
+            if dedupe_key in self._opened_keys:
+                return None
+            if not replay and self._reentry_blocked_locked(
+                sym, stream_key, setup_bar_time_utc
+            ):
+                return None
+
+        # Same book limits and kill switches as open_v1_combo_position.
+        if not replay:
+            gate = evaluate_paper_entry_risk(
+                sym,
+                policy=self.risk_policy,
+                open_count=open_count,
+                open_risk_usd=open_risk,
+                equity=self.equity,
+                **self._halt_kwargs(sym),
+            )
+            if not gate.ok:
+                self._last_skip_reason = f"{sym}:{gate.reason}"
+                return None
+
+        if side == "LONG":
+            sized = size_paper_long(
+                symbol=sym,
+                account_equity=self.equity,
+                risk_percent=risk_pct,
+                entry=entry_price,
+                stop=stop_price,
+                leverage=self.max_leverage,
+                rounding="plan",
+            )
+        else:
+            sized = size_paper_short(
+                symbol=sym,
+                account_equity=self.equity,
+                risk_percent=risk_pct,
+                entry=entry_price,
+                stop=stop_price,
+                leverage=self.max_leverage,
+                rounding="plan",
+            )
+        paper_fill = float(sized["entry_price"])
+        stop_price = float(sized["stop_price"])
+        qty = float(sized.get("quantity") or 0.0)
+        risk_usd = float(sized.get("risk_usd") or 0.0)
+        if tp1 is not None:
+            tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
+        if qty <= 0:
+            self._last_skip_reason = f"{sym}:v21a_zero_qty"
+            return None
+
+        if not replay:
+            gate2 = evaluate_paper_entry_risk(
+                sym,
+                policy=self.risk_policy,
+                open_count=open_count,
+                open_risk_usd=open_risk,
+                equity=self.equity,
+                planned_risk_usd=risk_usd,
+                **self._halt_kwargs(sym),
+            )
+            if not gate2.ok:
+                self._last_skip_reason = f"{sym}:{gate2.reason}"
+                return None
+
+        snip.update(
+            {
+                "strategy_id": STRATEGY_ID,
+                "source": SOURCE_WATCHER,
+                "combo_id": COMBINATION_ID,
+                "combo_version": COMBO_VERSION,
+                "mode": MODE,
+                "direction": side,
+                "stream": STREAM_ID,
+                "telegram_eligible": bool(snip.get("telegram_eligible", True)),
+                "production_approved": False,
+                "live_execution": False,
+                "risk_percent": risk_pct,
+                "backtest_entry": float(entry_price),
+                "live_signal_price": float(live) if live is not None else None,
+                "paper_entry": paper_fill,
+                "price_source": live_price_source,
+                "paper_execution": paper_execution_snippet(sized),
+                "signal_time": str(setup_bar_time_utc) if setup_bar_time_utc else None,
+                "paper_entry_time": datetime.now(timezone.utc).isoformat(),
+                "playbook": eval_result.get("playbook"),
+                "regime": eval_result.get("regime"),
+                "event": eval_result.get("event"),
+                "confirmation": eval_result.get("confirmation"),
+                "execution": "backtest_plan",
+            }
+        )
+
+        with self._lock:
+            if stream_key in self._open:
+                return None
+            if dedupe_key in self._opened_keys:
+                return None
+            pos = PaperPosition(
+                id=str(uuid.uuid4()),
+                symbol=sym,
+                side=side,
+                status="OPEN",
+                entry_price=paper_fill,
+                stop_price=stop_price,
+                tp1_price=tp1,
+                quantity=qty,
+                risk_usd=risk_usd,
+                opened_at=datetime.now(timezone.utc).isoformat(),
+                source_candle_ts=str(setup_bar_time_utc) if setup_bar_time_utc else None,
+                timeframe=tf,
+                signal_snippet=snip,
+            )
+            self._open[stream_key] = pos
+            self._opened_keys.add(dedupe_key)
+            self._queue_persist(pos)
+            self._last_skip_reason = None
+            logger.info(
+                "paper_trade_opened",
+                strategy_id=STRATEGY_ID,
+                symbol=sym,
+                side=side,
+                trade_id=pos.id,
+                mode=MODE,
+                live_execution=False,
+            )
+            if emit_alert:
+                try:
+                    from app.services.alerts import get_alert_feed
+
+                    get_alert_feed().observe_paper_open(pos)
+                except Exception:  # noqa: BLE001
+                    pass
+            return pos
+
+    def open_passed_position(
+        self,
+        *,
+        symbol: str,
+        combination_id: str,
+        timeframe: str,
+        direction: str,
+        eval_result: dict[str, Any],
+        risk_percent: float,
+        setup_bar_time_utc: str,
+        market_direction: str = "NEUTRAL",
+    ) -> PaperPosition | None:
+        """Open one passed cap-book side at the backtest plan. Paper only."""
+        from app.research.passed_cap_book import (
+            SOURCE_WATCHER,
+            is_passed_side,
+            passed_stream,
+        )
+
+        if not self.enabled:
+            return None
+        sym = str(symbol or "").upper()
+        if self._writes_blocked(sym):
+            return None
+        combo = str(combination_id or "")
+        tf = str(timeframe or "1h").lower()
+        side = str(direction or "").upper()
+        if not is_passed_side(combo, tf, side):
+            self._last_skip_reason = f"{sym}:not_passed_side"
+            return None
+        status = str(eval_result.get("status") or "")
+        if side == "LONG" and status != "LONG_ENTRY_CANDIDATE":
+            self._last_skip_reason = f"{sym}:not_long_entry"
+            return None
+        if side == "SHORT" and status != "SHORT_ENTRY_CANDIDATE":
+            self._last_skip_reason = f"{sym}:not_short_entry"
+            return None
+
+        entry_price = _f(eval_result.get("entry_price"))
+        stop_price = _f(eval_result.get("stop_price"))
+        tp1 = _f(eval_result.get("tp1"))
+        if tp1 is None:
+            targets = eval_result.get("targets") or []
+            if targets and isinstance(targets[0], dict):
+                tp1 = _f(targets[0].get("target_price"))
+        if entry_price is None or stop_price is None or entry_price <= 0:
+            self._last_skip_reason = f"{sym}:passed_missing_prices"
+            return None
+        if side == "LONG" and stop_price >= entry_price:
+            self._last_skip_reason = f"{sym}:passed_bad_stop"
+            return None
+        if side == "SHORT" and stop_price <= entry_price:
+            self._last_skip_reason = f"{sym}:passed_bad_stop"
+            return None
+
+        risk_pct = float(risk_percent or 0.0)
+        if risk_pct <= 0:
+            self._last_skip_reason = f"{sym}:passed_zero_risk"
+            return None
+
+        stream = passed_stream(combo, side)
+        dedupe_key = ledger_dedupe_key(sym, setup_bar_time_utc, stream, tf)
+        with self._lock:
+            open_count = len(self._open)
+            open_risk = sum(p.risk_usd for p in self._open.values())
+            stream_key = self.book_key(sym, stream)
+            if stream_key in self._open or dedupe_key in self._opened_keys:
+                return None
+            if self._reentry_blocked_locked(sym, stream_key, setup_bar_time_utc):
+                return None
+
+        # Same book limits and kill switches as open_v1_combo_position.
+        # This opener has no replay mode, so the gate always runs.
+        gate = evaluate_paper_entry_risk(
+            sym,
+            policy=self.risk_policy,
+            open_count=open_count,
+            open_risk_usd=open_risk,
+            equity=self.equity,
+            **self._halt_kwargs(sym),
+        )
+        if not gate.ok:
+            self._last_skip_reason = f"{sym}:{gate.reason}"
+            return None
+
+        if side == "LONG":
+            sized = size_paper_long(
+                symbol=sym,
+                account_equity=self.equity,
+                risk_percent=risk_pct,
+                entry=entry_price,
+                stop=stop_price,
+                leverage=self.max_leverage,
+                rounding="plan",
+            )
+        else:
+            sized = size_paper_short(
+                symbol=sym,
+                account_equity=self.equity,
+                risk_percent=risk_pct,
+                entry=entry_price,
+                stop=stop_price,
+                leverage=self.max_leverage,
+                rounding="plan",
+            )
+        if sized.get("reason"):
+            self._last_skip_reason = f"{sym}:{sized.get('reason')}"
+            return None
+        entry_fill = float(sized["entry_price"])
+        stop_fill = float(sized["stop_price"])
+        qty = float(sized.get("quantity") or 0.0)
+        risk_usd = float(sized.get("risk_usd") or 0.0)
+        if tp1 is not None:
+            tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
+        if qty <= 0:
+            self._last_skip_reason = f"{sym}:passed_zero_qty"
+            return None
+
+        gate2 = evaluate_paper_entry_risk(
+            sym,
+            policy=self.risk_policy,
+            open_count=open_count,
+            open_risk_usd=open_risk,
+            equity=self.equity,
+            planned_risk_usd=risk_usd,
+            **self._halt_kwargs(sym),
+        )
+        if not gate2.ok:
+            self._last_skip_reason = f"{sym}:{gate2.reason}"
+            return None
+
+        snip = {
+            "strategy_id": combo,
+            "source": SOURCE_WATCHER,
+            "stream": stream,
+            "direction": side,
+            "timeframe": tf,
+            "execution": "backtest_plan",
+            "telegram_eligible": False,
+            "production_approved": False,
+            "live_execution": False,
+            "risk_percent": risk_pct,
+            "market_direction": market_direction,
+            "backtest_entry": float(entry_price),
+            "paper_entry": entry_fill,
+            "price_source": "plan",
+            "paper_execution": paper_execution_snippet(sized),
+            "signal_time": str(setup_bar_time_utc or ""),
+        }
+        with self._lock:
+            if stream_key in self._open or dedupe_key in self._opened_keys:
+                return None
+            pos = PaperPosition(
+                id=str(uuid.uuid4()),
+                symbol=sym,
+                side=side,
+                status="OPEN",
+                entry_price=entry_fill,
+                stop_price=stop_fill,
+                tp1_price=tp1,
+                quantity=qty,
+                risk_usd=risk_usd,
+                opened_at=datetime.now(timezone.utc).isoformat(),
+                source_candle_ts=str(setup_bar_time_utc) if setup_bar_time_utc else None,
+                timeframe=tf,
+                signal_snippet=snip,
+            )
+            self._open[stream_key] = pos
+            self._opened_keys.add(dedupe_key)
+            self._queue_persist(pos)
+            self._last_skip_reason = None
+            logger.info(
+                "paper_opened_passed_side",
+                symbol=sym,
+                combination_id=combo,
+                side=side,
+                entry=entry_fill,
+                stop=stop_fill,
+                tp1=tp1,
+                risk_percent=risk_pct,
+            )
+            return pos
+
     def tick(self, prices: dict[str, float]) -> list[PaperPosition]:
         """Manage open positions against mark/last prices. Returns newly closed."""
         closed: list[PaperPosition] = []
         with self._lock:
             for _key, pos in list(self._open.items()):
-                # Phase 2: SHORT paper management is not implemented — fail closed.
-                if str(getattr(pos, "side", "") or "").upper() == "SHORT":
-                    raise PermissionError("short_research_only")
                 snip = getattr(pos, "signal_snippet", None) or {}
+                side = str(getattr(pos, "side", "") or "").upper()
+                strategy = str(snip.get("strategy_id") or "") if isinstance(snip, dict) else ""
+                source = str(snip.get("source") or "") if isinstance(snip, dict) else ""
+                # SHORT research pipelines remain fail-closed.
+                # V2.1-A and the passed cap-book sides are allowed to paper-trade.
+                if (
+                    side == "SHORT"
+                    and strategy != "COMBO_02_V2_1_A"
+                    and source != "PASSED_CAP_BOOK"
+                ):
+                    raise PermissionError("short_research_only")
                 if isinstance(snip, dict) and (
-                    str(snip.get("strategy_id") or "") == "COMBO_02_SHORT_RESEARCH"
-                    or str(snip.get("source") or "") == "SHORT_RESEARCH_PIPELINE"
+                    strategy == "COMBO_02_SHORT_RESEARCH"
+                    or source == "SHORT_RESEARCH_PIPELINE"
                 ):
                     raise PermissionError("short_research_only")
                 px = prices.get(pos.symbol)
@@ -1215,13 +1957,22 @@ class PaperTradeEngine:
                 pos.mark_price = px
                 risk_per = abs(pos.entry_price - pos.stop_price)
                 if risk_per > 0:
-                    pos.unrealized_pnl_usd = (px - pos.entry_price) * pos.quantity
-                    pos.unrealized_r = (px - pos.entry_price) / risk_per
-                # Long exits — paper stop/limit fills at the planned level (not gap mark)
-                if px <= pos.stop_price:
-                    closed.append(self._close_locked(pos, float(pos.stop_price), "STOP"))
-                elif pos.tp1_price is not None and px >= pos.tp1_price:
-                    closed.append(self._close_locked(pos, float(pos.tp1_price), "TP1"))
+                    if side == "SHORT":
+                        pos.unrealized_pnl_usd = (pos.entry_price - px) * pos.quantity
+                        pos.unrealized_r = (pos.entry_price - px) / risk_per
+                    else:
+                        pos.unrealized_pnl_usd = (px - pos.entry_price) * pos.quantity
+                        pos.unrealized_r = (px - pos.entry_price) / risk_per
+                if side == "SHORT":
+                    if px >= pos.stop_price:
+                        closed.append(self._close_locked(pos, float(pos.stop_price), "STOP"))
+                    elif pos.tp1_price is not None and px <= float(pos.tp1_price):
+                        closed.append(self._close_locked(pos, float(pos.tp1_price), "TP1"))
+                else:
+                    if px <= pos.stop_price:
+                        closed.append(self._close_locked(pos, float(pos.stop_price), "STOP"))
+                    elif pos.tp1_price is not None and px >= pos.tp1_price:
+                        closed.append(self._close_locked(pos, float(pos.tp1_price), "TP1"))
         return closed
 
     def _cancel_open(
@@ -1358,7 +2109,7 @@ class PaperTradeEngine:
                 },
             }
         pos.status = "CLOSED"
-        pos.closed_at = datetime.now(timezone.utc).isoformat()
+        pos.closed_at = self._now().isoformat()
         pos.exit_price = exit_px
         pos.exit_reason = reason
         pos.pnl_usd = pnl
@@ -1367,7 +2118,12 @@ class PaperTradeEngine:
         pos.unrealized_pnl_usd = 0.0
         pos.unrealized_r = 0.0
         self._open.pop(self._key_for(pos), None)
+        # Same stream may not re-enter on or before the bar this exit fell in.
+        exit_open = exit_bar_open(pos.closed_at, pos.timeframe)
+        if exit_open is not None:
+            self._last_exit_bar_open[self._key_for(pos)] = exit_open
         self.realized_pnl += pnl
+        self._pnl_since_reconcile += pnl
         self._note_close_for_halts(symbol=pos.symbol, r_multiple=r_mult)
         self._closed.insert(0, pos)
         self._trim_closed()
@@ -1416,9 +2172,15 @@ async def flush_paper_trade_persists(
 
     eng = engine if engine is not None else get_paper_trade_engine()
     rows = eng.drain_persist_queue()
+    written = 0
     for row in rows:
-        await persistence.persist_paper_trade(row)
-    return len(rows)
+        result = await persistence.persist_paper_trade(row)
+        if result == "duplicate":
+            eng.drop_rejected_duplicate(str(row.get("id") or ""))
+            continue
+        if result == "ok":
+            written += 1
+    return written
 
 
 def _live_price_with_source(symbol: str) -> tuple[float | None, str]:
@@ -1574,6 +2336,21 @@ def get_paper_trade_engine(
     return _engine
 
 
+def _chance_gaps(missing: list[str], setup_trend: str, bos_direction: str) -> str:
+    """Words for the chance column. A bearish print is not a missing column."""
+    parts: list[str] = []
+    trend = str(setup_trend or "").upper()
+    bos = str(bos_direction or "").upper()
+    for label in missing[:4]:
+        if label == "trend" and trend and trend != "BULLISH":
+            parts.append(f"trend {trend} (long gate wants BULLISH)")
+        elif label == "bos" and bos and bos != "BULLISH_BOS":
+            parts.append(f"bos {bos}")
+        else:
+            parts.append(label)
+    return ", ".join(parts) or "structure confirms"
+
+
 def list_trade_opportunities(
     *,
     limit: int = 40,
@@ -1601,6 +2378,9 @@ def list_trade_opportunities(
     rows: list[dict[str, Any]] = []
     for sym, payload in list(engine_store.setup_signals.items()):
         if not isinstance(payload, dict):
+            continue
+        # Binance USDT perps are ASCII tickers. Cached non-ASCII names are not.
+        if not str(sym or "").upper().isalnum() or not str(sym or "").isascii():
             continue
         row = _opportunity_from_payload(
             sym,
@@ -1722,14 +2502,10 @@ def _opportunity_from_payload(
         )
     )
 
-    path_a_ready = (
-        entry_mode == PATH_A
-        and longish
-        and bos_ok
-        and trend_ok
-        and _htf_bullish_for_long(payload)
-        and stop_px is not None
-    )
+    from app.services.path_a_paper_validation import validate_path_a_paper_entry
+
+    path_a_gate = validate_path_a_paper_entry(payload, payload)
+    path_a_ready = entry_mode == PATH_A and path_a_gate.ok
 
     if status in ENTRY_STATUSES and longish and entry_mode == PATH_B:
         tier = "READY"
@@ -1747,25 +2523,39 @@ def _opportunity_from_payload(
         else:
             # Path B mode: still needs impulse/pullback/retest
             tier = "NEAR"
-            chance = "Near entry — waiting: " + (", ".join(missing[:4]) or "confirmation")
+            chance = "Near entry — waiting: " + (
+                _chance_gaps(missing, setup_trend, str(bos.get("direction") or ""))
+                or "confirmation"
+            )
     elif longish and (bos_ok or trend_ok or impulse_ok) and status in ("NO_SETUP", "WAITING"):
         tier = "FORMING"
-        chance = "Forming structure — waiting: " + (", ".join(missing[:4]) or "more confirms")
+        chance = "Forming structure — waiting: " + (
+            _chance_gaps(missing, setup_trend, str(bos.get("direction") or ""))
+            or "more confirms"
+        )
     elif ohlcv_waiting:
         if not include_waiting:
             return None
         tier = "WAITING"
-        chance = f"Not ready — {dep or 'WAITING FOR OHLCV / setup'}"
+        if dep.upper() == "LIVE":
+            chance = "Not ready — setup conditions unmet (OHLCV LIVE)"
+        else:
+            chance = f"Not ready — {dep or 'WAITING FOR OHLCV / setup'}"
     elif status == "WAITING":
         # Computed WAITING without OHLCV block (conditions not met yet)
         tier = "WATCH"
-        chance = "Setup WAITING — missing: " + (", ".join(missing[:4]) or "structure confirms")
+        chance = "Setup WAITING — " + (
+            _chance_gaps(missing, setup_trend, str(bos.get("direction") or ""))
+            or "structure confirms"
+        )
     elif status and status not in ("",):
         # Any other computed setup (bearish, NO_SETUP without structure, etc.)
         tier = "WATCH"
         chance = f"Computed {status}" + (f" ({direction})" if direction else "")
         if missing:
-            chance += " — missing: " + ", ".join(missing[:4])
+            chance += " — " + _chance_gaps(
+                missing, setup_trend, str(bos.get("direction") or "")
+            )
     else:
         return None
 

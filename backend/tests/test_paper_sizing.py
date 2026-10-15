@@ -118,7 +118,7 @@ def test_paper_engine_sol_tight_stop_uses_leverage_cap(monkeypatch):
     )
     eng.legacy_auto_entry_enabled = True
     payload = {
-        "status": "WAITING",
+        "status": "LONG_ENTRY_CANDIDATE",
         "direction": "LONG",
         "timeframe": "15m",
         "trend": {
@@ -132,9 +132,11 @@ def test_paper_engine_sol_tight_stop_uses_leverage_cap(monkeypatch):
             "direction": "BULLISH_BOS",
             "broken_level": 150.0,
         },
-        "entry": {"entry_price": 150.0},
-        "stop": {"final_stop": 149.9},
-        "targets": [{"target_price": 150.5}],
+        "entry": {"entry_price": 150.0, "status": "LONG_ENTRY_CANDIDATE"},
+        "stop": {"final_stop": 149.9, "provisional": False, "reason": "structural pullback low"},
+        "targets": [{"target_price": 150.5, "target_type": "previous_swing_high"}],
+        "impulse": {"is_impulse": True},
+        "pullback": {"pullback_state": "CONFIRMED"},
         "risk_reward": {"RISK_REWARD": "PASS"},
         "risk_management": {},
         "source_candle_timestamps": {"15m": "2026-10-04T12:00:00+00:00"},

@@ -624,10 +624,14 @@ class PersistenceService:
             logger.warning("persist_setup_events_failed", error=str(exc))
             return 0
 
-    async def persist_paper_trade(self, trade: dict[str, Any]) -> None:
-        """Upsert one paper trade row (open or closed)."""
+    async def persist_paper_trade(self, trade: dict[str, Any]) -> str:
+        """Upsert one paper trade row.
+
+        Returns "ok", "duplicate" (same symbol + candle + stream + timeframe
+        already booked), or "skipped".
+        """
         if not self.active or not trade:
-            return
+            return "skipped"
         # asyncpg binds TIMESTAMPTZ as datetime — ISO strings fail even with CAST().
         opened_at = self._as_utc_dt(trade.get("opened_at")) or datetime.now(
             timezone.utc
@@ -657,40 +661,88 @@ class PersistenceService:
                 updated_at = NOW()
             """
         )
+        from app.services.paper_trade import PaperTradeEngine, ledger_dedupe_key
+
+        snippet = trade.get("signal_snippet") or {}
+        if not isinstance(snippet, dict):
+            snippet = {}
+        stream = PaperTradeEngine.stream_of(
+            {"signal_snippet": snippet, "side": trade.get("side")}
+        )
+        dedupe_key = ""
+        if trade.get("source_candle_ts"):
+            dedupe_key = ledger_dedupe_key(
+                str(trade.get("symbol") or ""),
+                trade.get("source_candle_ts"),
+                stream,
+                str(trade.get("timeframe") or ""),
+            )
+        params = {
+            "id": str(trade.get("id")),
+            "symbol": str(trade.get("symbol") or "").upper(),
+            "side": str(trade.get("side") or "LONG"),
+            "status": str(trade.get("status") or "OPEN"),
+            "entry_price": float(trade.get("entry_price") or 0),
+            "stop_price": float(trade.get("stop_price") or 0),
+            "tp1_price": trade.get("tp1_price"),
+            "quantity": float(trade.get("quantity") or 0),
+            "risk_usd": trade.get("risk_usd"),
+            "opened_at": opened_at,
+            "closed_at": closed_at,
+            "exit_price": trade.get("exit_price"),
+            "exit_reason": trade.get("exit_reason"),
+            "pnl_usd": trade.get("pnl_usd"),
+            "r_multiple": trade.get("r_multiple"),
+            "source_candle_ts": trade.get("source_candle_ts"),
+            "timeframe": trade.get("timeframe"),
+            "signal_snippet": json.dumps(snippet, default=str),
+            "dedupe_key": dedupe_key,
+        }
+        claim_sql = text(
+            """
+            INSERT INTO paper_trade_dedupe (dedupe_key, trade_id)
+            VALUES (:dedupe_key, :id)
+            ON CONFLICT (dedupe_key) DO NOTHING
+            RETURNING trade_id
+            """
+        )
+        owner_sql = text(
+            "SELECT trade_id FROM paper_trade_dedupe WHERE dedupe_key = :dedupe_key"
+        )
         try:
             async with db_manager.engine.begin() as conn:
-                await conn.execute(
-                    sql,
-                    {
-                        "id": str(trade.get("id")),
-                        "symbol": str(trade.get("symbol") or "").upper(),
-                        "side": str(trade.get("side") or "LONG"),
-                        "status": str(trade.get("status") or "OPEN"),
-                        "entry_price": float(trade.get("entry_price") or 0),
-                        "stop_price": float(trade.get("stop_price") or 0),
-                        "tp1_price": trade.get("tp1_price"),
-                        "quantity": float(trade.get("quantity") or 0),
-                        "risk_usd": trade.get("risk_usd"),
-                        "opened_at": opened_at,
-                        "closed_at": closed_at,
-                        "exit_price": trade.get("exit_price"),
-                        "exit_reason": trade.get("exit_reason"),
-                        "pnl_usd": trade.get("pnl_usd"),
-                        "r_multiple": trade.get("r_multiple"),
-                        "source_candle_ts": trade.get("source_candle_ts"),
-                        "timeframe": trade.get("timeframe"),
-                        "signal_snippet": json.dumps(
-                            trade.get("signal_snippet") or {}, default=str
-                        ),
-                    },
-                )
+                if dedupe_key:
+                    claimed = await conn.execute(claim_sql, params)
+                    if claimed.first() is None:
+                        owner = (
+                            await conn.execute(owner_sql, params)
+                        ).scalar()
+                        # A second id never overwrites the row that owns the bar.
+                        # That includes a later flush of a duplicate ticket.
+                        if owner != params["id"]:
+                            logger.info(
+                                "paper_persist_duplicate_bar",
+                                symbol=params["symbol"],
+                                dedupe_key=dedupe_key,
+                                trade_id=params["id"],
+                                owner=owner,
+                            )
+                            return "duplicate"
+                await conn.execute(sql, params)
             self._writes += 1
+            return "ok"
         except Exception as exc:  # noqa: BLE001
             self._errors += 1
             logger.warning("persist_paper_trade_failed", error=str(exc))
+            return "skipped"
 
-    async def load_paper_trades(self, *, closed_limit: int = 200) -> list[dict[str, Any]]:
-        """Load all OPEN paper trades + recent CLOSED/CANCELLED for restart hydrate."""
+    async def load_paper_trades(
+        self, *, closed_limit: int = 200, raise_on_error: bool = False
+    ) -> list[dict[str, Any]]:
+        """Load all OPEN paper trades + recent CLOSED/CANCELLED for restart hydrate.
+
+        ``raise_on_error`` lets the hydrate path tell a failed query from an empty ledger.
+        """
         if not self.active:
             return []
         # OPEN first (all), then newest closed up to limit
@@ -740,7 +792,50 @@ class PersistenceService:
         except Exception as exc:  # noqa: BLE001
             self._errors += 1
             logger.warning("load_paper_trades_failed", error=str(exc))
+            if raise_on_error:
+                raise
             return []
+
+    async def load_paper_dedupe_keys(self, *, raise_on_error: bool = False) -> list[str]:
+        """Every booked symbol+candle+stream+timeframe, including closed rows."""
+        if not self.active:
+            return []
+        sql = text("SELECT dedupe_key FROM paper_trade_dedupe")
+        try:
+            async with db_manager.engine.begin() as conn:
+                result = await conn.execute(sql)
+                return [str(row[0]) for row in result if row and row[0]]
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("load_paper_dedupe_keys_failed", error=str(exc))
+            if raise_on_error:
+                raise
+            return []
+
+    async def sum_closed_paper_pnl(self, *, raise_on_error: bool = False) -> float | None:
+        """Sum PnL across every CLOSED paper trade, not the hydrate window."""
+        if not self.active:
+            return None
+        sql = text(
+            """
+            SELECT COALESCE(SUM(pnl_usd), 0) AS realized_pnl
+            FROM paper_trades
+            WHERE status = 'CLOSED'
+            """
+        )
+        try:
+            async with db_manager.engine.begin() as conn:
+                result = await conn.execute(sql)
+                row = result.mappings().first()
+            if row is None:
+                return 0.0
+            return float(row["realized_pnl"] or 0)
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("sum_closed_paper_pnl_failed", error=str(exc))
+            if raise_on_error:
+                raise
+            return None
 
     async def clear_paper_trades(self) -> int:
         """Delete all paper_trades rows (Reset book)."""

@@ -61,7 +61,9 @@ def test_profile_summary_shape():
 def _live_near_entry(monkeypatch):
     import app.services.paper_trade as paper_mod
 
-    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    monkeypatch.setattr(
+        paper_mod, "_live_price_with_source", lambda _s: (100.0, "mark_price")
+    )
 
 
 def _path_a(
@@ -71,7 +73,7 @@ def _path_a(
     trend_1h: str = "BULLISH",
 ) -> dict:
     return {
-        "status": "WAITING",
+        "status": "LONG_ENTRY_CANDIDATE",
         "direction": "LONG",
         "timeframe": timeframe,
         "trend": {
@@ -89,9 +91,11 @@ def _path_a(
             "direction": "BULLISH_BOS",
             "broken_level": 100.0,
         },
-        "entry": {},
-        "stop": {"final_stop": 98.0},
-        "targets": [{"target_price": 104.0}],
+        "entry": {"entry_price": 100.0, "status": "LONG_ENTRY_CANDIDATE"},
+        "stop": {"final_stop": 98.0, "provisional": False, "reason": "structural pullback low"},
+        "targets": [{"target_price": 104.0, "target_type": "previous_swing_high"}],
+        "impulse": {"is_impulse": True},
+        "pullback": {"pullback_state": "CONFIRMED"},
         "risk_reward": {"RISK_REWARD": "PASS"},
         "risk_management": {},
         "source_candle_timestamps": {timeframe: "2026-10-02T13:15:00+00:00"},
@@ -104,7 +108,9 @@ def test_path_a_legacy_and_v1_coexist_on_same_symbol(monkeypatch):
     """LEGACY + V1 streams track separately — same symbol may have both open."""
     import app.services.paper_trade as paper_mod
 
-    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    monkeypatch.setattr(
+        paper_mod, "_live_price_with_source", lambda _s: (100.0, "mark_price")
+    )
     eng = PaperTradeEngine(
         entry_mode="path_a",
         starting_equity=1000,
@@ -144,6 +150,8 @@ def test_path_a_legacy_and_v1_coexist_on_same_symbol(monkeypatch):
     )
     assert v1 is not None
     assert v1.signal_snippet.get("source") == "V1_PAPER_WATCHER"
+    assert v1.signal_snippet["price_source"] == "mark_price"
+    assert v1.entry_price == pytest.approx(100.0)
     assert eng.has_open("BTCUSDT", "V1")
     assert eng.status()["open_count"] == 2
     assert eng.status()["open_by_stream"]["LEGACY"] == 1

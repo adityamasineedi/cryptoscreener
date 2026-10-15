@@ -300,14 +300,43 @@ def is_v1_paper_alert(alert: dict[str, Any] | None) -> bool:
     return True
 
 
+def is_v21a_paper_alert(alert: dict[str, Any] | None) -> bool:
+    """COMBO_02 V2.1-A paper PAPER_ENTRY/EXIT — LONG and SHORT, PAPER ONLY."""
+    if not alert or not isinstance(alert, dict):
+        return False
+    alert_type = str(alert.get("type") or "").upper()
+    if alert_type not in _V1_ALERT_TYPES:
+        return False
+    payload = alert.get("payload") or {}
+    if not isinstance(payload, dict):
+        return False
+    snip = _snippet(payload)
+    strategy_id = str(_alert_pick(alert, payload, snip, "strategy_id") or "")
+    source = str(_alert_pick(alert, payload, snip, "source") or "")
+    tel = _alert_pick(alert, payload, snip, "telegram_eligible")
+    if strategy_id != "COMBO_02_V2_1_A":
+        return False
+    if source != "V21A_PAPER_WATCHER":
+        return False
+    if tel is not True and str(tel).lower() not in ("true", "1"):
+        return False
+    entry = _f(payload.get("entry_price"))
+    stop = _f(payload.get("stop_price"))
+    if entry is None or stop is None or entry <= 0 or stop <= 0:
+        return False
+    return True
+
+
 def is_telegram_trade_alert(alert: dict[str, Any] | None) -> bool:
     """Send gate for paper trade signals on all paper-eligible coins.
 
     Allows any PAPER_ENTRY / PAPER_EXIT with entry+stop that is not a blocked
-    research/experimental stream. Includes COMBO_02 v1 books and legacy Path A
-    paper opens across the risk-policy universe.
+    research/experimental stream. Includes COMBO_02 v1 books, V2.1-A paper,
+    and legacy Path A paper opens across the risk-policy universe.
     """
     if is_v1_paper_alert(alert):
+        return True
+    if is_v21a_paper_alert(alert):
         return True
     if not alert or not isinstance(alert, dict):
         return False
@@ -342,10 +371,11 @@ def is_telegram_trade_alert(alert: dict[str, Any] | None) -> bool:
     if source and source not in (
         "V1_PAPER_WATCHER",
         "LEGACY_SETUP_SIGNAL",
+        "V21A_PAPER_WATCHER",
         "",
     ):
         # Unknown sources: allow only when strategy is a known paper stream.
-        if strategy_id not in ("COMBO_02_V1", "RESEARCH_15M", ""):
+        if strategy_id not in ("COMBO_02_V1", "COMBO_02_V2_1_A", "RESEARCH_15M", ""):
             return False
 
     entry = _f(payload.get("entry_price"))
@@ -353,6 +383,123 @@ def is_telegram_trade_alert(alert: dict[str, Any] | None) -> bool:
     if entry is None or stop is None or entry <= 0 or stop <= 0:
         return False
     return True
+
+
+def _v21a_rr(entry: float | None, stop: float | None, tp1: float | None, side: str) -> float | None:
+    if entry is None or stop is None or tp1 is None:
+        return None
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    if str(side).upper() == "SHORT":
+        return (entry - tp1) / risk
+    return (tp1 - entry) / risk
+
+
+def _holding_label(opened_at: Any, closed_at: Any) -> str:
+    try:
+        from datetime import datetime
+
+        def _parse(v: Any) -> datetime | None:
+            if v is None or v == "":
+                return None
+            if isinstance(v, datetime):
+                return v
+            s = str(v).replace("Z", "+00:00")
+            return datetime.fromisoformat(s)
+
+        o = _parse(opened_at)
+        c = _parse(closed_at)
+        if o is None or c is None:
+            return "n/a"
+        secs = max(0.0, (c - o).total_seconds())
+        hours = secs / 3600.0
+        if hours < 1:
+            return f"{int(secs // 60)}m"
+        if hours < 48:
+            return f"{hours:.0f}h"
+        return f"{hours / 24.0:.1f}d"
+    except Exception:  # noqa: BLE001
+        return "n/a"
+
+
+def format_v21a_telegram_message(alert: dict[str, Any]) -> str | None:
+    """Concise PAPER ONLY messages for COMBO_02 V2.1-A."""
+    alert_type = str(alert.get("type") or "").upper()
+    payload = alert.get("payload") if isinstance(alert.get("payload"), dict) else {}
+    assert isinstance(payload, dict)
+    snip = _snippet(payload)
+    symbol = str(alert.get("symbol") or payload.get("symbol") or "?").upper()
+    side = str(payload.get("side") or snip.get("direction") or "LONG").upper()
+    if side not in ("LONG", "SHORT"):
+        side = "LONG"
+    entry = _f(payload.get("entry_price"))
+    stop = _f(payload.get("stop_price"))
+    tp1 = _f(payload.get("tp1_price"))
+    qty = _resolve_quantity(payload)
+    risk_pct = _f(snip.get("risk_percent")) or _f(payload.get("risk_percent"))
+    rr = _v21a_rr(entry, stop, tp1, side)
+
+    setup_lines: list[str] = []
+    for key, label in (
+        ("event", None),
+        ("playbook", "Playbook"),
+        ("confirmation", "Confirmation"),
+        ("regime", "Regime"),
+    ):
+        val = snip.get(key) or payload.get(key)
+        if val:
+            if label:
+                setup_lines.append(f"{label}: {val}")
+            else:
+                setup_lines.append(str(val))
+
+    if alert_type == "PAPER_ENTRY":
+        risk_s = _fmt_pct(risk_pct) if risk_pct is not None else "—"
+        rr_s = f"{rr:.1f}" if rr is not None else "—"
+        qty_s = _fmt_qty(qty) if qty is not None else "—"
+        setup_block = "\n".join(setup_lines) if setup_lines else "V2.1-A entry"
+        side_emoji = "🟢" if side == "LONG" else "🔴"
+        return (
+            f"🟢 PAPER TRADE OPEN\n\n"
+            f"🧭 Strategy: COMBO_02 V2.1-A\n"
+            f"{side_emoji} {symbol} {side}\n\n"
+            f"👉 Entry: {_fmt_price(entry)}\n"
+            f"🛑 Stop: {_fmt_price(stop)}\n"
+            f"🎯 TP: {_fmt_price(tp1)}\n"
+            f"📦 Quantity: {qty_s}\n\n"
+            f"🛡 Risk: {risk_s}\n"
+            f"📏 R:R: {rr_s}\n\n"
+            f"🧠 Setup:\n{setup_block}\n\n"
+            f"📄 Mode: PAPER ONLY"
+        )
+
+    if alert_type == "PAPER_EXIT":
+        r_mult = _f(payload.get("r_multiple"))
+        pnl = _f(payload.get("pnl_usd"))
+        reason = str(payload.get("exit_reason") or "EXIT").upper()
+        if reason == "STOP":
+            reason = "STOP_LOSS"
+        elif reason.startswith("TP"):
+            reason = "TAKE_PROFIT"
+        r_s = f"{r_mult:+.1f}R" if r_mult is not None else "—"
+        pnl_s = f"${pnl:+.2f}" if pnl is not None else "—"
+        hold = _holding_label(payload.get("opened_at"), payload.get("closed_at"))
+        side_emoji = "🟢" if side == "LONG" else "🔴"
+        result_emoji = "✅" if r_mult is not None and r_mult > 0 else "❌"
+        return (
+            f"🔴 PAPER TRADE CLOSED\n\n"
+            f"🧭 Strategy: COMBO_02 V2.1-A\n"
+            f"{side_emoji} {symbol} {side}\n\n"
+            f"👉 Entry: {_fmt_price(entry)}\n"
+            f"🚪 Exit: {_fmt_price(payload.get('exit_price'))}\n\n"
+            f"{result_emoji} Result: {r_s}\n"
+            f"💵 PnL: {pnl_s}\n\n"
+            f"🏷 Reason: {reason}\n\n"
+            f"⏳ Holding: {hold}\n\n"
+            f"📄 Mode: PAPER ONLY"
+        )
+    return None
 
 
 def _outcome_label(exit_reason: Any) -> str:
@@ -393,8 +540,134 @@ def _principal(payload: dict[str, Any], snip: dict[str, Any]) -> float | None:
     return None
 
 
+def _pretty_trend(value: Any) -> str | None:
+    t = str(value or "").strip().upper()
+    if not t:
+        return None
+    return t.replace("_", " ")
+
+
+def _side_emoji(side: str) -> str:
+    return "🟢" if str(side).upper() == "LONG" else "🔴"
+
+
+def _formation_lines(payload: dict[str, Any], snip: dict[str, Any]) -> list[str]:
+    """Human lines for how the setup formed — display only, no new gates."""
+    lines: list[str] = []
+    strategy = str(snip.get("strategy_id") or payload.get("strategy_id") or "").upper()
+    source = str(snip.get("source") or payload.get("source") or "")
+    path = str(snip.get("path") or "").upper().replace("PATH_", "")
+    if strategy == "COMBO_02_V1" or source == "V1_PAPER_WATCHER":
+        lines.append("🧭 Strategy: COMBO_02 v1 · Path A")
+        bos = str(snip.get("bos_direction") or snip.get("bos_state") or "").upper()
+        if "BULLISH_BOS" in bos or bos == "CONFIRMED":
+            lines.append("🧩 Setup: Confirmed bullish BOS on closed 1h")
+        else:
+            lines.append("🧩 Setup: Trend + BOS + HTF aligned (closed 1h)")
+    elif strategy == "COMBO_02_V2_1_A" or source == "V21A_PAPER_WATCHER":
+        lines.append("🧭 Strategy: COMBO_02 V2.1-A")
+        playbook = snip.get("playbook") or payload.get("playbook")
+        event = snip.get("event") or payload.get("event")
+        if event:
+            lines.append(f"⚡ Event: {event}")
+        if playbook:
+            lines.append(f"📘 Playbook: {playbook}")
+        conf = snip.get("confirmation") or payload.get("confirmation")
+        if conf:
+            lines.append(f"✅ Confirm: {conf}")
+    elif strategy == "RESEARCH_15M" or source == "LEGACY_SETUP_SIGNAL":
+        label = "Path B" if path == "B" else "15m research Path A"
+        lines.append(f"🧭 Strategy: {label}")
+        lines.append("🧩 Setup: Structure signal on closed setup candle")
+    else:
+        if strategy:
+            lines.append(f"🧭 Strategy: {strategy}")
+        lines.append("🧩 Setup: Paper entry from closed-candle evaluator")
+
+    t4 = _pretty_trend(snip.get("trend_4h"))
+    t1 = _pretty_trend(snip.get("trend_1h"))
+    if t4 or t1:
+        parts = []
+        if t4:
+            parts.append(f"4H {t4}")
+        if t1:
+            parts.append(f"1H {t1}")
+        lines.append("📈 Trend: " + " · ".join(parts))
+    htf = _pretty_trend(snip.get("htf_alignment"))
+    if htf:
+        lines.append(f"🎯 HTF: {htf}")
+    regime = snip.get("regime")
+    if regime:
+        lines.append(f"🌤 Regime: {regime}")
+    return lines
+
+
+def _timeframe_lines(payload: dict[str, Any], snip: dict[str, Any], alert: dict[str, Any]) -> list[str]:
+    setup_tf = str(
+        snip.get("timeframe")
+        or payload.get("timeframe")
+        or alert.get("timeframe")
+        or "1h"
+    ).lower()
+    lines = [
+        f"⏱ Setup TF: {setup_tf} (closed candle only)",
+        "🕯 Context: 4h bias · 1h structure",
+    ]
+    if setup_tf in ("15m", "5m"):
+        lines[1] = "🕯 Context: 4h / 1h bias · setup TF entry"
+    bar = snip.get("setup_bar_time_utc") or snip.get("signal_time") or payload.get(
+        "source_candle_ts"
+    )
+    if bar:
+        lines.append(f"🗓 Bar: {bar}")
+    return lines
+
+
+def _capital_lines(
+    *,
+    payload: dict[str, Any],
+    snip: dict[str, Any],
+    asset: str,
+    entry: float | None,
+    qty: float | None,
+    leverage: float,
+) -> list[str]:
+    exec_meta = snip.get("paper_execution") if isinstance(snip.get("paper_execution"), dict) else {}
+    risk_usd = _f(payload.get("risk_usd"))
+    risk_pct = _f(snip.get("risk_percent")) or _f(payload.get("risk_percent"))
+    notional = _f(exec_meta.get("notional"))
+    if notional is None and qty is not None and entry is not None:
+        notional = qty * entry
+    principal = _principal(payload, snip)
+    margin = (notional / leverage) if notional is not None and leverage > 0 else None
+
+    lines: list[str] = []
+    if risk_pct is not None:
+        pct = risk_pct * 100.0 if abs(risk_pct) <= 1.0 else risk_pct
+        if risk_usd is not None:
+            lines.append(f"🛡 Risk: {pct:g}% (${_fmt_money(risk_usd)})")
+        else:
+            lines.append(f"🛡 Risk: {pct:g}%")
+    elif risk_usd is not None:
+        lines.append(f"🛡 Risk: ${_fmt_money(risk_usd)}")
+    if qty is not None:
+        size_line = f"📦 Size: {_fmt_qty(qty)} {asset}"
+        if notional is not None:
+            size_line += f" (${_fmt_money(notional)} notional)"
+        lines.append(size_line)
+    if margin is not None:
+        lines.append(f"💳 Margin @ {leverage:g}x: ~${_fmt_money(margin)}")
+    if principal is not None:
+        lines.append(f"🏦 Paper equity basis: ${_fmt_money(principal)}")
+    lines.append(f"🚨 Leverage: {leverage:g}x")
+    lines.append("📄 Mode: PAPER ONLY")
+    return lines
+
+
 def format_telegram_message(alert: dict[str, Any]) -> str | None:
-    """Build human-readable Telegram text for a v1 paper alert."""
+    """Build human-readable Telegram text for a v1 / V2.1-A paper alert."""
+    if is_v21a_paper_alert(alert):
+        return format_v21a_telegram_message(alert)
     alert_type = str(alert.get("type") or "").upper()
     payload = alert.get("payload") if isinstance(alert.get("payload"), dict) else {}
     assert isinstance(payload, dict)
@@ -418,15 +691,34 @@ def format_telegram_message(alert: dict[str, Any]) -> str | None:
         else:
             entry_line = _fmt_dollar_price(entry)
         targets = _target_ladder(entry, stop, tp1)
+        formed = "\n".join(_formation_lines(payload, snip))
+        tfs = "\n".join(_timeframe_lines(payload, snip, alert))
+        capital = "\n".join(
+            _capital_lines(
+                payload=payload,
+                snip=snip,
+                asset=asset,
+                entry=entry,
+                qty=qty,
+                leverage=leverage,
+            )
+        )
         return (
-            f"SCALP TRADE - {asset}\n"
-            f"🏮 TYPE - {side}\n"
+            f"🟡 SCALP TRADE — {asset}\n"
+            f"{_side_emoji(side)} TYPE — {side}\n"
             f"\n"
-            f"👉 ENTRY - {entry_line}\n"
-            f"👉 TARGET - {_fmt_target_line(targets)}\n"
-            f"👉 SL - {_fmt_dollar_price(stop)}\n"
+            f"👉 ENTRY — {entry_line}\n"
+            f"🎯 TARGET — {_fmt_target_line(targets)}\n"
+            f"🛑 SL — {_fmt_dollar_price(stop)}\n"
             f"\n"
-            f"🚨LEVERAGE - {leverage:g}x"
+            f"🧠 HOW IT FORMED\n"
+            f"{formed}\n"
+            f"\n"
+            f"⏱ TIMEFRAMES\n"
+            f"{tfs}\n"
+            f"\n"
+            f"💰 CAPITAL\n"
+            f"{capital}"
         )
 
     if alert_type == "PAPER_EXIT":
@@ -435,21 +727,24 @@ def format_telegram_message(alert: dict[str, Any]) -> str | None:
         if hold is None:
             hold = snip.get("hold_bars")
         hold_s = str(hold) if hold is not None else "n/a"
-        qty_line = f"Qty: {_fmt_qty(qty)} {asset}"
+        qty_line = f"📦 Qty: {_fmt_qty(qty)} {asset}"
         if notional is not None:
             qty_line += f" (entry ~${_fmt_money(notional)})"
+        r_mult = _f(payload.get("r_multiple"))
+        result_emoji = "✅" if r_mult is not None and r_mult > 0 else "❌"
         return (
-            f"CLOSE TRADE - {asset}\n"
-            f"🏮 TYPE - {side}\n"
+            f"🔔 CLOSE TRADE — {asset}\n"
+            f"{_side_emoji(side)} TYPE — {side}\n"
             f"\n"
-            f"👉 EXIT - {_fmt_dollar_price(payload.get('exit_price'))} ({outcome})\n"
-            f"👉 ENTRY - {_fmt_dollar_price(entry)}\n"
-            f"👉 SL - {_fmt_dollar_price(stop)}\n"
+            f"🚪 EXIT — {_fmt_dollar_price(payload.get('exit_price'))} ({outcome})\n"
+            f"👉 ENTRY — {_fmt_dollar_price(entry)}\n"
+            f"🛑 SL — {_fmt_dollar_price(stop)}\n"
             f"\n"
-            f"R: {_fmt_r(payload.get('r_multiple'))} | "
+            f"{result_emoji} R: {_fmt_r(payload.get('r_multiple'))} | "
             f"PnL: ${_fmt_money(payload.get('pnl_usd'))}\n"
             f"{qty_line}\n"
-            f"Hold: {hold_s} bars"
+            f"⏳ Hold: {hold_s} bars\n"
+            f"📄 Mode: PAPER ONLY"
         )
 
     return None
@@ -575,22 +870,64 @@ class TelegramAlertSubscriber:
             resp = await self._client.post(url, json=payload)
             if resp.status_code >= 400:
                 logger.warning(
-                    "telegram_send_failed",
+                    "telegram_failed",
                     status=resp.status_code,
                     body=resp.text[:300],
                     symbol=alert.get("symbol"),
                     type=alert.get("type"),
                 )
+                self._note_v21a_telegram_fail(alert)
                 return
             self._mark_notified(trade_id, alert_type)
             self._log_sent(alert)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "telegram_send_error",
+                "telegram_failed",
                 error=str(exc),
                 symbol=alert.get("symbol"),
                 type=alert.get("type"),
             )
+            self._note_v21a_telegram_fail(alert)
+
+    def _note_v21a_telegram_fail(self, alert: dict[str, Any]) -> None:
+        try:
+            payload = alert.get("payload") if isinstance(alert.get("payload"), dict) else {}
+            snip = _snippet(payload) if isinstance(payload, dict) else {}
+            if str(snip.get("strategy_id") or "") != "COMBO_02_V2_1_A":
+                return
+            from app.services.v21a_paper_validation import get_v21a_validation_monitor
+
+            get_v21a_validation_monitor().record_telegram_status(
+                str((payload or {}).get("id") or snip.get("signal_id") or ""),
+                "FAILED",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def send_text(self, text: str) -> bool:
+        """Best-effort plain text send (daily summary). Never raises."""
+        if not self.enabled or not text:
+            return False
+        url = f"{self.api_base}/bot{self.bot_token}/sendMessage"
+        try:
+            if self._client is None:
+                self._client = httpx.AsyncClient(timeout=self.timeout)
+            resp = await self._client.post(
+                url,
+                json={
+                    "chat_id": self.chat_id,
+                    "text": text,
+                    "disable_web_page_preview": True,
+                },
+            )
+            if resp.status_code >= 400:
+                logger.warning("telegram_failed", status=resp.status_code)
+                return False
+            logger.info("telegram_sent", kind="plain_text")
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("telegram_failed", error=str(exc))
+            return False
 
     def _send_sync(
         self,
@@ -612,22 +949,24 @@ class TelegramAlertSubscriber:
                 )
             if resp.status_code >= 400:
                 logger.warning(
-                    "telegram_send_failed",
+                    "telegram_failed",
                     status=resp.status_code,
                     body=resp.text[:300],
                     symbol=alert.get("symbol"),
                     type=alert.get("type"),
                 )
+                self._note_v21a_telegram_fail(alert)
                 return
             self._mark_notified(trade_id, alert_type)
             self._log_sent(alert)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "telegram_send_error",
+                "telegram_failed",
                 error=str(exc),
                 symbol=alert.get("symbol"),
                 type=alert.get("type"),
             )
+            self._note_v21a_telegram_fail(alert)
 
     def _mark_notified(self, trade_id: str, alert_type: str) -> None:
         if not trade_id:
@@ -640,9 +979,12 @@ class TelegramAlertSubscriber:
     def _log_sent(self, alert: dict[str, Any]) -> None:
         payload = alert.get("payload") if isinstance(alert.get("payload"), dict) else {}
         assert isinstance(payload, dict)
+        snip = _snippet(payload)
         logger.info(
-            "telegram_alert_sent",
+            "telegram_sent",
+            strategy_id=snip.get("strategy_id") or alert.get("strategy_id"),
             symbol=alert.get("symbol"),
+            trade_id=payload.get("id"),
             type=alert.get("type"),
             outcome=_outcome_label(payload.get("exit_reason"))
             if str(alert.get("type") or "").upper() == "PAPER_EXIT"
@@ -650,6 +992,16 @@ class TelegramAlertSubscriber:
             r_multiple=payload.get("r_multiple"),
             pnl_usd=payload.get("pnl_usd"),
         )
+        if str(snip.get("strategy_id") or "") == "COMBO_02_V2_1_A":
+            try:
+                from app.services.v21a_paper_validation import get_v21a_validation_monitor
+
+                get_v21a_validation_monitor().record_telegram_status(
+                    str(payload.get("id") or snip.get("signal_id") or ""),
+                    "SENT",
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
 
 _active_subscriber: TelegramAlertSubscriber | None = None
@@ -665,7 +1017,9 @@ def telegram_delivery_status(settings: Any | None = None) -> dict[str, Any]:
         from app.config import get_settings
 
         settings = get_settings()
-    flag = bool(getattr(settings, "paper_v1_telegram_enabled", False))
+    flag_v1 = bool(getattr(settings, "paper_v1_telegram_enabled", False))
+    flag_v21a = bool(getattr(settings, "paper_v21a_telegram_enabled", False))
+    flag = flag_v1 or flag_v21a
     token = getattr(settings, "telegram_bot_token", None) or None
     chat_id = getattr(settings, "telegram_chat_id", None) or None
     token_ok = bool(str(token).strip() if token else "")
@@ -674,7 +1028,7 @@ def telegram_delivery_status(settings: Any | None = None) -> dict[str, Any]:
     sub = _active_subscriber
     attached = bool(sub is not None and getattr(sub, "_attached", False))
     if not flag:
-        reason = "PAPER_V1_TELEGRAM_ENABLED is false"
+        reason = "PAPER_V1_TELEGRAM_ENABLED and PAPER_V21A_TELEGRAM_ENABLED are false"
     elif not token_ok or not chat_ok:
         reason = "missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID"
     elif not attached:
@@ -683,6 +1037,8 @@ def telegram_delivery_status(settings: Any | None = None) -> dict[str, Any]:
         reason = None
     return {
         "enabled": flag,
+        "v1_enabled": flag_v1,
+        "v21a_enabled": flag_v21a,
         "configured": token_ok and chat_ok,
         "subscribed": attached,
         "ready": flag and token_ok and chat_ok and attached,
@@ -690,16 +1046,17 @@ def telegram_delivery_status(settings: Any | None = None) -> dict[str, Any]:
         "monitors": sorted(_V1_SYMBOLS),
         "timeframe": "any_paper",
         "alert_types": sorted(_V1_ALERT_TYPES),
-        "source": "V1_PAPER_WATCHER|LEGACY_SETUP_SIGNAL",
+        "source": "V1_PAPER_WATCHER|LEGACY_SETUP_SIGNAL|V21A_PAPER_WATCHER",
         "combo_version": _V1_COMBO_VERSION,
-        "path": "A|LEGACY",
+        "path": "A|LEGACY|V21A",
         "reason": reason,
         "label": (
-            "Telegram · PAPER_ENTRY / PAPER_EXIT for all paper-eligible coins "
-            "(v1 books + legacy Path A)"
+            "Telegram · PAPER_ENTRY / PAPER_EXIT for paper-eligible coins "
+            "(v1 books + V2.1-A + legacy Path A)"
         ),
         "v1_books": sorted(_V1_SYMBOLS),
         "legacy_paper": True,
+        "v21a_paper": True,
     }
 
 
@@ -714,10 +1071,12 @@ def start_telegram_alerts(
         from app.config import get_settings
 
         settings = get_settings()
-    if not bool(getattr(settings, "paper_v1_telegram_enabled", False)):
+    flag_v1 = bool(getattr(settings, "paper_v1_telegram_enabled", False))
+    flag_v21a = bool(getattr(settings, "paper_v21a_telegram_enabled", False))
+    if not (flag_v1 or flag_v21a):
         logger.info(
             "telegram_alerts_disabled",
-            reason="PAPER_V1_TELEGRAM_ENABLED is false (default until parity passes)",
+            reason="no paper Telegram flags enabled (v1 / v21a)",
         )
         _active_subscriber = None
         return None

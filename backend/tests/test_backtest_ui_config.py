@@ -123,10 +123,42 @@ def test_short_request_accepted_as_research_only_combo04_htf():
     assert identity["telegram_sent"] is False
 
 
-def test_short_defaults_combo02_to_combo04_htf():
-    r = _resolve(direction="SHORT", allow_short=True, combination_id="COMBO_02")
-    assert r.combination_id == "COMBO_04_HTF"
-    assert r.short_status == "RESEARCH_ONLY"
+def test_v1_short_is_not_rewritten_to_combo04_htf():
+    """COMBO_04_HTF made zero trades; a V1 SHORT is refused instead of rewritten."""
+    for sid in ("COMBO_02_V1", None):
+        with pytest.raises(BacktestConfigError) as ei:
+            _resolve(
+                direction="SHORT",
+                allow_short=True,
+                combination_id="COMBO_02",
+                strategy_id=sid,
+            )
+        assert ei.value.code == "v1_short_removed"
+
+
+def test_explicit_combo02_short_is_not_rewritten():
+    r = _resolve(
+        direction="SHORT",
+        allow_short=True,
+        combination_id="COMBO_02",
+        strategy_id="COMBO_02",
+    )
+    assert r.combination_id == "COMBO_02"
+    assert r.strategy_id == "COMBO_02"
+    assert r.direction == "SHORT"
+
+
+def test_passed_cap_book_short_keeps_its_combination():
+    r = _resolve(
+        direction="SHORT",
+        allow_short=True,
+        combination_id="COMBO_02_V2",
+        strategy_id="COMBO_02_V2",
+        combo_version="v2-combo02-adaptive-3-regime",
+    )
+    assert r.combination_id == "COMBO_02_V2"
+    assert r.strategy_id == "COMBO_02_V2"
+    assert r.direction == "SHORT"
 
 
 def test_short_job_start_accepted_research_only(monkeypatch):
@@ -379,3 +411,38 @@ def test_job_start_long_v1_identity_and_no_side_effects():
             svc_mod.get_bos_research_service = original  # type: ignore[assignment]
 
     asyncio.run(_run())
+
+
+def test_custom_leverage_marks_run_and_cell_research_only():
+    r = _resolve(leverage=3.0, symbols=["BTCUSDT"])
+    assert r.production_comparable is False
+    assert r.cells[0].production_comparable is False
+    assert job_identity_payload(r)["research_only"] is True
+
+
+def test_custom_taker_fee_marks_run_and_every_cell_research_only():
+    r = _resolve(taker_fee_pct=0.06)
+    assert r.production_comparable is False
+    assert all(c.production_comparable is False for c in r.cells)
+
+
+def test_short_combo02_v2_marks_run_and_every_cell_research_only():
+    r = _resolve(
+        direction="SHORT",
+        allow_short=True,
+        combination_id="COMBO_02_V2",
+        strategy_id="COMBO_02_V2",
+        combo_version="v2",
+    )
+    assert r.direction == "SHORT"
+    assert r.production_comparable is False
+    assert r.research_only is True
+    assert "direction_mismatch" in r.mismatch_reasons
+    assert all(c.production_comparable is False for c in r.cells)
+
+
+def test_frozen_v1_run_and_every_cell_production_comparable():
+    r = _resolve(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+    assert r.production_comparable is True
+    assert len(r.cells) == 3
+    assert all(c.production_comparable is True for c in r.cells)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left, insort
 from dataclasses import asdict, dataclass, field
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.research.market_structure.config import MarketStructureFeatureConfig
 from app.research.market_structure.labels import PRIMARY_REGIMES
@@ -313,3 +314,208 @@ def classify_market_regime(
             },
         },
     )
+
+
+def prior_percentile_threshold(
+    history: Sequence[float | None],
+    index: int,
+    lookback: int,
+    percentile: float,
+) -> float | None:
+    """Percentile of values strictly before ``index`` (no current, no future)."""
+    if index <= 0 or lookback <= 0:
+        return None
+    start = max(0, index - lookback)
+    window = [float(v) for v in history[start:index] if v is not None]
+    if len(window) < 5:
+        return None
+    window.sort()
+    if percentile <= 0:
+        return window[0]
+    if percentile >= 100:
+        return window[-1]
+    pos = (len(window) - 1) * (percentile / 100.0)
+    lo = int(pos)
+    hi = min(lo + 1, len(window) - 1)
+    frac = pos - lo
+    return window[lo] * (1.0 - frac) + window[hi] * frac
+
+
+def prior_percentile_threshold_series(
+    history: Sequence[float | None],
+    lookback: int,
+    percentiles: Sequence[float],
+) -> tuple[list[float | None], ...]:
+    """Exact prior-only rolling percentiles in O(n log lookback)."""
+    n = len(history)
+    outputs = tuple([None] * n for _ in percentiles)
+    if lookback <= 0 or not percentiles:
+        return outputs
+
+    window: list[float] = []
+    for index in range(n):
+        add_index = index - 1
+        if add_index >= 0:
+            raw_add = history[add_index]
+            if raw_add is not None:
+                value = float(raw_add)
+                if value == value:  # exclude NaN, matching the scalar path
+                    insort(window, value)
+
+        remove_index = index - lookback - 1
+        if remove_index >= 0:
+            raw_remove = history[remove_index]
+            if raw_remove is not None:
+                value = float(raw_remove)
+                if value == value:
+                    pos = bisect_left(window, value)
+                    if pos < len(window) and window[pos] == value:
+                        window.pop(pos)
+
+        if len(window) < 5:
+            continue
+        last = len(window) - 1
+        for output, percentile in zip(outputs, percentiles):
+            if percentile <= 0:
+                output[index] = window[0]
+            elif percentile >= 100:
+                output[index] = window[-1]
+            else:
+                raw_pos = last * (float(percentile) / 100.0)
+                lo = int(raw_pos)
+                hi = min(lo + 1, last)
+                frac = raw_pos - lo
+                output[index] = window[lo] * (1.0 - frac) + window[hi] * frac
+    return outputs
+
+
+@dataclass(frozen=True)
+class TwoAxisRegime:
+    trend_state: str | None
+    vol_state: str | None
+    combined: str | None
+    warmup: bool
+    unclassified_reason: str | None
+    reason_codes: tuple[str, ...] = field(default_factory=tuple)
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["reason_codes"] = list(self.reason_codes)
+        return d
+
+
+def classify_two_axis(
+    snapshot: Mapping[str, Any],
+    *,
+    atr_high: float | None,
+    atr_low: float | None,
+    config: MarketStructureFeatureConfig | None = None,
+) -> TwoAxisRegime:
+    """Analytics axes. Does not replace ``classify_market_regime`` or ``regime_1h``.
+
+    ``HIGH_VOLATILITY_TREND`` is never emitted. Warmup is separate from TRANSITION.
+    """
+    cfg = config or MarketStructureFeatureConfig()
+    quality = str(snapshot.get("data_quality_state") or "")
+    if quality in {"UNKNOWN_DATA_MISSING", "UNKNOWN_INSUFFICIENT_HISTORY"}:
+        return TwoAxisRegime(
+            None, None, None, True, "WARMUP", (quality or "WARMUP",)
+        )
+    if atr_high is None or atr_low is None:
+        return TwoAxisRegime(None, None, None, True, "WARMUP", ("PERCENTILE_WARMUP",))
+
+    trend = str(snapshot.get("trend_state") or "UNKNOWN").upper()
+    structure = str(snapshot.get("structure_state") or "UNKNOWN").upper()
+    ema_align = str(snapshot.get("ema_alignment") or "UNKNOWN").upper()
+    chop = _num(snapshot.get("choppiness_index"))
+    atr = _num(snapshot.get("atr"))
+
+    bull = bear = range_votes = chop_votes = transition_votes = 0
+    if structure in {"UPTREND_HH_HL", "BULLISH_STRUCTURE"} or trend == "BULLISH":
+        bull += 1
+    elif structure in {"DOWNTREND_LH_LL", "BEARISH_STRUCTURE"} or trend == "BEARISH":
+        bear += 1
+    elif structure in {"RANGE_STRUCTURE", "MIXED_STRUCTURE"} or trend == "NEUTRAL":
+        range_votes += 1
+    elif trend == "TRANSITION" or structure == "TRANSITION_STRUCTURE":
+        transition_votes += 1
+
+    if ema_align == "BULLISH":
+        bull += 1
+    elif ema_align == "BEARISH":
+        bear += 1
+    elif ema_align == "MIXED":
+        transition_votes += 1
+
+    if chop is not None and chop >= cfg.choppiness_high_threshold:
+        chop_votes += 1
+    if {("BULL" if bull else None), ("BEAR" if bear else None)} >= {"BULL", "BEAR"} and bull and bear:
+        transition_votes += 1
+
+    need = int(cfg.trend_vote_required)
+    reason = "CLASSIFIED"
+    if bull >= need and bull > bear and bull >= range_votes:
+        trend_state = "TREND_UP"
+    elif bear >= need and bear > bull and bear >= range_votes:
+        trend_state = "TREND_DOWN"
+    elif chop_votes >= need and chop_votes >= range_votes:
+        trend_state = "CHOPPY"
+    elif range_votes >= need:
+        trend_state = "RANGE"
+    elif transition_votes >= 1 or (bull > 0 and bear > 0):
+        trend_state = "TRANSITION"
+        reason = "VOTES_DISAGREE"
+    elif trend in {"BULLISH", "BEARISH", "NEUTRAL", "TRANSITION"}:
+        trend_state = {
+            "BULLISH": "TREND_UP",
+            "BEARISH": "TREND_DOWN",
+            "NEUTRAL": "RANGE",
+            "TRANSITION": "TRANSITION",
+        }[trend]
+        reason = "STRUCTURE_FALLBACK"
+    else:
+        return TwoAxisRegime(
+            None, None, None, False, "MISSING_VOTES", ("MISSING_VOTES",)
+        )
+
+    if atr is None:
+        vol_state = None
+        combined = None
+        return TwoAxisRegime(
+            trend_state, None, None, False, "MISSING_ATR", (reason, "MISSING_ATR")
+        )
+    if atr >= atr_high:
+        vol_state = "HIGH"
+    elif atr <= atr_low:
+        vol_state = "LOW"
+    else:
+        vol_state = "NORMAL"
+    return TwoAxisRegime(
+        trend_state,
+        vol_state,
+        f"{trend_state}|{vol_state}",
+        False,
+        None if reason == "CLASSIFIED" else reason,
+        (reason,),
+    )
+
+
+def unknown_share_after_warmup(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """UNKNOWN is an unclassified bar that is not warmup."""
+    after = [r for r in rows if r.get("warmup") is not True]
+    reasons: dict[str, int] = {}
+    unknown = 0
+    for row in after:
+        reason = row.get("unclassified_reason")
+        trend = row.get("trend_axis")
+        if trend in {None, "UNKNOWN"} or reason in {"MISSING_VOTES", "MISSING_ATR"}:
+            unknown += 1
+            key = str(reason or "UNKNOWN")
+            reasons[key] = reasons.get(key, 0) + 1
+    n = len(after)
+    return {
+        "bars_after_warmup": n,
+        "unknown_bars": unknown,
+        "unknown_share": (unknown / n) if n else 0.0,
+        "reason_counts": reasons,
+    }

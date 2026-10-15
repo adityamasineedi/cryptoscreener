@@ -17,6 +17,14 @@ async def diagnostics_overview() -> dict[str, Any]:
     return await diagnostic_service.overview(get_settings())
 
 
+@router.post("/frontend-heartbeat")
+async def diagnostics_frontend_heartbeat() -> dict[str, Any]:
+    from app.diagnostics.frontend_presence import note_frontend_seen
+
+    seen = note_frontend_seen()
+    return {"ok": True, "seen_at": seen.isoformat()}
+
+
 @router.get("/issues")
 async def diagnostics_issues(
     status: str | None = Query(default=None),

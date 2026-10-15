@@ -153,18 +153,22 @@ def slice_candles_for_research(
         }
 
     if start is None and end_exclusive is None:
+        warm = max(0, int(warmup_bars))
+        eval_n = len(series)
         if limit is not None and limit > 0:
-            series = series[-limit:]
-        return series, 0, {
-            "candles_loaded": len(series),
-            "warmup_bars_applied": 0,
-            "eval_bars": len(series),
-            "period_start": (
-                candle_timestamp(series[0]).isoformat() if series else None
-            ),
-            "period_end": (
-                candle_timestamp(series[-1]).isoformat() if series else None
-            ),
+            eval_n = min(len(series), int(limit))
+        # Keep lookback in front of the requested tail. Do not steal bars
+        # from the eval window when history before it is missing.
+        prefix = min(warm, max(0, len(series) - eval_n))
+        window = series[len(series) - (prefix + eval_n) :]
+        eval_ts = candle_timestamp(window[prefix]) if window and prefix < len(window) else None
+        end_ts = candle_timestamp(window[-1]) if window else None
+        return window, prefix, {
+            "candles_loaded": len(window),
+            "warmup_bars_applied": prefix,
+            "eval_bars": max(0, len(window) - prefix),
+            "period_start": eval_ts.isoformat() if eval_ts else None,
+            "period_end": end_ts.isoformat() if end_ts else None,
         }
 
     first_eval = 0

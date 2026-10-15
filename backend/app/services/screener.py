@@ -14,7 +14,7 @@ from app.ingestion.providers.sentiment import SentimentProvider, get_sentiment_p
 from app.models.schemas import DataStatus, FreshValue, ScreenerRow, SymbolInfo
 from app.services.asset_metadata import asset_registry
 from app.services.engine_store import engine_store
-from app.services.freshness import wrap_value
+from app.services.freshness import wrap_funding_rate, wrap_value
 from app.services.historical_performance import compute_performance_sync
 from app.services.market_store import MarketDataStore
 from app.services.persistence import persistence
@@ -90,12 +90,16 @@ class ScreenerService:
             price_val = ticker.price
 
         if mark is None:
-            funding = FreshValue.waiting("binance_ws")
+            funding = FreshValue.waiting(
+                "binance_ws",
+                methodology="Waiting for mark price / funding stream",
+            )
         else:
-            m_stale, m_unavail = _ticker_windows(mark.source)
-            funding = wrap_value(
-                mark.funding_rate, mark.timestamp, mark.source,
-                stale_after=m_stale, unavailable_after=m_unavail,
+            funding = wrap_funding_rate(
+                mark.funding_rate,
+                mark.timestamp,
+                mark.source,
+                next_funding_time=mark.next_funding_time,
             )
 
         # OI from scheduler

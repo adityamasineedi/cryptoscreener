@@ -218,6 +218,7 @@ class SignalEngine:
         swings: list | None = None,
         atr_value: float | None = None,
         volumes: Sequence[float] | None = None,
+        avg_volume_ref: float | None = None,
         serialize_swings: bool = True,
     ) -> dict[str, Any]:
         """Analyze one timeframe for structure (swings/trend/BOS/…/retest).
@@ -246,7 +247,17 @@ class SignalEngine:
                 symbol=symbol,
                 as_of_index=as_of_index,
             )
-        trend = infer_trend(swings)
+        end_i = (
+            len(candles) - 1
+            if as_of_index is None
+            else min(int(as_of_index), len(candles) - 1)
+        )
+        close_px = ohlc(candles, end_i)[3] if end_i >= 0 else None
+        trend = infer_trend(
+            swings,
+            close=float(close_px) if close_px is not None else None,
+            mode=getattr(self.config, "trend_mode", None),
+        )
         bos = detect_bos(
             candles,
             swings,
@@ -257,6 +268,8 @@ class SignalEngine:
             rvol=rvol,
             as_of_index=as_of_index,
             atr_value=atr_value,
+            volumes=volumes,
+            avg_volume_ref=avg_volume_ref,
         )
         choch = detect_choch(
             candles,

@@ -11,7 +11,12 @@ from app.research.bos_combinations import get_combination
 from app.research.combination_backtest import run_combination_backtest
 from app.research.combination_engine import evaluate_combination_at_bar
 from app.research.config import ResearchConfig
-from app.research.v1_production import enabled_v1_books
+from app.research.v1_production import (
+    EXTENDED_PAPER_SYMBOLS,
+    FROZEN_V1_SYMBOLS,
+    V1_SYMBOLS,
+    enabled_v1_books,
+)
 from app.services.paper_trade import PaperTradeEngine, PATH_A, PATH_B
 from app.services.v1_paper_watcher import (
     V1PaperWatcher,
@@ -103,13 +108,16 @@ def _reset_watcher():
     reset_v1_paper_watcher_for_tests()
 
 
-def test_enabled_v1_books_are_1h_btc_eth_sol():
+def test_enabled_v1_books_are_1h_frozen_trio_and_extended_majors():
     books = enabled_v1_books(secondary_enabled=True, timeframes={"1h"})
-    assert {(b.symbol, b.timeframe) for b in books} == {
-        ("BTCUSDT", "1h"),
-        ("ETHUSDT", "1h"),
-        ("SOLUSDT", "1h"),
-    }
+    assert {b.timeframe for b in books} == {"1h"}
+    symbols = {b.symbol for b in books}
+    # The frozen claim set is unchanged and still watched.
+    assert FROZEN_V1_SYMBOLS == {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+    assert FROZEN_V1_SYMBOLS <= symbols
+    # Extended majors are books too. Nothing else is.
+    assert symbols - FROZEN_V1_SYMBOLS == EXTENDED_PAPER_SYMBOLS
+    assert symbols == V1_SYMBOLS
     core = enabled_v1_books(secondary_enabled=False, timeframes={"1h"})
     assert [b.symbol for b in core] == ["BTCUSDT"]
 
@@ -117,8 +125,11 @@ def test_enabled_v1_books_are_1h_btc_eth_sol():
 def test_watcher_rejects_outside_universe():
     paper = PaperTradeEngine(enabled=True, v1_profile_enabled=True)
     watcher = V1PaperWatcher(paper_engine=paper, replay_mode=True, emit_alerts=False)
-    assert watcher.book_for("DOGEUSDT") is None
-    assert watcher.on_closed_1h("DOGEUSDT", candles_1h=[], candles_4h=[]) is None
+    assert "PEPEUSDT" not in V1_SYMBOLS
+    assert watcher.book_for("PEPEUSDT") is None
+    assert watcher.on_closed_1h("PEPEUSDT", candles_1h=[], candles_4h=[]) is None
+    # An extended major is a book.
+    assert watcher.book_for("DOGEUSDT") is not None
 
 
 def test_watcher_dedupes_same_closed_bar():
@@ -183,13 +194,15 @@ def test_path_a_15m_opens_in_parallel_with_v1_on_same_symbol(monkeypatch):
     import app.services.paper_trade as paper_mod
     from app.research.v1_production import V1Book
 
-    monkeypatch.setattr(paper_mod, "_live_price", lambda _s: 100.0)
+    monkeypatch.setattr(
+        paper_mod, "_live_price_with_source", lambda _s: (100.0, "mark_price")
+    )
     paper = PaperTradeEngine(enabled=True, entry_mode=PATH_A, v1_profile_enabled=True)
     paper.legacy_auto_entry_enabled = True
     paper.v1_watcher_owns_entries = False
     paper.risk_policy.enabled = False
     payload = {
-        "status": "WAITING",
+        "status": "LONG_ENTRY_CANDIDATE",
         "direction": "LONG",
         "timeframe": "15m",
         "bos": {"state": "CONFIRMED", "direction": "BULLISH_BOS", "broken_level": 100},
@@ -200,8 +213,10 @@ def test_path_a_15m_opens_in_parallel_with_v1_on_same_symbol(monkeypatch):
         },
         "mtf": {"MTF_ALIGNMENT": "STRONG_LONG"},
         "entry": {"entry_price": 100},
-        "stop": {"final_stop": 98},
-        "targets": [{"target_price": 104}],
+        "stop": {"final_stop": 98, "provisional": False, "reason": "structural pullback low"},
+        "targets": [{"target_price": 104, "target_type": "previous_swing_high"}],
+        "impulse": {"is_impulse": True},
+        "pullback": {"pullback_state": "CONFIRMED"},
         "risk_reward": {"RISK_REWARD": "PASS"},
         "ohlcv_freshness": "OK",
     }
@@ -231,6 +246,8 @@ def test_path_a_15m_opens_in_parallel_with_v1_on_same_symbol(monkeypatch):
         emit_alert=False,
     )
     assert v1 is not None
+    assert v1.signal_snippet["price_source"] == "mark_price"
+    assert v1.entry_price == pytest.approx(100.0)
     assert paper.has_open("BTCUSDT", "LEGACY")
     assert paper.has_open("BTCUSDT", "V1")
     assert paper.status()["open_count"] == 2
@@ -293,3 +310,96 @@ def test_live_seed_does_not_open_historical_tip():
     # First sighting seeds watermark — no open
     assert watcher.on_closed_1h("BTCUSDT", candles_1h=h1, candles_4h=h4) is None
     assert "BTCUSDT" in watcher._seeded
+
+
+def test_thin_history_does_not_burn_the_live_bar():
+    thin = _trending_series(n=8, minutes_per_bar=60, start_price=100.0, drift=1.0)
+    paper = PaperTradeEngine(enabled=True)
+    watcher = V1PaperWatcher(
+        paper_engine=paper,
+        replay_mode=False,
+        emit_alerts=False,
+    )
+    assert watcher.on_closed_1h("BTCUSDT", candles_1h=thin, candles_4h=[]) is None
+    assert watcher._last_skip == "BTCUSDT:ohlcv_catchup"
+    assert "BTCUSDT" not in watcher._watermarks
+    assert "BTCUSDT" not in watcher._seeded
+
+    ready_1h = _trending_series(n=80, minutes_per_bar=60, start_price=100.0, drift=1.0)
+    ready_4h = _htf_ending_with_setup(
+        ready_1h, n=40, minutes_per_bar=240, start_price=90.0, drift=2.0
+    )
+    # Same symbol can be evaluated once depth arrives (stale tip seeds, does not stay blocked).
+    assert watcher.on_closed_1h("BTCUSDT", candles_1h=ready_1h, candles_4h=ready_4h) is None
+    assert watcher._last_skip == "BTCUSDT:seeded_no_backlog"
+    assert "BTCUSDT" in watcher._seeded
+
+
+class _SpyPaper:
+    """Records v1 open attempts; never opens."""
+
+    def __init__(self) -> None:
+        self.open_calls = 0
+
+    def open_v1_combo_position(self, **_kwargs: Any) -> None:
+        self.open_calls += 1
+        return None
+
+
+def _rows(watcher: V1PaperWatcher) -> dict[str, dict[str, Any]]:
+    return {row["symbol"]: row for row in watcher.peek_books()}
+
+
+def test_each_book_keeps_its_own_last_skip_and_bar():
+    paper = _SpyPaper()
+    watcher = V1PaperWatcher(paper_engine=paper, replay_mode=False, emit_alerts=False)
+
+    btc_1h = _trending_series(n=80, minutes_per_bar=60, start_price=100.0, drift=1.0)
+    btc_4h = _htf_ending_with_setup(
+        btc_1h, n=40, minutes_per_bar=240, start_price=90.0, drift=2.0
+    )
+    eth_1h = _trending_series(n=8, minutes_per_bar=60, start_price=50.0, drift=1.0)
+    btc_bar = btc_1h[-1]["time"].isoformat()
+    eth_bar = eth_1h[-1]["time"].isoformat()
+    assert btc_bar != eth_bar
+
+    assert watcher.on_closed_1h("BTCUSDT", candles_1h=btc_1h, candles_4h=btc_4h) is None
+    assert watcher.on_closed_1h("ETHUSDT", candles_1h=eth_1h, candles_4h=[]) is None
+
+    # The later ETH skip owns the watcher-wide slot but not the BTC row.
+    assert watcher._last_skip == "ETHUSDT:ohlcv_catchup"
+    rows = _rows(watcher)
+    assert rows["BTCUSDT"]["last_skip"] == "BTCUSDT:seeded_no_backlog"
+    assert rows["BTCUSDT"]["last_skip_bar"] == btc_bar
+    assert rows["ETHUSDT"]["last_skip"] == "ETHUSDT:ohlcv_catchup"
+    assert rows["ETHUSDT"]["last_skip_bar"] == eth_bar
+    assert rows["SOLUSDT"]["last_skip"] is None
+    assert rows["SOLUSDT"]["last_skip_bar"] is None
+
+    # Same closed bar again: the existing skip still refuses the open.
+    watermark = watcher._watermarks["BTCUSDT"]
+    assert watcher.on_closed_1h("BTCUSDT", candles_1h=btc_1h, candles_4h=btc_4h) is None
+    assert paper.open_calls == 0
+    assert watcher._watermarks["BTCUSDT"] == watermark
+    rows = _rows(watcher)
+    assert rows["BTCUSDT"]["last_skip"] == "BTCUSDT:already_processed"
+    assert rows["BTCUSDT"]["last_skip_bar"] == btc_bar
+    assert rows["ETHUSDT"]["last_skip"] == "ETHUSDT:ohlcv_catchup"
+    assert rows["ETHUSDT"]["last_skip_bar"] == eth_bar
+
+
+def test_recreated_watcher_loads_skips_from_process_memory():
+    thin = _trending_series(n=8, minutes_per_bar=60, start_price=100.0, drift=1.0)
+    first = V1PaperWatcher(paper_engine=_SpyPaper(), emit_alerts=False)
+    assert first.on_closed_1h("BTCUSDT", candles_1h=thin, candles_4h=[]) is None
+
+    second = V1PaperWatcher(paper_engine=_SpyPaper(), emit_alerts=False)
+    row = _rows(second)["BTCUSDT"]
+    assert row["last_skip"] == "BTCUSDT:ohlcv_catchup"
+    assert row["last_skip_bar"] == thin[-1]["time"].isoformat()
+    # Skips only: watermarks and the processed set are not carried over.
+    assert second._watermarks == {}
+    assert second._processed_bars == set()
+
+    reset_v1_paper_watcher_for_tests()
+    assert _rows(V1PaperWatcher(emit_alerts=False))["BTCUSDT"]["last_skip"] is None

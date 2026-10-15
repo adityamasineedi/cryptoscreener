@@ -48,16 +48,17 @@ async def list_symbols_with_ohlcv(timeframe: str | None = None) -> list[str]:
 def _rows_to_candles(rows: Any) -> list[dict[str, Any]]:
     candles: list[dict[str, Any]] = []
     for r in rows:
-        candles.append(
-            {
-                "time": r[0],
-                "open": float(r[1]),
-                "high": float(r[2]),
-                "low": float(r[3]),
-                "close": float(r[4]),
-                "volume": float(r[5] or 0),
-            }
-        )
+        candle = {
+            "time": r[0],
+            "open": float(r[1]),
+            "high": float(r[2]),
+            "low": float(r[3]),
+            "close": float(r[4]),
+            "volume": float(r[5] or 0),
+        }
+        if len(r) > 6 and r[6] is not None:
+            candle["quote_volume"] = float(r[6])
+        candles.append(candle)
     return candles
 
 
@@ -153,6 +154,38 @@ async def load_ohlcv_series_range(
         params["end_ts"] = end_exclusive
     sql = f"""
         SELECT time, open, high, low, close, volume
+        FROM ohlcv
+        WHERE {" AND ".join(clauses)}
+        ORDER BY time ASC
+    """
+    async with db_manager.engine.begin() as conn:
+        result = await conn.execute(text(sql), params)
+        rows = result.fetchall()
+    return _rows_to_candles(rows)
+
+
+async def load_ohlcv_range_with_quote(
+    symbol: str,
+    timeframe: str,
+    *,
+    start: datetime | None,
+    end_exclusive: datetime | None,
+) -> list[dict[str, Any]]:
+    """Same table as the other loaders, including exchange quote volume when stored."""
+    if db_manager.engine is None:
+        raise RuntimeError("DATABASE unavailable")
+    sym = normalize_research_symbol(symbol)
+    tf = normalize_research_timeframe(timeframe)
+    clauses = ["symbol = :symbol", "timeframe = :tf"]
+    params: dict[str, Any] = {"symbol": sym, "tf": tf}
+    if start is not None:
+        clauses.append("time >= :start_ts")
+        params["start_ts"] = start
+    if end_exclusive is not None:
+        clauses.append("time < :end_ts")
+        params["end_ts"] = end_exclusive
+    sql = f"""
+        SELECT time, open, high, low, close, volume, quote_volume
         FROM ohlcv
         WHERE {" AND ".join(clauses)}
         ORDER BY time ASC

@@ -45,6 +45,24 @@ class OHLCVStore:
     def get_open(self, symbol: str, timeframe: str) -> Candle | None:
         return self._open.get((symbol.upper(), normalize_timeframe(timeframe)))
 
+    def _place_closed(self, key: tuple[str, str], candle: Candle) -> bool:
+        """Keep one closed series in open_time order. True when the bar is new."""
+        hist = self._closed[key]
+        if hist and candle.open_time == hist[-1].open_time:
+            hist[-1] = candle
+            return False
+        if not hist or candle.open_time > hist[-1].open_time:
+            hist.append(candle)
+            return True
+        kept = [c for c in hist if c.open_time != candle.open_time]
+        kept.append(candle)
+        kept.sort(key=lambda c: c.open_time)
+        if hist.maxlen:
+            kept = kept[-int(hist.maxlen) :]
+        hist.clear()
+        hist.extend(kept)
+        return True
+
     def get_closed(
         self, symbol: str, timeframe: str, *, limit: int | None = None
     ) -> list[Candle]:
@@ -73,12 +91,8 @@ class OHLCVStore:
         self._live_symbols.add(candle.symbol.upper())
 
         if candle.is_closed:
-            hist = self._closed[key]
-            if hist and hist[-1].open_time == candle.open_time:
-                hist[-1] = candle
-            else:
-                hist.append(candle)
-            self._closed_count += 1
+            if self._place_closed(key, candle):
+                self._closed_count += 1
             self._open.pop(key, None)
             self._pending_db.append(candle)
             if self.redis is not None:
@@ -137,20 +151,12 @@ class OHLCVStore:
                 continue
             self._live_symbols.add(candle.symbol.upper())
             key = (candle.symbol.upper(), normalize_timeframe(candle.timeframe))
-            hist = self._closed[key]
-            if hist and any(c.open_time == candle.open_time for c in hist):
-                # replace matching — still upsert to Postgres so tip repairs persist
-                for i, existing in enumerate(hist):
-                    if existing.open_time == candle.open_time:
-                        hist[i] = candle
-                        self._pending_db.append(candle)
-                        n += 1
-                        break
-            else:
-                hist.append(candle)
+            # Replace or insert in open_time order. A later history fill must
+            # not land after the live tip.
+            if self._place_closed(key, candle):
                 self._closed_count += 1
-                self._pending_db.append(candle)
-                n += 1
+            self._pending_db.append(candle)
+            n += 1
         return n
 
     def find_gaps(self, symbol: str, timeframe: str) -> list[GapInfo]:
@@ -263,10 +269,10 @@ class OHLCVStore:
         for candle in candles:
             if candle.open_time in existing_times:
                 continue
-            hist.append(candle)
+            if self._place_closed(key, candle):
+                self._closed_count += 1
+                n += 1
             existing_times.add(candle.open_time)
-            self._closed_count += 1
-            n += 1
         return n
 
     async def flush_db(self) -> int:

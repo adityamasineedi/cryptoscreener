@@ -1,9 +1,9 @@
 # Grid trading (isolated)
 
-Results are for a **USDT-M futures, unleveraged, long grid**. Candles come from
+Results are for a **USDT-M futures long grid at 1x to 5x leverage**. Candles come from
 persisted Binance USDT-M futures `ohlcv` (`load_ohlcv_series` /
 `load_ohlcv_series_tail`). The market label is `binance_usdt_m_futures`.
-Leverage above 1 is rejected. This is not a spot book.
+This is not a spot book.
 
 `GRID_TRADING_ENABLED` defaults to false. While it is off, every route on
 `/api/grid-trading` returns 404 and `create_app` does not run a grid backtest,
@@ -13,6 +13,50 @@ scan, or live submit. The sidebar shows the tab only when
 Live `submit_live` acquires the grid rate limiter and then raises. There is
 no order client. `mode=paper` is rejected. Grid paper, when it exists later,
 stays inside this package and does not call `paper_trade.py`.
+
+## Risk
+
+`capital` is the margin. Each slot is sized to `capital * leverage / grid_count`
+of notional, so 2x on 1000 is 2000 of grid notional. Leverage outside `[1, 5]`
+is rejected. A buy is filled only while equity after the buy covers its initial
+margin, `(base + qty) * price / leverage`. At 1x that is the old `quote >= debit`.
+
+Equity is margin equity: `quote + base * price`, where `quote` goes negative
+once a leveraged buy borrows. The equity curve, `max_drawdown`, the
+max-drawdown kill, and `return` are all measured on that margin, not on the
+leveraged notional.
+
+Liquidation is at the price where margin equity falls to the maintenance
+margin, `maintenance_margin_rate * base * price` (default 0.5%). Realized
+grid profit stays in the margin. On every bar after fills, price is taken to
+fall from the open to the low, so whichever of the stop and the liquidation
+price is higher fires first. A liquidation closes at the liquidation price
+with the taker fee and forfeits the margin left after the close
+(`liquidation_fee`), which leaves equity at zero.
+
+The run is rejected (`liquidation`) when the stop is at or below the
+worst-case liquidation price. The worst case holds the `max_open_grids`
+highest slots from their buys with no realized profit. Lower leverage, lower
+`max_open_grids`, or a higher stop clears it. Funding can still move the live
+liquidation price above the stop, which is why the per-bar check stays.
+
+`max_open_grids` caps how many slots can hold inventory at once. Default is
+`grid_count`. Buys fill from the highest touched slot down. A buy blocked by
+the cap stays armed, counts as a touch without a fill, and is counted in
+`blocked_buys`.
+
+`exit_above_range` (default false; the UI sends true) flattens and ends the
+grid when a bar closes above `range_high` while equity is above `capital`. A
+wick above the range does not trigger it, and neither does a close above the
+range while the book is flat or under water, so a grid that has not made money
+keeps running. The event is `take_profit`. Funding stops after it, as after a stop.
+
+The buy-and-hold benchmark uses the same leverage and maintenance margin. If
+its liquidation price is reached its equity is zero.
+
+The result counts `stop_hits`, `liquidations`, `take_profit_exits`, and
+`drawdown_kills`. `round_trips` counts grid take-profits (slot sells). There is
+one global stop; it closes the whole book, so `stop_hits` is 0 or 1.
 
 ## Fees
 
@@ -112,4 +156,5 @@ ranked by that share. The payload always includes an overfitting warning.
 Set `GRID_TRADING_ENABLED=true` and post to `/api/grid-trading/backtest` with
 `range_low`, `range_high`, `grid_count`, `capital`, and `stop_price`. Pass
 `candles` or a `symbol` plus `timeframe`. Invalid range, grid count, capital,
-maker spacing, leverage, stop, max drawdown, or max open orders is a 422.
+maker spacing, leverage, maintenance margin, max open grids, stop, stop below
+liquidation, max drawdown, or max open orders is a 422.

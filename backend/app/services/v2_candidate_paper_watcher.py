@@ -26,7 +26,7 @@ from app.research.dynamic_candidate_constants import (
 )
 from app.research.strategy_candidate_registry import strategy_candidate_registry
 from app.research.v1_production import normalize_symbol, normalize_timeframe
-from app.services.v1_paper_watcher import is_v1_long_entry
+from app.services.v1_paper_watcher import is_v1_long_entry, series_integrity_fault
 from app.signals._candle_utils import candle_time
 from app.signals.config import SignalConfig
 
@@ -290,9 +290,21 @@ class V2CandidatePaperWatcher:
         tip_ts = candle_time(series_1h[tip_idx])
         tip_iso = _iso(tip_ts)
         key = f"{sym}|{self.timeframe}|{tip_iso}"
+        fault = series_integrity_fault(series_1h, series_4h)
         with self._lock:
             if key in self._processed_bars and not force:
                 self._last_skip = f"{sym}:already_processed"
+                return None
+            if fault:
+                # Same gate as the v1 watcher. The bar is not marked
+                # processed, so it is retried once the store heals.
+                self._last_skip = f"{sym}:data_integrity:{fault}"
+                logger.warning(
+                    "v2_watcher_data_integrity",
+                    symbol=sym,
+                    bar=tip_iso,
+                    fault=fault,
+                )
                 return None
             self._processed_bars.add(key)
 

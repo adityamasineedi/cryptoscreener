@@ -1,0 +1,25 @@
+{
+  "candles": [
+    {"time": 1699999200, "close": 42100.0},
+    {"time": 1700028000, "close": 41900.0}
+  ],
+  "fills": [
+    {"time": 1699999200, "side": "buy", "qty": 0.25},
+    {"time": 1700028000, "side": "sell", "qty": 0.10}
+  ],
+  "settlements": [
+    {
+      "symbol": "BTCUSDT",
+      "fundingTime": 1700000000400,
+      "fundingRate": "0.00010000",
+      "markPrice": "42000.5"
+    },
+    {
+      "symbol": "BTCUSDT",
+      "fundingTime": 1700028800000,
+      "fundingRate": "-0.00005000",
+      "markPrice": ""
+    }
+  ],
+  "expected_funding_paid": 0.7357625
+}

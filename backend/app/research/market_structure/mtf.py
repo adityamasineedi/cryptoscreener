@@ -158,3 +158,46 @@ def classify_mtf_alignment(
         mtf_conflict_count=int(conflict),
         reason_codes=tuple(reasons),
     )
+
+
+def bias_token(trend_state: str | None) -> str:
+    mapping = {
+        "TREND_UP": "UP",
+        "TREND_DOWN": "DOWN",
+        "RANGE": "RANGE",
+        "CHOPPY": "CHOP",
+        "TRANSITION": "TRANSITION",
+    }
+    if not trend_state:
+        return "NA"
+    return mapping.get(str(trend_state), "NA")
+
+
+def trigger_token(pullback_state: str | None, bos_state: str | None) -> str:
+    pb = str(pullback_state or "").upper()
+    bos = str(bos_state or "").upper()
+    if "PULLBACK" in pb and pb not in {"", "NONE", "UNKNOWN"}:
+        return "PULLBACK"
+    if bos.startswith("BULLISH"):
+        return "BULL_BOS"
+    if bos.startswith("BEARISH"):
+        return "BEAR_BOS"
+    if pb in {"", "NONE", "UNKNOWN", "NO_PULLBACK"}:
+        return "NONE"
+    return pb
+
+
+def combined_structure_key(
+    trend_4h: str | None,
+    trend_1h: str | None,
+    pullback_15m: str | None,
+    bos_15m: str | None,
+) -> str | None:
+    """None when the 1h axis is still warming up."""
+    if not trend_1h:
+        return None
+    return (
+        f"4h_{bias_token(trend_4h)}/"
+        f"1h_{trend_1h}/"
+        f"15m_{trigger_token(pullback_15m, bos_15m)}"
+    )

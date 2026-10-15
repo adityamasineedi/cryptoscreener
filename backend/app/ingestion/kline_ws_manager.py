@@ -79,14 +79,11 @@ class KlineShardConnection:
         self.forensics.note_task_created(f"kline:{self.name}")
 
     async def stop(self) -> None:
+        from app.core.shutdown import cancel_tasks
+
         self._stop.set()
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        await cancel_tasks([self._task], label=f"kline:{self.name}")
+        self._task = None
         self.connected = False
         self._subscribed.clear()
 
@@ -151,6 +148,7 @@ class KlineShardConnection:
                     url,
                     ping_interval=self.ping_interval,
                     ping_timeout=20,
+                    close_timeout=2,
                     max_queue=2048,
                     open_timeout=30,
                 ) as ws:

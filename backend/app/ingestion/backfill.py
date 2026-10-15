@@ -423,15 +423,11 @@ class ProgressiveBackfillService:
         return len(drop)
 
     async def stop(self) -> None:
+        from app.core.shutdown import cancel_tasks, finish_within
+
         self._running = False
-        await self._save_progress()
-        for t in self._tasks:
-            t.cancel()
-        for t in self._tasks:
-            try:
-                await t
-            except asyncio.CancelledError:
-                pass
+        await finish_within(self._save_progress(), label="backfill_progress")
+        await cancel_tasks(self._tasks, label="backfill")
         self._tasks.clear()
 
     def _volume(self, symbol: str) -> float:
@@ -1047,9 +1043,14 @@ class ProgressiveBackfillService:
         existing = self.ohlcv.get_closed(symbol, timeframe)
         known = {c.open_time for c in existing}
         want_end = int(datetime.now(timezone.utc).timestamp() * 1000)
-        page = max(50, min(int(limit), self.candles_per_request))
+        # Paper hydration asks for the EMA-200 window (250). Allow that page
+        # even when the steady backfill page size is smaller. Binance caps at 1500.
+        page = max(50, min(int(limit), max(int(self.candles_per_request), 500)))
 
-        ranges = missing_fetch_ranges(
+        # A short series that already touches "now" must still pull older bars.
+        # Forward-only ranges would leave the book at a handful of candles forever.
+        shallow = len(existing) < page
+        ranges = [] if shallow else missing_fetch_ranges(
             existing,
             timeframe,
             want_start_ms=(
@@ -1061,7 +1062,9 @@ class ProgressiveBackfillService:
             max_ranges=2,
         )
         kwargs: dict[str, Any] = {"limit": page}
-        if ranges:
+        if shallow:
+            pass
+        elif ranges:
             start_ms, end_ms = ranges[-1]
             # Prefer the trailing window so the chart tip reaches "now"
             kwargs["start_time"] = start_ms
@@ -1129,7 +1132,60 @@ class ProgressiveBackfillService:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("freshness_loop_failed", error=str(exc))
 
+    def _closed_tip_older_than_last_completed(
+        self, symbol: str, timeframe: str
+    ) -> bool:
+        """True when the newest closed bar opened before the last completed interval."""
+        closed = self.ohlcv.get_closed(symbol, timeframe)
+        if not closed:
+            return False
+        tf = normalize_timeframe(timeframe)
+        step = TIMEFRAME_MS.get(tf)
+        if not step:
+            return False
+        tip = max(closed, key=lambda c: c.open_time)
+        ot = tip.open_time
+        if ot.tzinfo is None:
+            ot = ot.replace(tzinfo=timezone.utc)
+        wall_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        current_open_ms = (wall_ms // step) * step
+        last_completed_open_ms = current_open_ms - step
+        return int(ot.timestamp() * 1000) < last_completed_open_ms
+
+    async def _guarantee_btc_daily_tail(self) -> int:
+        """Offer and finish a REST tail for the regime clock's BTCUSDT 1d series.
+
+        Daily closes are not on the kline websocket. The capped freshness scan
+        can also miss this symbol, and a forming daily candle must not block
+        the missing close. Other symbols' failed jobs do not gate this fetch.
+        """
+        sym, tf = "BTCUSDT", "1d"
+        if not self._closed_tip_older_than_last_completed(sym, tf):
+            return 0
+        tip = self._tip_view(sym, tf)
+        if not is_trailing_stale(tip, tf):
+            return 0
+        offered = await self._offer(
+            sym,
+            tf,
+            priority=0,
+            reason="trailing_stale",
+            score=1_000_000.0,
+        )
+        try:
+            await self._fetch_rest_tail(sym, tf, limit=5)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "btc_daily_tail_failed",
+                symbol=sym,
+                timeframe=tf,
+                error=str(exc),
+            )
+        return offered
+
     async def _enqueue_stale_tips(self) -> int:
+        # Regime daily is outside the prefer cap and the backtest deferral.
+        n = await self._guarantee_btc_daily_tail()
         # Defer trailing REST work while a UI backtest owns the event loop.
         try:
             from app.research.backtest_job import backtest_job_service
@@ -1139,7 +1195,7 @@ class ProgressiveBackfillService:
                     "trailing_stale_deferred_for_backtest",
                     queue=self.queue_size,
                 )
-                return 0
+                return n
         except Exception:  # noqa: BLE001
             pass
         active = self.select_active_universe()
@@ -1152,8 +1208,8 @@ class ProgressiveBackfillService:
                 [*sorted(self._visible), *sorted(self._watchlist), *ranked]
             )
         )
-        n = 0
-        # Cap work per tick within the active universe
+        # Cap work per tick within the active universe. `n` already includes
+        # the BTCUSDT 1d tail when that series was behind.
         for sym in prefer[: max(20, min(len(prefer), self.active_universe_count))]:
             for tf in self.tf_priority:
                 if tf == "1m" and not self._include_1m(sym, ranked or prefer):

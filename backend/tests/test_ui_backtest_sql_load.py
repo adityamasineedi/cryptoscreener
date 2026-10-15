@@ -61,6 +61,52 @@ async def test_load_research_candles_skips_parquet_when_disabled():
     assert eval_start >= 0
 
 
+@pytest.mark.asyncio
+async def test_tail_warmup_fetches_lookback_before_limit():
+    from datetime import timedelta
+
+    from app.research.service import _load_research_candles
+
+    base = datetime(2026, 8, 17, tzinfo=timezone.utc)
+    candles = [
+        {
+            "time": base + timedelta(hours=i),
+            "open": 1.0,
+            "high": 1.1,
+            "low": 0.9,
+            "close": 1.0,
+            "volume": 1.0,
+        }
+        for i in range(150)
+    ]
+    mock_db = MagicMock()
+    mock_db.enabled = True
+    mock_db.engine = object()
+
+    with (
+        patch("app.services.database.db_manager", mock_db),
+        patch(
+            "app.research.postgres_ohlcv.load_ohlcv_series_tail",
+            new=AsyncMock(return_value=candles),
+        ) as tail_mock,
+    ):
+        window, eval_start, meta = await _load_research_candles(
+            "SOLUSDT",
+            "1h",
+            limit=120,
+            warmup_bars=50,
+            use_research_cache=False,
+            tail_warmup=True,
+        )
+
+    tail_mock.assert_awaited()
+    assert tail_mock.await_args.kwargs["limit"] == 170
+    assert len(window) == 150
+    assert eval_start == 30
+    assert meta["eval_bars"] == 120
+    assert meta["period_start"] == candles[30]["time"].isoformat()
+
+
 def test_strategy_matrix_defaults_use_research_cache_false():
     import inspect
 

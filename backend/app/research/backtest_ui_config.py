@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from app.research.v1_production import (
@@ -40,6 +40,7 @@ SOURCE_V1_RESEARCH_BACKTEST = "V1_RESEARCH_BACKTEST"
 SOURCE_V21A_RESEARCH_BACKTEST = "V21A_RESEARCH_BACKTEST"
 SHORT_RESEARCH_PAUSED_CODE = "short_research_paused"
 SHORT_RESEARCH_COMBO_ID = "COMBO_04_HTF"
+V1_SHORT_REMOVED_CODE = "v1_short_removed"
 
 # Frozen COMBO_02 v1 production setup (docs/v1_freeze.md / v1_production.py).
 V1_SETUP_TIMEFRAME = "1h"
@@ -306,9 +307,20 @@ def validate_backtest_request(
             raise BacktestConfigError("invalid_risk", "Risk must be positive")
 
     combo = (combination_id or COMBO_ID).upper().strip()
-    if direction_raw == "SHORT" and combo in {COMBO_ID, "COMBO_02"}:
-        # Default SHORT backtest to reverse-of-long impulse/pullback+HTF research combo.
-        combo = SHORT_RESEARCH_COMBO_ID
+    explicit_sid = (strategy_id or "").upper().strip()
+    if (
+        direction_raw == "SHORT"
+        and combo in {COMBO_ID, "COMBO_02"}
+        and explicit_sid != "COMBO_02"
+    ):
+        # COMBO_02 v1 is LONG only. Its SHORT used to be rewritten to COMBO_04_HTF,
+        # which made zero trades on every coin; that option is removed. An explicit
+        # COMBO_02 strategy id still runs COMBO_02 SHORT (passed cap-book side).
+        raise BacktestConfigError(
+            V1_SHORT_REMOVED_CODE,
+            "COMBO_02 V1 is LONG only. To backtest COMBO_02 SHORT, send strategy id "
+            "COMBO_02. COMBO_04_HTF can still be requested by its own id.",
+        )
     default_sid = (
         STRATEGY_ID_SHORT_RESEARCH
         if direction_raw == "SHORT"
@@ -491,6 +503,23 @@ def validate_backtest_request(
     if mode != "V1_PRODUCTION_PROFILE":
         production_comparable = False
 
+    # Run-wide gates apply to every cell so the cell and run flags cannot disagree.
+    run_wide_ok = (
+        abs(float(lev) - V1_DEFAULT_LEVERAGE) <= 1e-9
+        and abs(float(taker_fee_pct) - V1_DEFAULT_TAKER_FEE_PCT) <= 1e-9
+        and abs(float(maker_fee_pct) - V1_DEFAULT_MAKER_FEE_PCT) <= 1e-9
+        and direction_raw == V1_DIRECTION
+        and combo == COMBO_ID
+        and mode == "V1_PRODUCTION_PROFILE"
+        and "non_v1_strategy" not in uniq_mismatch
+    )
+    if not run_wide_ok:
+        production_comparable = False
+    cells = [
+        replace(c, production_comparable=bool(c.production_comparable and run_wide_ok))
+        for c in cells
+    ]
+
     if not production_comparable and "risk_mismatch" not in uniq_mismatch:
         # Ensure research-only configs always carry at least one reason when mismatched.
         if any(c.risk_source != "V1_PRODUCTION_PROFILE" for c in cells):
@@ -625,14 +654,23 @@ def enrich_row_with_config(
         "end_date": None,
         "limit": None,
     }
+    # Warm-up bars are loaded but never evaluated; duration reflects evaluated bars.
+    bars_used = (
+        row.get("bars_evaluated")
+        if row.get("bars_evaluated") is not None
+        else row.get("bars_loaded")
+    )
+    warmup_bars = int(row.get("warmup_bars") or 0)
+    out["warmup_bars"] = warmup_bars
     out["actual_range"] = {
         "first_candle": row.get("period_start"),
         "last_candle": row.get("period_end"),
         "bars_loaded": row.get("bars_loaded"),
-        "bars_used": row.get("bars_loaded"),
+        "bars_used": bars_used,
+        "warmup_bars": warmup_bars,
     }
     out["approx_duration_days"] = bars_to_approx_days(
-        int(row.get("bars_loaded") or 0), str(row.get("timeframe") or "")
+        int(bars_used or 0), str(row.get("timeframe") or "")
     )
     out["dataset_fingerprint"] = dataset_fingerprint
     out["configuration_fingerprint"] = resolved.configuration_fingerprint

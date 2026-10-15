@@ -302,6 +302,15 @@ def test_v2_paper_records_entry_triad(monkeypatch):
         "app.services.paper_trade._live_price_with_source",
         lambda _sym: (100.2, "mark_price"),
     )
+    # The experimental opener now runs the paper risk gate: give BNB a live
+    # cap tier and 24h volume so it passes on real inputs.
+    monkeypatch.setattr(
+        "app.services.paper_risk._mcap_and_group",
+        lambda _s: ("large-cap", 20e9, "LIVE"),
+    )
+    monkeypatch.setattr(
+        "app.services.paper_risk._quote_volume_24h", lambda _s: (50e6, "LIVE")
+    )
     pos = engine.open_experimental_position(
         symbol="BNBUSDT",
         timeframe="1h",

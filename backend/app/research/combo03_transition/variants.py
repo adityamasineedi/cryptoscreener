@@ -35,3 +35,8 @@ def require_15m_confirmation(variant: str) -> bool:
 
 def require_displacement(variant: str) -> bool:
     return variant == VARIANT_C_DISPLACEMENT
+
+
+def block_long_in_bearish_trend(variant: str) -> bool:
+    """Variant B skips a LONG while the confirmed-swing trend is BEARISH."""
+    return variant == VARIANT_B_NO_15M

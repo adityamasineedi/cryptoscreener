@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
+import ipaddress
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 
 from app.config import get_settings
 from app.core.provider_health import provider_health
@@ -25,10 +36,46 @@ from app.services.system_stats import build_system_stats
 router = APIRouter()
 ws_router = APIRouter()
 
+_LOOPBACK_PEERS = (ipaddress.ip_address("127.0.0.1"), ipaddress.ip_address("::1"))
+
+
+def _peer_is_loopback(request: Request) -> bool:
+    """True only when the TCP peer is 127.0.0.1 or ::1 (never a forwarded header)."""
+    client = request.client
+    host = getattr(client, "host", None) if client is not None else None
+    if not host or not isinstance(host, str):
+        return False
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    mapped = getattr(addr, "ipv4_mapped", None)
+    if mapped is not None:
+        addr = mapped
+    return addr in _LOOPBACK_PEERS
+
+
+def _require_paper_admin(request: Request) -> None:
+    """Gate destructive paper routes: loopback peer, or X-Paper-Admin == paper_admin_token."""
+    if _peer_is_loopback(request):
+        return
+    token = get_settings().paper_admin_token
+    sent = request.headers.get("x-paper-admin")
+    if (
+        isinstance(token, str)
+        and token
+        and sent
+        and hmac.compare_digest(sent.encode("utf-8"), token.encode("utf-8"))
+    ):
+        return
+    raise HTTPException(status_code=403, detail="paper admin access required")
+
 
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     settings = get_settings()
+    if db_manager.status != "ok":
+        await db_manager.connect(settings, ensure_schema=False)
     redis_h = await redis_manager.health()
     db_h = await db_manager.health()
     from app.services.active_universe import active_universe_meta
@@ -1083,6 +1130,16 @@ async def research_long_strategy_backtest_job_status() -> dict[str, Any]:
     return out
 
 
+@router.get("/research/cap-book-agents")
+async def research_cap_book_agents() -> dict[str, Any]:
+    """Read current cap/MTF research shards without controlling their workers."""
+    from app.research.cap_book_monitor import read_cap_book_agents
+
+    out = read_cap_book_agents()
+    out["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return out
+
+
 @router.post("/research/long-strategy/backtest/start")
 async def research_long_strategy_backtest_start(
     body: dict[str, Any] = Body(default_factory=dict),
@@ -1292,6 +1349,14 @@ async def research_combo02_candidate_results(
         "execution_rights": False,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/research/cross-sectional-discovery/latest")
+async def research_cross_sectional_discovery_latest() -> dict[str, Any]:
+    """Return saved cross-sectional holdout results; never starts or promotes trades."""
+    from app.research.cross_sectional_discovery import load_cross_sectional_discovery
+
+    return load_cross_sectional_discovery()
 
 
 
@@ -1868,6 +1933,49 @@ async def research_strategies_catalog() -> dict[str, Any]:
     }
 
 
+@router.get("/research/strategies/rank")
+async def research_strategies_rank() -> dict[str, Any]:
+    """Ranked board from strategy_rank/ranked.json (read-only, no backtest run)."""
+    from app.research.strategy_rank_board import build_strategy_rank_board
+
+    board = await asyncio.to_thread(build_strategy_rank_board)
+    return {**board, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/structure-labels")
+async def research_structure_labels(
+    symbol: str = Query(default="BTCUSDT"),
+    rule_version: str = Query(default="structure-baseline-v1"),
+) -> dict[str, Any]:
+    """Explain closed 4h, 1h, and 15m structure. Research only. Not a trade signal."""
+    from fastapi import HTTPException
+
+    from app.research.sd_structure.labels_api import structure_label_snapshot
+    from app.services.database import db_manager
+
+    if db_manager.status != "ok":
+        await db_manager.connect(get_settings(), ensure_schema=False)
+    try:
+        payload = await structure_label_snapshot(symbol, rule_version=rule_version)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    import os
+
+    payload["process_id"] = os.getpid()
+    payload["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return payload
+
+
+@router.get("/research/ohlcv-structure-experiment")
+async def research_ohlcv_structure_experiment() -> dict[str, Any]:
+    """Saved OHLCV BOS/CHoCH timing experiment. Does not run a new search."""
+    from app.research.ohlcv_structure_experiment.report import load_saved_report
+
+    payload = load_saved_report()
+    payload["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return payload
+
+
 @router.get("/research/bos-combinations")
 async def research_bos_combinations() -> dict[str, Any]:
     from app.research.service import get_bos_research_service
@@ -1987,6 +2095,102 @@ async def research_bos_combination_backtest(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     return {**run, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/research/market-structure-discovery-v1/latest")
+async def research_market_structure_discovery_v1_latest() -> dict[str, Any]:
+    """Identify the newest stored discovery run. Does not rank or execute it."""
+    from app.research.repository import latest_discovery_run_id
+
+    return {"run_id": await latest_discovery_run_id()}
+
+
+@router.get("/research/market-structure-discovery-v1/{run_id}/ranking")
+async def research_market_structure_discovery_v1_ranking(
+    run_id: str,
+) -> dict[str, Any]:
+    """Rank stored discovery rows without running or recomputing research."""
+    from fastapi import HTTPException
+
+    from app.research.market_structure_discovery_v1.ranking import (
+        DISCLAIMER,
+        rank_discovery_results,
+    )
+    from app.research.repository import get_research_run
+
+    summary = await get_research_run(run_id)
+    if summary is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Research run '{run_id}' was not found",
+        )
+    rows = rank_discovery_results(summary["results"])
+    safety = {
+        "operator_approved": False,
+        "production_approved": False,
+        "paper_eligible": False,
+        "live_eligible": False,
+        "telegram_eligible": False,
+    }
+    embargo = None
+    stored_embargo = summary.get("embargo")
+    if isinstance(stored_embargo, dict):
+        embargo = {**stored_embargo, **safety}
+    patterns = None
+    stored_patterns = summary.get("patterns")
+    if isinstance(stored_patterns, dict):
+        patterns = {**stored_patterns, **safety}
+        stored_by_symbol = stored_patterns.get("by_symbol")
+        if isinstance(stored_by_symbol, dict):
+            by_symbol: dict[str, Any] = {}
+            for symbol, stored_symbol in stored_by_symbol.items():
+                if not isinstance(stored_symbol, dict):
+                    by_symbol[symbol] = stored_symbol
+                    continue
+                symbol_patterns = {**stored_symbol, **safety}
+                clusters = stored_symbol.get("clusters")
+                if "cluster_count" not in stored_symbol and isinstance(clusters, list):
+                    symbol_patterns["cluster_count"] = len(clusters)
+                if isinstance(clusters, list):
+                    symbol_patterns["clusters"] = [
+                        {**cluster, **safety}
+                        if isinstance(cluster, dict)
+                        else cluster
+                        for cluster in clusters
+                    ]
+                by_symbol[symbol] = symbol_patterns
+            patterns["by_symbol"] = by_symbol
+    return {
+        "run_id": run_id,
+        "rows": rows,
+        "embargo": embargo,
+        "patterns": patterns,
+        "disclaimer": DISCLAIMER,
+    }
+
+
+@router.get("/research/market-structure-discovery-v1/{run_id}/trades")
+async def research_market_structure_discovery_v1_trades(
+    run_id: str,
+) -> list[dict[str, Any]]:
+    """Return only the stored trade ledger for a discovery run."""
+    from fastapi import HTTPException
+
+    from app.research.repository import get_research_run, list_research_trades
+
+    if await get_research_run(run_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Research run '{run_id}' was not found",
+        )
+    safety = {
+        "operator_approved": False,
+        "production_approved": False,
+        "paper_eligible": False,
+        "live_eligible": False,
+        "telegram_eligible": False,
+    }
+    return [{**trade, **safety} for trade in await list_research_trades(run_id)]
 
 
 @router.get("/research/bos-combinations/{combination_id}/by-timeframe")
@@ -2355,7 +2559,6 @@ async def signal_for_symbol(
     leverage: float | None = None,
 ) -> dict[str, Any]:
     from app.services.setup_signals import get_setup_signal_service
-    from app.services.paper_trade import get_paper_trade_engine
 
     svc = get_setup_signal_service()
     orch = get_orchestrator()
@@ -2377,15 +2580,7 @@ async def signal_for_symbol(
         risk_percent=risk_percent,
         leverage=leverage,
     )
-    # Auto paper: open as soon as this request produces an entry candidate
-    try:
-        from app.services.paper_trade import flush_paper_trade_persists
-
-        eng = get_paper_trade_engine()
-        eng.on_setup_signal(symbol, payload)
-        await flush_paper_trade_persists(eng)
-    except Exception:  # noqa: BLE001
-        pass
+    # Read-only: this GET never opens a paper position (no on_setup_signal here).
     return {
         **payload,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -2412,15 +2607,16 @@ def _enrich_paper_status(status: dict[str, Any]) -> dict[str, Any]:
     if watcher_enabled and legacy_on and not owns:
         auto_source = "V1_PAPER_WATCHER+LEGACY_15M"
         explanation = (
-            "Parallel paper streams: COMBO_02 v1 1h watcher (BTC/ETH/SOL) and "
-            "15m RESEARCH_15M Trade chances. Separate sources/labels — one open "
-            "position per symbol; follow paper_opened / paper_skip_* logs."
+            "Parallel paper streams: COMBO_02 v1 1h watcher (its own book list, "
+            "shown in the book table) and 15m RESEARCH_15M Trade chances. "
+            "Separate sources/labels; follow paper_opened / paper_skip_* logs."
         )
     elif watcher_enabled and owns:
         auto_source = "V1_PAPER_WATCHER"
         explanation = (
             "Auto paper opens only from the COMBO_02 v1 1h watcher "
-            "(BTC/ETH/SOL closed bars). Trade chances stay research-only while "
+            "(closed 1h bars of its own book list, shown in the book table). "
+            "Trade chances stay research-only while "
             "PAPER_V1_WATCHER_OWNS_ENTRIES=true."
         )
     elif legacy_on:
@@ -2492,14 +2688,271 @@ def _enrich_paper_status(status: dict[str, Any]) -> dict[str, Any]:
         out["telegram"] = telegram_delivery_status(settings)
     except Exception as exc:  # noqa: BLE001
         out["telegram"] = {"ready": False, "reason": str(exc)}
+    try:
+        from app.services.v21a_paper_watcher import get_v21a_paper_watcher
+
+        v21a_flag = bool(getattr(settings, "paper_v21a_watcher_enabled", False))
+        v21a = get_v21a_paper_watcher()
+        out["v21a_watcher"] = {
+            **v21a.status(),
+            "settings_enabled": v21a_flag,
+            "trading_mode": str(getattr(settings, "trading_mode", "PAPER") or "PAPER"),
+            "live_execution": False,
+        }
+    except Exception as exc:  # noqa: BLE001
+        out["v21a_watcher"] = {
+            "enabled": False,
+            "error": str(exc),
+            "live_execution": False,
+        }
     return out
+
+
+_PAPER_CATCHUP_TASK: asyncio.Task | None = None
+_PAPER_HISTORY_TARGETS = (("1h", 250), ("4h", 80), ("15m", 100))
+
+
+def _schedule_paper_history_catchup() -> None:
+    """Fill missing 1h/4h/15m windows even when the API was started without lifespan."""
+    global _PAPER_CATCHUP_TASK
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if _PAPER_CATCHUP_TASK is not None and not _PAPER_CATCHUP_TASK.done():
+        return
+    _PAPER_CATCHUP_TASK = loop.create_task(_fill_paper_history())
+
+
+async def _fill_paper_history() -> None:
+    from app.research.v1_production import V1_SYMBOLS
+
+    symbols = sorted(V1_SYMBOLS)
+
+    def _count(sym: str, tf: str) -> int:
+        return len(ohlcv_store.get_candles_for_engine(sym, tf, include_open=False) or [])
+
+    thin = [
+        sym
+        for sym in symbols
+        if any(_count(sym, tf) < need for tf, need in _PAPER_HISTORY_TARGETS)
+        or (sym == "BTCUSDT" and _count(sym, "1d") < 50)
+    ]
+    if not thin:
+        return
+    orch = get_orchestrator()
+    if orch is not None and getattr(orch, "backfill", None) is not None:
+        await orch._paper_history_catchup(thin)
+        return
+    from app.ingestion.binance_rest import BinanceRestClient
+    from app.ingestion.klines import BINANCE_INTERVAL, normalize_rest_kline
+
+    rest = BinanceRestClient(get_settings())
+    await rest.start()
+    try:
+        for sym in thin:
+            jobs = list(_PAPER_HISTORY_TARGETS)
+            if sym == "BTCUSDT":
+                jobs.append(("1d", 50))
+            for tf, need in jobs:
+                if _count(sym, tf) >= need:
+                    continue
+                interval = BINANCE_INTERVAL.get(tf, tf)
+                raw = await rest.futures_klines(sym, interval, limit=need)
+                closed = []
+                open_c = None
+                for row in raw or []:
+                    candle = normalize_rest_kline(sym, tf, row)
+                    if candle is None:
+                        continue
+                    if candle.is_closed:
+                        closed.append(candle)
+                    else:
+                        open_c = candle
+                if closed:
+                    await ohlcv_store.ingest_history(closed)
+                if open_c is not None:
+                    await ohlcv_store.upsert_candle(open_c)
+    finally:
+        await rest.close()
 
 
 @router.get("/paper/status")
 async def paper_status() -> dict[str, Any]:
     from app.services.paper_trade import get_paper_trade_engine
 
+    _schedule_paper_history_catchup()
     return _enrich_paper_status(get_paper_trade_engine().status())
+
+
+@router.get("/paper/v21a/status")
+async def paper_v21a_status() -> dict[str, Any]:
+    """COMBO_02 V2.1-A paper watcher health + validation (no dashboard)."""
+    from app.config import get_settings
+    from app.services.paper_trade import get_paper_trade_engine
+    from app.services.telegram_alerts import telegram_delivery_status
+    from app.services.v21a_paper_validation import (
+        get_v21a_validation_monitor,
+        paper_performance_summary,
+    )
+    from app.services.v21a_paper_watcher import get_v21a_paper_watcher
+
+    settings = get_settings()
+    watcher = get_v21a_paper_watcher()
+    paper = get_paper_trade_engine()
+    mon = get_v21a_validation_monitor()
+    snap = paper.snapshot() if hasattr(paper, "snapshot") else {"open": [], "closed": []}
+    open_v21a = [
+        p
+        for p in (snap.get("open") or [])
+        if str((p.get("signal_snippet") or {}).get("strategy_id") or "")
+        == "COMBO_02_V2_1_A"
+    ]
+    tel = telegram_delivery_status(settings)
+    wstatus = watcher.status()
+    return {
+        "strategy_id": "COMBO_02_V2_1_A",
+        "mode": "PAPER",
+        "live_execution": False,
+        "real_execution": "DISABLED",
+        "trading_mode": str(getattr(settings, "trading_mode", "PAPER") or "PAPER"),
+        "watcher": wstatus,
+        "settings_enabled": bool(
+            getattr(settings, "paper_v21a_watcher_enabled", False)
+        ),
+        "open_positions": open_v21a,
+        "open_count": len(open_v21a),
+        "telegram": tel,
+        "telegram_connected": bool(tel.get("ready")),
+        "paper_equity": paper.status().get("equity"),
+        "validation": mon.status(),
+        "parity_mismatches": mon.recent_mismatches(20),
+        "performance": paper_performance_summary(paper),
+        "label": "OBSERVATION",
+        "health": {
+            "status": wstatus.get("status"),
+            "strategy": "COMBO_02_V2_1_A",
+            "mode": "PAPER",
+            "last_market_update": wstatus.get("last_market_update"),
+            "last_evaluation": wstatus.get("last_evaluation"),
+            "last_signal": wstatus.get("last_signal"),
+            "open_paper_positions": len(open_v21a),
+            "telegram": "CONNECTED" if tel.get("ready") else "NOT_READY",
+            "real_execution": "DISABLED",
+        },
+    }
+
+
+@router.get("/paper/v21a/validation")
+async def paper_v21a_validation() -> dict[str, Any]:
+    """Live↔backtest parity mismatches + recent eval audits (diagnostics)."""
+    from app.services.v21a_paper_validation import get_v21a_validation_monitor
+
+    mon = get_v21a_validation_monitor()
+    return {
+        "strategy_id": "COMBO_02_V2_1_A",
+        "mode": "PAPER",
+        "real_execution": "DISABLED",
+        "label": "OBSERVATION",
+        "status": mon.status(),
+        "mismatches": mon.recent_mismatches(50),
+    }
+
+
+@router.post("/paper/v21a/enable")
+async def paper_v21a_enable() -> dict[str, Any]:
+    """Start V2.1-A paper signal generation (PAPER ONLY — no real orders)."""
+    from app.config import get_settings
+    from app.research.combo02_v21a_paper_constants import DEFAULT_SYMBOLS
+    from app.services.paper_trade import get_paper_trade_engine
+    from app.services.v21a_paper_watcher import get_v21a_paper_watcher
+
+    settings = get_settings()
+    mode = str(getattr(settings, "trading_mode", "PAPER") or "PAPER").upper()
+    if mode == "LIVE":
+        return {
+            "ok": False,
+            "error": "COMBO_02_V2_1_A + LIVE is not enabled",
+            "live_execution": False,
+        }
+    raw_syms = str(getattr(settings, "paper_v21a_symbols", "") or "").strip()
+    symbols = (
+        [s.strip().upper() for s in raw_syms.split(",") if s.strip()]
+        if raw_syms
+        else list(DEFAULT_SYMBOLS)
+    )
+    watcher = get_v21a_paper_watcher(
+        enabled=True,
+        symbols=symbols,
+        risk_percent=float(settings.paper_risk_percent),
+        emit_alerts=True,
+        paper_engine=get_paper_trade_engine(),
+    )
+    watcher.enable()
+    try:
+        watcher.seed_from_store()
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "live_execution": False, "watcher": watcher.status()}
+
+
+@router.post("/paper/v21a/disable")
+async def paper_v21a_disable() -> dict[str, Any]:
+    """Stop new V2.1-A signals; preserve paper trade records."""
+    from app.services.v21a_paper_watcher import get_v21a_paper_watcher
+
+    watcher = get_v21a_paper_watcher()
+    watcher.disable()
+    return {"ok": True, "live_execution": False, "watcher": watcher.status()}
+
+
+def _quote_open_paper_rows(rows: list[dict[str, Any]]) -> None:
+    """Fill mark and unrealized profit on the response copies.
+
+    The exit loop is unchanged. Rows already quoted by that loop are left as-is.
+    """
+    from app.engines.orchestrator import paper_tick_price
+    from app.services.market_store import market_store
+
+    orch = get_orchestrator()
+    for row in rows:
+        if row.get("mark_price") and row.get("unrealized_pnl_usd") is not None:
+            continue
+        sym = str(row.get("symbol") or "")
+        if not sym:
+            continue
+        tf = str(row.get("timeframe") or "1h")
+
+        def _last_close(symbol: str = sym, timeframe: str = tf) -> float | None:
+            ohlcv = getattr(orch, "ohlcv", None) if orch is not None else None
+            if ohlcv is None:
+                return None
+            candles = ohlcv.get_candles_for_engine(symbol, timeframe, include_open=True)
+            if not candles:
+                return None
+            close = candles[-1].get("close")
+            try:
+                px = float(close or 0)
+            except (TypeError, ValueError):
+                return None
+            return px if px > 0 else None
+
+        px = paper_tick_price(
+            market_store.mark_prices.get(sym),
+            market_store.get_ticker(sym),
+            _last_close,
+        )
+        if px is None or px <= 0:
+            continue
+        entry = float(row.get("entry_price") or 0)
+        stop = float(row.get("stop_price") or 0)
+        qty = float(row.get("quantity") or 0)
+        risk_per = abs(entry - stop)
+        short = str(row.get("side") or "LONG").upper() == "SHORT"
+        move = (entry - px) if short else (px - entry)
+        row["mark_price"] = px
+        row["unrealized_pnl_usd"] = move * qty
+        row["unrealized_r"] = (move / risk_per) if risk_per > 0 else None
 
 
 @router.get("/paper/positions")
@@ -2507,8 +2960,24 @@ async def paper_positions(closed_limit: int = Query(default=50, ge=1, le=200)) -
     from app.services.paper_trade import get_paper_trade_engine
 
     data = get_paper_trade_engine().positions(closed_limit=closed_limit)
+    _quote_open_paper_rows(list(data.get("open") or []))
+    _schedule_paper_history_catchup()
     data["status"] = _enrich_paper_status(data.get("status") or {})
     return data
+
+
+@router.get("/paper/passed-regime")
+async def paper_passed_regime() -> dict[str, Any]:
+    """Read the passed-book regime view. Opens, closes and toggles nothing."""
+    from app.services.passed_paper_watcher import get_passed_paper_watcher
+
+    # No kwargs: passing any would overwrite the singleton's enabled flag / engine.
+    out = dict(get_passed_paper_watcher().regime_status())
+    out["watcher_loop_enabled"] = bool(
+        getattr(get_settings(), "paper_passed_watcher_enabled", False)
+    )
+    out["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return out
 
 
 @router.get("/paper/opportunities")
@@ -2569,7 +3038,8 @@ async def paper_opportunities(
     if watcher_owns and not legacy_on:
         note = (
             "15m screener research only — auto paper opens come from the "
-            "COMBO_02 v1 1h watcher (BTC/ETH/SOL), not these READY rows."
+            "COMBO_02 v1 1h watcher (its own book list, shown in the book "
+            "table), not these READY rows."
         )
     elif eng.entry_mode == "path_a":
         note = f"Auto mode={eng.entry_mode}. READY = Path A Trend+BOS opens when Auto ON"
@@ -2604,7 +3074,7 @@ async def paper_enable() -> dict[str, Any]:
     return _enrich_paper_status(eng.status())
 
 
-@router.post("/paper/disable")
+@router.post("/paper/disable", dependencies=[Depends(_require_paper_admin)])
 async def paper_disable() -> dict[str, Any]:
     from app.services.paper_trade import get_paper_trade_engine
 
@@ -2613,7 +3083,7 @@ async def paper_disable() -> dict[str, Any]:
     return _enrich_paper_status(eng.status())
 
 
-@router.post("/paper/reset")
+@router.post("/paper/reset", dependencies=[Depends(_require_paper_admin)])
 async def paper_reset() -> dict[str, Any]:
     from app.services.paper_trade import get_paper_trade_engine
     from app.services.persistence import persistence
@@ -2628,7 +3098,7 @@ async def paper_reset() -> dict[str, Any]:
     return _enrich_paper_status(eng.status())
 
 
-@router.post("/paper/close-legacy")
+@router.post("/paper/close-legacy", dependencies=[Depends(_require_paper_admin)])
 async def paper_close_legacy(
     confirm: bool = Query(
         default=False,
@@ -3052,17 +3522,28 @@ class ConnectionManager:
             self.active.discard(ws)
 
     async def broadcast(self, message: dict[str, Any]) -> None:
-        dead: list[WebSocket] = []
-        for ws in list(self.active):
+        clients = list(self.active)
+
+        async def _send(ws: WebSocket) -> WebSocket | None:
             try:
                 await ws.send_json(message)
             except Exception:  # noqa: BLE001
-                dead.append(ws)
-        for ws in dead:
-            await self.disconnect(ws)
+                return ws
+            return None
+
+        results = await asyncio.gather(*(_send(ws) for ws in clients))
+        for ws in results:
+            if ws is not None:
+                await self.disconnect(ws)
 
 
 ws_connections = ConnectionManager()
+
+
+def _ensure_market_forwarder() -> None:
+    """One browser forwarder for every /ws/market client."""
+    if _forward_market_events not in market_store._subscribers:
+        market_store.subscribe(_forward_market_events)
 
 
 async def _forward_market_events(event: dict[str, Any]) -> None:
@@ -3135,7 +3616,7 @@ async def ws_alerts(websocket: WebSocket) -> None:
 @ws_router.websocket("/market")
 async def ws_market(websocket: WebSocket) -> None:
     await ws_connections.connect(websocket)
-    market_store.subscribe(_forward_market_events)
+    _ensure_market_forwarder()
     try:
         await websocket.send_json(
             {
@@ -3153,7 +3634,6 @@ async def ws_market(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        market_store.unsubscribe(_forward_market_events)
         await ws_connections.disconnect(websocket)
 
 

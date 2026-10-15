@@ -245,6 +245,46 @@ async def get_research_run(run_id: str) -> dict[str, Any] | None:
         return payload if isinstance(payload, dict) else json.loads(payload)
 
 
+async def list_research_trades(run_id: str) -> list[dict[str, Any]]:
+    """Return the stored trade ledger rows for one research run."""
+    fields = (
+        "symbol",
+        "combination_id",
+        "direction",
+        "entry_index",
+        "signal_time",
+        "entry_price",
+        "stop_price",
+        "tp1",
+        "outcome",
+        "r_multiple",
+    )
+    rows = [
+        {field: trade.get(field) for field in fields}
+        for trade in _MEMORY_TRADES
+        if trade.get("run_id") == run_id
+    ]
+    if db_manager.enabled and db_manager.engine is not None:
+        await ensure_research_schema()
+        async with db_manager.engine.begin() as conn:
+            result = await conn.execute(
+                text(
+                    """
+                    SELECT
+                        symbol, combination_id, direction, entry_index,
+                        signal_time, entry_price, stop_price, tp1, outcome,
+                        r_multiple
+                    FROM research_trades
+                    WHERE run_id = :run_id
+                    ORDER BY id
+                    """
+                ),
+                {"run_id": run_id},
+            )
+            rows.extend(dict(row._mapping) for row in result.fetchall())
+    return rows
+
+
 async def list_research_results(
     *,
     combination_id: str | None = None,
@@ -291,6 +331,37 @@ async def list_research_results(
             continue
         out.append(row)
     return out[:limit]
+
+
+async def latest_discovery_run_id() -> str | None:
+    """Return the newest market-structure discovery run id, if one is stored."""
+    strategy_id = "MARKET_STRUCTURE_DISCOVERY_V1"
+    if db_manager.enabled and db_manager.engine is not None:
+        await ensure_research_schema()
+        async with db_manager.engine.begin() as conn:
+            result = await conn.execute(
+                text(
+                    """
+                    SELECT run_id
+                    FROM research_runs
+                    WHERE payload->>'strategy_id' = :strategy_id
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """
+                ),
+                {"strategy_id": strategy_id},
+            )
+            row = result.fetchone()
+            if row and row[0]:
+                return str(row[0])
+    newest: tuple[str, str] | None = None
+    for run_id, summary in _MEMORY_RUNS.items():
+        if summary.get("strategy_id") != strategy_id:
+            continue
+        created = str(summary.get("created_at") or "")
+        if newest is None or created > newest[0]:
+            newest = (created, run_id)
+    return newest[1] if newest else None
 
 
 def memory_clear() -> None:

@@ -6,6 +6,7 @@ Does NOT re-implement BOS/trend/impulse/pullback algorithms.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any, Mapping, Sequence
 
 from app.config import get_settings
@@ -27,6 +28,10 @@ from app.signals.schemas import SwingRecord
 from app.signals.signal_engine import SignalEngine
 from app.signals.stop_engine import compute_stop
 from app.signals.target_engine import compute_targets
+
+# COMBO_02 1h LONG: structural targets come from swing highs the live watcher
+# can see. Must equal v1_paper_watcher._MAX_EVAL_BARS_1H.
+COMBO02_TP1_SWING_LOOKBACK_1H = 250
 
 
 def hl_intact_for_long(
@@ -139,6 +144,22 @@ def revalidate_combo02_long_fill(eval_result: Mapping[str, Any] | None) -> tuple
     return True, "OK"
 
 
+# Set only for the duration of one research walk. Bar evaluators then reuse
+# one cloned SignalConfig instead of deepcopying it on every candle.
+_clone_reuse: ContextVar[dict[tuple[int, int, bool], SignalConfig] | None] = ContextVar(
+    "research_signal_config_clone_reuse",
+    default=None,
+)
+
+
+def begin_signal_config_clone_reuse() -> Any:
+    return _clone_reuse.set({})
+
+
+def end_signal_config_clone_reuse(token: Any) -> None:
+    _clone_reuse.reset(token)
+
+
 def _clone_signal_config(
     base: SignalConfig,
     research: ResearchConfig,
@@ -151,13 +172,25 @@ def _clone_signal_config(
     ``evaluate_combination_at_bar``). Align ``require_mtf_alignment`` with that
     flag so research cannot silently force MTF off while the combo requires HTF.
     Combos without HTF keep the base live default (not forced False).
+
+    During a research walk the same pair is cloned once and reused. Callers
+    outside that walk still get a fresh deepcopy, so a later mutation of the
+    source config cannot leak into a cached copy.
     """
+    slot = _clone_reuse.get()
+    key = (id(base), id(research), bool(require_htf_alignment))
+    if slot is not None:
+        cached = slot.get(key)
+        if cached is not None:
+            return cached
     cfg = deepcopy(base)
     cfg.min_rr = research.min_rr
     cfg.min_rvol = research.min_rvol
     cfg.atr_multiplier = research.atr_multiplier
     if require_htf_alignment:
         cfg.require_mtf_alignment = True
+    if slot is not None:
+        slot[key] = cfg
     return cfg
 
 
@@ -202,6 +235,16 @@ def htf_alignment_gate(
         meta["htf_alignment"] = "HTF_NEUTRAL_UNAVAILABLE"
         return False, meta
 
+    # Alignment reads 1h and 4h only. On a 1h or 4h setup, leaving trend_15m
+    # empty made every candidate bar detect swings again on the setup series.
+    # 15m, 5m, and 1m still pass the setup trend through, or recompute if absent.
+    if tf in ("15m", "5m", "1m"):
+        trend_15m_arg = setup_trend_label
+    else:
+        trend_15m_arg = (
+            setup_trend_label if setup_trend_label is not None else "HTF_UNAVAILABLE"
+        )
+
     htf = htf_trends_for_setup_bar(
         symbol=symbol,
         setup_candles=candles,
@@ -209,7 +252,7 @@ def htf_alignment_gate(
         candles_4h=series_4h,
         candles_1h=series_1h,
         config=signal_config,
-        trend_15m=setup_trend_label if tf in ("15m", "5m", "1m") else None,
+        trend_15m=trend_15m_arg,
         trend_cache=htf_trend_cache,
         idx_1h_map=htf_idx_1h_map,
         idx_4h_map=htf_idx_4h_map,
@@ -397,9 +440,12 @@ def evaluate_combination_at_bar(
     swings: Sequence[SwingRecord] | None = None,
     atr_value: float | None = None,
     volumes: Sequence[float] | None = None,
+    avg_volume_ref: float | None = None,
     candles_1h: Sequence[Mapping[str, Any]] | None = None,
     candles_4h: Sequence[Mapping[str, Any]] | None = None,
     candles_15m: Sequence[Mapping[str, Any]] | None = None,
+    candles_5m: Sequence[Mapping[str, Any]] | None = None,
+    candles_1d: Sequence[Mapping[str, Any]] | None = None,
     htf_trend_cache: dict[tuple[str, int], str] | None = None,
     htf_idx_1h_map: Sequence[int | None] | None = None,
     htf_idx_4h_map: Sequence[int | None] | None = None,
@@ -419,6 +465,26 @@ def evaluate_combination_at_bar(
     """
     from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
     from app.research.combo03_transition.variants import COMBO_03_FAMILY
+    from app.research.sd_structure.variants import SD_STRUCTURE_FAMILY
+
+    if combination.combination_id in SD_STRUCTURE_FAMILY:
+        from app.research.sd_structure.evaluate import evaluate_sd_structure_at_bar
+
+        return evaluate_sd_structure_at_bar(
+            symbol=symbol,
+            timeframe=timeframe,
+            candles=candles,
+            as_of_index=as_of_index,
+            combination=combination,
+            signal_config=signal_config,
+            research_config=research_config,
+            swings=swings,
+            candles_1h=candles_1h,
+            candles_4h=candles_4h,
+            candles_15m=candles_15m,
+            candles_5m=candles_5m,
+            candles_1d=candles_1d,
+        )
 
     if combination.combination_id in COMBO_V2_FAMILY:
         from app.research.combo02_v2.evaluate import evaluate_combo02_v2_at_bar
@@ -435,6 +501,7 @@ def evaluate_combination_at_bar(
             swings=swings,
             atr_value=atr_value,
             volumes=volumes,
+            avg_volume_ref=avg_volume_ref,
             candles_1h=candles_1h,
             candles_4h=candles_4h,
             candles_15m=candles_15m,
@@ -461,6 +528,7 @@ def evaluate_combination_at_bar(
             swings=swings,
             atr_value=atr_value,
             volumes=volumes,
+            avg_volume_ref=avg_volume_ref,
             candles_15m=candles_15m,
             v2_context=v2_context,
         )
@@ -502,6 +570,7 @@ def evaluate_combination_at_bar(
             swings=swing_list,
             atr_value=atr_value,
             volumes=volumes,
+            avg_volume_ref=avg_volume_ref,
             serialize_swings=False,
         )
     trend = tf_analysis.get("trend") or {}
@@ -677,6 +746,19 @@ def evaluate_combination_at_bar(
             "as_of_index": as_of_index,
             "reason": "STOP_INVALID:non_numeric",
         }
+    # Targets only. Trend, BOS, structure and the stop above use every swing.
+    min_target_swing_bar: int | None = None
+    if (
+        combination.combination_id == "COMBO_02"
+        and direction == "LONG"
+        and (timeframe or "").lower() == "1h"
+    ):
+        # A swing needs its left bars inside the window to be detected there.
+        min_target_swing_bar = (
+            as_of_index
+            - (COMBO02_TP1_SWING_LOOKBACK_1H - 1)
+            + int(local_cfg.swing_for(timeframe).swing_left_bars)
+        )
     targets = compute_targets(
         direction=direction,
         entry_price=float(entry_price),
@@ -685,6 +767,7 @@ def evaluate_combination_at_bar(
         supply_zone=supply_zone,
         demand_zone=demand_zone,
         config=local_cfg,
+        min_swing_bar_index=min_target_swing_bar,
     )
     if not targets:
         return {

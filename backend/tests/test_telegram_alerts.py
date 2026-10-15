@@ -141,7 +141,7 @@ def test_telegram_trade_alert_allows_legacy_eligible_coin():
     assert is_telegram_trade_alert(alert)
     text = format_telegram_message(alert)
     assert text is not None
-    assert "SCALP TRADE - 1000PEPE" in text
+    assert "🟡 SCALP TRADE — 1000PEPE" in text
 
 
 def test_telegram_trade_alert_blocks_path_b_and_short_research():
@@ -187,13 +187,20 @@ def test_format_entry_message():
     }
     text = format_telegram_message(alert)
     assert text is not None
-    assert text.startswith("SCALP TRADE - BTC")
-    assert "🏮 TYPE - LONG" in text
-    assert "👉 ENTRY - $100,000" in text
-    assert "👉 TARGET - " in text
+    assert text.startswith("🟡 SCALP TRADE — BTC")
+    assert "🟢 TYPE — LONG" in text
+    assert "👉 ENTRY — $100,000" in text
+    assert "🎯 TARGET — " in text
     assert "$104,000" in text
-    assert "👉 SL - $98,000" in text
-    assert "🚨LEVERAGE - 2x" in text
+    assert "🛑 SL — $98,000" in text
+    assert "🧠 HOW IT FORMED" in text
+    assert "COMBO_02 v1" in text
+    assert "⏱ TIMEFRAMES" in text
+    assert "Setup TF: 1h" in text
+    assert "💰 CAPITAL" in text
+    assert "🛡 Risk: 2%" in text
+    assert "🚨 Leverage: 2x" in text
+    assert "PAPER ONLY" in text
 
 
 def test_format_entry_message_sol_scalp_layout():
@@ -222,17 +229,21 @@ def test_format_entry_message_sol_scalp_layout():
                 "trend_1h": "BULLISH",
                 "htf_alignment": "HTF_ALIGNED",
                 "telegram_eligible": True,
-                "paper_execution": {"leverage": 2.0},
+                "paper_execution": {"leverage": 2.0, "notional": 2148.0},
             },
         ),
     }
     text = format_telegram_message(alert)
     assert text is not None
-    assert "SCALP TRADE - SOL" in text
-    assert "👉 ENTRY - $120.09" in text
-    assert "👉 SL - $118.9719" in text
+    assert "🟡 SCALP TRADE — SOL" in text
+    assert "👉 ENTRY — $120.09" in text
+    assert "🛑 SL — $118.9719" in text
     assert "$123.36" in text
-    assert "🚨LEVERAGE - 2x" in text
+    assert "4H BULLISH" in text
+    assert "1H BULLISH" in text
+    assert "🛡 Risk: 2% ($20.00)" in text
+    assert "📦 Size: 17.884 SOL" in text
+    assert "🚨 Leverage: 2x" in text
 
 
 def test_format_exit_maps_stop_to_sl():
@@ -251,17 +262,19 @@ def test_format_exit_maps_stop_to_sl():
     }
     text = format_telegram_message(alert)
     assert text is not None
-    assert text.startswith("CLOSE TRADE - ETH")
-    assert "👉 EXIT - $98,000.00 (SL)" in text
-    assert "Qty: 0.15 ETH" in text
+    assert text.startswith("🔔 CLOSE TRADE — ETH")
+    assert "🚪 EXIT — $98,000.00 (SL)" in text
+    assert "📦 Qty: 0.15 ETH" in text
     assert "R: -1.00R" in text
     assert "PnL: $-15.00" in text
-    assert "Hold: n/a bars" in text
+    assert "⏳ Hold: n/a bars" in text
+    assert "PAPER ONLY" in text
 
 
 def test_start_telegram_alerts_disabled_by_default_flag():
     settings = MagicMock()
     settings.paper_v1_telegram_enabled = False
+    settings.paper_v21a_telegram_enabled = False
     settings.telegram_bot_token = "tok"
     settings.telegram_chat_id = "123"
     assert start_telegram_alerts(settings) is None
@@ -270,6 +283,7 @@ def test_start_telegram_alerts_disabled_by_default_flag():
 def test_start_telegram_alerts_disabled_without_creds():
     settings = MagicMock()
     settings.paper_v1_telegram_enabled = True
+    settings.paper_v21a_telegram_enabled = False
     settings.telegram_bot_token = None
     settings.telegram_chat_id = None
     assert start_telegram_alerts(settings) is None
@@ -339,9 +353,11 @@ async def test_subscriber_sends_only_v1_via_feed(httpx_mock):
     requests = httpx_mock.get_requests()
     assert len(requests) == 2
     bodies = b" ".join(r.read() for r in requests)
-    assert b"SCALP TRADE - BTC" in bodies
-    assert b"SCALP TRADE - 1000PEPE" in bodies
-    assert b"LEVERAGE" in bodies
+    assert "🟡 SCALP TRADE — BTC".encode() in bodies
+    assert "🟡 SCALP TRADE — 1000PEPE".encode() in bodies
+    assert "🚨 Leverage: 2x".encode() in bodies
+    assert "🧠 HOW IT FORMED".encode() in bodies
+    assert "💰 CAPITAL".encode() in bodies
 
     # Idempotent: same trade_id must not send again
     feed.observe_paper_open(PathA())

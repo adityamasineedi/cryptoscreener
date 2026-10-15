@@ -27,7 +27,11 @@ from app.research.market_structure.regime import RegimeClassification, classify_
 from app.signals._candle_utils import candle_time, series_ohlcv
 from app.signals.bos_engine import detect_bos
 from app.signals.swing_detector import detect_swings, extend_swings
-from app.signals.trend_engine import infer_trend
+from app.signals.trend_engine import (
+    ChochPersistentCursor,
+    apply_persistent_close,
+    infer_trend,
+)
 
 
 def _aware(ts: datetime | None) -> datetime | None:
@@ -252,7 +256,17 @@ def build_timeframe_feature_table(
     # as_of_index / extend_swings (right-bar confirmation, no look-ahead).
     min_i = max(cfg.swing_left + cfg.swing_right, cfg.min_bars_basic - 1)
     swings: list = []
+    highs_sw: list = []
+    lows_sw: list = []
+    trend_base: dict[str, Any] | None = None
+    swing_count = 0
     prev_trend = "NEUTRAL"
+    choch_cursor = ChochPersistentCursor()
+    cached_hh: float | None = None
+    cached_hl: float | None = None
+    cached_lh: float | None = None
+    cached_ll: float | None = None
+    persistent_trend = str(getattr(cfg, "trend_mode", "")).lower() == "choch_persistent"
     for i in range(n):
         if i < min_i:
             continue
@@ -283,7 +297,45 @@ def build_timeframe_feature_table(
                 lows=lows,
                 closes=closes,
             )
-        trend = infer_trend(swings)
+        if len(swings) != swing_count or trend_base is None:
+            swing_count = len(swings)
+            highs_sw = [s for s in swings if s.swing_type == "HIGH"]
+            lows_sw = [s for s in swings if s.swing_type == "LOW"]
+            if persistent_trend:
+                # Swings arrive already ordered. Fold only the new confirms.
+                choch_cursor.sync(swings)
+                trend_base = choch_cursor.structural(swings)
+            else:
+                trend_base = infer_trend(
+                    swings,
+                    close=None,
+                    mode=getattr(cfg, "trend_mode", None),
+                )
+            cached_hh = cached_lh = None
+            for s in reversed(highs_sw):
+                if s.label == "HH" and cached_hh is None:
+                    cached_hh = s.price
+                elif s.label == "LH" and cached_lh is None:
+                    cached_lh = s.price
+                if cached_hh is not None and cached_lh is not None:
+                    break
+            cached_hl = cached_ll = None
+            for s in reversed(lows_sw):
+                if s.label == "HL" and cached_hl is None:
+                    cached_hl = s.price
+                elif s.label == "LL" and cached_ll is None:
+                    cached_ll = s.price
+                if cached_hl is not None and cached_ll is not None:
+                    break
+        if persistent_trend:
+            trend = apply_persistent_close(
+                trend_base,
+                close=float(closes[i]) if i < len(closes) else None,
+                last_swing_high=highs_sw[-1] if highs_sw else None,
+                last_swing_low=lows_sw[-1] if lows_sw else None,
+            )
+        else:
+            trend = trend_base
         tlabel = str(trend.get("trend") or "NEUTRAL").upper()
         if tlabel == "INSUFFICIENT_DATA":
             trend_state[i] = "UNKNOWN_INSUFFICIENT_HISTORY"
@@ -309,24 +361,12 @@ def build_timeframe_feature_table(
         if tlabel in {"BULLISH", "BEARISH", "NEUTRAL"}:
             prev_trend = tlabel
 
-        highs_sw = [s for s in swings if s.swing_type == "HIGH"]
-        lows_sw = [s for s in swings if s.swing_type == "LOW"]
         swing_high[i] = highs_sw[-1].price if highs_sw else None
         swing_low[i] = lows_sw[-1].price if lows_sw else None
-        for s in reversed(highs_sw):
-            if s.label == "HH" and last_hh[i] is None:
-                last_hh[i] = s.price
-            elif s.label == "LH" and last_lh[i] is None:
-                last_lh[i] = s.price
-            if last_hh[i] is not None and last_lh[i] is not None:
-                break
-        for s in reversed(lows_sw):
-            if s.label == "HL" and last_hl[i] is None:
-                last_hl[i] = s.price
-            elif s.label == "LL" and last_ll[i] is None:
-                last_ll[i] = s.price
-            if last_hl[i] is not None and last_ll[i] is not None:
-                break
+        last_hh[i] = cached_hh
+        last_hl[i] = cached_hl
+        last_lh[i] = cached_lh
+        last_ll[i] = cached_ll
 
         # Mixed structure override
         seq = list(trend.get("structure_sequence") or [])
@@ -346,6 +386,9 @@ def build_timeframe_feature_table(
             atr_period=cfg.atr_period,
             as_of_index=i,
             atr_value=atr[i],
+            volumes=vols,
+            high_swings=highs_sw,
+            low_swings=lows_sw,
         )
         if bos and bos.get("state") == "CONFIRMED" and bos.get("direction"):
             bos_state[i] = str(bos["direction"])

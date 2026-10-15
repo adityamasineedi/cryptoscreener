@@ -7,6 +7,15 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Mapping, Sequence
 
+from app.research.market_structure.funnel import build_regime_funnel
+
+__all__ = [
+    "build_mtf_alignment_summary",
+    "build_opportunity_summary",
+    "build_regime_funnel",
+    "build_trade_regime_summary",
+]
+
 
 def _f(v: Any) -> float | None:
     if v is None:

@@ -1,6 +1,6 @@
 """COMBO_02_V1_CLOSED_HTF — required regression tests.
 
-Preserves frozen COMBO_02 forming-HTF behavior (htf_require_fully_closed=False).
+COMBO_02 requires fully closed HTF bars (htf_require_fully_closed=True).
 """
 
 from __future__ import annotations
@@ -80,11 +80,11 @@ def test_service_loaders_use_corrected_4h_coverage():
         )
 
 
-# 2. Original forming-HTF map preservation
-def test_forming_htf_map_preserved_for_combo02():
+# 2. COMBO_02 uses fully closed HTF; the forming map remains available for research.
+def test_combo02_requires_fully_closed_htf():
     combo = get_combination("COMBO_02")
     assert combo is not None
-    assert combo.htf_require_fully_closed is False
+    assert combo.htf_require_fully_closed is True
     setup = [_c(_ts(10))]
     htf = [_c(_ts(4)), _c(_ts(8))]
     forming = build_htf_as_of_index_map(setup, htf)
@@ -228,8 +228,7 @@ def test_stop_target_risk_flags_preserved_across_variants():
         assert c.require_rvol is False
         assert c.require_sd is False
         assert c.require_rr is False
-    # only closed-HTF flag differs
-    assert v1.htf_require_fully_closed is False
+    assert v1.htf_require_fully_closed is True
     assert closed.htf_require_fully_closed is True
 
 

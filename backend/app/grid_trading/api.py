@@ -10,7 +10,13 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.logging import get_logger
-from app.grid_trading.config import MARKET, GridConfig, GridConfigError, grid_trading_enabled
+from app.grid_trading.config import (
+    LEVERAGE_MAX,
+    MARKET,
+    GridConfig,
+    GridConfigError,
+    grid_trading_enabled,
+)
 from app.grid_trading.engine import run_grid
 from app.grid_trading.execution import GridExecution
 from app.grid_trading.metrics import export_fills, summarize
@@ -62,6 +68,9 @@ class GridRunRequest(BaseModel):
     taker_fee_bps: float | None = None
     slippage_bps: float = 1.0
     leverage: float = 1.0
+    maintenance_margin_rate: float = 0.005
+    max_open_grids: int | None = None
+    exit_above_range: bool = False
     stop_price: float
     max_drawdown: float = 0.5
     max_open_orders: int = 50
@@ -106,6 +115,9 @@ def _to_config(body: GridRunRequest) -> GridConfig:
             taker_fee_bps=body.taker_fee_bps,
             slippage_bps=body.slippage_bps,
             leverage=body.leverage,
+            maintenance_margin_rate=body.maintenance_margin_rate,
+            max_open_grids=body.max_open_grids,
+            exit_above_range=body.exit_above_range,
             stop_price=body.stop_price,
             max_drawdown=body.max_drawdown,
             max_open_orders=body.max_open_orders,
@@ -221,6 +233,7 @@ async def status() -> dict[str, Any]:
         "live": False,
         "paper": False,
         "leverage": 1,
+        "max_leverage": LEVERAGE_MAX,
         "side": "long",
         "funding_included": False,
     }

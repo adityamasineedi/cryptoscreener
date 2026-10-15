@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
+
+from sqlalchemy import text
 
 from app.config import Settings
 from app.core.logging import get_logger
@@ -24,7 +26,7 @@ from app.ingestion.providers.router import FundamentalProviderRouter
 from app.ingestion.providers.sentiment import get_sentiment_provider
 from app.ingestion.ws_manager import WebSocketManager
 from app.models.ohlcv import Candle
-from app.models.schemas import FreshValue
+from app.models.schemas import DataStatus, FreshValue
 from app.services.engine_store import EngineStore, engine_store
 from app.services.market_store import MarketDataStore
 from app.services.ohlcv_store import OHLCVStore, ohlcv_store
@@ -34,6 +36,148 @@ from app.services.redis_state import redis_state
 from app.services.retention import apply_retention
 
 logger = get_logger("orchestrator")
+
+# Session-level Postgres advisory lock: one backend process writes paper trades.
+# Fixed arbitrary bigint; changing it lets two builds write side by side.
+PAPER_WRITER_LOCK_KEY = 7_302_026_001
+# Startup tries, 1 s apart: a reload can start before the old process lets go.
+PAPER_WRITER_LOCK_ATTEMPTS = 5
+# Seconds between ledger-load retries while the paper book is not ready.
+PAPER_LEDGER_RETRY_SECONDS = 30.0
+# A mark older than this (or not LIVE) is not used to exit a paper position.
+PAPER_MARK_MAX_AGE_SECONDS = 30.0
+
+
+async def acquire_paper_writer_lock(
+    db: Any, *, attempts: int = 1, interval: float = 1.0
+) -> tuple[bool | None, Any]:
+    """Try to become the single paper writer.
+
+    Returns ``(held, connection)``. ``held`` is None when no lock is possible
+    (database off), True when this process holds it, False when another process
+    does or the attempt failed. The connection must stay open: closing it
+    releases the lock. ``attempts`` covers a reload, where the previous process
+    may hold the lock for a moment after this one starts.
+    """
+    if not getattr(db, "enabled", False) or getattr(db, "engine", None) is None:
+        logger.info("paper_writer_lock_not_needed", reason="database_disabled")
+        return None, None
+    conn = None
+    got = False
+    try:
+        conn = await db.engine.connect()
+        for attempt in range(max(1, int(attempts))):
+            if attempt:
+                await asyncio.sleep(interval)
+            got = (
+                await conn.execute(
+                    text("SELECT pg_try_advisory_lock(:key)"),
+                    {"key": PAPER_WRITER_LOCK_KEY},
+                )
+            ).scalar()
+            # End the implicit transaction; the session lock outlives it.
+            await conn.commit()
+            if got:
+                break
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("paper_writer_lock_failed", error=str(exc))
+        got = False
+    if got:
+        logger.info("paper_writer_lock_acquired", key=PAPER_WRITER_LOCK_KEY)
+        return True, conn
+    logger.warning("paper_writer_lock_not_held", key=PAPER_WRITER_LOCK_KEY)
+    if conn is not None:
+        try:
+            await conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return False, None
+
+
+async def retry_paper_writer_lock(
+    paper: Any,
+    db: Any,
+    *,
+    on_acquired: Callable[[Any], None] | None = None,
+    interval: float = 15.0,
+    keep_running: Callable[[], bool] = lambda: True,
+) -> None:
+    """Keep trying the paper writer lock after a reload left the old session up.
+
+    Startup only waits a few seconds. A force-stopped process can hold the
+    Postgres advisory lock until the server notices the socket is gone, and
+    this process would otherwise refuse every paper open until the next boot.
+    """
+    while keep_running() and not getattr(paper, "writer_lock_held", False):
+        await asyncio.sleep(interval)
+        if not keep_running() or getattr(paper, "writer_lock_held", False):
+            return
+        held, conn = await acquire_paper_writer_lock(db, attempts=1)
+        if held:
+            paper.writer_lock_held = True
+            if on_acquired is not None:
+                on_acquired(conn)
+            logger.info("paper_writer_lock_acquired_on_retry", key=PAPER_WRITER_LOCK_KEY)
+            return
+
+
+async def load_paper_ledger(paper: Any, store: Any) -> bool:
+    """One ledger load. Marks the paper book ready only when every read succeeded."""
+    try:
+        rows = await store.load_paper_trades(
+            closed_limit=paper.max_closed, raise_on_error=True
+        )
+        closed_pnl_total = await store.sum_closed_paper_pnl(raise_on_error=True)
+        dedupe_keys = await store.load_paper_dedupe_keys(raise_on_error=True)
+        paper.hydrate_from_rows(rows, closed_pnl_total=closed_pnl_total)
+        paper.remember_dedupe_keys(dedupe_keys)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("paper_hydrate_failed", error=str(exc))
+        return False
+    paper.ledger_ready = True
+    return True
+
+
+async def retry_paper_ledger_load(
+    paper: Any,
+    store: Any,
+    *,
+    interval: float = PAPER_LEDGER_RETRY_SECONDS,
+    keep_running: Callable[[], bool] = lambda: True,
+) -> None:
+    """Reload the ledger every ``interval`` seconds until the book is ready."""
+    while keep_running() and not paper.ledger_ready:
+        await asyncio.sleep(interval)
+        if not keep_running():
+            return
+        await load_paper_ledger(paper, store)
+
+
+def paper_tick_price(
+    mark: Any,
+    ticker: Any,
+    last_candle_close: Callable[[], float | None] | None = None,
+    now: datetime | None = None,
+) -> float | None:
+    """Price the paper exit loop uses for one symbol: fresh LIVE mark, ticker, candle.
+
+    ``last_candle_close`` is called only when neither mark nor ticker is usable.
+    """
+    px = getattr(mark, "mark_price", None) if mark is not None else None
+    ts = getattr(mark, "timestamp", None) if mark is not None else None
+    if px and isinstance(ts, datetime) and getattr(mark, "status", None) == DataStatus.LIVE:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        wall = now if now is not None else datetime.now(timezone.utc)
+        if (wall - ts).total_seconds() <= PAPER_MARK_MAX_AGE_SECONDS:
+            return float(px)
+    if ticker is not None and ticker.price:
+        return float(ticker.price)
+    if last_candle_close is not None:
+        last = float(last_candle_close() or 0)
+        if last > 0:
+            return last
+    return None
 
 
 class CalculationOrchestrator:
@@ -131,6 +275,8 @@ class CalculationOrchestrator:
         self._running = False
         self._candle_events = 0
         self._calc_events = 0
+        # Dedicated connection holding the paper writer advisory lock.
+        self._paper_writer_lock_conn: Any | None = None
 
     async def start(self, symbols: list[str]) -> None:
         if not self.settings.use_real_data:
@@ -188,6 +334,27 @@ class CalculationOrchestrator:
         paper.legacy_auto_entry_enabled = bool(
             getattr(self.settings, "paper_legacy_auto_entry_enabled", False)
         )
+        # One paper writer per database. Without the lock this process only reads.
+        from app.services.database import db_manager
+
+        lock_held, self._paper_writer_lock_conn = await acquire_paper_writer_lock(
+            db_manager, attempts=PAPER_WRITER_LOCK_ATTEMPTS
+        )
+        paper.writer_lock_held = lock_held is not False
+        if lock_held is False:
+            self._tasks.append(
+                asyncio.create_task(
+                    retry_paper_writer_lock(
+                        paper,
+                        db_manager,
+                        on_acquired=lambda conn: setattr(
+                            self, "_paper_writer_lock_conn", conn
+                        ),
+                        keep_running=lambda: self._running,
+                    ),
+                    name="paper_writer_lock_retry",
+                )
+            )
         v1_watcher = None
         if bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
             from app.services.v1_paper_watcher import get_v1_paper_watcher
@@ -223,36 +390,100 @@ class CalculationOrchestrator:
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("v1_paper_watcher_seed_failed", error=str(exc))
-        try:
-            rows = await persistence.load_paper_trades(closed_limit=paper.max_closed)
-            paper.hydrate_from_rows(rows)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("paper_hydrate_failed", error=str(exc))
-        # Alerts: Redis first, else Postgres
-        try:
-            from app.services.alerts import get_alert_feed
-            from app.services.redis_state import redis_state
+        if bool(getattr(self.settings, "paper_v21a_watcher_enabled", False)):
+            try:
+                from app.research.combo02_v21a_paper_constants import DEFAULT_SYMBOLS
+                from app.services.v21a_paper_watcher import get_v21a_paper_watcher
 
-            feed = get_alert_feed()
-            snap = await redis_state.get_alerts_state()
-            if not isinstance(snap, dict) or not snap.get("rows"):
-                db_rows = await persistence.load_alerts(limit=feed.maxlen)
-                if db_rows:
-                    snap = {
-                        "rows": db_rows,
-                        "latest_seq": max(
-                            (int(a.get("seq") or 0) for a in db_rows), default=0
+                raw_syms = str(
+                    getattr(self.settings, "paper_v21a_symbols", "") or ""
+                ).strip()
+                symbols = (
+                    [s.strip().upper() for s in raw_syms.split(",") if s.strip()]
+                    if raw_syms
+                    else list(DEFAULT_SYMBOLS)
+                )
+                v21a = get_v21a_paper_watcher(
+                    enabled=True,
+                    symbols=symbols,
+                    risk_percent=float(self.settings.paper_risk_percent),
+                    replay_mode=bool(
+                        getattr(self.settings, "paper_v21a_replay_mode", False)
+                    ),
+                    emit_alerts=True,
+                    paper_engine=paper,
+                )
+                try:
+                    self.set_kline_focus(
+                        list(
+                            dict.fromkeys(
+                                [
+                                    *(
+                                        [b.symbol for b in v1_watcher.books]
+                                        if v1_watcher is not None
+                                        else []
+                                    ),
+                                    *symbols,
+                                ]
+                            )
+                        )
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                seeded_v21a = v21a.seed_from_store()
+                logger.info(
+                    "v21a_paper_watcher_started",
+                    strategy_id="COMBO_02_V2_1_A",
+                    mode="PAPER",
+                    symbols=len(symbols),
+                    seeded=seeded_v21a,
+                    live_execution=False,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("v21a_paper_watcher_start_failed", error=str(exc))
+        async def _hydrate_ledgers() -> None:
+            if not await load_paper_ledger(paper, persistence):
+                # Opens stay refused until a later load succeeds.
+                self._tasks.append(
+                    asyncio.create_task(
+                        retry_paper_ledger_load(
+                            paper, persistence, keep_running=lambda: self._running
                         ),
-                    }
-            feed.hydrate_from_snapshot(snap if isinstance(snap, dict) else None)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("alerts_hydrate_failed", error=str(exc))
-        # Funding marks from DB until live WS overwrites
-        try:
-            fund_rows = await persistence.load_latest_funding_rates()
-            self.market.hydrate_funding_from_rows(fund_rows)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("funding_hydrate_failed", error=str(exc))
+                        name="paper_ledger_retry",
+                    )
+                )
+            try:
+                from app.services.alerts import get_alert_feed
+                from app.services.redis_state import redis_state
+
+                feed = get_alert_feed()
+                snap = await redis_state.get_alerts_state()
+                if not isinstance(snap, dict) or not snap.get("rows"):
+                    db_rows = await persistence.load_alerts(limit=feed.maxlen)
+                    if db_rows:
+                        snap = {
+                            "rows": db_rows,
+                            "latest_seq": max(
+                                (int(a.get("seq") or 0) for a in db_rows), default=0
+                            ),
+                        }
+                feed.hydrate_from_snapshot(snap if isinstance(snap, dict) else None)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("alerts_hydrate_failed", error=str(exc))
+            try:
+                fund_rows = await persistence.load_latest_funding_rates()
+                self.market.hydrate_funding_from_rows(fund_rows)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("funding_hydrate_failed", error=str(exc))
+
+        # No paper open before the ledger has loaded (database on only).
+        if persistence.active:
+            paper.ledger_ready = False
+        # Do not block the port on these reads. A locked or large paper/alert
+        # query was leaving the API unbound while the rest of startup finished.
+        self._tasks.append(
+            asyncio.create_task(_hydrate_ledgers(), name="hydrate_ledgers")
+        )
         # Open any legacy Path A/B setups already in cache after boot.
         # Runs alongside the v1 watcher unless exclusive ownership is enabled.
         if paper.legacy_auto_entry_enabled and not paper.v1_watcher_owns_entries:
@@ -277,13 +508,33 @@ class CalculationOrchestrator:
         self._tasks.append(
             asyncio.create_task(self._setup_ensure_loop(), name="setup_ensure_loop")
         )
-        self._tasks.append(
-            asyncio.create_task(self._paper_trade_loop(), name="paper_trade_loop")
-        )
-        if bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
+        # Paper loops run only in the process that holds the writer lock.
+        if paper.writer_lock_held:
+            self._tasks.append(
+                asyncio.create_task(self._paper_trade_loop(), name="paper_trade_loop")
+            )
+        if paper.writer_lock_held and bool(
+            getattr(self.settings, "paper_v1_watcher_enabled", True)
+        ):
             self._tasks.append(
                 asyncio.create_task(
                     self._v1_paper_watcher_loop(), name="v1_paper_watcher_loop"
+                )
+            )
+        if paper.writer_lock_held and bool(
+            getattr(self.settings, "paper_v21a_watcher_enabled", False)
+        ):
+            self._tasks.append(
+                asyncio.create_task(
+                    self._v21a_paper_watcher_loop(), name="v21a_paper_watcher_loop"
+                )
+            )
+        if paper.writer_lock_held and bool(
+            getattr(self.settings, "paper_passed_watcher_enabled", False)
+        ):
+            self._tasks.append(
+                asyncio.create_task(
+                    self._passed_paper_watcher_loop(), name="passed_paper_watcher_loop"
                 )
             )
         self._tasks.append(
@@ -495,26 +746,31 @@ class CalculationOrchestrator:
             logger.error("hydrate_and_enqueue_failed", error=str(exc))
 
     async def stop(self) -> None:
+        from app.core.shutdown import cancel_tasks, finish_within
+
         self._running = False
-        for t in self._tasks:
-            t.cancel()
-        for t in self._tasks:
-            try:
-                await t
-            except asyncio.CancelledError:
-                pass
+        await cancel_tasks(self._tasks, label="orchestrator")
         self._tasks.clear()
-        await self.backfill.stop()
-        await self.kline_ws.stop()
-        await self.trade_tips.stop()
-        await self.liquidations.stop()
-        await self._liq_ws.stop_all()
-        await self.oi.stop()
+        # Stop the loops that keep issuing REST before waiting on sockets.
+        await finish_within(self.oi.stop(), label="oi")
+        await finish_within(self.backfill.stop(), label="backfill")
+        await finish_within(self.kline_ws.stop(), label="kline_ws")
+        await finish_within(self.trade_tips.stop(), label="trade_tips")
+        await finish_within(self.liquidations.stop(), label="liquidations")
+        await finish_within(self._liq_ws.stop_all(), label="liq_ws")
         await self.fundamentals.close()
         try:
             await self.sentiment.close()
         except Exception:  # noqa: BLE001
             pass
+        # Closing the dedicated connection releases the paper writer lock.
+        lock_conn = getattr(self, "_paper_writer_lock_conn", None)
+        if lock_conn is not None:
+            self._paper_writer_lock_conn = None
+            try:
+                await lock_conn.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     async def on_symbols_changed(self, symbols: list[str]) -> None:
         self._universe_symbols = [s.upper() for s in symbols]
@@ -568,10 +824,31 @@ class CalculationOrchestrator:
 
         # Structure setup signal engine — candle-close / series-ready only (not tick)
         await self._recompute_setup(symbol, timeframe)
+        await self._maybe_run_scalping_watcher(symbol, timeframe)
         # COMBO_02 v1 1h watcher — independent of 15m screener Path A
         await self._maybe_run_v1_watcher(symbol, timeframe)
         # Dynamic v2 experimental paper — disabled by default; never joins v1
         await self._maybe_run_v2_candidate_watcher(symbol, timeframe)
+        # COMBO_02 V2.1-A paper — disabled by default; PAPER ONLY (never live)
+        await self._maybe_run_v21a_watcher(symbol, timeframe)
+
+    async def _maybe_run_scalping_watcher(self, symbol: str, timeframe: str) -> None:
+        """Update read-only scalp setup cache on each fully closed 1m bar."""
+        if not bool(getattr(self.settings, "scalping_watcher_enabled", True)):
+            return
+        if normalize_timeframe(timeframe).lower() != "1m":
+            return
+        try:
+            from app.services.scalping_watcher import get_scalping_watcher
+
+            await asyncio.to_thread(get_scalping_watcher().on_closed_1m, symbol)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "scalping_watcher_failed",
+                symbol=symbol,
+                timeframe=timeframe,
+                error=str(exc),
+            )
 
     async def _maybe_run_v1_watcher(self, symbol: str, timeframe: str) -> None:
         if not bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
@@ -629,6 +906,98 @@ class CalculationOrchestrator:
                 error=str(exc),
             )
 
+    async def _maybe_run_v21a_watcher(self, symbol: str, timeframe: str) -> None:
+        if not bool(getattr(self.settings, "paper_v21a_watcher_enabled", False)):
+            return
+        if normalize_timeframe(timeframe).lower() != "1h":
+            return
+        # LIVE mode must never auto-enable V2.1-A real execution.
+        mode = str(getattr(self.settings, "trading_mode", "PAPER") or "PAPER").upper()
+        if mode == "LIVE":
+            logger.warning(
+                "v21a_live_mode_blocked",
+                symbol=symbol,
+                trading_mode=mode,
+            )
+            return
+        try:
+            from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
+            from app.services.v21a_paper_watcher import get_v21a_paper_watcher
+
+            watcher = get_v21a_paper_watcher()
+            if not watcher.enabled:
+                return
+            pos = await asyncio.to_thread(watcher.on_closed_1h, symbol)
+            if pos is not None:
+                await flush_paper_trade_persists(get_paper_trade_engine())
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "v21a_paper_watcher_failed",
+                symbol=symbol,
+                timeframe=timeframe,
+                error=str(exc),
+            )
+
+    async def _paper_history_catchup(self, symbols: list[str]) -> None:
+        """REST-fill the windows every paper strategy reads, then keep the tip live.
+
+        1h 250 covers the 200-bar EMA used by regime routing. 4h 80 covers the
+        HTF swing gate. 15m 100 covers v2 / COMBO_03 confirmation. BTC 1d 50
+        covers the passed-book market-direction swing.
+        """
+        if getattr(self, "backfill", None) is None:
+            return
+        from app.services.ohlcv_store import ohlcv_store
+
+        targets = (("1h", 250), ("4h", 80), ("15m", 100))
+        if not hasattr(self, "_paper_history_ready"):
+            self._paper_history_ready = set()
+        for raw in symbols:
+            sym = str(raw or "").upper()
+            if not sym:
+                continue
+            try:
+                counts = {
+                    tf: len(
+                        ohlcv_store.get_candles_for_engine(sym, tf, include_open=False) or []
+                    )
+                    for tf, _need in targets
+                }
+                if sym == "BTCUSDT":
+                    counts["1d"] = len(
+                        ohlcv_store.get_candles_for_engine(sym, "1d", include_open=False) or []
+                    )
+                ready = all(counts[tf] >= need for tf, need in targets)
+                if sym == "BTCUSDT":
+                    ready = ready and counts.get("1d", 0) >= 50
+                if sym in self._paper_history_ready and ready:
+                    for tf, _need in targets:
+                        await self.backfill.ensure_series_fresh(
+                            sym, tf, limit=80, force_tip=True
+                        )
+                    continue
+                for tf, need in targets:
+                    if counts[tf] < need:
+                        await self.backfill._fetch_rest_tail(sym, tf, limit=need)
+                if sym == "BTCUSDT" and counts.get("1d", 0) < 50:
+                    await self.backfill._fetch_rest_tail(sym, "1d", limit=50)
+                counts = {
+                    tf: len(
+                        ohlcv_store.get_candles_for_engine(sym, tf, include_open=False) or []
+                    )
+                    for tf, _need in targets
+                }
+                ready = all(counts[tf] >= need for tf, need in targets)
+                if sym == "BTCUSDT":
+                    d1 = len(
+                        ohlcv_store.get_candles_for_engine(sym, "1d", include_open=False) or []
+                    )
+                    ready = ready and d1 >= 50
+                if ready:
+                    self._paper_history_ready.add(sym)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("paper_history_catchup_failed", symbol=sym, error=str(exc))
+
     async def _v1_paper_watcher_loop(self) -> None:
         """Periodic tip check for v1 books (covers missed 1h close events)."""
         from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
@@ -641,74 +1010,85 @@ class CalculationOrchestrator:
             try:
                 watcher = get_v1_paper_watcher()
                 paper = get_paper_trade_engine()
-                # Preferential REST tip catch-up for v1 books. Deep-fill thin
-                # series once; thereafter only tip-refresh.
-                if getattr(self, "backfill", None) is not None:
-                    from app.services.ohlcv_store import ohlcv_store
-
-                    if not hasattr(self, "_v1_deep_hydrated"):
-                        self._v1_deep_hydrated = set()
-                    for book in watcher.books:
-                        try:
-                            bars_1h = len(
-                                ohlcv_store.get_candles_for_engine(
-                                    book.symbol, "1h", include_open=False
-                                )
-                                or []
-                            )
-                            bars_4h = len(
-                                ohlcv_store.get_candles_for_engine(
-                                    book.symbol, "4h", include_open=False
-                                )
-                                or []
-                            )
-                            key = book.symbol.upper()
-                            need_deep = key not in self._v1_deep_hydrated and (
-                                bars_1h < 80 or bars_4h < 80
-                            )
-                            if need_deep:
-                                if bars_1h < 80:
-                                    await self.backfill._fetch_rest_tail(
-                                        book.symbol, "1h", limit=200
-                                    )
-                                if bars_4h < 80:
-                                    await self.backfill._fetch_rest_tail(
-                                        book.symbol, "4h", limit=200
-                                    )
-                                bars_1h = len(
-                                    ohlcv_store.get_candles_for_engine(
-                                        book.symbol, "1h", include_open=False
-                                    )
-                                    or []
-                                )
-                                bars_4h = len(
-                                    ohlcv_store.get_candles_for_engine(
-                                        book.symbol, "4h", include_open=False
-                                    )
-                                    or []
-                                )
-                                if bars_1h >= 80 and bars_4h >= 80:
-                                    self._v1_deep_hydrated.add(key)
-                            else:
-                                await self.backfill.ensure_series_fresh(
-                                    book.symbol, "1h", limit=80, force_tip=True
-                                )
-                                await self.backfill.ensure_series_fresh(
-                                    book.symbol, "4h", limit=80, force_tip=True
-                                )
-                                if bars_1h >= 80 and bars_4h >= 80:
-                                    self._v1_deep_hydrated.add(key)
-                        except Exception as exc:  # noqa: BLE001
-                            logger.warning(
-                                "v1_watcher_tip_refresh_failed",
-                                symbol=book.symbol,
-                                error=str(exc),
-                            )
+                await self._paper_history_catchup([b.symbol for b in watcher.books])
                 for book in watcher.books:
+                    try:
+                        from app.services.market_store import market_store
+
+                        mark = market_store.mark_prices.get(book.symbol)
+                        px = None
+                        if mark is not None and getattr(mark, "mark_price", None):
+                            px = float(mark.mark_price)
+                        else:
+                            tick = market_store.get_ticker(book.symbol)
+                            if tick is not None and tick.price:
+                                px = float(tick.price)
+                        if px and px > 0:
+                            await self.ohlcv.apply_live_price(book.symbol, px)
+                    except Exception:  # noqa: BLE001
+                        pass
                     watcher.on_closed_1h(book.symbol)
                 await flush_paper_trade_persists(paper)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("v1_paper_watcher_loop_failed", error=str(exc))
+
+    async def _passed_paper_watcher_loop(self) -> None:
+        """Closed-1h scan for every strategy side that passed the cap book."""
+        from app.research.passed_cap_book import cap_symbols
+        from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
+        from app.services.passed_paper_watcher import get_passed_paper_watcher
+
+        watcher = get_passed_paper_watcher(enabled=True, paper_engine=get_paper_trade_engine())
+        try:
+            self.set_kline_focus(list(cap_symbols()))
+        except Exception:  # noqa: BLE001
+            pass
+        while self._running:
+            await asyncio.sleep(60.0)
+            if not bool(getattr(self.settings, "paper_passed_watcher_enabled", False)):
+                continue
+            try:
+                paper = get_paper_trade_engine()
+                await self._paper_history_catchup(list(watcher.symbols))
+                # One BTC daily read per tick, so every symbol gets the same trend.
+                daily = await asyncio.to_thread(watcher.read_daily_snapshot)
+                for sym in watcher.symbols:
+                    try:
+                        await asyncio.to_thread(watcher.on_closed_1h, sym, daily=daily)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "passed_paper_watcher_symbol_failed",
+                            symbol=sym,
+                            error=str(exc),
+                        )
+                await flush_paper_trade_persists(paper)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("passed_paper_watcher_loop_failed", error=str(exc))
+
+    async def _v21a_paper_watcher_loop(self) -> None:
+        """Periodic tip check for V2.1-A paper symbols + optional daily summary."""
+        from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
+        from app.services.v21a_paper_watcher import get_v21a_paper_watcher
+
+        while self._running:
+            await asyncio.sleep(45.0)
+            if not bool(getattr(self.settings, "paper_v21a_watcher_enabled", False)):
+                continue
+            try:
+                watcher = get_v21a_paper_watcher()
+                if not watcher.enabled:
+                    continue
+                paper = get_paper_trade_engine()
+                await self._paper_history_catchup(list(watcher.symbols))
+                for sym in watcher.symbols:
+                    await asyncio.to_thread(watcher.on_closed_1h, sym)
+                await flush_paper_trade_persists(paper)
+                if bool(
+                    getattr(self.settings, "paper_v21a_daily_summary_enabled", False)
+                ):
+                    await asyncio.to_thread(watcher.maybe_daily_summary)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("v21a_paper_watcher_loop_failed", error=str(exc))
 
     async def _hydrate_setup_signals(self) -> None:
         """Load persisted setups into cache; mark stale vs current OHLCV for recompute."""
@@ -834,15 +1214,27 @@ class CalculationOrchestrator:
                     sym = getattr(pos, "symbol", None)
                     if not sym:
                         continue
-                    mark = market_store.mark_prices.get(sym)
-                    if mark is not None and getattr(mark, "mark_price", None):
-                        prices[sym] = float(mark.mark_price)
-                        continue
-                    tick = market_store.get_ticker(sym)
-                    if tick is not None and tick.price:
-                        prices[sym] = float(tick.price)
+
+                    def _last_close(sym: str = sym, pos: Any = pos) -> float | None:
+                        candles = self.ohlcv.get_candles_for_engine(
+                            sym, getattr(pos, "timeframe", None) or "1h", include_open=True
+                        )
+                        return candles[-1].get("close") if candles else None
+
+                    px = paper_tick_price(
+                        market_store.mark_prices.get(sym),
+                        market_store.get_ticker(sym),
+                        _last_close,
+                    )
+                    if px is not None:
+                        prices[sym] = px
                 if prices:
                     paper.tick(prices)
+                    for sym, px in prices.items():
+                        try:
+                            await self.ohlcv.apply_live_price(sym, px)
+                        except Exception:  # noqa: BLE001
+                            pass
                 await flush_paper_trade_persists(paper)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("paper_trade_loop_failed", error=str(exc))

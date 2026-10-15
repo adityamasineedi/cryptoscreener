@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from app.research.market_structure.config import ANALYTICS_VERSION
+from app.research.market_structure.funnel import funnel_csv_rows, format_funnel_table
 
 ROOT = Path(__file__).resolve().parents[3]  # backend/
 DEFAULT_REPORTS = ROOT / "reports"
@@ -63,6 +64,7 @@ def write_market_structure_artifacts(
     ambiguous = list(analytics.get("ambiguous_trade_context") or [])
     trade_summary = list(analytics.get("trade_regime_summary") or [])
     opportunity = list(analytics.get("regime_opportunity_summary") or [])
+    regime_funnel = dict(analytics.get("regime_funnel") or {})
     mtf_summary = list(analytics.get("mtf_alignment_summary") or [])
     quality = dict(analytics.get("quality_report") or {})
     meta = dict(analytics.get("metadata") or {})
@@ -110,6 +112,9 @@ def write_market_structure_artifacts(
         "trade_regime_summary.csv": out_dir / "trade_regime_summary.csv",
         "trade_regime_summary.json": out_dir / "trade_regime_summary.json",
         "regime_opportunity_summary.csv": out_dir / "regime_opportunity_summary.csv",
+        "regime_funnel.csv": out_dir / "regime_funnel.csv",
+        "regime_funnel.json": out_dir / "regime_funnel.json",
+        "regime_funnel.txt": out_dir / "regime_funnel.txt",
         "mtf_alignment_summary.csv": out_dir / "mtf_alignment_summary.csv",
         "entry_funnel.json": out_dir / "entry_funnel.json",
         "entry_funnel.md": out_dir / "entry_funnel.md",
@@ -150,6 +155,12 @@ def write_market_structure_artifacts(
     _write_csv(paths["trade_regime_summary.csv"], trade_summary)
     _write_json(paths["trade_regime_summary.json"], trade_summary)
     _write_csv(paths["regime_opportunity_summary.csv"], opportunity)
+    _write_csv(paths["regime_funnel.csv"], funnel_csv_rows(regime_funnel) if regime_funnel else [])
+    _write_json(paths["regime_funnel.json"], regime_funnel)
+    paths["regime_funnel.txt"].write_text(
+        format_funnel_table(regime_funnel) if regime_funnel else "",
+        encoding="utf-8",
+    )
     _write_csv(paths["mtf_alignment_summary.csv"], mtf_summary)
     _write_json(paths["entry_funnel.json"], entry_funnel)
     paths["entry_funnel.md"].write_text(

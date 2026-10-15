@@ -5,7 +5,7 @@ No combination is assumed superior. Conditions are stored with each backtest.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -77,15 +77,18 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
         name="TREND_BOS",
         description=(
             "BOS confirmed AND setup-TF trend agrees AND 4h+1h HTF "
-            "structure aligned with BOS direction (fail closed)."
+            "structure aligned with BOS direction (fail closed). "
+            "HTF trends use only candles fully closed at the setup bar close."
         ),
         require_bos=True,
         require_trend=True,
         require_htf_alignment=True,
+        htf_require_fully_closed=True,
         conditions=(
             "BOS confirmed",
             "Trend agrees with BOS direction",
             "4h+1h HTF structure aligned (hard gate)",
+            "HTF candles fully closed at setup bar close",
         ),
     ),
     # Legacy setup-TF-only baseline — research A/B only.
@@ -253,6 +256,7 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
             "Eligible regime at setup time",
             "Sweep + rejection + existing 1H structure shift",
             "15M confirmation NOT mandatory (comparison only)",
+            "LONG skipped while the confirmed-swing trend on the setup bars is BEARISH",
             "Existing stop/TP/RR engines",
         ),
     ),
@@ -384,7 +388,134 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
             "R:R >= configured minimum",
         ),
     ),
+    # Research hypothesis only. Location, reversal, confirmation, and volume
+    # are staged filters. They do not replace COMBO_01–08.
+    "COMBO_SD_A": CombinationDefinition(
+        combination_id="COMBO_SD_A",
+        name="SD_CHOCH",
+        description=(
+            "RESEARCH: demand/supply location then CHoCH. No BOS and no volume "
+            "filter. Entry is the next bar open. Not a live signal."
+        ),
+        require_bos=False,
+        conditions=(
+            "Causal supply/demand zone touched before the signal",
+            "CHoCH close through the opposite swing",
+            "No volume filter",
+            "Stop at the pre-CHoCH structural extreme plus ATR buffer",
+        ),
+    ),
+    "COMBO_SD_B": CombinationDefinition(
+        combination_id="COMBO_SD_B",
+        name="SD_CHOCH_BOS",
+        description=(
+            "RESEARCH: zone, then CHoCH, then BOS after a higher low or lower high. "
+            "No volume filter."
+        ),
+        require_bos=False,
+        conditions=(
+            "Causal zone touch",
+            "CHoCH",
+            "BOS after protective swing",
+            "No volume filter",
+        ),
+    ),
+    "COMBO_SD_C12": CombinationDefinition(
+        combination_id="COMBO_SD_C12",
+        name="SD_CHOCH_BOS_RVOL_1_2",
+        description="RESEARCH: COMBO_SD_B plus breakout RVOL at least 1.2 versus the same UTC clock slot.",
+        require_bos=False,
+        conditions=("Zone", "CHoCH", "BOS", "RVOL >= 1.2"),
+    ),
+    "COMBO_SD_C": CombinationDefinition(
+        combination_id="COMBO_SD_C",
+        name="SD_CHOCH_BOS_RVOL_1_5",
+        description=(
+            "RESEARCH hypothesis to start from: zone + CHoCH + BOS + "
+            "breakout RVOL >= 1.5 versus the same UTC clock slot. "
+            "OHLCV volume is participation, not delta."
+        ),
+        require_bos=False,
+        conditions=("Zone", "CHoCH", "BOS", "RVOL >= 1.5"),
+    ),
+    "COMBO_SD_C20": CombinationDefinition(
+        combination_id="COMBO_SD_C20",
+        name="SD_CHOCH_BOS_RVOL_2_0",
+        description="RESEARCH: COMBO_SD_B plus breakout RVOL at least 2.0 versus the same UTC clock slot.",
+        require_bos=False,
+        conditions=("Zone", "CHoCH", "BOS", "RVOL >= 2.0"),
+    ),
+    "COMBO_SD_D": CombinationDefinition(
+        combination_id="COMBO_SD_D",
+        name="SD_CHOCH_BOS_RETEST_RVOL_1_5",
+        description=(
+            "RESEARCH: zone + CHoCH + BOS with RVOL >= 1.5 on the break, "
+            "entry after a retest of the broken level holds."
+        ),
+        require_bos=False,
+        conditions=("Zone", "CHoCH", "BOS", "Retest holds", "RVOL >= 1.5 on the break"),
+    ),
+    "COMBO_SD_E": CombinationDefinition(
+        combination_id="COMBO_SD_E",
+        name="SD_CHOCH_VOLUME_DIVERGENCE",
+        description=(
+            "RESEARCH: zone + CHoCH plus price/volume divergence on the last "
+            "two swing extremes. No BOS requirement."
+        ),
+        require_bos=False,
+        conditions=("Zone", "CHoCH", "Volume divergence on swing extremes"),
+    ),
+    "COMBO_SD_F": CombinationDefinition(
+        combination_id="COMBO_SD_F",
+        name="SD_BOS_VOLUME_EXPANSION",
+        description=(
+            "RESEARCH: zone + BOS, without requiring CHoCH, plus range and "
+            "volume expansion on the break (wider range than the previous 20 bars, "
+            "and slot RVOL >= 1.5)."
+        ),
+        require_bos=False,
+        conditions=("Zone", "BOS", "Range expansion", "RVOL >= 1.5"),
+    ),
+    "COMBO_SD_LIQ": CombinationDefinition(
+        combination_id="COMBO_SD_LIQ",
+        name="SD_EQ_SWEEP_CHOCH_BOS",
+        description=(
+            "RESEARCH: COMBO_SD_B only after an equal-low sweep (long) or "
+            "equal-high sweep (short) has wicked through the cluster and "
+            "closed back inside, before CHoCH confirms. Not a live signal."
+        ),
+        require_bos=False,
+        conditions=(
+            "Equal highs or equal lows within 0.2%",
+            "Wick through the cluster and close back inside",
+            "Sweep completes before CHoCH",
+            "Zone",
+            "CHoCH",
+            "BOS",
+            "No volume filter",
+        ),
+    ),
+    "COMBO_SD_C_FRESH": CombinationDefinition(
+        combination_id="COMBO_SD_C_FRESH",
+        name="SD_CHOCH_BOS_RVOL_1_5_FRESH_ZONE",
+        description=(
+            "RESEARCH: COMBO_SD_C restricted to a fresh zone "
+            "(at most one touch, not broken)."
+        ),
+        require_bos=False,
+        conditions=("Fresh zone", "CHoCH", "BOS", "RVOL >= 1.5"),
+    ),
 }
+
+
+from app.research.sd_structure.variants import STRUCTURE_RULES
+
+for _sd_id, _sd_combo in list(COMBINATIONS.items()):
+    if _sd_id.startswith("COMBO_SD_"):
+        COMBINATIONS[_sd_id] = replace(
+            _sd_combo,
+            conditions=_sd_combo.conditions + STRUCTURE_RULES,
+        )
 
 
 def get_combination(combination_id: str) -> CombinationDefinition | None:

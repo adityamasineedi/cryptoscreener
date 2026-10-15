@@ -211,6 +211,33 @@ def test_ws_stale_logic_via_why_chain():
     assert chain["failure_node"]["ok"] is False
 
 
+def test_frontend_health_follows_ui_heartbeat():
+    from datetime import datetime, timedelta, timezone
+
+    from app.diagnostics import frontend_presence as presence
+
+    saved = presence.frontend_last_seen()
+    try:
+        presence._last_seen = None
+        status, reason, seen, age = presence.frontend_health()
+        assert status == HealthStatus.UNKNOWN.value
+        assert reason == "No UI heartbeat yet"
+        assert seen is None
+        assert age is None
+        now = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
+        presence.note_frontend_seen(now)
+        status, reason, seen, age = presence.frontend_health(now + timedelta(seconds=5))
+        assert status == HealthStatus.HEALTHY.value
+        assert reason == "UI heartbeat received"
+        assert seen == now
+        assert age == 5
+        status, reason, seen, age = presence.frontend_health(now + timedelta(seconds=21))
+        assert status == HealthStatus.STALE.value
+        assert "21s" in reason
+    finally:
+        presence._last_seen = saved
+
+
 def test_redact_string_jwt():
     s = redact_string("token=eyJhbGciOiJIUzI1NiJ9.aaa.bbb")
     assert s is not None

@@ -11,6 +11,7 @@ from typing import Any, Mapping, Sequence
 
 from app.research.bos_strategy_comparison.htf import (
     build_htf_as_of_index_map_fully_closed,
+    precompute_htf_trend_cache,
 )
 from app.research.combo03_transition.state_machine import SetupState
 from app.research.grid_range_research.fast_structure import (
@@ -30,6 +31,7 @@ class Combo03Context:
     idx_15m_map: list[int | None] = field(default_factory=list)
     setup: SetupState = field(default_factory=SetupState)
     last_entered_event_key: str | None = None
+    trend_cache: dict[tuple[str, int], str] | None = field(default=None, repr=False)
 
     @classmethod
     def build(
@@ -68,6 +70,19 @@ class Combo03Context:
         if as_of_index < 0 or as_of_index >= len(self.regimes_1h):
             return "UNKNOWN"
         return str(self.regimes_1h[as_of_index] or "UNKNOWN")
+
+    def trend_at(self, as_of_index: int) -> str | None:
+        """Confirmed-swing trend on the setup series at a closed bar.
+
+        Same call and arguments as the ``trade_context`` label, built on first
+        use. Bar ``i`` reads candles up to ``i`` only.
+        """
+        tf = str(self.setup_timeframe).lower()
+        if self.trend_cache is None:
+            self.trend_cache = precompute_htf_trend_cache(
+                self.setup_candles, timeframe=tf, symbol=self.symbol
+            )
+        return self.trend_cache.get((tf, as_of_index))
 
     def closed_15m_index(self, as_of_index: int) -> int | None:
         if as_of_index < 0 or as_of_index >= len(self.idx_15m_map):

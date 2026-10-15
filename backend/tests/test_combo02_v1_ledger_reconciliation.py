@@ -83,7 +83,7 @@ def test_dump_summary_matches_trade_ledger(name: str):
     assert float(row["pnl_usd"]) == pytest.approx(gross)
     assert float(row["pnl_usd_net"]) == pytest.approx(net)
 
-    # Forming HTF (not fully closed) on every closed trade for COMBO_02_V1.
+    # Archived dumps were produced before COMBO_02 required fully closed HTF.
     for t in trades:
         snap = t.get("condition_snapshot") or {}
         assert snap.get("htf_require_fully_closed") is False

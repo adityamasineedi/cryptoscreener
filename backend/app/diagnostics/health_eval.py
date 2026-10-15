@@ -118,15 +118,19 @@ async def evaluate_overview(settings: Any) -> dict[str, Any]:
         )
     )
 
-    # Frontend — backend cannot prove frontend health; mark UNKNOWN unless a probe exists
+    from app.diagnostics.frontend_presence import frontend_health
+
+    fe_status, fe_reason, fe_seen, fe_age = frontend_health(now)
     cards.append(
         health_component(
             "frontend",
             "Frontend",
-            HealthStatus.UNKNOWN,
-            reason="Frontend health is client-reported; no server-side probe in Phase 1",
+            fe_status,
+            reason=fe_reason,
             last_checked=checked,
-            metrics={"note": "UI presence is not verified by backend"},
+            last_success=fe_seen.isoformat() if fe_seen is not None else None,
+            stale_seconds=fe_age,
+            metrics={"heartbeat_age_seconds": fe_age},
         )
     )
 

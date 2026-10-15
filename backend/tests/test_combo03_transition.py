@@ -366,6 +366,110 @@ def test_variant_b_can_reach_risk_finalize_without_15m(monkeypatch):
     assert out.get("combination_id") == "COMBO_03_TRANSITION_B"
 
 
+def _variant_b_entry_with_trend(monkeypatch, *, trend: str, direction: str = "LONG") -> dict:
+    """Variant B to the entry step with the trend cache pinned to one label."""
+    from app.research.combo03_transition import context as ctx_mod
+    from app.research.combo03_transition import evaluate as ev
+    from app.research.combo03_transition.context import Combo03Context
+
+    c1h = _candles(80, drift=0.0, base=100.0)
+    if direction == "LONG":
+        c1h[70].update(open=100.0, high=101.0, low=94.0, close=100.3)
+    else:
+        c1h[70].update(open=100.0, high=105.0, low=99.5, close=99.8)
+    side = "BULLISH" if direction == "LONG" else "BEARISH"
+
+    monkeypatch.setattr(Combo03Context, "regime_at", lambda self, idx: "CHOPPY")
+    monkeypatch.setattr(
+        ctx_mod,
+        "precompute_htf_trend_cache",
+        lambda candles, *, timeframe, symbol, **kw: {
+            (timeframe, i): trend for i in range(len(candles))
+        },
+    )
+    monkeypatch.setattr(
+        ev,
+        "structure_shift_for_direction",
+        lambda **kwargs: {
+            "structure_shift": f"{side.lower()}_structure_shift",
+            "bos_or_choch": f"{side}_BOS",
+            "level": 100.5,
+            "bos": {"direction": f"{side}_BOS", "state": "CONFIRMED", "broken_level": 100.5},
+            "choch": None,
+        },
+    )
+    # The risk engines are not under test here.
+    monkeypatch.setattr(
+        ev,
+        "finalize_with_existing_risk",
+        lambda **kwargs: {
+            "status": f"{kwargs['direction']}_ENTRY_CANDIDATE",
+            "direction": kwargs["direction"],
+            "combination_id": kwargs["combination_id"],
+        },
+    )
+    return evaluate_combination_at_bar(
+        symbol="SOLUSDT",
+        timeframe="1h",
+        candles=c1h,
+        as_of_index=70,
+        combination=get_combination("COMBO_03_TRANSITION_B"),
+        signal_config=SignalConfig(),
+        research_config=ResearchConfig(),
+        candles_15m=None,
+    )
+
+
+def test_variant_b_long_suppressed_when_trend_cache_is_bearish(monkeypatch):
+    out = _variant_b_entry_with_trend(monkeypatch, trend="BEARISH")
+    assert out["status"] == "NO_SETUP"
+    assert out["reason"] == "LONG_BLOCKED_BEARISH_TREND"
+    assert out["direction"] == "LONG"
+    assert out["combo03_diagnostics"]["status"] == "REJECTED"
+
+
+def test_variant_b_long_allowed_when_trend_cache_is_bullish(monkeypatch):
+    out = _variant_b_entry_with_trend(monkeypatch, trend="BULLISH")
+    assert out["status"] == "LONG_ENTRY_CANDIDATE"
+
+
+def test_variant_b_long_allowed_when_trend_cache_is_neutral(monkeypatch):
+    out = _variant_b_entry_with_trend(monkeypatch, trend="NEUTRAL")
+    assert out["status"] == "LONG_ENTRY_CANDIDATE"
+
+
+def test_variant_b_short_ignores_the_trend_cache(monkeypatch):
+    for trend in ("BULLISH", "BEARISH", "NEUTRAL"):
+        out = _variant_b_entry_with_trend(monkeypatch, trend=trend, direction="SHORT")
+        assert out["status"] == "SHORT_ENTRY_CANDIDATE", trend
+
+
+def test_bearish_trend_block_is_variant_b_only():
+    from app.research.combo03_transition.variants import block_long_in_bearish_trend
+
+    assert block_long_in_bearish_trend("TRANSITION_B") is True
+    assert block_long_in_bearish_trend("TRANSITION_A") is False
+    assert block_long_in_bearish_trend("TRANSITION_C") is False
+
+
+def test_context_trend_matches_the_trade_context_label_call():
+    """Filter and label read the same cache: same function, same arguments."""
+    from app.research.bos_strategy_comparison.htf import precompute_htf_trend_cache
+    from app.research.combo03_transition.context import Combo03Context
+
+    c1h = _candles(120, drift=-0.4, base=200.0)
+    for i in range(0, 120, 7):
+        c1h[i]["high"] += 3.0
+        c1h[i]["low"] -= 3.0
+    ctx = Combo03Context.build(
+        symbol="SOLUSDT", setup_timeframe="1h", setup_candles=c1h, candles_15m=None
+    )
+    label_cache = precompute_htf_trend_cache(list(c1h), timeframe="1h", symbol="SOLUSDT")
+    assert [ctx.trend_at(i) for i in range(120)] == [
+        label_cache[("1h", i)] for i in range(120)
+    ]
+
+
 def test_expired_setup_produces_no_trade(monkeypatch):
     from app.research.combo03_transition import evaluate as ev
     from app.research.combo03_transition.context import Combo03Context

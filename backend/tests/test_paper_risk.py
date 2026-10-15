@@ -169,7 +169,7 @@ def test_engine_skips_meme_path_a(monkeypatch):
     pos = eng.on_setup_signal(
         "MEMEUSDT",
         {
-            "status": "WAITING",
+            "status": "LONG_ENTRY_CANDIDATE",
             "direction": "LONG",
             "timeframe": "15m",
             # Path A requires HTF before risk gates run
@@ -184,8 +184,11 @@ def test_engine_skips_meme_path_a(monkeypatch):
                 "direction": "BULLISH_BOS",
                 "broken_level": 1.0,
             },
-            "stop": {"final_stop": 0.95},
-            "targets": [{"target_price": 1.1}],
+            "entry": {"entry_price": 1.0, "status": "LONG_ENTRY_CANDIDATE"},
+            "stop": {"final_stop": 0.95, "provisional": False, "reason": "structural pullback low"},
+            "targets": [{"target_price": 1.1, "target_type": "previous_swing_high"}],
+            "impulse": {"is_impulse": True},
+            "pullback": {"pullback_state": "CONFIRMED"},
             "risk_reward": {"RISK_REWARD": "PASS"},
             "source_candle_timestamps": {"15m": "ts-1"},
             "ohlcv_freshness": "OK",

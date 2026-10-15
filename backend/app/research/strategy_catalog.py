@@ -23,6 +23,17 @@ from app.research.v1_production import (
 )
 
 
+def strategy_horizon(strategy_id: str, setup_timeframe: str | None) -> str:
+    """Presentation bucket only. Does not change which book can signal."""
+    sid = (strategy_id or "").lower()
+    if sid.startswith("scalp") or (setup_timeframe or "").strip().lower() == "1m":
+        return "scalping"
+    setup = (setup_timeframe or "").strip().lower()
+    if sid.startswith("intraday") or setup.startswith("5m") or setup.startswith("15m"):
+        return "intraday"
+    return "swing"
+
+
 def build_strategy_catalog() -> dict[str, Any]:
     combos = {c["combination_id"]: c for c in list_combinations()}
     profile = profile_summary()
@@ -38,14 +49,18 @@ def build_strategy_catalog() -> dict[str, Any]:
             "name": "COMBO_02 v1 — HTF-gated LONG",
             "status": "WORKING",
             "tier": "production_candidate",
+            "tier_label": "paper forward-test",
             "combo_id": COMBO_ID,
             "combo_version": COMBO_VERSION,
             "direction": "LONG",
             "setup_timeframe": "1h",
             "htf_timeframes": ["4h", "1h"],
             "summary": (
-                "Primary working long playbook. Requires setup-TF bullish structure "
-                "(HH+HL), confirmed bullish BOS, and hard 4h+1h HTF alignment."
+                "Paper forward-test, not a production book. LONG 1h only. Requires "
+                "setup-TF bullish structure (HH+HL), confirmed bullish BOS, and hard "
+                "4h+1h HTF alignment. The same five coins (BTC, ETH, SOL, XRP, LINK) "
+                "passed the REPORT.md rule after 0.02% slippage; OOS1 and OOS2 nets go "
+                "negative after each cell's best trade is removed."
             ),
             "gates": list(COMBINATIONS["COMBO_02"].conditions),
             "symbols": {
@@ -500,7 +515,113 @@ def build_strategy_catalog() -> dict[str, Any]:
                 "note": "Often WAITING on pullback — do not fake PASS.",
             },
         },
+        {
+            "id": "INTRADAY_BOS_SD_V1",
+            "name": "Intraday BOS / CHoCH / zones",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "5m",
+            "htf_timeframes": ["1h", "15m", "1m"],
+            "summary": (
+                "Separate research book. 1h direction, 15m zones, 5m setup, "
+                "1m execution when those candles exist. Not a COMBO_02 v1 signal."
+            ),
+            "where_to_run": [
+                {"label": "Intraday status", "path": "/intraday-bos-sd"},
+                {
+                    "label": "Research script",
+                    "path": "backend/scripts/run_intraday_bos_sd.py",
+                    "kind": "repo_path",
+                },
+            ],
+            "do_not": [
+                "Do not treat a passed gate as a screener v1 trade",
+                "Do not run it from the Strategy Backtest COMBO list",
+            ],
+        },
+        {
+            "id": "scalp_bos_retest_v1",
+            "name": "Scalp BOS retest",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1m",
+            "htf_timeframes": ["5m", "15m"],
+            "summary": "1m research replay. Not a COMBO_02 v1 signal.",
+            "where_to_run": [
+                {
+                    "label": "Research script",
+                    "path": "backend/scripts/run_scalping_research.py",
+                    "kind": "repo_path",
+                },
+            ],
+        },
+        {
+            "id": "scalp_sweep_reclaim_v1:reclaim_only",
+            "name": "Scalp sweep reclaim",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1m",
+            "htf_timeframes": ["5m", "15m"],
+            "summary": "1m research replay, reclaim-only variant. Not a COMBO_02 v1 signal.",
+            "where_to_run": [
+                {
+                    "label": "Research script",
+                    "path": "backend/scripts/run_scalping_research.py",
+                    "kind": "repo_path",
+                },
+            ],
+        },
+        {
+            "id": "scalp_sweep_reclaim_v1:reclaim_choch",
+            "name": "Scalp sweep reclaim + CHoCH",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1m",
+            "htf_timeframes": ["5m", "15m"],
+            "summary": "1m research replay, reclaim plus CHoCH variant. Not a COMBO_02 v1 signal.",
+            "where_to_run": [
+                {
+                    "label": "Research script",
+                    "path": "backend/scripts/run_scalping_research.py",
+                    "kind": "repo_path",
+                },
+            ],
+        },
+        {
+            "id": "scalp_vwap_pullback_v1",
+            "name": "Scalp VWAP pullback",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1m",
+            "htf_timeframes": ["5m", "15m"],
+            "summary": "1m research replay. Not a COMBO_02 v1 signal.",
+            "where_to_run": [
+                {
+                    "label": "Research script",
+                    "path": "backend/scripts/run_scalping_research.py",
+                    "kind": "repo_path",
+                },
+            ],
+        },
+        {
+            "id": "scalp_compression_retest_v1",
+            "name": "Scalp compression retest",
+            "status": "RESEARCH",
+            "tier": "research_only",
+            "direction": "LONG / SHORT",
+            "setup_timeframe": "1m",
+            "summary": "Registered only. Specification is incomplete, so it cannot be evaluated.",
+            "do_not": ["Do not evaluate or publish until the specification is complete"],
+        },
     ]
+
+    for item in strategies:
+        item["horizon"] = strategy_horizon(str(item["id"]), item.get("setup_timeframe"))
 
     return {
         "label": "Working strategies catalog",
