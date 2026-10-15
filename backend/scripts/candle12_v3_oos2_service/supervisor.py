@@ -9,16 +9,20 @@ It runs exactly one runner at a time, always with --recover:
   the process dies, so it never goes stale. A runner that is already alive (found by
   its command line) is adopted and watched, never doubled. The store's own run lock
   (runner.lock) is a second guard.
-- Restarts. When the runner exits it is started again with --recover, with a growing
-  delay of 60 s to 600 s. The cli exit codes mean:
-    - 2, REFUSED: for example PREFLIGHT_FAIL, or CONCURRENT_RUN while a crashed
-      runner's lock is still fresh (it goes stale after 15 min). Retried.
+- Restarts. When the runner exits it is started again with --recover. The cli exit codes mean:
+    - 2, REFUSED at startup: for example PREFLIGHT_FAIL, or CONCURRENT_RUN while a crashed
+      runner's lock is still fresh (it goes stale after 15 min). Retried every 60 s.
+      Nothing ran, so it does not count toward a restart storm. The preflight clock-skew
+      check takes a single sample, and this network's 0.8-1.2 s round trips can make one
+      sample read about -1.8 s while NTP shows about -0.03 s.
     - 3, HALTED by recovery: not restarted. The store needs an operator.
+    - Anything else, or any run that lasted 60 s or more: a crash. Restarted with a delay
+      that grows from 60 s to 600 s.
 - Halted store. If state.json says halted and its HALTED exception is still open, the
   supervisor does not start a runner. It records why and exits. The scheduled task
   tries again every 5 minutes, and the runner starts once an operator has resolved
   the exception.
-- Restart storm. Four or more starts within 60 minutes writes one SERVICE_RESTART_STORM
+- Restart storm. Four or more crashes (not startup refusals) within 60 minutes writes one SERVICE_RESTART_STORM
   exception (an open exception, so it blocks OOS acceptance until explained) and a
   PROCESS_RESTART alert into the store. At most one is written per hour.
 - Logs, all git-ignored, under backend/data/candle12_v3_paper/service_logs/:
@@ -56,6 +60,7 @@ MARK = "app.research.candle12_v3_paper.cli"
 KEEP_RUN_LOGS = 60
 STORM_STARTS, STORM_WINDOW = 4, timedelta(minutes=60)
 HALTED_EXIT = 3
+REFUSED_EXIT = 2
 CREATE_NO_WINDOW = 0x08000000
 UTC = timezone.utc
 
@@ -157,7 +162,7 @@ def main() -> int:
             log.error("store halted with open exception %s; not starting a runner (resolve it first)", halt)
             return HALTED_EXIT
         t = now()
-        starts = [s for s in starts if t - s < STORM_WINDOW] + [t]
+        starts = [s for s in starts if t - s < STORM_WINDOW]
         if len(starts) >= STORM_STARTS and storm_logged_hour != t.strftime("%Y%m%d%H"):
             record_storm(starts, log)
             storm_logged_hour = t.strftime("%Y%m%d%H")
@@ -170,11 +175,17 @@ def main() -> int:
             code = proc.wait()
             for child in live_runners():  # the venv launcher can leave the real interpreter behind
                 psutil.wait_procs([child], timeout=None)
-        log.warning("runner exited code=%s after %.0fs", code, (now() - t).total_seconds())
+        ran = now() - t
+        log.warning("runner exited code=%s after %.0fs", code, ran.total_seconds())
         if code == HALTED_EXIT:
             log.error("runner reported a recovery HALT; not restarting until an operator resolves it")
             return HALTED_EXIT
-        delay = 60 if (now() - t) > timedelta(minutes=30) else min(delay * 2, 600)
+        if code == REFUSED_EXIT and ran < timedelta(seconds=60):
+            log.info("startup refused (see runner_%s.out.log); retrying in 60s", stamp)
+            time.sleep(60)
+            continue
+        starts.append(t)  # a real run that ended: counts toward a restart storm
+        delay = 60 if ran > timedelta(minutes=30) else min(delay * 2, 600)
         log.info("restarting in %ss", delay)
         time.sleep(delay)
 
