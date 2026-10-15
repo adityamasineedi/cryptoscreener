@@ -1,0 +1,208 @@
+{
+ "sims": 10000,
+ "block_length_trades": 8,
+ "risk_per_trade": 0.02,
+ "start_equity": 1000.0,
+ "samples": {
+  "ETHUSDT|OOS_COMBINED": {
+   "trades": 80,
+   "sum_R": 23.7825,
+   "observed": {
+    "final_equity": 1549.7960967927343,
+    "max_dd_R": 5.601099999999997,
+    "max_dd_pct": 11.218136143254942
+   },
+   "methods": {
+    "PERMUTATION": {
+     "median_final_equity": 1549.7960967927334,
+     "p5_final_equity": 1549.7960967927322,
+     "p95_final_equity": 1549.7960967927345,
+     "final_equity_order_invariant": true,
+     "median_max_dd_R": 7.8838499999999945,
+     "p95_max_dd_R": 12.662329999999999,
+     "p_dd_gt_10R": 0.2036,
+     "p_dd_gt_15R": 0.0123,
+     "p_dd_gt_20R": 0.0006,
+     "median_max_dd_pct": 14.91219962424713,
+     "p95_max_dd_pct": 22.92509479847124
+    },
+    "BLOCK_BOOTSTRAP": {
+     "median_final_equity": 1545.77579271371,
+     "p5_final_equity": 1092.5201501577394,
+     "p95_final_equity": 2215.8786375069603,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 6.2493,
+     "p95_max_dd_R": 9.929115,
+     "p_dd_gt_10R": 0.0475,
+     "p_dd_gt_15R": 0.0017,
+     "p_dd_gt_20R": 0.0002,
+     "median_max_dd_pct": 12.136791480640586,
+     "p95_max_dd_pct": 18.78398017939112
+    },
+    "IID_BOOTSTRAP": {
+     "median_final_equity": 1550.90337452193,
+     "p5_final_equity": 1009.3061501406949,
+     "p95_final_equity": 2385.614749666794,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 7.976300000000002,
+     "p95_max_dd_R": 15.461584999999998,
+     "p_dd_gt_10R": 0.2807,
+     "p_dd_gt_15R": 0.0583,
+     "p_dd_gt_20R": 0.0114,
+     "median_max_dd_pct": 15.10517715757793,
+     "p95_max_dd_pct": 27.291472801933796
+    }
+   }
+  },
+  "ETHUSDT|FULL": {
+   "trades": 189,
+   "sum_R": 22.0711,
+   "observed": {
+    "final_equity": 1429.3910854818607,
+    "max_dd_R": 20.0589,
+    "max_dd_pct": 33.763910327603085
+   },
+   "methods": {
+    "PERMUTATION": {
+     "median_final_equity": 1429.39108548186,
+     "p5_final_equity": 1429.3910854818585,
+     "p95_final_equity": 1429.3910854818616,
+     "final_equity_order_invariant": true,
+     "median_max_dd_R": 15.191899999999997,
+     "p95_max_dd_R": 24.073214999999998,
+     "p_dd_gt_10R": 0.9582,
+     "p_dd_gt_15R": 0.5206,
+     "p_dd_gt_20R": 0.165,
+     "median_max_dd_pct": 27.395931649338088,
+     "p95_max_dd_pct": 39.56866622903052
+    },
+    "BLOCK_BOOTSTRAP": {
+     "median_final_equity": 1439.2264252571406,
+     "p5_final_equity": 739.2285123909063,
+     "p95_final_equity": 2822.4955008936026,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 15.5844,
+     "p95_max_dd_R": 30.518074999999996,
+     "p_dd_gt_10R": 0.8967,
+     "p_dd_gt_15R": 0.5434,
+     "p_dd_gt_20R": 0.2645,
+     "median_max_dd_pct": 28.021770625165114,
+     "p95_max_dd_pct": 47.688444629560465
+    },
+    "IID_BOOTSTRAP": {
+     "median_final_equity": 1425.3438505259357,
+     "p5_final_equity": 735.9712127587828,
+     "p95_final_equity": 2809.8551375478137,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 15.632249999999996,
+     "p95_max_dd_R": 30.634655000000002,
+     "p_dd_gt_10R": 0.8957,
+     "p_dd_gt_15R": 0.5418,
+     "p_dd_gt_20R": 0.2642,
+     "median_max_dd_pct": 28.06483905263156,
+     "p95_max_dd_pct": 47.91263009985386
+    }
+   }
+  },
+  "BTCUSDT|OOS_COMBINED": {
+   "trades": 79,
+   "sum_R": 5.122999999999999,
+   "observed": {
+    "final_equity": 1068.7736367671175,
+    "max_dd_R": 10.2304,
+    "max_dd_pct": 18.800191489892992
+   },
+   "methods": {
+    "PERMUTATION": {
+     "median_final_equity": 1068.7736367671187,
+     "p5_final_equity": 1068.773636767118,
+     "p95_final_equity": 1068.7736367671193,
+     "final_equity_order_invariant": true,
+     "median_max_dd_R": 11.82565,
+     "p95_max_dd_R": 18.55551499999999,
+     "p_dd_gt_10R": 0.7314,
+     "p_dd_gt_15R": 0.1993,
+     "p_dd_gt_20R": 0.0255,
+     "median_max_dd_pct": 21.868469585270905,
+     "p95_max_dd_pct": 31.88434149041381
+    },
+    "BLOCK_BOOTSTRAP": {
+     "median_final_equity": 1071.7020873147617,
+     "p5_final_equity": 729.9125244001162,
+     "p95_final_equity": 1555.1282788775627,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 10.680799999999998,
+     "p95_max_dd_R": 22.16414999999999,
+     "p_dd_gt_10R": 0.5592,
+     "p_dd_gt_15R": 0.2303,
+     "p_dd_gt_20R": 0.0813,
+     "median_max_dd_pct": 19.925812673130107,
+     "p95_max_dd_pct": 36.99969735305322
+    },
+    "IID_BOOTSTRAP": {
+     "median_final_equity": 1068.2795888733663,
+     "p5_final_equity": 689.8077458586266,
+     "p95_final_equity": 1656.4039178944442,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 12.214649999999999,
+     "p95_max_dd_R": 24.833754999999996,
+     "p_dd_gt_10R": 0.6835,
+     "p_dd_gt_15R": 0.3249,
+     "p_dd_gt_20R": 0.138,
+     "median_max_dd_pct": 22.507624812077182,
+     "p95_max_dd_pct": 40.49323709326739
+    }
+   }
+  },
+  "BTCUSDT|FULL": {
+   "trades": 197,
+   "sum_R": 1.2227000000000032,
+   "observed": {
+    "final_equity": 940.2927253676321,
+    "max_dd_R": 17.188200000000002,
+    "max_dd_pct": 33.02062350511971
+   },
+   "methods": {
+    "PERMUTATION": {
+     "median_final_equity": 940.2927253676321,
+     "p5_final_equity": 940.2927253676311,
+     "p95_final_equity": 940.2927253676331,
+     "final_equity_order_invariant": true,
+     "median_max_dd_R": 21.455299999999998,
+     "p95_max_dd_R": 32.687214999999995,
+     "p_dd_gt_10R": 0.9998,
+     "p_dd_gt_15R": 0.9222,
+     "p_dd_gt_20R": 0.6034,
+     "median_max_dd_pct": 36.94287864905293,
+     "p95_max_dd_pct": 49.937237641066424
+    },
+    "BLOCK_BOOTSTRAP": {
+     "median_final_equity": 938.8985830302584,
+     "p5_final_equity": 497.16149920979655,
+     "p95_final_equity": 1833.1886317278643,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 21.301399999999997,
+     "p95_max_dd_R": 42.21269499999996,
+     "p_dd_gt_10R": 0.9757,
+     "p_dd_gt_15R": 0.7998,
+     "p_dd_gt_20R": 0.5592,
+     "median_max_dd_pct": 36.93451470925078,
+     "p95_max_dd_pct": 59.42123859464354
+    },
+    "IID_BOOTSTRAP": {
+     "median_final_equity": 939.5110625136556,
+     "p5_final_equity": 479.21072790894925,
+     "p95_final_equity": 1852.4249279882174,
+     "final_equity_order_invariant": false,
+     "median_max_dd_R": 22.171,
+     "p95_max_dd_R": 43.99725500000002,
+     "p_dd_gt_10R": 0.9777,
+     "p_dd_gt_15R": 0.8224,
+     "p_dd_gt_20R": 0.5916,
+     "median_max_dd_pct": 37.95457579994186,
+     "p95_max_dd_pct": 60.77836690808165
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,69 @@
+{
+ "generated_utc": "2026-10-15T15:59:49.710341+00:00",
+ "symbols": {
+  "BTCUSDT": {
+   "gap_stop_exits_v2": 0,
+   "identical_exits": true,
+   "screen_v1": {
+    "trades": 197,
+    "net_usd": 380.86,
+    "gross_usd": 558.0,
+    "fees_usd": -177.15,
+    "max_dd_usd": 246.91
+   },
+   "screen_v2": {
+    "trades": 197,
+    "net_usd": 380.86,
+    "gross_usd": 558.0,
+    "fees_usd": -177.15,
+    "max_dd_usd": 246.91
+   },
+   "slip_2bps_v1": {
+    "trades": 197,
+    "net_usd": 336.52,
+    "gross_usd": 513.66,
+    "fees_usd": -177.15,
+    "max_dd_usd": 254.29
+   },
+   "slip_2bps_v2": {
+    "trades": 197,
+    "net_usd": 292.28,
+    "gross_usd": 469.43,
+    "fees_usd": -177.15,
+    "max_dd_usd": 261.71
+   }
+  },
+  "ETHUSDT": {
+   "gap_stop_exits_v2": 0,
+   "identical_exits": true,
+   "screen_v1": {
+    "trades": 189,
+    "net_usd": 718.11,
+    "gross_usd": 858.54,
+    "fees_usd": -140.44,
+    "max_dd_usd": 308.46
+   },
+   "screen_v2": {
+    "trades": 189,
+    "net_usd": 718.11,
+    "gross_usd": 858.54,
+    "fees_usd": -140.44,
+    "max_dd_usd": 308.46
+   },
+   "slip_2bps_v1": {
+    "trades": 189,
+    "net_usd": 682.91,
+    "gross_usd": 823.35,
+    "fees_usd": -140.44,
+    "max_dd_usd": 316.33
+   },
+   "slip_2bps_v2": {
+    "trades": 189,
+    "net_usd": 647.89,
+    "gross_usd": 788.33,
+    "fees_usd": -140.44,
+    "max_dd_usd": 324.24
+   }
+  }
+ }
+}
