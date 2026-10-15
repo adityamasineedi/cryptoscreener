@@ -1,0 +1,243 @@
+{
+ "coin": "SOLUSDT",
+ "detectors": {
+  "1h": {
+   "atr14": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "atr100": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "fractal_k3": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "dc_2.5atr": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "zigzag_3pct": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "breaks_dc": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "breaks_fractal": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "sweeps_fractal": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "compression": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "failed_breakout": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "sd_zones": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "rel_volume": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "donchian24": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "CONTROL_leaky_fractal": {
+    "tested": 620,
+    "fail": 320,
+    "first_fail_T": 400
+   }
+  },
+  "4h": {
+   "atr14": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "atr100": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "fractal_k3": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "dc_2.5atr": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "zigzag_3pct": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "breaks_dc": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "breaks_fractal": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "sweeps_fractal": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "compression": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "failed_breakout": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "sd_zones": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "rel_volume": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "donchian24": {
+    "tested": 620,
+    "fail": 0,
+    "first_fail_T": null
+   },
+   "CONTROL_leaky_fractal": {
+    "tested": 620,
+    "fail": 313,
+    "first_fail_T": 408
+   }
+  },
+  "1d": {
+   "daily_z": {
+    "tested": 998,
+    "fail": 0
+   }
+  },
+  "1h<-4h": {
+   "asof_map_atr4": {
+    "tested": 20,
+    "fail": 0
+   }
+  }
+ },
+ "setups": {
+  "H1": {
+   "setups_full": 213,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H2": {
+   "setups_full": 160,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H3": {
+   "setups_full": 157,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H4": {
+   "setups_full": 49,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H5": {
+   "setups_full": 226,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H6": {
+   "setups_full": 460,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H7": {
+   "setups_full": 111,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H8": {
+   "setups_full": 226,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H2_fractal": {
+   "setups_full": 322,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "H2_zigzag": {
+   "setups_full": 766,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  },
+  "CONTROL_H1_stamped_at_open": {
+   "setups_full": 213,
+   "tested": 248,
+   "fail": 42,
+   "first_fail_tau": 1704830400
+  },
+  "CONTROL_H8_centered_relvol": {
+   "setups_full": 224,
+   "tested": 248,
+   "fail": 147,
+   "first_fail_tau": 1704776400
+  },
+  "INFO_leaky_fractal_H1": {
+   "setups_full": 213,
+   "tested": 248,
+   "fail": 0,
+   "first_fail_tau": null
+  }
+ },
+ "seconds": 941,
+ "seconds_controls": 298
+}
