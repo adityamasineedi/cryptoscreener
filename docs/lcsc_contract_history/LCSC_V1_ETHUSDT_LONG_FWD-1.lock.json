@@ -1,0 +1,77 @@
+{
+ "by": "Claude (session 2f319371) on user instruction 2026-10-15",
+ "lock": {
+  "code_fingerprint": {
+   "combined": "f4683811ee6c7d33961cf7d8e52594a68023d9911d4fc400c079ada1855ac51a",
+   "files": {
+    "backend/app/engines/mtf/indicators.py": "19d3a1c08aa9b7b9addfdb7c8f901d6bcfcd806ba07f98f786356a2fc0553ac8",
+    "backend/app/research/config.py": "60d9174bc5b0b669768826bf88c8d4d573d9e729ec1a4472056f54a0313e76c7",
+    "backend/app/research/multi_cap_strategies/common.py": "6f480ffb275e70ce31509353b9cbee1023b25497cd4163c496b02a5e42c78ebe",
+    "backend/app/research/multi_cap_strategies/config.py": "da9e9e92b18ab359cedb0cc34524271c241f62e187f513065fad8f7043af8b9c",
+    "backend/app/research/multi_cap_strategies/large_cap_sweep_choch.py": "544c6f65ebab527f7d3028f795d7af717bd92db9452189cadf8c8b3c386e7228",
+    "backend/app/research/multi_cap_strategies/schemas.py": "bcf690d22f386bb9fc1edf5425af0fe581ecef09a95e9ee77d683b477ad8f3b6",
+    "backend/app/research/schemas.py": "6e4aa95db308e478d80017663ae6fdd4d87979810ed460925fd7355b19e1c167",
+    "backend/app/research/trade_fees.py": "117deec02b4713d84f1786ba8d045e1e01adce510e7b7e16cebab25b5c447636",
+    "backend/app/signals/_candle_utils.py": "82cc6c533773ca862c56dc66a1ee392134a77e1c619f3559ecedd9438b565a5d",
+    "backend/app/signals/swing_detector.py": "73fccca6f6d05972ca0bf54429da6ecf15b28e8fe31592530a3fcfef2966b468",
+    "backend/scripts/lcsc_validation/forward.py": "4804e8c761f931b0e3f0d6df96d437685af89aff1398d98ed8e7a35f60592455",
+    "backend/scripts/lcsc_validation/load_data.py": "46585b5bd8b5faa6d91a4875e8a65c25fec822e49422d4f987fec1a31f1cb80d",
+    "backend/scripts/lcsc_validation/study.py": "af126fffdf3e7b00602cee7add4515d811a0be85891b3a7bee9b44f11f647078",
+    "backend/scripts/strategy_rank/multicap/_db.py": "b0cbacf516c839a72615cbf3050f44782c99fffe4d77b89f1a156da039410dc2"
+   }
+  },
+  "config_fingerprint": "e27e5579cb8575c397df07525fb0fe2a45815f2b4b17da18e74dac21431227b7",
+  "contract_id": "LCSC_V1_ETHUSDT_LONG/FWD-1",
+  "frozen_at": "2026-10-15T16:08:29.832713+00:00",
+  "terms": {
+   "contract_id": "LCSC_V1_ETHUSDT_LONG/FWD-1",
+   "cost_model": {
+    "fee": 0.0004,
+    "funding": true,
+    "gap": true,
+    "next_open": true,
+    "slip_entry": 0.0005,
+    "slip_stop": 0.001
+   },
+   "earliest_evaluation": "2027-07-16T00:00:00+00:00",
+   "forward_start": "2026-10-16T00:00:00+00:00",
+   "kill": {
+    "downtrend_only_profit": true,
+    "fewer_than_min_trades_after_12_months": true,
+    "max_dd_R": 15.0,
+    "max_expectancy_R": 0.0,
+    "min_pf": 1.0,
+    "unresolved_exceptions": true
+   },
+   "min_closed_trades": 40,
+   "pass": {
+    "max_dd_R": 15.0,
+    "min_expectancy_R_exclusive": 0.1,
+    "min_pf": 1.2,
+    "min_positive_trend_regimes": 2
+   },
+   "rules": {
+    "atr_multiplier": 1.5,
+    "lookback": 48,
+    "min_rr": 2.0,
+    "swing": 3
+   },
+   "series_anchor": "2022-11-20T08:00:00+00:00",
+   "side": "LONG",
+   "sizing": {
+    "equity": 1000.0,
+    "leverage": 2.0,
+    "risk_usd": 20.0
+   },
+   "symbol": "ETHUSDT",
+   "timeframe": "1h",
+   "twelve_month_exception_preapproved": false,
+   "twelve_months": "2027-10-16T00:00:00+00:00"
+  }
+ },
+ "lock_sha256_of_canonical_json": "df929e135cb194d8847495469d8e710fd092e897a8338fd218c22f600ea8cc58",
+ "reason": "Before any forward bar: add the grey-zone continuation limit (80 trades / 18 months -> KILL_INSUFFICIENT_EDGE), startup drift guard, audited refreeze, hash-chained records, run lock and uptime checks. Strategy rules, costs, thresholds and forward start unchanged.",
+ "status": "SUPERSEDED",
+ "superseded_at": "2026-10-15T16:37:18.554894+00:00",
+ "superseded_by": "LCSC_V1_ETHUSDT_LONG/FWD-2"
+}
