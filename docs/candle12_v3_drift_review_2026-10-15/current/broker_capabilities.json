@@ -1,0 +1,102 @@
+{
+ "venue": "BINANCE_USDM_FUTURES_TESTNET",
+ "checked_at": "2026-10-15",
+ "sources": [
+  "https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",
+  "https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api",
+  "https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/New-Algo-Order",
+  "https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Query-Algo-Order",
+  "https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Current-All-Algo-Open-Orders",
+  "https://developers.binance.com/docs/derivatives/usds-margined-futures/error-code",
+  "https://developers.binance.com/docs/derivatives/change-log"
+ ],
+ "hosts": {
+  "testnet_rest": "https://demo-fapi.binance.com",
+  "testnet_rest_legacy": "https://testnet.binancefuture.com",
+  "mainnet_market_data": "https://fapi.binance.com"
+ },
+ "migration": {
+  "announced": "2025-11-06",
+  "effective": "2025-12-09",
+  "summary": "STOP_MARKET, TAKE_PROFIT_MARKET, STOP, TAKE_PROFIT and TRAILING_STOP_MARKET moved to the Algo Service. POST /fapi/v1/order and /fapi/v1/batchOrders reject them with -4120 STOP_ORDER_SWITCH_ALGO."
+ },
+ "order_types": {
+  "MARKET": {
+   "endpoint": "POST /fapi/v1/order",
+   "query": "GET /fapi/v1/order (origClientOrderId)",
+   "cancel": "DELETE /fapi/v1/order (origClientOrderId)",
+   "open_orders": "GET /fapi/v1/openOrders (symbol)",
+   "required_params": ["symbol", "side", "type", "quantity", "timestamp"],
+   "price_param": null,
+   "client_id_param": "newClientOrderId",
+   "reduce_only": true,
+   "time_in_force": "not sent (MARKET)",
+   "used_for": ["ENTRY (gap / price beyond trigger)", "broker-check entry and flatten"]
+  },
+  "STOP_MARKET": {
+   "endpoint": "POST /fapi/v1/algoOrder",
+   "query": "GET /fapi/v1/algoOrder (clientAlgoId)",
+   "cancel": "DELETE /fapi/v1/algoOrder (clientAlgoId)",
+   "open_orders": "GET /fapi/v1/openAlgoOrders (symbol)",
+   "required_params": ["algoType=CONDITIONAL", "symbol", "side", "type", "quantity", "triggerPrice", "timestamp"],
+   "price_param": "triggerPrice",
+   "working_type": "CONTRACT_PRICE",
+   "client_id_param": "clientAlgoId",
+   "reduce_only": true,
+   "time_in_force": "not sent (market on trigger)",
+   "used_for": ["ENTRY (Candle-2 stop entry)", "STOP (reduce-only exit)"]
+  },
+  "TAKE_PROFIT_MARKET": {
+   "endpoint": "POST /fapi/v1/algoOrder",
+   "query": "GET /fapi/v1/algoOrder (clientAlgoId)",
+   "cancel": "DELETE /fapi/v1/algoOrder (clientAlgoId)",
+   "open_orders": "GET /fapi/v1/openAlgoOrders (symbol)",
+   "required_params": ["algoType=CONDITIONAL", "symbol", "side", "type", "quantity", "triggerPrice", "timestamp"],
+   "price_param": "triggerPrice",
+   "working_type": "CONTRACT_PRICE",
+   "client_id_param": "clientAlgoId",
+   "reduce_only": true,
+   "time_in_force": "not sent (market on trigger)",
+   "used_for": ["TARGET (reduce-only exit)"]
+  }
+ },
+ "unsupported_order_types": ["LIMIT", "STOP", "TAKE_PROFIT", "TRAILING_STOP_MARKET"],
+ "client_id": {
+  "pattern": "^[\\.A-Z\\:/a-z0-9_-]{1,36}$",
+  "max_length": 36,
+  "duplicate_error_order_endpoint": -4116,
+  "duplicate_error_algo_endpoint": "undocumented; clientAlgoId must be unique among open orders"
+ },
+ "other_endpoints": {
+  "position": "GET /fapi/v3/positionRisk (symbol)",
+  "fills": "GET /fapi/v1/userTrades (symbol, orderId | startTime)",
+  "funding_income": "GET /fapi/v1/income (incomeType=FUNDING_FEE)",
+  "account": "GET /fapi/v2/balance",
+  "exchange_info": "GET /fapi/v1/exchangeInfo",
+  "price": "GET /fapi/v1/ticker/price"
+ },
+ "error_codes": {
+  "-1007": "TIMEOUT: execution status unknown; query before any retry",
+  "-1021": "INVALID_TIMESTAMP",
+  "-1022": "INVALID_SIGNATURE",
+  "-2011": "CANCEL_REJECTED",
+  "-2013": "NO_SUCH_ORDER",
+  "-2019": "MARGIN_NOT_SUFFICIENT",
+  "-2021": "ORDER_WOULD_IMMEDIATELY_TRIGGER",
+  "-2022": "REDUCE_ONLY_REJECT",
+  "-4015": "INVALID_CL_ORD_ID_LEN",
+  "-4116": "DUPLICATED_CLIENT_ORDER_ID",
+  "-4120": "STOP_ORDER_SWITCH_ALGO",
+  "-4164": "MIN_NOTIONAL"
+ },
+ "known_limitations": [
+  "The documented algoStatus enum is incomplete: only NEW and CANCELED appear in the examples. The client treats NEW as open and CANCELED / EXPIRED / REJECTED as terminal. It reads every other status through actualOrderId and the triggered order.",
+  "The parameters and response of GET /fapi/v1/openAlgoOrders were truncated in the fetched documentation. The symbol filter is assumed.",
+  "No error code is documented for a duplicate clientAlgoId. broker-check records what the testnet actually returns.",
+  "Conditional orders get no margin check before they trigger. A margin rejection of the Candle-2 stop entry arrives only at trigger time, as an algo status, not when the order is placed.",
+  "An untriggered conditional order cannot be modified. A resize is a cancel followed by a new order.",
+  "There is a limit of 200 conditional orders across all symbols.",
+  "The change log does not say whether the testnet migrated on the same date. broker-check is the evidence.",
+  "Testnet prices, liquidity, fills and funding are not mainnet's. Testnet results never validate the strategy and never count toward OOS."
+ ]
+}

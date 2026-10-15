@@ -1,0 +1,62 @@
+diff --git "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\contract.py" "b/backend\\app\\research\\candle12_v3_paper\\contract.py"
+index 075c233..a52d048 100644
+--- "a/docs\\candle12_v3_drift_review_2026-10-15\\frozen\\contract.py"
++++ "b/backend\\app\\research\\candle12_v3_paper\\contract.py"
+@@ -20,12 +20,15 @@ UTC = timezone.utc
+ REPO_ROOT = Path(__file__).resolve().parents[4]
+ BACKEND = REPO_ROOT / "backend"
+ LOCK_PATH = REPO_ROOT / "docs" / "candle12_v3_oos_contract.lock.json"
++CONTRACT_DOC = REPO_ROOT / "docs" / "candle12_v3_oos_contract.md"
+ 
+ CONTRACT_ID = "CANDLE12_V3_EXEC_FIX/OOS-1"
+ SYMBOL = "BTCUSDT"
+ TIMEFRAME = "1h"
+ BOOK_SIDE = "LONG"
+ WARMUP_BARS = 1000
++ALLOWED_SYMBOLS = (SYMBOL,)
++OOS_MODE = "virtual_paper_mainnet"  # the only execution mode whose store can count toward OOS
+ 
+ OOS_START = datetime(2026, 10, 16, tzinfo=UTC)
+ EARLIEST_EVALUATION = datetime(2027, 10, 15, tzinfo=UTC)
+@@ -76,6 +79,14 @@ CODE_FILES = (
+     "backend/app/research/candle12_v3_paper/oos.py",
+     "backend/app/research/candle12_v3_paper/store.py",
+     "backend/app/research/candle12_v3_paper/cli.py",
++    "backend/app/research/candle12_v3_paper/capabilities.py",
++    "backend/app/research/candle12_v3_paper/broker_capabilities.json",
++    "backend/app/research/candle12_v3_paper/modes.py",
++    "backend/app/research/candle12_v3_paper/recovery.py",
++    "backend/app/research/candle12_v3_paper/safety.py",
++    "backend/app/research/candle12_v3_paper/guard.py",
++    "backend/app/research/candle12_v3_paper/backfill.py",
++    "backend/app/research/candle12_v3_paper/freeze.py",
+     "backend/scripts/strategy_rank/multicap/_db.py",
+ )
+ 
+@@ -116,6 +127,8 @@ def contract_terms() -> dict[str, Any]:
+         "strategy_id": STRATEGY_ID,
+         "engine_version": ENGINE_VERSION,
+         "symbol": SYMBOL,
++        "allowed_symbols": list(ALLOWED_SYMBOLS),
++        "oos_mode": OOS_MODE,
+         "timeframe": TIMEFRAME,
+         "warmup_bars": WARMUP_BARS,
+         "oos_start": OOS_START.isoformat(),
+@@ -146,6 +159,17 @@ def code_fingerprint(root: Path = REPO_ROOT, files: Sequence[str] = CODE_FILES)
+     return {"combined": combined, "files": per_file}
+ 
+ 
++def contract_fingerprint(path: Path = CONTRACT_DOC) -> str:
++    """sha256 of the contract document."""
++    return _sha(path.read_bytes()) if path.exists() else "MISSING"
++
++
++def lock_hash(lock: Mapping[str, Any]) -> str:
++    """sha256 of the lock's canonical JSON without its own hash field."""
++    body = {k: v for k, v in lock.items() if k != "lock_hash"}
++    return _sha(json.dumps(body, sort_keys=True, default=str).encode())
++
++
+ def data_fingerprint(candles: Sequence[Mapping[str, Any]]) -> str:
+     h = hashlib.sha256()
+     for c in candles:
