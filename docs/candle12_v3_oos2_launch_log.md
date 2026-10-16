@@ -81,3 +81,16 @@ Corrected at 2026-10-15T17:40:11.851174+00:00. To revert, write the old values b
 | 04:27:42 | Health | one runner (interpreter 16420); heartbeat 04:26:45; not halted; nothing in flight; guard OK; tree clean; open exceptions 0; AC online |
 
 Open risk recorded: the runner and its supervisor run at below-normal priority, inherited from the task's default of 7. Under sustained 100% CPU the runner could be starved past the 300-second entry-placement limit. Raising it (at registration with `install_task.ps1 -Priority 4`, or in place on the running process) needs owner approval.
+
+## Priority and unattended-execution preparation (owner-approved 2026-10-16)
+
+| Time (UTC) | Item | Evidence |
+|---|---|---|
+| 05:12:41 | Live processes raised to Normal, no restart | verified by command line and run lock: supervisor 3612 and 21392, runner launcher 27980, runner interpreter 16420. All BelowNormal, now Normal; start times unchanged. |
+| 05:1x | Persistent Normal priority | Task Scheduler `<Priority>` (0–10) maps 4–6 to the Normal process class and 7–8 (7 is the default) to BelowNormal. Children inherit BelowNormal or Idle, and otherwise default to Normal. `supervisor.py` and `scheduled_backfill.py` now raise themselves, and any adopted runner, to Normal (never higher). Tested: a process started at BelowNormal raised itself to Normal and its children (launcher and interpreter) came up Normal. `install_task.ps1 -Priority 4` was checked on a temporary task. |
+| 05:16 | Unattended diagnostic, Interactive, temporary task | all 6 checks pass: venv launcher, then Microsoft Store base Python 3.12.10; imports; config (localhost:5432/cryptoscreener, credentials not printed); DNS and Binance HTTPS (time, klines, fundingRate); read-only PostgreSQL; log directory writable. No EFS-encrypted file is involved. Temporary task deleted. |
+| 05:16 | Unattended diagnostic, S4U | **not run**: registering an S4U task needs elevation ("Access is denied"). |
+| 05:17 | Re-registration probe | `Register-ScheduledTask -Force` on a running probe task left its processes running. Even unregistering did not kill them. Probe removed. |
+| 05:18 | `elevated_install.ps1 -DryRun` | backups exported to `service_logs\task_backups\20261016T051829Z\`; one runner holding the lock; diagnostic passed; nothing registered. A non-elevated real run refuses. |
+
+Alerts are local files only, in two places that both need checking: the store's `alerts.jsonl` and `service_logs\ops_alerts.jsonl` (see the runbook).
