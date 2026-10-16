@@ -14,10 +14,10 @@ Alerts are **local files only**. Nothing sends an e-mail, push or other external
 
 | File | Written by | Contents |
 |---|---|---|
-| `data\candle12_v3_paperirtual_paper_mainnet\oos2lerts.jsonl` | the runner (frozen code) and the supervisor's restart-storm record | missed candle, missing funding, order rejection, exit failure, unexpected position, recovery action, fingerprint drift, process restart, halt, kill switch |
+| `data\candle12_v3_paper\virtual_paper_mainnet\oos2\alerts.jsonl` | the runner (frozen code) and the supervisor's restart-storm record | missed candle, missing funding, order rejection, exit failure, unexpected position, recovery action, fingerprint drift, process restart, halt, kill switch |
 | `data\candle12_v3_paper\service_logs\ops_alerts.jsonl` | `scheduled_backfill.py` | backfill failures after all retries: MISSING_FUNDING, MISSED_CANDLE, BACKFILL_FAILED |
 
-The backfill never writes to the runner's store. The store has no cross-process lock, and a torn line would halt the frozen runner. Check both files at every hourly check and at the daily check. Also read `service_logs\supervisor.log` and `service_logsackfill_runs.jsonl`.
+The backfill never writes to the runner's store. The store has no cross-process lock, and a torn line would halt the frozen runner. Check both files at every hourly check and at the daily check. Also read `service_logs\supervisor.log` and `service_logs\backfill_runs.jsonl`.
 
 ## 1. At 00:00 UTC (window opens). Check at 00:02, again at 01:02
 
