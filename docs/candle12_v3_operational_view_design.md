@@ -127,6 +127,27 @@ The tolerances are the OOS-2 contract's, unchanged:
 
 **Exposure to date, disclosed:** operational checks on 2026-10-15 and 16 used `status` and the store layout. That showed the book was flat at each check, and that `trades.jsonl` did not exist (no closed trade yet) at 02:58 UTC on 2026-10-16. That is position state and a trade count, not an outcome. From adoption of this design, those fields are sealed for operators.
 
+**Disclosed operational-state exposure: LCSC session reads (added 2026-10-16).** The LCSC session (cryptoscreener-48) disclosed the reads below. They were not reread or reconstructed for this record. Both were read-only.
+
+| UTC (2026-10-16) | Purpose | Printed in full | Parsed only |
+|---|---|---|---|
+| about 02:57–03:00 | LCSC's operational health check of the shared machine and the OOS-2 runner | `manifest.json`, `state.json`, `runner.lock`, the backfill watermark file, `events.jsonl`, `alerts.jsonl`, `exceptions.jsonl` | every heartbeat line, including `slots` |
+| 05:31 | evidence snapshot for LCSC's deferred permission-change request (`candle12-evidence`) | none disclosed | `state.json` and the last heartbeat |
+
+- **Reported contents at the time:**
+  - **Flat position.** The heartbeat `slots` were empty, per the LCSC disclosure.
+  - **Zero closed trades.** `trades.jsonl` did not exist at 02:58, per this session's own check at that time (the paragraph above).
+  - **Startup and drill events only.** `events.jsonl` held only the 7 startup and restart-drill events, per this session's earlier account.
+  - **Nothing further disclosed.** The disclosure reported no contents for the 05:31 read beyond those fields.
+- **Not read:** the LCSC session states it has never read `trades.jsonl` or `signals.jsonl`.
+- **Two separate findings:**
+  - **Outcomes:** no closed-trade outcome is reported to have existed or been seen at either read.
+  - **Read restriction:** both reads predate the allow-list in section 2, and both went beyond it. Full `state.json`, `slots`, and `events.jsonl` and `alerts.jsonl` in full are all outside it.
+  - What the reads exposed is information about the forward window: position state and a trade count. It is disclosed here, not dismissed.
+- **Allow-list in effect:** from 13:21 UTC on 2026-10-16, the LCSC checkpoint script reads only `at` and `halted` from the last 4 KB of `heartbeats.jsonl`.
+- **Dormant tooling stays prohibited:** `option_b.resource_health` and `candle12_acl.evidence` still parse more than the allow-list. They must not run against OOS-2 until their reads are narrowed to the allow-list and the change is separately approved. The permission-change operation itself remains DEFERRED_PENDING_REVIEW_AND_CAPACITY.
+- **Status:** this entry neither invalidates OOS-2 nor exempts it from review, and it doesn't make OOS-2 fully blind. It preserves the facts for assessment under the frozen policy at the formal OOS-2 read.
+
 ## 7. Resource budget
 
 - On-demand only.
