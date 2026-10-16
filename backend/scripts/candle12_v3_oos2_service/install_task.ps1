@@ -11,7 +11,10 @@
 # Without admin rights the task runs only while this user is logged on (LogonType
 # Interactive). To start at boot with no logon, run install_task.ps1 -AtStartup from
 # an elevated PowerShell. It then registers with the S4U logon type.
-param([switch]$AtStartup)
+# -Priority: Task Scheduler priority for the supervisor and runner (inherited). The
+# default, 7, is below normal: under sustained 100% CPU from normal-priority processes
+# the runner can be starved. 4 is normal. Changing it is an owner decision.
+param([switch]$AtStartup, [ValidateRange(0, 10)][int]$Priority = 7)
 
 $Name = "CANDLE12_V3_OOS2_Runner"
 $Backend = "D:\cryptoscreener\backend"
@@ -31,7 +34,7 @@ if ($AtStartup) {
 }
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds 0) `
     -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable `
-    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd -Priority $Priority
 Register-ScheduledTask -TaskName $Name -Action $action -Trigger @($first, $watchdog) -Principal $principal `
     -Settings $settings -Description "CANDLE12_V3_EXEC_FIX/OOS-2 virtual_paper_mainnet runner supervisor (always --recover)" -Force |
     Select-Object TaskName, State
