@@ -86,9 +86,40 @@ For each book there are exactly three parts:
 | **MARGINAL** | 8 ≤ rate < 12, **or** 10% < share ≤ 20% | Not started without separate approval |
 | **NOT_FEASIBLE** | rate < 8, **or** share > 20% | Not frozen, not started |
 
-### 3.2 Results
+### 3.2 Results (run 2026-10-16 15:06:44–15:09:27 UTC, read-only)
 
-*(Filled in after the count; see below.)*
+- **Run conditions:** started at 2.02 GB free memory and 78.5% CPU. The guard was OK before and after.
+- **Data:** klines have no gaps; bars run from 2023-01-01 through 2026-10-15 23:00 (4h: 20:00).
+- **Harness check:** BTC 1h at $20 reproduces **84** in-sample trades (window to 13:00 and to 12:00). That is the in-sample reference, not OOS-2.
+- **SOL filters** (exchangeInfo, 15:08:20 UTC): step 0.01, min qty 0.01, min notional $5. **The step is 0.01, not one coin.**
+
+| | ETH 1h | SOL 1h | BTC 4h |
+|---|---|---|---|
+| Total LONG signals | 200 | 193 | 79 |
+| Refire-suppressed | 31 | 30 | 21 |
+| Blocked by own open position | 29 | 24 | 10 |
+| No fill (Candle-2 didn't trade the trigger) | 50 | 39 | 10 |
+| Reaching sizing | 90 | 100 | 38 |
+| Passing the 10% rounding rule | 90 | 100 | 25 |
+| Rejected: step size / rounding (`ROUNDING_SHORTFALL`) | 0 | 0 | **13** (all at 2–6 steps) |
+| Rejected: minimum notional | 0 | 0 | 0 |
+| Rejected: risk tolerance (margin cap) | 1 (only reason) | 0 | 13 (always together with rounding) |
+| **Executable trades** | **89** | **100** | **25** |
+| Rate a year (3.79 years) | **23.5** | **26.4** | **6.6** |
+| Per calendar year (2023 / 2024 / 2025 / 2026 to Oct 15) | 16 / 28 / 26 / 19 | 30 / 22 / 30 / 18 | 12 / 5 / 3 / 5 |
+| Last 12 months (context) | 21 | 22 | 6 |
+| Exchange-filter rejection share | **0.0%** | **0.0%** | **34.2%** |
+| Expected by day 90 (p10–p90) | 5.8 (3–9) | 6.5 (3–10) | 1.6 (0–3) |
+| Expected by day 180 | 11.6 (7–16) | 13.0 (9–18) | 3.3 (1–6) |
+| Expected by day 365 | 23.5 (17–30) | 26.4 (20–33) | 6.6 (3–10) |
+| Expected dates for reviews (3 / 6 / 12 trades) | day 90 / 180 / 365 | day 90 / 180 / 365 | day 166 / 332 / 664 |
+| **Classification** | **FEASIBLE** | **FEASIBLE** | **NOT_FEASIBLE** (rate < 8 and share > 20%) |
+
+**What follows:**
+- **BTC 4h:** not frozen, not started.
+- **ETH 1h and SOL 1h:** may be proposed for start. Starting either still needs the user's approval.
+- **Scope:** these are tradability counts on used history. They measure no performance or edge.
+- **Cost:** each walk took ≤ 18 s and ≤ 155 MB.
 
 ## 4. Gates (per book)
 
