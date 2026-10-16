@@ -68,3 +68,16 @@ Corrected at 2026-10-15T17:40:11.851174+00:00. To revert, write the old values b
 
 **Funding ingestion is manual.** No scheduled task writes `grid_funding_settlements`. The app writes `funding_rates` (quotes) only. The runner reads funding live from Binance, so collection does not depend on the database. The OOS read and reconciliation do, so the runbook's 00:00, 08:00 and 16:00 backfills must be run by hand until a scheduled task is approved.
 | 03:41:07 | Power re-check after the owner connected the charger | PowerLineStatus **Online**, charging (61%); one runner (16420); heartbeat 03:38:04; not halted; nothing in flight; guard OK; tree clean; exceptions file unchanged (4 rows, all resolved). Both blockers cleared: **COLLECTING_HEALTHY** |
+
+## Automation (owner-approved 2026-10-16)
+
+| Time (UTC) | Item | Status / evidence |
+|---|---|---|
+| 04:1x | Duplicate check | no existing backfill task; only `CANDLE12_V3_OOS2_Runner` |
+| 04:16–04:25 | `CANDLE12_V3_OOS2_FundingBackfill` registered | **TASK_CONFIGURED**. Daily at 00:20Z, 08:20Z and 16:20Z (stored as UTC `Z` boundaries; IST 05:50, 13:50, 21:50). StartWhenAvailable; IgnoreNew plus an OS file lock; 3 wrapper attempts 5 min apart, then 1 task restart after 15 min; 75-min limit; priority 4; user `VARUADI\masin`, Interactive; `backend\.venv\Scripts\pythonw.exe scripts\candle12_v3_oos2_service\scheduled_backfill.py`, working directory `D:\cryptoscreener\backend`; target `localhost:5432/cryptoscreener`. |
+| 04:16–04:25 | First on-demand run starved and stopped | At the default task priority 7 (below normal), with the machine at 100% CPU from normal-priority processes (app uvicorn worker, PID 8928, Cursor), the wrapper got 62 ms of CPU in 6 min. It had started no child. It was stopped and the task priority set to 4. |
+| 04:25:51 | On-demand run at priority 4 | **TASK_EXECUTION_VERIFIED**: exit 0, healthy. Candles 1004 fetched, 0 inserted; funding 126 fetched, 0 inserted; no gaps or conflicts. Log `backfill_20261016T042551Z_a1.log` has no credentials. No `ops_alerts.jsonl`. |
+| 04:27:42 | Runner boot-start | **Not installed**: needs elevation, which this session lacks. The runner task still has a logon trigger plus the 5-min watchdog, Interactive, priority 7. **BOOT_RECOVERY_NOT_YET_TESTED.** |
+| 04:27:42 | Health | one runner (interpreter 16420); heartbeat 04:26:45; not halted; nothing in flight; guard OK; tree clean; open exceptions 0; AC online |
+
+Open risk recorded: the runner and its supervisor run at below-normal priority, inherited from the task's default of 7. Under sustained 100% CPU the runner could be starved past the 300-second entry-placement limit. Raising it (at registration with `install_task.ps1 -Priority 4`, or in place on the running process) needs owner approval.

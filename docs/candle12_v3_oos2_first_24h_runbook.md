@@ -34,6 +34,8 @@ Look only at plumbing fields. Do not look at PnL.
 
 ## 3. Funding at 00:00, 08:00 and 16:00 UTC (check at about :20)
 
+**Automated since 2026-10-16:** task `CANDLE12_V3_OOS2_FundingBackfill` runs the command below at 00:20Z, 08:20Z and 16:20Z. Check `data\candle12_v3_paper\service_logsackfill_runs.jsonl` for the newest row with `healthy: true`, and confirm `ops_alerts.jsonl` has no new rows. The task is Interactive: it runs only while the owner is logged on, and a missed start runs at the next logon. Run the command by hand if the newest healthy row is older than the last settlement plus 30 minutes.
+
 ```
 .venv\Scripts\python.exe -m app.research.candle12_v3_paper.cli backfill-data --symbols BTCUSDT --start 2026-09-04T08:00:00+00:00 --end now
 ```
