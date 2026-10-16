@@ -40,6 +40,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import psutil
+
 BACKEND = Path(__file__).resolve().parents[2]
 PYTHON = BACKEND / ".venv" / "Scripts" / "python.exe"
 LOGS = BACKEND / "data" / "candle12_v3_paper" / "service_logs"
@@ -102,6 +104,9 @@ def prune() -> None:
 
 def main() -> int:
     LOGS.mkdir(parents=True, exist_ok=True)
+    me = psutil.Process()  # never run below Normal; the backfill-data child inherits it
+    if me.nice() in (psutil.BELOW_NORMAL_PRIORITY_CLASS, psutil.IDLE_PRIORITY_CLASS):
+        me.nice(psutil.NORMAL_PRIORITY_CLASS)
     lock = open(LOGS / "backfill.lock", "a+")
     try:
         msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)

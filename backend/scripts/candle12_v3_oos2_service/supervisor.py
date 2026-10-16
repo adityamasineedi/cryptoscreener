@@ -29,6 +29,10 @@ It runs exactly one runner at a time, always with --recover:
     - runner_<UTC>.out.log and runner_<UTC>.err.log, one pair per start; the 60 newest
       are kept;
     - supervisor.log, rotating at 2 MB x 10 files.
+- Priority. The supervisor raises itself, and any runner it adopts, from BelowNormal or
+  Idle to the Windows Normal priority class, and never higher. Its children inherit
+  Normal. A Task Scheduler task left at its default priority of 7 starts it at
+  BelowNormal, and on 2026-10-16 sustained 100% CPU starved such processes.
 - It never pulls code, installs packages, or writes outside the store and the
   service_logs directory. Its working directory, interpreter and environment are
   those of backend/ and backend/.venv, exactly as a manual run.
@@ -79,6 +83,22 @@ def setup_log() -> logging.Logger:
     logging.Formatter.converter = time.gmtime
     log.addHandler(h)
     return log
+
+
+LOW_CLASSES = (psutil.BELOW_NORMAL_PRIORITY_CLASS, psutil.IDLE_PRIORITY_CLASS)
+
+
+def ensure_normal_priority(proc: psutil.Process, log: logging.Logger | None = None) -> None:
+    """Raise a below-normal or idle process to NORMAL. Never raises above NORMAL."""
+    try:
+        before = proc.nice()
+        if before in LOW_CLASSES:
+            proc.nice(psutil.NORMAL_PRIORITY_CLASS)
+            if log:
+                log.info("priority pid=%s raised %s -> NORMAL", proc.pid, before)
+    except (psutil.Error, OSError) as exc:
+        if log:
+            log.warning("priority pid=%s not changed: %s", proc.pid, exc)
 
 
 def single_instance() -> object | None:
@@ -146,6 +166,7 @@ def main() -> int:
         log.info("another supervisor holds the lock; exiting")
         return 0
     log.info("supervisor start pid=%s python=%s cwd=%s", os.getpid(), PYTHON, BACKEND)
+    ensure_normal_priority(psutil.Process(), log)  # children (the runner) inherit it
     starts: list[datetime] = []
     storm_logged_hour = None
     delay = 60
@@ -154,6 +175,8 @@ def main() -> int:
         if running:
             p = running[0]
             log.info("adopting live runner pid=%s; watching", p.pid)
+            for proc in running:
+                ensure_normal_priority(proc, log)
             psutil.wait_procs(running, timeout=None)
             log.warning("adopted runner pid=%s exited", p.pid)
             continue
