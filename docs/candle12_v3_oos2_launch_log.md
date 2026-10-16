@@ -67,3 +67,4 @@ Corrected at 2026-10-15T17:40:11.851174+00:00. To revert, write the old values b
 | 03:37:41 | Power | **still on battery** (PowerLineStatus Offline, 63%, about 1%/min since 03:01). Blocker open. |
 
 **Funding ingestion is manual.** No scheduled task writes `grid_funding_settlements`. The app writes `funding_rates` (quotes) only. The runner reads funding live from Binance, so collection does not depend on the database. The OOS read and reconciliation do, so the runbook's 00:00, 08:00 and 16:00 backfills must be run by hand until a scheduled task is approved.
+| 03:41:07 | Power re-check after the owner connected the charger | PowerLineStatus **Online**, charging (61%); one runner (16420); heartbeat 03:38:04; not halted; nothing in flight; guard OK; tree clean; exceptions file unchanged (4 rows, all resolved). Both blockers cleared: **COLLECTING_HEALTHY** |
