@@ -265,8 +265,17 @@ def test_job_steps_match_run_regime_book(monkeypatch: pytest.MonkeyPatch):
         job_mod._execute({"op": "symbol", "symbol": s, "book": b, "btc_daily": daily}, backtest_fn=_FakeWalk([90, 100]))
         for s, b in books.items()
     ]
-    final = job_mod._execute({"op": "finish", "symbol_results": parts, "btc_daily": daily}, postprocess_fn=_postprocess)
+    final = job_mod._execute(
+        {
+            "op": "finish",
+            "symbol_results": parts,
+            "btc_daily": daily,
+            "candles_by_symbol": {s: b["candles"] for s, b in books.items()},
+        },
+        postprocess_fn=_postprocess,
+    )
     assert final == whole
+    assert final["pnl_model"] == "CAUSAL_NEXT_OPEN"
 
 
 # --- R3: off the event loop, progress, cancel, single-flight ---------------
@@ -346,6 +355,10 @@ async def test_job_reports_progress_window_and_result(monkeypatch: pytest.Monkey
     assert window["cap"]["applied"] is True and window["cap"]["symbols"] == [LARGE[0], LARGE[1]]
     assert done["summary"]["trades"] == 2
     assert done["fixed_config"]["leverage"] == book.LEVERAGE
+    # The sizing step got each symbol's candles, so the next-open book priced the run.
+    assert done["pnl_model"] == "CAUSAL_NEXT_OPEN"
+    assert done["execution_model_version"]
+    assert done["directions"] == ["LONG", "SHORT"]
 
 
 async def test_single_flight_and_cancel(monkeypatch: pytest.MonkeyPatch):
@@ -408,6 +421,116 @@ async def test_child_process_is_killed_on_cancel():
 # --- route -------------------------------------------------------------------
 
 
+# --- next-open fill book and sides in scope ---------------------------------
+
+
+def test_slim_result_reports_the_fill_book_and_the_sides_in_scope():
+    result = {
+        "pnl_model": "CAUSAL_NEXT_OPEN",
+        "execution_model_version": "causal_next_open_v1",
+        "directions": ["LONG"],
+        "sides_in_scope": [{"strategy_id": "COMBO_03_TRANSITION_B", "timeframe": "1h", "direction": "LONG"}],
+        "summary": {"by_strategy": {}},
+        "trades": [],
+    }
+    slim = slim_result(result)
+    assert slim["pnl_model"] == "CAUSAL_NEXT_OPEN"
+    assert slim["execution_model_version"] == "causal_next_open_v1"
+    assert slim["directions"] == ["LONG"]
+    assert slim["sides_in_scope"] == result["sides_in_scope"]
+
+
+def _start_without_running(monkeypatch, directions):
+    seen: list[tuple] = []
+
+    async def fake_run(job):
+        seen.append((tuple(job["symbols"]), job["limit"], tuple(job["directions"])))
+
+    monkeypatch.setattr(job_mod, "_run", fake_run)
+
+    async def go():
+        out = await start([LARGE[0]], 200, directions)
+        await asyncio.sleep(0)
+        return out
+
+    return asyncio.run(go()), seen
+
+
+def test_start_with_long_scope_runs_only_the_long_rows(monkeypatch):
+    out, seen = _start_without_running(monkeypatch, ["LONG"])
+    assert out["status"] == "STARTED"
+    assert out["job"]["directions"] == ["LONG"]
+    assert out["job"]["pnl_model"] == "CAUSAL_NEXT_OPEN"
+    assert out["job"]["sides_in_scope"] == [
+        {"strategy_id": "COMBO_03_TRANSITION_B", "timeframe": "1h", "direction": "LONG"}
+    ]
+    assert seen and seen[0][2] == ("LONG",)
+
+
+def test_start_with_short_scope_lists_only_short_rows(monkeypatch):
+    out, seen = _start_without_running(monkeypatch, ["SHORT"])
+    assert out["status"] == "STARTED"
+    assert {row["direction"] for row in out["job"]["sides_in_scope"]} == {"SHORT"}
+    assert seen[0][2] == ("SHORT",)
+
+
+def test_start_without_scope_keeps_both_directions(monkeypatch):
+    out, seen = _start_without_running(monkeypatch, None)
+    assert out["job"]["directions"] == ["LONG", "SHORT"]
+    assert seen[0][2] == ("LONG", "SHORT")
+
+
+def test_start_rejects_an_unknown_direction(monkeypatch):
+    out, seen = _start_without_running(monkeypatch, ["SIDEWAYS"])
+    assert out["status"] == "REJECTED"
+    assert seen == []
+
+
+def test_job_steps_match_run_regime_book_with_one_side_in_scope(monkeypatch: pytest.MonkeyPatch):
+    """Child steps and run_regime_book agree on the next-open book with SHORT only."""
+    _bearish(monkeypatch)
+    daily = _daily(70)
+    books = {LARGE[0]: {"candles": _hourly(150), "eval_start": 80}, LARGE[1]: {"candles": _hourly(150), "eval_start": 80}}
+    whole = book.run_regime_book(
+        books, daily, backtest_fn=_FakeWalk([90, 100]), postprocess_fn=_postprocess, directions=["SHORT"]
+    )
+    parts = [
+        job_mod._execute(
+            {"op": "symbol", "symbol": s, "book": b, "btc_daily": daily, "pnl_model": "CAUSAL_NEXT_OPEN", "directions": ["SHORT"]},
+            backtest_fn=_FakeWalk([90, 100]),
+        )
+        for s, b in books.items()
+    ]
+    final = job_mod._execute(
+        {
+            "op": "finish",
+            "symbol_results": parts,
+            "btc_daily": daily,
+            "pnl_model": "CAUSAL_NEXT_OPEN",
+            "directions": ["SHORT"],
+            "candles_by_symbol": {s: b["candles"] for s, b in books.items()},
+        },
+        postprocess_fn=_postprocess,
+    )
+    assert final == whole
+    assert final["pnl_model"] == "CAUSAL_NEXT_OPEN"
+    assert {row["direction"] for row in final["sides_in_scope"]} == {"SHORT"}
+    assert final["summary"]["trades"] > 0
+
+
+def test_finish_without_candles_cannot_price_the_next_open(monkeypatch: pytest.MonkeyPatch):
+    """The next-open book never falls back silently to signal-close pricing."""
+    _bearish(monkeypatch)
+    daily = _daily(70)
+    part = job_mod._execute(
+        {"op": "symbol", "symbol": SYMBOL, "book": {"candles": _hourly(150), "eval_start": 80}, "btc_daily": daily},
+        backtest_fn=_FakeWalk([90]),
+    )
+    assert part["trades"]
+    with pytest.raises(ValueError, match="CAUSAL_NEXT_OPEN"):
+        job_mod._execute({"op": "finish", "symbol_results": [part], "btc_daily": daily}, postprocess_fn=_postprocess)
+
+
 def test_route_passes_dates_and_rejects_mixed_timeframes(monkeypatch: pytest.MonkeyPatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -432,6 +555,7 @@ def test_route_passes_dates_and_rejects_mixed_timeframes(monkeypatch: pytest.Mon
     assert seen[-1] == {
         "symbols": [SYMBOL],
         "limit": 20000,
+        "directions": None,
         "timeframe": "1h",
         "start_date": "2025-01-01",
         "end_date": "2025-03-31",
@@ -443,3 +567,25 @@ def test_route_passes_dates_and_rejects_mixed_timeframes(monkeypatch: pytest.Mon
     assert len(seen) == 1
     idle = client.post("/api/research/regime-backtest/cancel").json()
     assert idle["status"] == "NOT_RUNNING"
+
+
+def test_route_passes_the_directions_to_the_job(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api import routes
+
+    calls: list[tuple] = []
+
+    async def fake_start(symbols, limit=None, directions=None, **kw):
+        calls.append((symbols, limit, directions))
+        return {"status": "STARTED"}
+
+    monkeypatch.setattr(job_mod, "start", fake_start)
+    app = FastAPI()
+    app.include_router(routes.router, prefix="/api")
+    client = TestClient(app)
+    client.post("/api/research/regime-backtest/start", json={"symbols": ["ETHUSDT"], "limit": 100, "directions": ["LONG"]})
+    client.post("/api/research/regime-backtest/start", json={"symbols": ["ETHUSDT"], "limit": 100})
+    client.post("/api/research/regime-backtest/start", json={"symbols": ["ETHUSDT"], "limit": 100, "direction": "SHORT"})
+    assert calls == [(["ETHUSDT"], 100, ["LONG"]), (["ETHUSDT"], 100, None), (["ETHUSDT"], 100, ["SHORT"])]

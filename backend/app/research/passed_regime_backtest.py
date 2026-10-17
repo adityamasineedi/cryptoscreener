@@ -7,6 +7,22 @@ bars closed at that bar's close) picks the sides that may open
 size, leverage, and fees come from the existing backtest and fee code; this
 module only decides which of those trades the shared book takes. No I/O.
 
+Fill book (``pnl_model``)
+    ``CAUSAL_NEXT_OPEN`` (default): every taken trade is priced the way the
+    Backtest screen prices a COMBO row (``service.strategy_matrix`` with
+    ``DUAL_LEGACY_AND_CAUSAL``): the fee step runs with that execution model
+    and the symbol's 1h candles, so ``causal_execution`` fills the trade at
+    the next bar's open with its slippage and walks the exit from there. The
+    symbol is held until that fill's exit. The signal-close prices of the
+    same trade stay on the row as ``legacy_signal_close``.
+    ``LEGACY_SIGNAL_CLOSE``: the trade is priced at the signal close, as the
+    strategy walk reports it, and the symbol is held until that exit.
+
+Sides in scope (``directions``)
+    ``None`` runs every 1h row of PASSED_SIDES. ``("LONG",)`` or
+    ``("SHORT",)`` keeps only the rows of that direction; the BTC daily trend
+    still decides, bar by bar, which of those rows may open.
+
 How signals are produced
     Every side the trend allows on at least one bar is walked once over the
     whole series by ``run_combination_backtest``, so a strategy that builds a
@@ -21,6 +37,12 @@ How signals are produced
 Result of ``run_regime_book`` / ``build_result``
     status            "OK" or "CANCELLED"
     principal_usd, taker_fee, maker_fee, leverage
+    pnl_model         CAUSAL_NEXT_OPEN or LEGACY_SIGNAL_CLOSE
+    execution_model_version, entry_slippage_rate, exit_slippage_rate
+                      the causal model's version and slippage (None for
+                      LEGACY_SIGNAL_CLOSE)
+    directions        directions in scope, e.g. ["LONG"]
+    sides_in_scope    [{strategy_id, timeframe, direction}] rows that ran
     equity_basis      "REALIZED_ONLY"
     limitations       list of str (``LIMITATIONS``)
     trades            list, in signal order. Every field of the existing trade
@@ -38,8 +60,17 @@ Result of ``run_regime_book`` / ``build_result``
                         daily_bars        closed daily bars behind that trend
                         entry_time        open time of the entry bar
                         target_price      same value as tp1
-                        exit_resolution   IN_WALK or REWALK
+                        exit_resolution   IN_WALK or REWALK (of the
+                                          strategy walk's own exit)
                         rewalk_first_bar  see ``signals``
+                        legacy_signal_close  CAUSAL_NEXT_OPEN only: the same
+                                          trade priced at the signal close
+                                          {entry_price, exit_price, exit_time,
+                                          outcome, gross_pnl_usd, net_pnl_usd,
+                                          r_net}
+                      With CAUSAL_NEXT_OPEN the prices, outcome, exit and
+                      P&L fields are the causal fill's (``fill_index``,
+                      ``fill_time``, ``next_open``, ``execution_model``).
                       Times are bar open times, as in the existing trade
                       dicts. A trade still open at the last bar has outcome
                       OPEN and no fee or PnL fields.
@@ -65,7 +96,10 @@ Result of ``run_regime_book`` / ``build_result``
                       max_drawdown_usd, max_drawdown_pct, signals,
                       signals_taken, skipped_signals {reason: count},
                       signals_on_rewalk_first_bar, trades_on_rewalk_first_bar,
-                      signals_outside_trend,
+                      signals_outside_trend, pnl_model,
+                      optimistic_comparison (CAUSAL_NEXT_OPEN only: the
+                      taken trades priced at the signal close {model, label,
+                      trades, pnl_usd_net}),
                       by_trend {BULLISH/BEARISH: symbol_bars, signals, trades,
                       wins, losses, pnl_usd_net; NEUTRAL: symbol_bars,
                       short_history_symbol_bars}, by_strategy
@@ -89,7 +123,15 @@ from typing import Any, Callable, Mapping, Sequence
 
 from app.research import passed_regime_router as router
 from app.research.btc_daily_regime import MIN_DAILY_BARS, daily_trend
-from app.research.passed_cap_book import PRINCIPAL_USD, passed_risk_percent
+from app.research.causal_execution import (
+    CAUSAL_NEXT_OPEN,
+    DUAL_LEGACY_AND_CAUSAL,
+    EXECUTION_MODEL_VERSION,
+    LEGACY_SIGNAL_CLOSE,
+    OPTIMISTIC_COMPARISON_LABEL,
+    execute_causal_trade,
+)
+from app.research.passed_cap_book import PASSED_SIDES, PRINCIPAL_USD, passed_risk_percent
 from app.signals._candle_utils import candle_time
 
 RUN_TIMEFRAME = "1h"
@@ -108,6 +150,20 @@ SKIP_SAME_BAR = "SAME_BAR_EARLIER_SIDE"
 EXIT_SPAN = 48
 
 EQUITY_BASIS = "REALIZED_ONLY"
+
+# Fill books. CAUSAL_NEXT_OPEN is what the Backtest screen shows for COMBO rows.
+PNL_MODELS = (CAUSAL_NEXT_OPEN, LEGACY_SIGNAL_CLOSE)
+DEFAULT_PNL_MODEL = CAUSAL_NEXT_OPEN
+DIRECTIONS = ("LONG", "SHORT")
+# Run id the fee step files its execution record under (in-process only).
+_EXECUTION_RUN_ID = "regime_book"
+
+CAUSAL_LIMITATION = (
+    "Trades are priced at the next bar's open (CAUSAL_NEXT_OPEN, the Backtest "
+    "screen's fill book) and the symbol is held until that fill exits. The "
+    "strategy walk that finds signals still skips the bars of its own "
+    "signal-close trade, as it does on the Backtest screen."
+)
 
 LIMITATIONS = (
     "A walk over hidden bars starts the bar after a signal the book did not "
@@ -235,6 +291,43 @@ def _same_setup(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool:
     )
 
 
+def normalize_pnl_model(pnl_model: Any) -> str:
+    value = str(pnl_model or DEFAULT_PNL_MODEL).strip().upper()
+    if value not in PNL_MODELS:
+        raise ValueError(f"unknown pnl_model {pnl_model!r}; expected one of {PNL_MODELS}")
+    return value
+
+
+def normalize_directions(directions: Any) -> tuple[str, ...]:
+    """Directions in scope, in DIRECTIONS order. None or empty means both."""
+    if directions is None:
+        return DIRECTIONS
+    if isinstance(directions, str):
+        directions = [part for part in directions.split(",")]
+    wanted = {str(d or "").strip().upper() for d in directions}
+    wanted.discard("")
+    if not wanted:
+        return DIRECTIONS
+    unknown = wanted - set(DIRECTIONS)
+    if unknown:
+        raise ValueError(f"unknown direction(s) {sorted(unknown)}; expected LONG and/or SHORT")
+    return tuple(d for d in DIRECTIONS if d in wanted)
+
+
+def sides_in_scope(directions: Any = None) -> tuple[tuple[str, str, str], ...]:
+    """1h rows of PASSED_SIDES whose direction is in scope, in book order."""
+    scope = normalize_directions(directions)
+    return tuple(side for side in PASSED_SIDES if side[1] == RUN_TIMEFRAME and side[2] in scope)
+
+
+def _causal_slippage() -> tuple[float, float]:
+    """Entry and exit slippage of the causal model, as the screen's fee step reads them."""
+    from app.research.config import ResearchConfig
+
+    cfg = ResearchConfig()
+    return float(cfg.entry_slippage_rate), float(cfg.exit_slippage_rate)
+
+
 def run_symbol(
     symbol: str,
     book: Mapping[str, Any],
@@ -246,6 +339,8 @@ def run_symbol(
     backtest_fn: Callable[..., dict[str, Any]] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     progress: Callable[[dict[str, Any]], None] | None = None,
+    pnl_model: str = DEFAULT_PNL_MODEL,
+    directions: Any = None,
 ) -> dict[str, Any]:
     """Pick the shared book's trades for one symbol. JSON-ready, no sizing.
 
@@ -255,8 +350,13 @@ def run_symbol(
     bars before it are warm-up only. The walks start there, as the
     single-strategy backtest does with its loader's ``eval_start``, and the
     bar counts, trend counts, and period describe the evaluated bars only.
+    ``pnl_model`` decides how long a taken trade holds the symbol (see the
+    module docstring); ``directions`` limits the PASSED_SIDES rows in scope.
     """
     backtest = backtest_fn or _default_backtest()
+    model = normalize_pnl_model(pnl_model)
+    scope = sides_in_scope(directions)
+    slip_in, slip_out = _causal_slippage() if model == CAUSAL_NEXT_OPEN else (0.0, 0.0)
     sym = str(symbol).upper()
     series = list(book.get("candles") or [])
     n = len(series)
@@ -287,7 +387,7 @@ def run_symbol(
         allowed = tuple(
             side
             for side in router.allowed_passed_sides(regime["trend"])
-            if side[1] == RUN_TIMEFRAME
+            if side[1] == RUN_TIMEFRAME and side in scope
         )
         allowed_at.append(allowed)
         for side in allowed:
@@ -454,8 +554,22 @@ def run_symbol(
             if open_here and item["end"] < n:
                 trade, resolution = resolve_exit(item)
             signal["taken"] = True
-            closed = trade.get("outcome") != "OPEN" and trade.get("exit_index") is not None
-            busy_until = int(trade["exit_index"]) if closed else n
+            if model == CAUSAL_NEXT_OPEN:
+                # The book holds the next-open fill, so the symbol is busy
+                # until that fill exits, not until the signal-close exit.
+                fill = execute_causal_trade(
+                    trade, series, entry_slippage_rate=slip_in, exit_slippage_rate=slip_out
+                )
+                if fill.get("entry_price") in (None, ""):
+                    # No next bar, or a gap before it: nothing was filled.
+                    busy_until = i
+                elif fill.get("outcome") == "OPEN" or fill.get("exit_index") is None:
+                    busy_until = n
+                else:
+                    busy_until = int(fill["exit_index"])
+            else:
+                closed = trade.get("outcome") != "OPEN" and trade.get("exit_index") is not None
+                busy_until = int(trade["exit_index"]) if closed else n
             holder = trade
             row = {key: value for key, value in trade.items() if key != "condition_snapshot"}
             snapshot = trade.get("condition_snapshot")
@@ -480,6 +594,8 @@ def run_symbol(
     return {
         "symbol": sym,
         "status": "CANCELLED" if cancelled else "OK",
+        "pnl_model": model,
+        "directions": list(normalize_directions(directions)),
         "bars": n - first,
         "bars_loaded": n,
         "warmup_bars": first,
@@ -508,14 +624,27 @@ def _size_trade(
     maker_fee: float,
     leverage: float,
     postprocess: Callable[[dict[str, Any]], dict[str, Any]],
+    pnl_model: str = LEGACY_SIGNAL_CLOSE,
+    candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    """Existing fee and leverage step for one trade. None when it is still open."""
+    """Existing fee and leverage step for one trade. None when it is still open.
+
+    With CAUSAL_NEXT_OPEN the step gets the execution model and the candles
+    the Backtest screen gives it for a COMBO row, so the trade comes back as
+    the causal fill; its signal-close pricing is kept as ``legacy_signal_close``.
+    """
     symbol = str(trade.get("symbol") or "")
     direction = str(trade.get("direction") or "")
     risk_usd = passed_risk_percent(symbol, direction, str(trade.get("trend_at_entry") or "")) * principal
+    causal = pnl_model == CAUSAL_NEXT_OPEN
+    backtest_out: dict[str, Any] = {"status": "OK", "trades": [dict(trade)], "result": {}, "sample_size": 1}
+    if causal:
+        if not candles:
+            raise ValueError(f"CAUSAL_NEXT_OPEN pricing needs the 1h candles of {symbol}")
+        backtest_out["execution_model"] = DUAL_LEGACY_AND_CAUSAL
     row = postprocess(
         {
-            "backtest_out": {"status": "OK", "trades": [dict(trade)], "result": {}, "sample_size": 1},
+            "backtest_out": backtest_out,
             "risk_usd": risk_usd,
             "taker_fee": taker_fee,
             "maker_fee": maker_fee,
@@ -526,12 +655,30 @@ def _size_trade(
             "combination_id": trade.get("combination_id"),
             "combination_name": trade.get("combination_id"),
             "load_meta": {"symbol": symbol, "timeframe": trade.get("timeframe")},
-            "candles": [],
+            "candles": list(candles) if causal and candles else [],
             "analytics_on": False,
+            "job_id": _EXECUTION_RUN_ID if causal else None,
         }
     )
     sized = list(row.get("trades") or [])
-    return dict(sized[0]) if sized else None
+    if not sized:
+        return None
+    out = dict(sized[0])
+    if causal:
+        legacy = dict((row.get("legacy_trades") or [{}])[0])
+        out["legacy_signal_close"] = {
+            key: legacy.get(key)
+            for key in (
+                "entry_price",
+                "exit_price",
+                "exit_time",
+                "outcome",
+                "gross_pnl_usd",
+                "net_pnl_usd",
+                "r_net",
+            )
+        }
+    return out
 
 
 def build_result(
@@ -543,9 +690,19 @@ def build_result(
     maker_fee: float = MAKER_FEE,
     leverage: float = LEVERAGE,
     postprocess_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    pnl_model: str = DEFAULT_PNL_MODEL,
+    candles_by_symbol: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    directions: Any = None,
 ) -> dict[str, Any]:
-    """Size the taken trades on one account and build the curve and summary."""
+    """Size the taken trades on one account and build the curve and summary.
+
+    ``candles_by_symbol`` (symbol -> the 1h series ``run_symbol`` walked) is
+    required for CAUSAL_NEXT_OPEN, which fills each trade at the next open.
+    """
     postprocess = postprocess_fn or _default_postprocess()
+    model = normalize_pnl_model(pnl_model)
+    causal = model == CAUSAL_NEXT_OPEN
+    candle_map = {str(k).upper(): v for k, v in (candles_by_symbol or {}).items()}
     principal = float(principal)
     order = {str(res.get("symbol")): n for n, res in enumerate(symbol_results)}
     far = datetime.max.replace(tzinfo=timezone.utc)
@@ -567,7 +724,9 @@ def build_result(
             if signal_ts is None or exit_ts is None or exit_ts <= signal_ts
         )
         sized = None
-        if trade.get("outcome") not in (None, "", "OPEN"):
+        # A trade the strategy walk left open can still have closed at the
+        # causal fill, so every causal trade goes through the fee step.
+        if causal or trade.get("outcome") not in (None, "", "OPEN"):
             sized = _size_trade(
                 trade,
                 equity=max(1e-6, principal + realized),
@@ -576,6 +735,8 @@ def build_result(
                 maker_fee=maker_fee,
                 leverage=leverage,
                 postprocess=postprocess,
+                pnl_model=model,
+                candles=candle_map.get(str(trade.get("symbol") or "").upper()) if causal else None,
             )
         row = dict(sized) if sized is not None else dict(trade)
         row.pop("condition_snapshot", None)
@@ -687,8 +848,26 @@ def build_result(
 
     total = tally(trades)
     cancelled = any(res.get("status") == "CANCELLED" for res in symbol_results)
+    optimistic = None
+    if causal:
+        legacy_nets = [
+            float(t["legacy_signal_close"]["net_pnl_usd"])
+            for t in trades
+            if isinstance(t.get("legacy_signal_close"), Mapping)
+            and t["legacy_signal_close"].get("net_pnl_usd") is not None
+        ]
+        optimistic = {
+            "model": LEGACY_SIGNAL_CLOSE,
+            "label": OPTIMISTIC_COMPARISON_LABEL,
+            "basis": "the trades this book took, priced at the signal close",
+            "trades": len(legacy_nets),
+            "pnl_usd_net": sum(legacy_nets),
+        }
+    scope = sides_in_scope(directions)
     summary = {
         **total,
+        "pnl_model": model,
+        "optimistic_comparison": optimistic,
         "open_trades": len(trades) - len(done),
         "win_rate": (total["wins"] / total["trades"]) if total["trades"] else None,
         "pnl_usd_gross": sum(float(t.get("gross_pnl_usd") or 0.0) for t in done),
@@ -708,14 +887,23 @@ def build_result(
         "by_strategy": by_strategy,
         "regime_timeline": clock.timeline(min(starts) + BAR, max(ends) + BAR) if starts and ends else [],
     }
+    slip_in, slip_out = _causal_slippage() if causal else (None, None)
     return {
         "status": "CANCELLED" if cancelled else "OK",
         "principal_usd": principal,
         "taker_fee": taker_fee,
         "maker_fee": maker_fee,
         "leverage": leverage,
+        "pnl_model": model,
+        "execution_model_version": EXECUTION_MODEL_VERSION if causal else None,
+        "entry_slippage_rate": slip_in,
+        "exit_slippage_rate": slip_out,
+        "directions": list(normalize_directions(directions)),
+        "sides_in_scope": [
+            {"strategy_id": cid, "timeframe": tf, "direction": side} for cid, tf, side in scope
+        ],
         "equity_basis": EQUITY_BASIS,
-        "limitations": list(LIMITATIONS),
+        "limitations": ([CAUSAL_LIMITATION] if causal else []) + list(LIMITATIONS),
         "summary": summary,
         "equity_curve": curve,
         "trades": trades,
@@ -766,6 +954,8 @@ def run_regime_book(
     postprocess_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     progress: Callable[[dict[str, Any]], None] | None = None,
+    pnl_model: str = DEFAULT_PNL_MODEL,
+    directions: Any = None,
 ) -> dict[str, Any]:
     """Run the regime book over loaded candles. See the module docstring.
 
@@ -774,7 +964,11 @@ def run_regime_book(
     ``signal_config`` and ``research_config`` go to the strategy walks as the
     retest passes them. ``regime_signal_config`` is for the daily trend and
     defaults to ``SignalConfig()``, which is what the paper watcher uses.
+    ``pnl_model`` picks the fill book (default CAUSAL_NEXT_OPEN, as the
+    Backtest screen); ``directions`` limits the PASSED_SIDES rows in scope.
     """
+    model = normalize_pnl_model(pnl_model)
+    scope_directions = normalize_directions(directions)
     if regime_signal_config is None:
         from app.signals.config import SignalConfig
 
@@ -792,6 +986,8 @@ def run_regime_book(
             backtest_fn=backtest_fn,
             should_cancel=should_cancel,
             progress=progress,
+            pnl_model=model,
+            directions=scope_directions,
         )
         results.append(result)
         if result["status"] == "CANCELLED":
@@ -804,4 +1000,9 @@ def run_regime_book(
         maker_fee=maker_fee,
         leverage=leverage,
         postprocess_fn=postprocess_fn,
+        pnl_model=model,
+        candles_by_symbol={
+            str(symbol).upper(): list(book.get("candles") or []) for symbol, book in books.items()
+        },
+        directions=scope_directions,
     )

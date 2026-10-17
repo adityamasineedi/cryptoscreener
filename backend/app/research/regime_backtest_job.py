@@ -5,6 +5,13 @@ Uses ``passed_regime_backtest`` (``RegimeClock``, ``run_symbol``,
 time). Entry, stop, target, exits, sizing, and fees stay in that module. This
 job only chooses the window, loads candles, and keeps one run at a time.
 
+Fill book and sides
+    Trades are priced on the next-open fill book (``CAUSAL_NEXT_OPEN``), the
+    book the Backtest screen shows for COMBO rows: the sizing step gets each
+    symbol's 1h candles (the same series its walk used, warm-up included).
+    ``directions`` limits the run to the LONG or the SHORT rows of the passed
+    book; the state reports which rows were in scope.
+
 Window
     The book runs on 1h bars only. A request names a timeframe; anything but
     1h is rejected, never reinterpreted. Two modes, as on the screen:
@@ -40,6 +47,12 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from app.research.passed_cap_book import PRINCIPAL_USD, cap_symbols
+from app.research.passed_regime_backtest import (
+    DEFAULT_PNL_MODEL,
+    normalize_directions,
+    normalize_pnl_model,
+    sides_in_scope,
+)
 
 RUN_TIMEFRAME = "1h"
 # Per-symbol cap on evaluated 1h bars. Same as the screen's API bar cap.
@@ -71,7 +84,10 @@ def _fixed_config() -> dict[str, Any]:
         "maker_fee_pct": MAKER_FEE * 100.0,
         "leverage": LEVERAGE,
         "risk_rule": "passed_risk_percent: 2% large / 1% mid of principal, halved when the side is against the BTC daily trend",
-        "fill_model": "existing combination backtest (research_config=None)",
+        "fill_model": (
+            "CAUSAL_NEXT_OPEN: signals from the existing combination backtest (research_config=None), "
+            "filled at the next bar's open with the causal model's slippage"
+        ),
     }
 
 
@@ -85,6 +101,10 @@ def _idle_state() -> dict[str, Any]:
         "timeframe": RUN_TIMEFRAME,
         "limit": 0,
         "window": None,
+        "pnl_model": DEFAULT_PNL_MODEL,
+        "execution_model_version": None,
+        "directions": [],
+        "sides_in_scope": [],
         "total_symbols": 0,
         "done_symbols": 0,
         "walks": 0,
@@ -136,6 +156,13 @@ def status() -> dict[str, Any]:
     return _public(_state)
 
 
+def _scope_rows(directions: Any) -> list[dict[str, str]]:
+    return [
+        {"strategy_id": cid, "timeframe": tf, "direction": side}
+        for cid, tf, side in sides_in_scope(directions)
+    ]
+
+
 def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, Any]:
     """Summary plus the latest closed trades. Drops the full signal list."""
     summary = dict(result.get("summary") or {})
@@ -161,7 +188,14 @@ def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, A
         if t.get("net_pnl_usd") is not None
     ]
     trades.sort(key=lambda row: str(row.get("exit_time") or ""))
-    return {"summary": summary, "trades": trades[-trade_limit:]}
+    return {
+        "summary": summary,
+        "trades": trades[-trade_limit:],
+        "pnl_model": result.get("pnl_model"),
+        "execution_model_version": result.get("execution_model_version"),
+        "directions": result.get("directions"),
+        "sides_in_scope": result.get("sides_in_scope"),
+    }
 
 
 # --- request ---------------------------------------------------------------
@@ -357,11 +391,19 @@ def _execute(
     backtest_fn: Callable[..., dict[str, Any]] | None = None,
     postprocess_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """One CPU step. Same calls, in the same order, as ``run_regime_book``."""
+    """One CPU step. Same calls, in the same order, as ``run_regime_book``.
+
+    ``pnl_model`` and ``directions`` ride in the payload (defaults: the
+    next-open book, both directions). The ``finish`` step needs
+    ``candles_by_symbol`` (symbol -> the 1h series that symbol's walk used),
+    as ``run_regime_book`` passes it, so the next-open fill can be priced.
+    """
     from app.research.passed_regime_backtest import RegimeClock, build_result, run_symbol
     from app.signals.config import SignalConfig
 
     clock = RegimeClock(payload["btc_daily"], SignalConfig())
+    model = normalize_pnl_model(payload.get("pnl_model") or DEFAULT_PNL_MODEL)
+    directions = normalize_directions(payload.get("directions"))
     op = payload["op"]
     if op == "symbol":
         return run_symbol(
@@ -374,9 +416,18 @@ def _execute(
             backtest_fn=backtest_fn,
             should_cancel=should_cancel,
             progress=progress,
+            pnl_model=model,
+            directions=directions,
         )
     if op == "finish":
-        return build_result(payload["symbol_results"], clock, postprocess_fn=postprocess_fn)
+        return build_result(
+            payload["symbol_results"],
+            clock,
+            postprocess_fn=postprocess_fn,
+            pnl_model=model,
+            candles_by_symbol=payload.get("candles_by_symbol"),
+            directions=directions,
+        )
     raise ValueError(f"unknown op {op!r}")
 
 
@@ -517,6 +568,9 @@ async def _run(job: dict[str, Any]) -> None:
     symbols = list(job["symbols"])
     per_symbol: dict[str, dict[str, Any]] = {}
     results: list[dict[str, Any]] = []
+    # Each symbol's 1h series, as its walk saw it: the sizing step fills the
+    # next-open trades on these bars (run_regime_book passes the same).
+    candles_by_symbol: dict[str, list[dict[str, Any]]] = {}
     skipped: list[str] = []
     try:
         job["phase"] = "loading"
@@ -543,10 +597,18 @@ async def _run(job: dict[str, Any]) -> None:
             job["phase"] = "running"
             job["walks_in_symbol"] = 0
             result = await _runner(
-                {"op": "symbol", "symbol": symbol, "book": book, "btc_daily": btc_daily},
+                {
+                    "op": "symbol",
+                    "symbol": symbol,
+                    "book": book,
+                    "btc_daily": btc_daily,
+                    "pnl_model": job["pnl_model"],
+                    "directions": job["directions"],
+                },
                 cancelled,
                 on_progress,
             )
+            series = list(book.get("candles") or [])
             del book
             status = str(result.get("status") or "")
             if status == "ERROR":
@@ -555,6 +617,7 @@ async def _run(job: dict[str, Any]) -> None:
                 break
             job["walks"] = int(job.get("walks") or 0) + int(result.get("walks") or 0)
             results.append(result)
+            candles_by_symbol[str(symbol).upper()] = series
             job["done_symbols"] = index
         if cancelled():
             _finish(job, "cancelled")
@@ -564,7 +627,18 @@ async def _run(job: dict[str, Any]) -> None:
             return
         job["phase"] = "sizing"
         job["current"] = "regime book"
-        final = await _runner({"op": "finish", "symbol_results": results, "btc_daily": btc_daily}, cancelled, on_progress)
+        final = await _runner(
+            {
+                "op": "finish",
+                "symbol_results": results,
+                "btc_daily": btc_daily,
+                "pnl_model": job["pnl_model"],
+                "directions": job["directions"],
+                "candles_by_symbol": candles_by_symbol,
+            },
+            cancelled,
+            on_progress,
+        )
         if str(final.get("status") or "") == "ERROR":
             raise RuntimeError(str(final.get("reason")))
         if final.get("status") == "CANCELLED" or cancelled():
@@ -573,6 +647,10 @@ async def _run(job: dict[str, Any]) -> None:
         slim = slim_result(final)
         job["summary"] = slim["summary"]
         job["trades"] = slim["trades"]
+        job["pnl_model"] = slim["pnl_model"]
+        job["execution_model_version"] = slim["execution_model_version"]
+        job["directions"] = slim["directions"]
+        job["sides_in_scope"] = slim["sides_in_scope"]
         _finish(job, "done")
     except Exception as exc:  # noqa: BLE001
         _finish(job, "error", error=f"{type(exc).__name__}: {exc}")
@@ -584,12 +662,16 @@ async def _run(job: dict[str, Any]) -> None:
 async def start(
     symbols: list[str],
     limit: Any = None,
+    directions: Any = None,
     *,
     timeframe: Any = None,
     start_date: Any = None,
     end_date: Any = None,
 ) -> dict[str, Any]:
-    """Start one regime-book run. A run already in progress is left alone."""
+    """Start one regime-book run. A run already in progress is left alone.
+
+    ``directions`` is None (every passed row), ``["LONG"]`` or ``["SHORT"]``.
+    """
     global _task, _state
     allowed = set(cap_symbols())
     chosen: list[str] = []
@@ -601,6 +683,10 @@ async def start(
     try:
         window = resolve_window(limit=limit, timeframe=timeframe, start_date=start_date, end_date=end_date)
     except RequestError as exc:
+        return {"status": "REJECTED", "error": str(exc)}
+    try:
+        scope = normalize_directions(directions)
+    except ValueError as exc:
         return {"status": "REJECTED", "error": str(exc)}
     async with _lock:
         if _task is not None and not _task.done():
@@ -627,6 +713,9 @@ async def start(
                 "symbols": chosen,
                 "limit": window["limit"] or 0,
                 "window": window,
+                "pnl_model": DEFAULT_PNL_MODEL,
+                "directions": list(scope),
+                "sides_in_scope": _scope_rows(scope),
                 "total_symbols": len(chosen),
                 "started_at": datetime.now(timezone.utc).isoformat(),
                 "_t0": time.perf_counter(),

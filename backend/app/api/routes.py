@@ -1145,8 +1145,10 @@ async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict
     """Run the passed book. The BTC daily regime chooses the side on each bar.
 
     Body: symbols, timeframe ("1h" only; ``timeframes`` must be ["1h"]),
-    start_date/end_date (UTC days, end inclusive) or limit (1h bars). Returns
-    STARTED, ALREADY_RUNNING, or REJECTED with the reason.
+    start_date/end_date (UTC days, end inclusive) or limit (1h bars), and
+    ``directions`` (``["LONG"]``, ``["SHORT"]``, or absent for both), which
+    limits the passed rows in scope. Trades are priced on the next-open fill
+    book. Returns STARTED, ALREADY_RUNNING, or REJECTED with the reason.
     """
     from app.research.regime_backtest_job import start
 
@@ -1165,9 +1167,13 @@ async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict
                 "error": f"The regime book runs on one timeframe (1h); got {', '.join(distinct) or 'none'}.",
             }
         timeframe = distinct[0]
+    directions = body.get("directions")
+    if directions is None and body.get("direction"):
+        directions = [body.get("direction")]
     return await start(
         [str(s) for s in symbols],
         body.get("limit"),
+        directions=directions,
         timeframe=timeframe,
         start_date=body.get("start_date"),
         end_date=body.get("end_date"),
