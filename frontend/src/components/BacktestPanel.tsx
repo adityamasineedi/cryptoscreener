@@ -26,6 +26,8 @@ import {
   checkJobInternallyConsistent,
   checkRunMatchesRequest,
   directionLabel,
+  directionText,
+  hedgeRequestDirection,
   htfRequirementLabel,
   isNativeTwoSidedJob,
 } from "../backtest/runGuard";
@@ -269,7 +271,7 @@ function twoSidedNotice(strategyId: string): string {
   if (strategyId === "COMBO_02_V2_1_A") {
     return "COMBO_02 V2.1-A research-only: CHOPPY → WAIT. Native LONG+SHORT. Does not replace COMBO_02 V2.";
   }
-  return `Research only. ${strategyId} runs native LONG+SHORT (direction filter off). It does not open an offsetting pair.`;
+  return `Research only. ${strategyId} runs LONG+SHORT in one walk (direction BOTH). It does not open an offsetting pair.`;
 }
 
 function toggleInList<T extends string>(list: T[], value: T): T[] {
@@ -961,8 +963,9 @@ export function BacktestPanel() {
     await startJob({
       symbols,
       timeframes,
-      // V2.1-A is native LONG+SHORT; keep direction LONG for request validation.
-      direction: isV21A || frozenV1View ? "LONG" : direction,
+      // Hedge book: V2.1-A is native LONG+SHORT and is posted LONG; V2 and V2_1B
+      // walk one side for LONG/SHORT, so the hedge book asks for BOTH.
+      direction: isV21A ? hedgeRequestDirection(strategyId) : frozenV1View ? "LONG" : direction,
       combination_id: isSd
         ? sdVariant
         : isV21A || isDirect
@@ -3022,7 +3025,7 @@ function SelectedDetail({
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-terminal-text">
           {row.pnl_model === "CAUSAL_NEXT_OPEN" ? "Causal trade blotter" : "Trade blotter"} —{" "}
-          {row.symbol} · {row.timeframe} · {row.direction}
+          {row.symbol} · {row.timeframe} · {directionText(row.direction)}
         </h2>
         <span className="font-mono text-[11px] text-terminal-muted">
           {row.pnl_model === "CAUSAL_NEXT_OPEN" ? "CAUSAL_NEXT_OPEN · " : ""}
@@ -3404,7 +3407,7 @@ function RunLead({
   return (
     <div className="mb-3">
       <div className="font-mono text-[12px] text-terminal-text">
-        {row.symbol} · {row.timeframe} · {strategyLabel} · {row.direction} · {bars}
+        {row.symbol} · {row.timeframe} · {strategyLabel} · {directionText(row.direction)} · {bars}
       </div>
       {firstStamp && lastStamp ? (
         <p className="mt-1 text-[11px] text-terminal-muted">

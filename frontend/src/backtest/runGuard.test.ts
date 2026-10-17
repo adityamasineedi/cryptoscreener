@@ -4,6 +4,8 @@ import {
   checkJobInternallyConsistent,
   checkRunMatchesRequest,
   directionLabel,
+  directionText,
+  hedgeRequestDirection,
   htfRequirementLabel,
   isNativeTwoSidedJob,
   type RunRequest,
@@ -159,7 +161,22 @@ describe("checkJobInternallyConsistent", () => {
     ).toEqual([]);
   });
 
-  it("does not apply the single-direction rule to a hedge-book (LONG) COMBO_02_V2 or V2_1B run", () => {
+  it("does not apply the single-direction rule to a hedge-book (BOTH) COMBO_02_V2 or V2_1B run", () => {
+    for (const id of ["COMBO_02_V2", "COMBO_02_V2_1B"]) {
+      expect(
+        checkJobInternallyConsistent({
+          status: "done",
+          direction: "BOTH",
+          strategy_id: id,
+          production_comparable: false,
+          research_only: true,
+          rows: [{ ...row, direction: "BOTH", trades: [trade, { ...trade, trade_no: 2, direction: "SHORT" }] }],
+        }),
+      ).toEqual([]);
+    }
+  });
+
+  it("keeps the single-direction rule for a LONG COMBO_02_V2 or V2_1B request (one side only)", () => {
     for (const id of ["COMBO_02_V2", "COMBO_02_V2_1B"]) {
       expect(
         checkJobInternallyConsistent({
@@ -170,7 +187,7 @@ describe("checkJobInternallyConsistent", () => {
           research_only: true,
           rows: [{ ...row, trades: [trade, { ...trade, trade_no: 2, direction: "SHORT" }] }],
         }),
-      ).toEqual([]);
+      ).toEqual(["BTCUSDT 1h: trade_no 2 is SHORT in a LONG run."]);
     }
   });
 
@@ -204,13 +221,16 @@ describe("checkJobInternallyConsistent", () => {
 });
 
 describe("isNativeTwoSidedJob", () => {
-  it("is true for V2.1-A and for the V2 family posted the hedge-book way", () => {
+  it("is true for V2.1-A and for the V2 family posted the hedge-book way (BOTH)", () => {
     expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2_1_A" })).toBe(true);
-    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2", direction: "LONG" })).toBe(true);
-    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2_1B", direction: "LONG" })).toBe(true);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2_1_A", direction: "LONG" })).toBe(true);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2", direction: "BOTH" })).toBe(true);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2_1B", direction: "BOTH" })).toBe(true);
   });
 
-  it("is false for a SHORT V2 request, other strategies and a missing job", () => {
+  it("is false for a LONG or SHORT V2 request, other strategies and a missing job", () => {
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2", direction: "LONG" })).toBe(false);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2_1B", direction: "LONG" })).toBe(false);
     expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2", direction: "SHORT" })).toBe(false);
     expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2" })).toBe(false);
     expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02", direction: "LONG" })).toBe(false);
@@ -224,10 +244,20 @@ describe("job labels", () => {
       "LONG+SHORT (native)",
     );
     expect(directionLabel({ status: "done", direction: "SHORT" })).toBe("SHORT");
-    expect(directionLabel({ status: "done", strategy_id: "COMBO_02_V2", direction: "LONG" })).toBe(
+    expect(directionLabel({ status: "done", strategy_id: "COMBO_02_V2", direction: "BOTH" })).toBe(
       "LONG+SHORT (native)",
     );
+    expect(directionLabel({ status: "done", strategy_id: "COMBO_02_V2", direction: "LONG" })).toBe("LONG");
     expect(directionLabel({ status: "done", strategy_id: "COMBO_02_V2", direction: "SHORT" })).toBe("SHORT");
+  });
+
+  it("shows a BOTH direction as LONG+SHORT and posts BOTH for the hedge book's V2 / V2_1B", () => {
+    expect(directionText("BOTH")).toBe("LONG+SHORT");
+    expect(directionText("SHORT")).toBe("SHORT");
+    expect(directionText(undefined)).toBe("—");
+    expect(hedgeRequestDirection("COMBO_02_V2")).toBe("BOTH");
+    expect(hedgeRequestDirection("COMBO_02_V2_1B")).toBe("BOTH");
+    expect(hedgeRequestDirection("COMBO_02_V2_1_A")).toBe("LONG");
   });
 
   it("labels the HTF requirement from the job", () => {

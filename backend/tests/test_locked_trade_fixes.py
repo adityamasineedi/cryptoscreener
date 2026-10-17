@@ -122,6 +122,38 @@ def test_both_is_accepted_for_the_v2_family_only():
     assert ei.value.code == "short_research_paused"
 
 
+def test_both_job_identity_and_row_echo_read_two_sided():
+    """A hedge-book BOTH run echoes BOTH on the job and the row, labelled both sides."""
+    from app.research.backtest_cpu_worker import build_matrix_row_postprocess
+    from app.research.backtest_ui_config import job_identity_payload
+
+    resolved = _validate(direction="BOTH", combination_id="COMBO_02_V2", strategy_id="COMBO_02_V2")
+    identity = job_identity_payload(resolved)
+    assert identity["direction"] == TWO_SIDED_DIRECTION
+    assert identity["production_comparable"] is False and identity["research_only"] is True
+
+    def trade(n: int, direction: str) -> dict:
+        return {
+            "symbol": "BTCUSDT", "timeframe": "1h", "combination_id": "COMBO_02_V2", "direction": direction,
+            "entry_index": n, "signal_time": (T0 + timedelta(hours=n)).isoformat(), "entry_price": 100.0,
+            "stop_price": 98.0 if direction == "LONG" else 102.0, "tp1": 104.0 if direction == "LONG" else 96.0,
+            "exit_index": n + 1, "exit_time": (T0 + timedelta(hours=n + 1)).isoformat(),
+            "exit_price": 104.0 if direction == "LONG" else 96.0, "outcome": "TP1", "r_multiple": 2.0,
+        }
+
+    row = build_matrix_row_postprocess(
+        {
+            "backtest_out": {"status": "OK", "trades": [trade(1, "LONG"), trade(5, "SHORT")], "result": {}, "sample_size": 2},
+            "risk_usd": 20.0, "taker_fee": 0.0004, "maker_fee": 0.0002, "leverage": 2.0, "principal": 1000.0,
+            "include_trades": True, "direction": TWO_SIDED_DIRECTION, "combination_id": "COMBO_02_V2",
+            "load_meta": {"symbol": "BTCUSDT", "timeframe": "1h"}, "candles": [], "analytics_on": False,
+        }
+    )
+    assert row["direction"] == TWO_SIDED_DIRECTION
+    assert row["structure"] == "HL+LH (both sides)"
+    assert sorted(t["direction"] for t in row["trades"]) == ["LONG", "SHORT"]
+
+
 def _flat_candles(n: int = 400) -> list[dict]:
     return [
         {"time": T0 + timedelta(hours=i), "open": 100.0, "high": 100.5, "low": 99.5, "close": 100.0, "volume": 1.0}

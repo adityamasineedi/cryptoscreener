@@ -1733,7 +1733,7 @@ describe("BacktestPanel interaction paths", () => {
       ["COMBO_02_V2", "v2-combo02-adaptive-3-regime"],
       ["COMBO_02_V2_1B", "v2.1-b-choppy-15m"],
     ] as const) {
-      it(`${id} on the hedge book posts its own id like V2.1-A: native LONG+SHORT, no side buttons`, async () => {
+      it(`${id} on the hedge book posts its own id with direction BOTH: LONG+SHORT, no side buttons`, async () => {
         const user = userEvent.setup();
         const { container } = renderPanel();
         const root = within(container);
@@ -1755,14 +1755,21 @@ describe("BacktestPanel interaction paths", () => {
           combination_id: id,
           strategy_id: id,
           combo_version: version,
-          // Same as V2.1-A: LONG is the request placeholder for a native LONG+SHORT run.
-          direction: "LONG",
+          // V2 / V2_1B walk one side for LONG or SHORT; the hedge book asks for both.
+          direction: "BOTH",
           research_risk_override: true,
         });
       });
     }
 
-    const v2Job = (direction: "LONG" | "SHORT"): BacktestJob => ({
+    const mixedTrades = () => [
+      { ...oseTrade(1, "TP1", 20), symbol: "BTCUSDT", timeframe: "1h", direction: "LONG" },
+      { ...oseTrade(2, "SL", -20), symbol: "BTCUSDT", timeframe: "1h", direction: "SHORT" },
+    ];
+    const v2Job = (
+      direction: "LONG" | "SHORT" | "BOTH",
+      trades: NonNullable<BacktestJob["rows"]>[number]["trades"] = mixedTrades(),
+    ): BacktestJob => ({
       status: "done",
       job_id: `v2-${direction}`,
       symbols: ["BTCUSDT"],
@@ -1787,34 +1794,65 @@ describe("BacktestPanel interaction paths", () => {
           bars_loaded: 100,
           production_comparable: false,
           research_only: true,
-          trades: [
-            { ...oseTrade(1, "TP1", 20), symbol: "BTCUSDT", timeframe: "1h", direction: "LONG" },
-            { ...oseTrade(2, "SL", -20), symbol: "BTCUSDT", timeframe: "1h", direction: "SHORT" },
-          ],
+          trades,
         },
       ],
     });
-
-    it("a hedge-book COMBO_02_V2 run with LONG and SHORT trades is shown, labelled LONG+SHORT", () => {
+    const ownV2 = (job: BacktestJob, direction: string) =>
       useBacktestJobStore.setState({
-        job: v2Job("LONG"),
+        job,
         request: {
           symbols: ["BTCUSDT"],
           timeframes: ["1h"],
-          direction: "LONG",
+          direction,
           strategy_id: "COMBO_02_V2",
           research_risk_override: true,
         },
         foreignJob: false,
-        ownJobId: "v2-LONG",
+        ownJobId: job.job_id ?? null,
         active: false,
         error: null,
       });
+
+    it("a hedge-book (BOTH) COMBO_02_V2 run with LONG and SHORT trades is shown, labelled LONG+SHORT", () => {
+      ownV2(v2Job("BOTH"), "BOTH");
+      const { container } = renderPanel();
+      const root = within(container);
+      expect(root.queryByTestId("backtest-run-mismatch")).toBeNull();
+      const blotter = root.getByTestId("backtest-trade-blotter");
+      expect(root.getAllByText(/LONG\+SHORT \(native\)/).length).toBeGreaterThan(0);
+      expect(blotter).toBeTruthy();
+      // Both trades (one LONG, one SHORT) are in the book, and BOTH reads LONG+SHORT.
+      expect(container.textContent).toMatch(/closed 2/);
+      expect(container.textContent).toMatch(/Trade blotter — BTCUSDT · 1h · LONG\+SHORT/);
+      expect(container.textContent).not.toMatch(/· BOTH/);
+    });
+
+    it("a COMBO_02_V2 SHORT request that returns SHORT trades only is shown, labelled SHORT", () => {
+      const shortOnly = [{ ...oseTrade(2, "SL", -20), symbol: "BTCUSDT", timeframe: "1h", direction: "SHORT" }];
+      ownV2(v2Job("SHORT", shortOnly), "SHORT");
       const { container } = renderPanel();
       const root = within(container);
       expect(root.queryByTestId("backtest-run-mismatch")).toBeNull();
       expect(root.getByTestId("backtest-trade-blotter")).toBeTruthy();
-      expect(root.getAllByText(/LONG\+SHORT \(native\)/).length).toBeGreaterThan(0);
+      expect(root.queryAllByText(/LONG\+SHORT \(native\)/)).toHaveLength(0);
+    });
+
+    it("a COMBO_02_V2 LONG request returns LONG only: shown as LONG, not as a two-sided run", () => {
+      const longOnly = [{ ...oseTrade(1, "TP1", 20), symbol: "BTCUSDT", timeframe: "1h", direction: "LONG" }];
+      ownV2(v2Job("LONG", longOnly), "LONG");
+      const { container } = renderPanel();
+      const root = within(container);
+      expect(root.queryByTestId("backtest-run-mismatch")).toBeNull();
+      expect(root.getByTestId("backtest-trade-blotter")).toBeTruthy();
+      expect(root.queryAllByText(/LONG\+SHORT \(native\)/)).toHaveLength(0);
+    });
+
+    it("a COMBO_02_V2 LONG request that returns a SHORT trade is hidden by the mismatch guard", () => {
+      ownV2(v2Job("LONG"), "LONG");
+      const { container } = renderPanel();
+      const banner = within(container).getByTestId("backtest-run-mismatch");
+      expect(banner.textContent).toMatch(/trade_no 2 is SHORT in a LONG run\./);
     });
 
     it("a COMBO_02_V2 SHORT request that returns LONG trades is still hidden by the mismatch guard", () => {

@@ -668,6 +668,58 @@ def test_symbol_is_held_until_the_next_open_fill_exits(monkeypatch: pytest.Monke
     assert [t["entry_index"] for t in legacy["trades"]] == [50, 55, 61]
 
 
+def _with_missing_hours(n: int, missing: tuple[int, ...]) -> list[dict]:
+    """``n`` flat 1h candles; the hours in ``missing`` never printed (timestamp gap)."""
+    out: list[dict] = []
+    hour = 0
+    while len(out) < n:
+        if hour not in missing:
+            out.append(_hourly(1, START + timedelta(hours=hour))[0])
+        hour += 1
+    return out
+
+
+def test_gap_inside_a_held_fill_exits_at_the_next_open_and_frees_the_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.research.causal_execution import OUTCOME_GAP_EXIT
+
+    _plan_trend(monkeypatch, lambda day: "BEARISH")
+    first, second = router.allowed_passed_sides("BEARISH")[:2]
+    # Hours 58 and 59 are missing: list index 58 is hour 60, the first bar after the gap.
+    candles = _with_missing_hours(96, (58, 59))
+    plan = {
+        (LARGE_SYMBOL, first[0], "SHORT"): [_sig(50, 52, stop=104.0, exit_price=104.0)],
+        (LARGE_SYMBOL, second[0], "SHORT"): [_sig(60, 61)],
+    }
+    result, _ = _run_causal(plan, candles)
+    trades = result["trades"]
+    assert [(t["strategy_id"], t["entry_index"]) for t in trades] == [(first[0], 50), (second[0], 60)]
+    held = trades[0]
+    assert held["outcome"] == OUTCOME_GAP_EXIT and held["exit_index"] == 58
+    assert held["gap_missing_bars"] == 2
+    assert held["net_pnl_usd"] is not None
+
+
+def test_signal_whose_next_bar_is_missing_is_kept_unfilled_not_signal_close_priced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.research.causal_execution import SKIP_FILL_BAR_GAP
+
+    _plan_trend(monkeypatch, lambda day: "BEARISH")
+    side = router.allowed_passed_sides("BEARISH")[0]
+    # Signal at index 50 (hour 50); hour 51 is missing, so there is no next open.
+    candles = _with_missing_hours(96, (51,))
+    plan = {(LARGE_SYMBOL, side[0], "SHORT"): [_sig(50, 53, stop=104.0, exit_price=104.0)]}
+    result, _ = _run_causal(plan, candles)
+    (trade,) = result["trades"]
+    assert trade["causal_skip_reason"] == SKIP_FILL_BAR_GAP
+    assert trade["entry_price"] is None and trade.get("net_pnl_usd") is None
+    assert result["summary"]["trades"] == 0
+    # The signal-close comparison still prices the signal the book took, as before.
+    assert result["summary"]["optimistic_comparison"]["trades"] == 1
+
+
 def test_causal_book_needs_the_candles() -> None:
     clock = book.RegimeClock(_daily(70), SignalConfig())
     trade = {

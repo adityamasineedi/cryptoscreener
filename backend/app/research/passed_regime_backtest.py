@@ -661,6 +661,11 @@ def _size_trade(
         }
     )
     sized = list(row.get("trades") or [])
+    if not sized and causal:
+        # The causal book left the fill out (its next bar is missing:
+        # FILL_BAR_GAP). Keep the unfilled causal row, never the signal-close
+        # pricing of the walk's trade.
+        sized = list(row.get("causal_skipped_trades") or [])
     if not sized:
         return None
     out = dict(sized[0])

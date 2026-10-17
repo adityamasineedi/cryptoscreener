@@ -10,22 +10,34 @@ export type RunRequest = {
 };
 
 const FROZEN_V1_STRATEGY = "COMBO_02_V1";
-/** Native LONG+SHORT: one run holds trades in both directions. */
+/** Native LONG+SHORT: one run holds trades in both directions whatever the direction. */
 const NATIVE_TWO_SIDED_STRATEGY = "COMBO_02_V2_1_A";
+/** Two-sided request direction for the COMBO_02_V2 family (backend TWO_SIDED_DIRECTION). */
+export const TWO_SIDED_DIRECTION = "BOTH";
 /**
- * The rest of the backend COMBO_V2_FAMILY. The backend always runs these with the
- * direction filter off, so their jobs hold LONG and SHORT trades. The hedge book posts
- * them like V2.1-A, with direction LONG. A SHORT request for one of them is still a
- * single-direction request and keeps the single-direction rule.
+ * The rest of the backend COMBO_V2_FAMILY. The backend walks the side a LONG or SHORT
+ * request names, and both sides only for a "BOTH" request. The hedge book posts these
+ * with direction BOTH; a LONG or SHORT request is a single-direction run.
  */
-const NATIVE_TWO_SIDED_FAMILY: ReadonlySet<string> = new Set(["COMBO_02_V2", "COMBO_02_V2_1B"]);
+const TWO_SIDED_ON_REQUEST_FAMILY: ReadonlySet<string> = new Set(["COMBO_02_V2", "COMBO_02_V2_1B"]);
 
-/** True when the job is a native LONG+SHORT run, posted the way the hedge book posts it. */
+/** Direction the hedge book posts for a two-sided strategy: BOTH for V2/V2_1B, LONG for V2.1-A. */
+export function hedgeRequestDirection(strategyId: string | null | undefined): "LONG" | "BOTH" {
+  return strategyId && TWO_SIDED_ON_REQUEST_FAMILY.has(strategyId) ? TWO_SIDED_DIRECTION : "LONG";
+}
+
+/** True when the job holds LONG and SHORT trades: V2.1-A, or a V2/V2_1B job run as BOTH. */
 export function isNativeTwoSidedJob(job: BacktestJob | null | undefined): boolean {
   const id = job?.strategy_id;
   if (!id) return false;
   if (id === NATIVE_TWO_SIDED_STRATEGY) return true;
-  return NATIVE_TWO_SIDED_FAMILY.has(id) && job?.direction === "LONG";
+  return TWO_SIDED_ON_REQUEST_FAMILY.has(id) && job?.direction === TWO_SIDED_DIRECTION;
+}
+
+/** A row or request direction as the screen shows it. BOTH reads LONG+SHORT. */
+export function directionText(direction: string | null | undefined): string {
+  if (!direction) return "—";
+  return direction === TWO_SIDED_DIRECTION ? "LONG+SHORT" : direction;
 }
 
 function sameSet(a: string[], b: string[]): boolean {

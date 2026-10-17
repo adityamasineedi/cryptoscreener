@@ -293,7 +293,7 @@ export const LONG_STRATEGY_IDS: readonly BacktestStrategyId[] = [
   "COMBO_03_TRANSITION_B",
   "COMBO_02_V1",
   // Long sides on the Strategies ranked board (net positive, same engine).
-  // COMBO_02_V2 and COMBO_02_V2_1B run LONG and SHORT together: hedge book.
+  // COMBO_02_V2 and COMBO_02_V2_1B run LONG and SHORT together (direction BOTH): hedge book.
   "COMBO_01",
   "CANDLE12_V2",
   "LARGE_CAP_SWEEP_CHOCH",
@@ -309,8 +309,9 @@ export const LONG_PASSED_IDS: readonly BacktestStrategyId[] = ["COMBO_03_TRANSIT
 export const LONG_RUN_STRATEGY_ID: BacktestStrategyId = "COMBO_03_TRANSITION_B";
 
 /**
- * Passed shorts. The COMBO_02_V2 family (V2, V2_1B, V2.1-A) is the hedge book because
- * the backend runs it with the direction filter off, so one run keeps both directions.
+ * Passed shorts. The COMBO_02_V2 family (V2, V2_1B, V2.1-A) is the hedge book: V2.1-A
+ * always walks both sides, and the hedge book posts V2 / V2_1B with direction BOTH, so
+ * one run keeps both directions.
  */
 export const SHORT_STRATEGY_IDS: readonly BacktestStrategyId[] = [
   "COMBO_02",

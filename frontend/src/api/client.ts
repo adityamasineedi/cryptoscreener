@@ -1793,7 +1793,8 @@ export function cancelRegimeBacktest() {
 export async function startBacktestJob(body: {
   symbols: string[];
   timeframes: string[];
-  direction?: "LONG" | "SHORT";
+  /** BOTH: two-sided request, COMBO_02_V2 family only (the hedge book's V2 / V2_1B). */
+  direction?: "LONG" | "SHORT" | "BOTH";
   combination_id?: string;
   strategy_id?: string;
   combo_version?: string;
