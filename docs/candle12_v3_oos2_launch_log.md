@@ -94,3 +94,12 @@ Open risk recorded: the runner and its supervisor run at below-normal priority, 
 | 05:18 | `elevated_install.ps1 -DryRun` | backups exported to `service_logs\task_backups\20261016T051829Z\`; one runner holding the lock; diagnostic passed; nothing registered. A non-elevated real run refuses. |
 
 Alerts are local files only, in two places that both need checking: the store's `alerts.jsonl` and `service_logs\ops_alerts.jsonl` (see the runbook).
+
+## Incident: fingerprint drift halt, 2026-10-17 (user-approved resume)
+
+| Time (UTC) | Item | Evidence |
+|---|---|---|
+| 03:42–03:44 | Five fingerprinted files edited in the checkout | `candle12_v2.py`, `candle12_v3.py`, `candle12_v3_paper/adapter.py`, `candle12_v3_paper/feeds.py`, `combination_backtest.py`: gap-continuity handling (`ohlcv_continuity`). Committed by the user at 04:44 as `0ff796f` ("Enable the passed paper book and fill entries at the next open"). |
+| 03:46:00 | **HALTED: FINGERPRINT_DRIFT** (CODE_DRIFT), bar index 1026 | The adapter blocked entries. Candle processing continued: last closed bar 06:00 at 07:09. No open position, no orders, nothing in flight, no missed-signal events. 36 `HALTED` exceptions were raised, one per heartbeat, from 03:46:00 to 06:43:41. |
+| ~06:47 | Fingerprinted files restored, commit `7bfa510` | Those five files were restored byte-for-byte to the locked versions (`398bec1`). All 36 fingerprinted `.py` files match `candle12_v3_oos_contract.lock.json`. The other changes in `0ff796f` (outside the fingerprint) stay. The drift guard has been clean since the 06:48 heartbeat. |
+| 07:1x | Decision | The user chose to resume and record this as an incident. Contract §8 lists "any run after fingerprint drift" under *Does not count*. Whether the window still counts is left to the 2027-10-16 acceptance read, with this incident on record. No strategy, config or data-handling change was in force for any processed bar after `7bfa510`. Between 03:46 and the restore, entries were blocked by the halt, so the drifted code placed no orders. |
