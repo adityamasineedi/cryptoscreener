@@ -4,6 +4,9 @@ The BTC daily trend picks the sides bar by bar, one shared position per
 symbol, one equity curve for the run. Entry and exit rules are unchanged.
 Reads stored candles only. Does not place paper or live orders and writes no
 database table. Output is one JSON file; a finished symbol is not run again.
+Trades are priced on the next-open fill book (CAUSAL_NEXT_OPEN), which needs
+each symbol's 1h candles, so a resumed or merged symbol's candles are loaded
+again.
 """
 
 from __future__ import annotations
@@ -69,8 +72,27 @@ def _write(out: Path, payload: dict) -> None:
     out.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
 
-def _payload(results: list[dict], clock, *, status: str, bars_1h: int, started: float) -> dict:
-    book = regime.build_result(results, clock, principal=cap.PRINCIPAL)
+async def _candles(symbol: str, walked: dict | None = None) -> list[dict]:
+    """1h candles of a symbol. With ``walked`` (a stored symbol result), refuse
+    a series that is not the one that run walked, since trades index into it."""
+    book = await cap._load(symbol, "1h")
+    candles = list((book or {}).get("candles") or [])
+    if walked is not None:
+        stamps = [regime._bar_iso(candles[0]), regime._bar_iso(candles[-1])] if candles else [None, None]
+        if (
+            len(candles) != walked.get("bars")
+            or stamps != [walked.get("period_start"), walked.get("period_end")]
+        ):
+            raise SystemExit(
+                f"{symbol}: stored candles changed since that symbol was walked; run it again"
+            )
+    return candles
+
+
+def _payload(
+    results: list[dict], clock, *, status: str, bars_1h: int, started: float, candles: dict[str, list]
+) -> dict:
+    book = regime.build_result(results, clock, principal=cap.PRINCIPAL, candles_by_symbol=candles)
     book["status"] = status if book["status"] == "OK" else book["status"]
     book["bars_1h"] = bars_1h
     book["passed_sides"] = [list(side) for side in PASSED_SIDES]
@@ -86,7 +108,10 @@ async def main(symbols: list[str], out: Path, bars_1h: int) -> None:
     await cap.db_manager.connect(cap.get_settings(), ensure_schema=False)
     results = [r for r in _resume(out, bars_1h) if r.get("symbol") in symbols]
     done = {r["symbol"] for r in results}
+    candles: dict[str, list] = {}
     try:
+        for row in results:
+            candles[str(row["symbol"])] = await _candles(str(row["symbol"]), row)
         btc_daily = await _btc_daily(bars_1h)
         clock = regime.RegimeClock(btc_daily, cap.SignalConfig())
         print(
@@ -113,7 +138,13 @@ async def main(symbols: list[str], out: Path, bars_1h: int) -> None:
             )
             row["symbol_seconds"] = round(time.perf_counter() - t0, 3)
             results.append(row)
-            _write(out, _payload(results, clock, status="RUNNING", bars_1h=bars_1h, started=started))
+            candles[str(row["symbol"])] = list(book.get("candles") or [])
+            _write(
+                out,
+                _payload(
+                    results, clock, status="RUNNING", bars_1h=bars_1h, started=started, candles=candles
+                ),
+            )
             print(
                 f"done {symbol} signals={len(row['signals'])} trades={len(row['trades'])} "
                 f"walks={row['walks']} neutral_short_history_bars={row['short_history_bars']} "
@@ -122,7 +153,7 @@ async def main(symbols: list[str], out: Path, bars_1h: int) -> None:
             )
     finally:
         await cap.db_manager.close()
-    payload = _payload(results, clock, status="OK", bars_1h=bars_1h, started=started)
+    payload = _payload(results, clock, status="OK", bars_1h=bars_1h, started=started, candles=candles)
     _write(out, payload)
     summary = payload["summary"]
     print(
@@ -144,11 +175,18 @@ async def merge(paths: list[Path], out: Path) -> None:
     rank = {symbol: n for n, symbol in enumerate(cap_symbols())}
     results.sort(key=lambda row: rank.get(row.get("symbol"), len(rank)))
     await cap.db_manager.connect(cap.get_settings(), ensure_schema=False)
+    cap.BARS = {"1h": bars_1h, "4h": 240}
     try:
         clock = regime.RegimeClock(await _btc_daily(bars_1h), cap.SignalConfig())
+        candles = {str(row["symbol"]): await _candles(str(row["symbol"]), row) for row in results}
     finally:
         await cap.db_manager.close()
-    _write(out, _payload(results, clock, status="OK", bars_1h=bars_1h, started=time.perf_counter()))
+    _write(
+        out,
+        _payload(
+            results, clock, status="OK", bars_1h=bars_1h, started=time.perf_counter(), candles=candles
+        ),
+    )
     print(f"wrote {out} symbols={len(results)}", flush=True)
 
 

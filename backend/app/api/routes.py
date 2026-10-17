@@ -1142,14 +1142,21 @@ async def research_cap_book_agents() -> dict[str, Any]:
 
 @router.post("/research/regime-backtest/start")
 async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict)) -> dict[str, Any]:
-    """Run the passed book. The BTC daily regime chooses the side on each bar."""
+    """Run the passed book. The BTC daily regime chooses the side on each bar.
+
+    ``directions`` (``["LONG"]``, ``["SHORT"]``, or absent for both) limits the
+    passed rows in scope. Trades are priced on the next-open fill book.
+    """
     from app.research.regime_backtest_job import start
 
     symbols = body.get("symbols") or []
     if isinstance(symbols, str):
         symbols = [part for part in symbols.split(",") if part.strip()]
     limit = int(body.get("limit") or 1440)
-    return await start([str(s) for s in symbols], limit)
+    directions = body.get("directions")
+    if directions is None and body.get("direction"):
+        directions = [body.get("direction")]
+    return await start([str(s) for s in symbols], limit, directions)
 
 
 @router.get("/research/regime-backtest")

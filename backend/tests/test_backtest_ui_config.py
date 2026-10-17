@@ -47,7 +47,8 @@ def test_btc_v1_uses_2_percent_risk():
     cell = r.cells[0]
     assert cell.effective_risk_percent == pytest.approx(0.02)
     assert cell.risk_source == "V1_PRODUCTION_PROFILE"
-    assert cell.production_comparable is True
+    # The screen shows the next-open book; the v1 profile was signal-close.
+    assert cell.production_comparable is False
 
 
 def test_eth_v1_uses_2_percent_risk():
@@ -224,7 +225,12 @@ def test_v1_strategy_identity_returned_explicitly():
     assert identity["setup_timeframe"] == "1h"
     assert identity["htf_timeframes"] == ["1h", "4h"]
     assert identity["htf_alignment"] == "BULLISH"
-    assert identity["production_comparable"] is True
+    assert identity["production_comparable"] is False
+    assert identity["research_only"] is True
+    assert identity["fill_book"] == "CAUSAL_NEXT_OPEN"
+    assert identity["production_comparable_note"] == (
+        "next-open fill book; v1 production profile was signal-close"
+    )
 
 
 def test_timeframe_role_labels():
@@ -273,7 +279,7 @@ def test_db_tail_mode_not_mislabeled_as_calendar_range():
     assert cal["label"] == "Calendar-range mode"
 
 
-def test_exact_frozen_v1_config_is_production_comparable():
+def test_exact_frozen_v1_config_is_not_production_comparable_on_the_next_open_book():
     r = _resolve(
         symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"],
         timeframes=["1h"],
@@ -284,8 +290,11 @@ def test_exact_frozen_v1_config_is_production_comparable():
         taker_fee_pct=0.04,
         maker_fee_pct=0.02,
     )
-    assert r.production_comparable is True
-    assert r.research_only is False
+    # Every frozen-profile gate passes; only the displayed fill book differs.
+    assert r.mismatch_reasons == ["next_open_fill_book"]
+    assert r.production_comparable is False
+    assert r.research_only is True
+    assert r.production_comparable_note == "next-open fill book; v1 production profile was signal-close"
     by_sym = {c.symbol: c for c in r.cells}
     assert by_sym["BTCUSDT"].effective_risk_percent == pytest.approx(0.02)
     assert by_sym["ETHUSDT"].effective_risk_percent == pytest.approx(0.02)
@@ -340,7 +349,7 @@ def test_v1_production_profile_ignores_configured_5_percent_for_effective_risk()
     assert identity["configured_risk_percent"] == pytest.approx(0.05)
     assert identity["effective_risk_percent"] == pytest.approx(0.02)
     assert identity["risk_source"] == "V1_PRODUCTION_PROFILE"
-    assert identity["production_comparable"] is True
+    assert identity["production_comparable"] is False
 
 
 def test_job_start_long_v1_identity_and_no_side_effects():
@@ -441,8 +450,33 @@ def test_short_combo02_v2_marks_run_and_every_cell_research_only():
     assert all(c.production_comparable is False for c in r.cells)
 
 
-def test_frozen_v1_run_and_every_cell_production_comparable():
+def test_frozen_v1_run_and_every_cell_not_production_comparable_on_next_open_book():
     r = _resolve(symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"])
-    assert r.production_comparable is True
+    assert r.production_comparable is False
     assert len(r.cells) == 3
-    assert all(c.production_comparable is True for c in r.cells)
+    assert all(c.production_comparable is False for c in r.cells)
+    assert all(c.risk_source == "V1_PRODUCTION_PROFILE" for c in r.cells)
+
+
+def test_v1_row_carries_the_fill_book_note():
+    from app.research.backtest_ui_config import enrich_row_with_config
+
+    r = _resolve(symbols=["BTCUSDT"])
+    row = enrich_row_with_config({"symbol": "BTCUSDT", "timeframe": "1h"}, r)
+    assert row["production_comparable"] is False
+    assert row["research_only"] is True
+    assert row["production_comparable_note"] == (
+        "next-open fill book; v1 production profile was signal-close"
+    )
+
+
+def test_non_combo02_run_has_no_fill_book_note():
+    r = _resolve(
+        direction="SHORT",
+        allow_short=True,
+        combination_id="COMBO_02_V2",
+        strategy_id="COMBO_02_V2",
+        combo_version="v2",
+    )
+    assert "next_open_fill_book" not in r.mismatch_reasons
+    assert r.production_comparable_note is None

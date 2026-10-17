@@ -1,6 +1,31 @@
 import { useEffect, useState } from "react";
 import { fetchRegimeBacktest, type RegimeBacktestStatus } from "../api/client";
 
+/** One line saying which passed sides the run had in scope. */
+export function regimeScopeText(job: RegimeBacktestStatus): string {
+  const dirs = job.directions ?? [];
+  const longOnly = dirs.length === 1 && dirs[0] === "LONG";
+  const shortOnly = dirs.length === 1 && dirs[0] === "SHORT";
+  if (longOnly) {
+    return "Long book only. Bullish runs the passed longs (COMBO_03_TRANSITION_B). Bearish and neutral open nothing.";
+  }
+  if (shortOnly) {
+    return "Short book only. Bearish runs the passed shorts. Bullish and neutral open nothing.";
+  }
+  return "BTC daily trend picks the side on each closed 1h bar. Bearish runs the passed shorts. Bullish runs COMBO_03_TRANSITION_B long. Neutral opens nothing.";
+}
+
+/** Which fill book priced the run. */
+export function regimeFillBookText(job: RegimeBacktestStatus): string {
+  if (job.pnl_model === "CAUSAL_NEXT_OPEN") {
+    return "Fill book: next bar's open with slippage (CAUSAL_NEXT_OPEN), the same book as the COMBO rows on this screen.";
+  }
+  if (job.pnl_model === "LEGACY_SIGNAL_CLOSE") {
+    return "Fill book: signal close (LEGACY_SIGNAL_CLOSE), optimistic.";
+  }
+  return job.pnl_model ? `Fill book: ${job.pnl_model}` : "Fill book: not reported";
+}
+
 function money(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return "—";
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -33,10 +58,18 @@ export function RegimeBookResults({ active }: { active: boolean }) {
   return (
     <section className="mb-4 rounded border border-emerald-500/30 bg-emerald-500/5 p-3" data-testid="regime-backtest">
       <h2 className="text-[11px] uppercase tracking-wide text-terminal-muted">Regime book results</h2>
-      <p className="mt-1 text-[12px] text-terminal-text">
-        BTC daily trend picks the side on each closed 1h bar. Bearish runs the passed shorts. Bullish runs
-        COMBO_03_TRANSITION_B long. Neutral opens nothing.
+      <p className="mt-1 text-[12px] text-terminal-text" data-testid="regime-backtest-scope">
+        {regimeScopeText(job)}
       </p>
+      <p className="mt-1 text-[11px] text-terminal-muted" data-testid="regime-backtest-fill-book">
+        {regimeFillBookText(job)}
+      </p>
+      {job.sides_in_scope?.length ? (
+        <p className="mt-1 font-mono text-[11px] text-terminal-muted" data-testid="regime-backtest-sides">
+          Sides in scope:{" "}
+          {job.sides_in_scope.map((row) => `${row.strategy_id} ${row.direction}`).join(", ")}
+        </p>
+      ) : null}
       <p className="mt-1 font-mono text-[11px] text-terminal-muted" data-testid="regime-backtest-status">
         {job.status}
         {job.current ? ` · ${job.current}` : ""}

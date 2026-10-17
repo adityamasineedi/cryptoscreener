@@ -137,6 +137,10 @@ def _fake_postprocess(seen: list[dict] | None = None):
 def _run(plan, n_bars: int = 96, symbols=(LARGE_SYMBOL,), **kwargs):
     fake = kwargs.pop("backtest_fn", None) or FakeBacktest(plan)
     kwargs.setdefault("postprocess_fn", _fake_postprocess())
+    # These tests pin how the book picks trades from the strategy walk's own
+    # exits on flat candles, so they run the signal-close book. The next-open
+    # book (the default) is covered by the CAUSAL_NEXT_OPEN tests below.
+    kwargs.setdefault("pnl_model", book.LEGACY_SIGNAL_CLOSE)
     result = book.run_regime_book(
         {symbol: {"candles": _hourly(n_bars)} for symbol in symbols},
         _daily(70),
@@ -559,3 +563,172 @@ def test_failed_walk_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     assert [e["status"] for e in errors] == ["INSUFFICIENT_DATA"] * len(router.allowed_passed_sides("BULLISH"))
     assert result["trades"] == []
 
+
+
+# --- Next-open fill book (CAUSAL_NEXT_OPEN), the Backtest screen's COMBO book ---
+
+
+def _shaped(n: int, bars: dict[int, dict]) -> list[dict]:
+    """Flat 1h candles with chosen bars overridden."""
+    candles = _hourly(n)
+    for i, values in bars.items():
+        candles[i] = {**candles[i], **values}
+    return candles
+
+
+def _run_causal(plan, candles, symbols=(LARGE_SYMBOL,), **kwargs):
+    fake = kwargs.pop("backtest_fn", None) or FakeBacktest(plan)
+    result = book.run_regime_book(
+        {symbol: {"candles": candles} for symbol in symbols},
+        _daily(70),
+        backtest_fn=fake,
+        **kwargs,
+    )
+    return result, fake
+
+
+def test_default_book_is_next_open() -> None:
+    import inspect
+
+    for fn in (book.run_regime_book, book.build_result, book.run_symbol):
+        assert inspect.signature(fn).parameters["pnl_model"].default == book.CAUSAL_NEXT_OPEN
+
+
+def test_trade_is_priced_like_the_screen_combo_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.research.causal_execution import (
+        CAUSAL_NEXT_OPEN,
+        EXECUTION_MODEL_VERSION,
+        LEGACY_SIGNAL_CLOSE,
+        compare_execution_models,
+    )
+    from app.research.config import ResearchConfig
+
+    _plan_trend(monkeypatch, lambda day: "BEARISH")
+    side = router.allowed_passed_sides("BEARISH")[0]
+    # Signal closes at 100; the next bar opens at 99 (worse for a short);
+    # bar 55 trades through the 92 target.
+    candles = _shaped(96, {51: {"open": 99.0, "high": 100.0, "low": 98.5}, 55: {"low": 91.0}})
+    raw = _sig(50, 55, entry=100.0, stop=104.0, tp1=92.0, exit_price=92.0, outcome="TP1")
+    result, fake = _run_causal({(LARGE_SYMBOL, side[0], "SHORT"): [raw]}, candles)
+
+    assert result["pnl_model"] == CAUSAL_NEXT_OPEN
+    assert result["execution_model_version"] == EXECUTION_MODEL_VERSION
+    assert result["summary"]["pnl_model"] == CAUSAL_NEXT_OPEN
+    (trade,) = result["trades"]
+    assert trade["execution_model"] == CAUSAL_NEXT_OPEN
+    assert trade["next_open"] == 99.0
+    assert trade["fill_index"] == 51
+    assert trade["entry_price"] == pytest.approx(99.0 * (1 - ResearchConfig().entry_slippage_rate))
+    assert trade["outcome"] == "TP1" and trade["exit_index"] == 55
+    assert trade["exit_price"] == pytest.approx(92.0 * (1 + ResearchConfig().exit_slippage_rate))
+
+    # Same numbers as causal_execution gives the screen for the same trade,
+    # risk, fees, leverage and equity.
+    walk = fake(**{**fake.calls[0], "index_start": None, "index_end": None})
+    cfg = ResearchConfig()
+    cfg.risk_usd = 20.0  # 2% of $1,000, large cap, with the trend
+    cfg.taker_fee_rate, cfg.maker_fee_rate, cfg.leverage = 0.0004, 0.0002, 2.0
+    screen = compare_execution_models(walk["trades"], candles, cfg, account_equity=PRINCIPAL_USD)
+    causal_row = screen["causal"]["trades"][0]
+    legacy_row = screen["legacy"]["trades"][0]
+    for key in ("entry_price", "exit_price", "qty", "gross_pnl_usd", "fee_total_usd", "net_pnl_usd", "r_net"):
+        assert trade[key] == pytest.approx(causal_row[key]), key
+    assert trade["legacy_signal_close"]["entry_price"] == 100.0
+    assert trade["legacy_signal_close"]["net_pnl_usd"] == pytest.approx(legacy_row["net_pnl_usd"])
+    assert trade["net_pnl_usd"] < trade["legacy_signal_close"]["net_pnl_usd"]
+    assert result["summary"]["pnl_usd_net"] == pytest.approx(causal_row["net_pnl_usd"])
+    optimistic = result["summary"]["optimistic_comparison"]
+    assert optimistic["model"] == LEGACY_SIGNAL_CLOSE
+    assert optimistic["trades"] == 1
+    assert optimistic["pnl_usd_net"] == pytest.approx(legacy_row["net_pnl_usd"])
+
+
+def test_symbol_is_held_until_the_next_open_fill_exits(monkeypatch: pytest.MonkeyPatch) -> None:
+    _plan_trend(monkeypatch, lambda day: "BEARISH")
+    first, second, third = router.allowed_passed_sides("BEARISH")[:3]
+    # The strategy walk says the first trade stops at bar 52, but nothing in
+    # the candles reaches 104 until bar 60, so the next-open fill is held to 60.
+    candles = _shaped(96, {60: {"high": 105.0}})
+    plan = {
+        (LARGE_SYMBOL, first[0], "SHORT"): [_sig(50, 52, stop=104.0, exit_price=104.0)],
+        (LARGE_SYMBOL, second[0], "SHORT"): [_sig(55, 56)],
+        (LARGE_SYMBOL, third[0], "SHORT"): [_sig(61, 62)],
+    }
+    result, _ = _run_causal(plan, candles)
+    trades = result["trades"]
+    assert [(t["strategy_id"], t["entry_index"]) for t in trades] == [(first[0], 50), (third[0], 61)]
+    assert trades[0]["outcome"] == "SL" and trades[0]["exit_index"] == 60
+    blocked = [s for s in result["signals"] if not s["taken"]]
+    assert [(s["bar_index"], s["skip_reason"]) for s in blocked] == [(55, book.SKIP_POSITION_OPEN)]
+
+    # The signal-close book frees the symbol after bar 52 and takes bar 55.
+    legacy, _ = _run_causal(
+        plan, candles, pnl_model=book.LEGACY_SIGNAL_CLOSE, postprocess_fn=_fake_postprocess()
+    )
+    assert [t["entry_index"] for t in legacy["trades"]] == [50, 55, 61]
+
+
+def test_causal_book_needs_the_candles() -> None:
+    clock = book.RegimeClock(_daily(70), SignalConfig())
+    trade = {
+        "symbol": LARGE_SYMBOL,
+        "timeframe": "1h",
+        "combination_id": "COMBO_01",
+        "direction": "SHORT",
+        "entry_index": 1,
+        "signal_time": START.isoformat(),
+        "entry_price": 100.0,
+        "stop_price": 104.0,
+        "tp1": 92.0,
+        "outcome": "SL",
+        "exit_index": 2,
+        "exit_price": 104.0,
+        "trend_at_entry": "BEARISH",
+    }
+    with pytest.raises(ValueError, match="needs the 1h candles"):
+        book.build_result([{"symbol": LARGE_SYMBOL, "trades": [trade]}], clock)
+
+
+def test_long_scope_runs_only_long_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    flip = (START + timedelta(days=2)).date()
+    _plan_trend(monkeypatch, lambda day: "BULLISH" if day >= flip else "BEARISH")
+    result, fake = _run(_one_signal_per_side(LARGE_SYMBOL), directions=["LONG"])
+    longs = [side for side in PASSED_SIDES if side[2] == "LONG"]
+    assert fake.calls
+    assert fake.sides() == {(cid, d) for cid, _, d in longs}
+    assert {t["direction"] for t in result["trades"]} == {"LONG"}
+    assert {s["direction"] for s in result["signals"]} == {"LONG"}
+    assert result["directions"] == ["LONG"]
+    assert result["sides_in_scope"] == [
+        {"strategy_id": cid, "timeframe": tf, "direction": d} for cid, tf, d in longs
+    ]
+
+
+def test_long_scope_opens_nothing_while_bearish(monkeypatch: pytest.MonkeyPatch) -> None:
+    _plan_trend(monkeypatch, lambda day: "BEARISH")
+    result, fake = _run(_one_signal_per_side(LARGE_SYMBOL), directions=["LONG"])
+    assert fake.calls == []
+    assert result["trades"] == [] and result["signals"] == []
+
+
+def test_short_scope_runs_only_short_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    _plan_trend(monkeypatch, lambda day: "BULLISH")
+    result, fake = _run(_one_signal_per_side(LARGE_SYMBOL), directions=["SHORT"])
+    # Bullish allows only the long row, which is out of scope.
+    assert fake.calls == []
+    assert result["trades"] == []
+    assert {row["direction"] for row in result["sides_in_scope"]} == {"SHORT"}
+
+    _plan_trend(monkeypatch, lambda day: "BEARISH")
+    result, fake = _run(_one_signal_per_side(LARGE_SYMBOL), directions="SHORT")
+    allowed = router.allowed_passed_sides("BEARISH")
+    assert fake.sides() == {(cid, d) for cid, _, d in allowed}
+    assert len(result["trades"]) == len(allowed)
+
+
+def test_both_directions_is_the_default_scope() -> None:
+    assert book.sides_in_scope(None) == book.sides_in_scope(["LONG", "SHORT"]) == tuple(
+        side for side in PASSED_SIDES if side[1] == "1h"
+    )
+    with pytest.raises(ValueError):
+        book.sides_in_scope(["SIDEWAYS"])

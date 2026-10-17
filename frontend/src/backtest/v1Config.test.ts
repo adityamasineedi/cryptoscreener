@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   assessProductionComparable,
+  NEXT_OPEN_FILL_BOOK_NOTE,
   BACKTEST_CAP_SYMBOLS,
   BACKTEST_LARGE_SYMBOLS,
   BACKTEST_MID_SYMBOLS,
@@ -68,7 +69,7 @@ describe("v1Config risk and identity display", () => {
     expect(v1RiskForSymbol("SOLUSDT", 1000)?.riskUsd).toBe(20);
   });
 
-  it("exact frozen config is production-comparable", () => {
+  it("exact frozen config is not production-comparable while the screen shows the next-open book", () => {
     const r = assessProductionComparable({
       symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
       timeframes: ["1h"],
@@ -78,7 +79,26 @@ describe("v1Config risk and identity display", () => {
       takerFeePct: 0.04,
       makerFeePct: 0.02,
     });
-    expect(r.productionComparable).toBe(true);
+    expect(r.productionComparable).toBe(false);
+    // Every frozen-profile check passes; only the fill book differs.
+    expect(r.reasons).toEqual(["next_open_fill_book"]);
+    expect(r.note).toBe(NEXT_OPEN_FILL_BOOK_NOTE);
+    expect(r.note).toBe("next-open fill book; v1 production profile was signal-close");
+  });
+
+  it("non-v1 strategies carry no fill-book note", () => {
+    const r = assessProductionComparable({
+      symbols: ["BTCUSDT"],
+      timeframes: ["1h"],
+      direction: "SHORT",
+      researchRiskOverride: true,
+      leverage: 2,
+      takerFeePct: 0.04,
+      makerFeePct: 0.02,
+      strategyId: "COMBO_02_V2",
+    });
+    expect(r.reasons).not.toContain("next_open_fill_book");
+    expect(r.note).toBeNull();
   });
 
   it("risk override / 4h setup is research-only", () => {

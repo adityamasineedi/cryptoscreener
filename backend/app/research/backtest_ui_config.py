@@ -12,6 +12,7 @@ import json
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
+from app.research.causal_execution import CAUSAL_NEXT_OPEN, LEGACY_SIGNAL_CLOSE
 from app.research.v1_production import (
     COMBO_ID,
     CORE_SYMBOLS,
@@ -50,6 +51,15 @@ V1_DIRECTION = "LONG"
 V1_DEFAULT_LEVERAGE = 2.0
 V1_DEFAULT_TAKER_FEE_PCT = 0.04
 V1_DEFAULT_MAKER_FEE_PCT = 0.02
+
+# The Backtest screen shows the next-open book for every non-SD combo,
+# COMBO_02 v1 included (service.strategy_matrix sets DUAL_LEGACY_AND_CAUSAL).
+# The frozen v1 production profile was defined on signal-close fills, so a v1
+# row is not production comparable while that book is shown.
+BACKTEST_DISPLAYED_FILL_BOOK = CAUSAL_NEXT_OPEN
+V1_PRODUCTION_FILL_BOOK = LEGACY_SIGNAL_CLOSE
+FILL_BOOK_MISMATCH_CODE = "next_open_fill_book"
+FILL_BOOK_MISMATCH_NOTE = "next-open fill book; v1 production profile was signal-close"
 
 TF_MINUTES: dict[str, int] = {"15m": 15, "1h": 60, "4h": 240, "5m": 5, "1d": 1440}
 
@@ -229,6 +239,8 @@ class ResolvedBacktestConfig:
     fee_metadata: dict[str, Any]
     cells: list[ResolvedCellRisk]
     configuration_fingerprint: str
+    fill_book: str = BACKTEST_DISPLAYED_FILL_BOOK
+    production_comparable_note: str | None = None
 
 
 def _configured_risk_percent(
@@ -369,6 +381,11 @@ def validate_backtest_request(
         mismatch.append("non_v1_strategy")
     if cver not in {COMBO_VERSION_V1, "v1-combo02-long-htf"}:
         mismatch.append("non_v1_strategy")
+    fill_book_differs = (
+        combo == COMBO_ID and BACKTEST_DISPLAYED_FILL_BOOK != V1_PRODUCTION_FILL_BOOK
+    )
+    if fill_book_differs:
+        mismatch.append(FILL_BOOK_MISMATCH_CODE)
 
     for tf in tfs:
         if tf not in TF_MINUTES and tf not in {"15m", "1h", "4h", "5m", "1d"}:
@@ -512,6 +529,7 @@ def validate_backtest_request(
         and combo == COMBO_ID
         and mode == "V1_PRODUCTION_PROFILE"
         and "non_v1_strategy" not in uniq_mismatch
+        and not fill_book_differs
     )
     if not run_wide_ok:
         production_comparable = False
@@ -600,6 +618,8 @@ def validate_backtest_request(
         ),
         cells=cells,
         configuration_fingerprint=fp,
+        fill_book=BACKTEST_DISPLAYED_FILL_BOOK,
+        production_comparable_note=FILL_BOOK_MISMATCH_NOTE if fill_book_differs else None,
     )
 
 
@@ -645,6 +665,7 @@ def enrich_row_with_config(
     out["risk_source"] = cell.risk_source if cell else "RESEARCH_FALLBACK"
     out["production_comparable"] = bool(cell.production_comparable) if cell else False
     out["research_only"] = not out["production_comparable"]
+    out["production_comparable_note"] = resolved.production_comparable_note
     out["paper_trade_created"] = False
     out["live_trade_created"] = False
     out["telegram_sent"] = False
@@ -706,6 +727,8 @@ def job_identity_payload(resolved: ResolvedBacktestConfig) -> dict[str, Any]:
         "risk_source": primary.risk_source if primary else resolved.risk_mode,
         "symbol_role": primary.symbol_role if primary else None,
         "production_comparable": resolved.production_comparable,
+        "production_comparable_note": resolved.production_comparable_note,
+        "fill_book": resolved.fill_book,
         "research_only": resolved.research_only,
         "mismatch_reasons": list(resolved.mismatch_reasons),
         "short_status": resolved.short_status,

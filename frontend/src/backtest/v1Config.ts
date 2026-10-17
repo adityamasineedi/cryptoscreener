@@ -474,7 +474,16 @@ export type ConfigMismatchReason =
   | "non_v1_strategy"
   | "custom_execution_model"
   | "custom_fee_model"
-  | "custom_leverage";
+  | "custom_leverage"
+  | "next_open_fill_book";
+
+/**
+ * The Backtest screen shows the next-open (CAUSAL_NEXT_OPEN) book for COMBO_02 v1.
+ * The frozen v1 production profile was defined on signal-close fills, so a v1
+ * run is not production comparable while that book is shown.
+ */
+export const NEXT_OPEN_FILL_BOOK_NOTE =
+  "next-open fill book; v1 production profile was signal-close";
 
 export function assessProductionComparable(input: {
   symbols: string[];
@@ -485,10 +494,13 @@ export function assessProductionComparable(input: {
   takerFeePct: number;
   makerFeePct: number;
   strategyId?: BacktestStrategyId;
-}): { productionComparable: boolean; reasons: ConfigMismatchReason[] } {
+}): { productionComparable: boolean; reasons: ConfigMismatchReason[]; note: string | null } {
   const reasons: ConfigMismatchReason[] = [];
-  if (input.strategyId && input.strategyId !== "COMBO_02_V1") {
+  const isV1 = !input.strategyId || input.strategyId === "COMBO_02_V1";
+  if (!isV1) {
     reasons.push("non_v1_strategy");
+  } else {
+    reasons.push("next_open_fill_book");
   }
   if (input.direction !== "LONG") reasons.push("direction_mismatch");
   if (input.researchRiskOverride) reasons.push("risk_mismatch");
@@ -504,6 +516,7 @@ export function assessProductionComparable(input: {
   return {
     productionComparable: reasons.length === 0 && input.symbols.length > 0,
     reasons: [...new Set(reasons)],
+    note: isV1 ? NEXT_OPEN_FILL_BOOK_NOTE : null,
   };
 }
 

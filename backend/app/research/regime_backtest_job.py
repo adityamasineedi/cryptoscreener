@@ -1,7 +1,10 @@
 """Background regime-book backtest for the Backtest tab.
 
 Uses ``run_regime_book``. Entry, stop, target, and fees stay in that module.
-This job only loads candles and keeps one run at a time.
+This job only loads candles and keeps one run at a time. Trades are priced on
+the next-open fill book (``CAUSAL_NEXT_OPEN``), the book the Backtest screen
+shows for COMBO rows. ``directions`` limits the run to the LONG or the SHORT
+rows of the passed book; the state reports which rows were in scope.
 """
 
 from __future__ import annotations
@@ -10,7 +13,12 @@ import asyncio
 from typing import Any
 
 from app.research.passed_cap_book import cap_symbols
-from app.research.passed_regime_backtest import run_regime_book
+from app.research.passed_regime_backtest import (
+    DEFAULT_PNL_MODEL,
+    normalize_directions,
+    run_regime_book,
+    sides_in_scope,
+)
 
 _MIN_BARS = 80
 _lock = asyncio.Lock()
@@ -21,6 +29,10 @@ _state: dict[str, Any] = {
     "current": "",
     "symbols": [],
     "limit": 0,
+    "pnl_model": DEFAULT_PNL_MODEL,
+    "execution_model_version": None,
+    "directions": [],
+    "sides_in_scope": [],
     "summary": None,
     "trades": [],
     "skipped_symbols": [],
@@ -30,6 +42,13 @@ _state: dict[str, Any] = {
 
 def status() -> dict[str, Any]:
     return dict(_state)
+
+
+def _scope_rows(directions: Any) -> list[dict[str, str]]:
+    return [
+        {"strategy_id": cid, "timeframe": tf, "direction": side}
+        for cid, tf, side in sides_in_scope(directions)
+    ]
 
 
 def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, Any]:
@@ -57,7 +76,14 @@ def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, A
         if t.get("net_pnl_usd") is not None
     ]
     trades.sort(key=lambda row: str(row.get("exit_time") or ""))
-    return {"summary": summary, "trades": trades[-trade_limit:]}
+    return {
+        "summary": summary,
+        "trades": trades[-trade_limit:],
+        "pnl_model": result.get("pnl_model"),
+        "execution_model_version": result.get("execution_model_version"),
+        "directions": result.get("directions"),
+        "sides_in_scope": result.get("sides_in_scope"),
+    }
 
 
 async def _load_book(symbol: str, limit: int) -> dict[str, Any] | None:
@@ -89,7 +115,7 @@ async def _load_book(symbol: str, limit: int) -> dict[str, Any] | None:
     return {"candles": candles, "meta": meta, "c1h": c1h, "c4h": c4h, "c15": c15, "c1d": c1d}
 
 
-async def _run(symbols: list[str], limit: int) -> None:
+async def _run(symbols: list[str], limit: int, directions: tuple[str, ...] | None = None) -> None:
     global _state
     skipped: list[str] = []
     books: dict[str, Any] = {}
@@ -114,10 +140,16 @@ async def _run(symbols: list[str], limit: int) -> None:
         btc_daily, _, _ = await _load_research_candles(
             "BTCUSDT", "1d", limit=500, warmup_bars=40, use_research_cache=False, tail_warmup=True
         )
-        result = await asyncio.to_thread(run_regime_book, books, btc_daily)
+        result = await asyncio.to_thread(
+            run_regime_book, books, btc_daily, pnl_model=DEFAULT_PNL_MODEL, directions=directions
+        )
         slim = slim_result(result)
         _state["summary"] = slim["summary"]
         _state["trades"] = slim["trades"]
+        _state["pnl_model"] = slim["pnl_model"]
+        _state["execution_model_version"] = slim["execution_model_version"]
+        _state["directions"] = slim["directions"]
+        _state["sides_in_scope"] = slim["sides_in_scope"]
         _state["skipped_symbols"] = skipped
         _state["status"] = "done" if result.get("status") != "CANCELLED" else "cancelled"
         _state["phase"] = "done"
@@ -128,13 +160,20 @@ async def _run(symbols: list[str], limit: int) -> None:
         _state["skipped_symbols"] = skipped
 
 
-async def start(symbols: list[str], limit: int) -> dict[str, Any]:
-    """Start one regime-book run. A run already in progress is left alone."""
+async def start(symbols: list[str], limit: int, directions: Any = None) -> dict[str, Any]:
+    """Start one regime-book run. A run already in progress is left alone.
+
+    ``directions`` is None (every passed row), ``["LONG"]`` or ``["SHORT"]``.
+    """
     global _task, _state
     allowed = set(cap_symbols())
     chosen = [s for s in (str(sym).upper() for sym in symbols) if s in allowed]
     if not chosen:
         return {"status": "REJECTED", "error": "No large-cap or mid-cap symbols."}
+    try:
+        scope = normalize_directions(directions)
+    except ValueError as exc:
+        return {"status": "REJECTED", "error": str(exc)}
     async with _lock:
         if _state["status"] == "running":
             return {"status": "ALREADY_RUNNING", "job": status()}
@@ -144,10 +183,14 @@ async def start(symbols: list[str], limit: int) -> dict[str, Any]:
             "current": "",
             "symbols": chosen,
             "limit": int(limit),
+            "pnl_model": DEFAULT_PNL_MODEL,
+            "execution_model_version": None,
+            "directions": list(scope),
+            "sides_in_scope": _scope_rows(scope),
             "summary": None,
             "trades": [],
             "skipped_symbols": [],
             "error": None,
         }
-        _task = asyncio.create_task(_run(chosen, max(80, min(int(limit), 5000))))
+        _task = asyncio.create_task(_run(chosen, max(80, min(int(limit), 5000)), scope))
     return {"status": "STARTED", "job": status()}

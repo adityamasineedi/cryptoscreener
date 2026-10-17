@@ -629,6 +629,8 @@ export type StrategyMatrixRow = {
   effective_risk_amount?: number;
   risk_source?: string;
   production_comparable?: boolean;
+  /** Why a COMBO_02 v1 run is not production comparable (fill book). */
+  production_comparable_note?: string | null;
   research_only?: boolean;
   dataset_fingerprint?: string | null;
   configuration_fingerprint?: string;
@@ -1479,6 +1481,9 @@ export type BacktestJob = {
   risk_source?: string;
   symbol_role?: string | null;
   production_comparable?: boolean;
+  /** Why a COMBO_02 v1 run is not production comparable (fill book). */
+  production_comparable_note?: string | null;
+  fill_book?: string;
   research_only?: boolean;
   short_status?: string;
   period_mode?: string;
@@ -1624,6 +1629,12 @@ export type RegimeBacktestStatus = {
   current?: string;
   symbols?: string[];
   limit?: number;
+  /** Fill book the regime run priced trades on, e.g. CAUSAL_NEXT_OPEN. */
+  pnl_model?: string;
+  execution_model_version?: string | null;
+  /** Directions in scope for this run, e.g. ["LONG"]. */
+  directions?: Array<"LONG" | "SHORT">;
+  sides_in_scope?: Array<{ strategy_id: string; timeframe: string; direction: string }>;
   error?: string | null;
   skipped_symbols?: string[];
   summary?: {
@@ -1661,7 +1672,12 @@ export type RegimeBacktestStatus = {
   }>;
 };
 
-export function startRegimeBacktest(body: { symbols: string[]; limit: number }) {
+export function startRegimeBacktest(body: {
+  symbols: string[];
+  limit: number;
+  /** Passed rows in scope. The Long book sends ["LONG"], the Short book ["SHORT"]. */
+  directions?: Array<"LONG" | "SHORT">;
+}) {
   return fetch(`${API_BASE}/api/research/regime-backtest/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -239,6 +239,12 @@ function formatDuration(ms: number): string {
   return `${h}h ${m % 60}m`;
 }
 
+function passedAutoLabel(book: TradeBook): string {
+  if (book === "long") return "Passed long strategies (auto)";
+  if (book === "hedge") return "Hedge strategy (auto)";
+  return "Passed strategies (auto)";
+}
+
 export function BacktestPanel() {
   const [book, setBook] = useState<TradeBook>("short");
   const [symbols, setSymbols] = useState<string[]>(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
@@ -264,7 +270,7 @@ export function BacktestPanel() {
   const [riskUsd, setRiskUsd] = useState(20);
   const [researchRiskOverride, setResearchRiskOverride] = useState(false);
   const [shortNotice, setShortNotice] = useState<string | null>(
-    "Passed strategies stay selected. Run applies the BTC daily regime on each 1h bar."
+    "Passed short strategies stay selected. The regime run uses them only while BTC daily is bearish."
   );
   const [leverage, setLeverage] = useState(2);
   const [takerFeePct, setTakerFeePct] = useState(0.04);
@@ -411,6 +417,15 @@ export function BacktestPanel() {
       strategyId,
     ]
   );
+  // Settings match the frozen v1 profile; only the shown fill book differs.
+  const frozenV1Settings =
+    comparability.productionComparable ||
+    (comparability.reasons.length === 1 && comparability.reasons[0] === "next_open_fill_book");
+  const formStatusLabel = comparability.productionComparable
+    ? "Paper forward-test"
+    : frozenV1Settings
+      ? "Research · next-open fill book"
+      : "Research";
 
   // Auto-apply frozen v1 production risk when editing is locked.
   useEffect(() => {
@@ -704,11 +719,15 @@ export function BacktestPanel() {
     setSelectedKey(null);
     if (autoPassed && book !== "hedge") {
       setRegimeActive(true);
+      // Each book runs only its own side of the passed book.
+      const side: "LONG" | "SHORT" = book === "long" ? "LONG" : "SHORT";
       setShortNotice(
-        "BTC daily regime picks the side on each closed 1h bar. Passed shorts while bearish. COMBO_03_TRANSITION_B long while bullish."
+        side === "LONG"
+          ? "Long book: passed long strategies only. COMBO_03_TRANSITION_B LONG opens while BTC daily is bullish; nothing opens otherwise. Fills at the next bar's open."
+          : "Short book: passed short strategies only. They open while BTC daily is bearish; nothing opens otherwise. Fills at the next bar's open."
       );
       try {
-        await startRegimeBacktest({ symbols, limit });
+        await startRegimeBacktest({ symbols, limit, directions: [side] });
       } catch (err) {
         setStoreError(err instanceof Error ? err.message : "Regime backtest failed to start");
       }
@@ -885,7 +904,7 @@ export function BacktestPanel() {
     setStrategyId(PASSED_RUN_STRATEGY_ID);
     setDirection("SHORT");
     setShortNotice(
-      "Passed strategies stay selected. Run applies the BTC daily regime on each 1h bar."
+      "Passed short strategies stay selected. The regime run uses them only while BTC daily is bearish."
     );
   }
 
@@ -1017,13 +1036,7 @@ export function BacktestPanel() {
                   ))}
                 </optgroup>
               ) : null}
-              <option value="PASSED_AUTO">
-                {book === "long"
-                  ? "Passed long strategies (auto)"
-                  : book === "hedge"
-                    ? "Hedge strategy (auto)"
-                    : "Passed strategies (auto)"}
-              </option>
+              <option value="PASSED_AUTO">{passedAutoLabel(book)}</option>
               {passedStrategies.length ? (
                 <optgroup label="Passed">
                   {passedStrategies.map((opt) => (
@@ -1072,10 +1085,10 @@ export function BacktestPanel() {
             <div className="flex flex-wrap items-center gap-1" data-testid="passed-strategy-selection">
               <span className="text-[10px] text-terminal-muted">
                 {book === "long"
-                  ? "Passed long strategies stay selected. Run uses COMBO_03_TRANSITION_B LONG."
+                  ? "Passed long strategies stay selected. Run uses COMBO_03_TRANSITION_B LONG only while BTC daily is bullish."
                   : book === "hedge"
                     ? "Hedge strategy stays selected. Run uses COMBO_02 V2.1-A LONG and SHORT together."
-                    : "Passed short strategies stay selected. Run applies the BTC daily regime on each 1h bar."}
+                    : "Passed short strategies stay selected. Run uses them only while BTC daily is bearish."}
               </span>
               {passedIds.map((id) => (
                 <button
@@ -1108,7 +1121,7 @@ export function BacktestPanel() {
             </label>
           ) : null}
           <span className="rounded border border-terminal-accent/40 bg-terminal-accent/10 px-2 py-1 font-mono text-terminal-accent">
-            Strategy: {autoPassed ? "Passed strategies (auto)" : bookChipLabel(strategyId, book)}
+            Strategy: {autoPassed ? passedAutoLabel(book) : bookChipLabel(strategyId, book)}
             {isSd
               ? ` · ${SD_VARIANT_OPTIONS.find((opt) => opt.id === sdVariant)?.label ?? sdVariant}`
               : ""}
@@ -1121,7 +1134,7 @@ export function BacktestPanel() {
                 : "border-amber-500/40 bg-amber-500/10 text-amber-100"
             }`}
           >
-            Status: {comparability.productionComparable ? "Paper forward-test" : "Research"}
+            Status: {formStatusLabel}
           </span>
           {researchUi ? (
             <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
@@ -1174,6 +1187,20 @@ export function BacktestPanel() {
             <div className="font-semibold">FROZEN V1 CONFIGURATION</div>
             <div>Production-comparable research run</div>
           </div>
+        ) : frozenV1Settings ? (
+          <div
+            className="mb-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"
+            data-testid="v1-fill-book-banner"
+          >
+            <div className="font-semibold">FROZEN V1 SETTINGS · NOT PRODUCTION COMPARABLE</div>
+            <div>
+              Settings match the frozen COMBO_02 v1 profile, but the P&amp;L shown is the
+              next-open fill book.
+            </div>
+            <div className="mt-1 text-[10px] text-amber-100/80" data-testid="fill-book-note">
+              Not production comparable: {comparability.note}
+            </div>
+          </div>
         ) : (
           <div className="mb-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
             <div className="font-semibold">RESEARCH-ONLY CONFIGURATION</div>
@@ -1184,6 +1211,11 @@ export function BacktestPanel() {
             {comparability.reasons.length ? (
               <div className="mt-1 font-mono text-[10px] text-amber-100/80">
                 Reasons: {comparability.reasons.join(", ")}
+              </div>
+            ) : null}
+            {comparability.note ? (
+              <div className="mt-1 text-[10px] text-amber-100/80" data-testid="fill-book-note">
+                Not production comparable: {comparability.note}
               </div>
             ) : null}
           </div>
@@ -1227,14 +1259,14 @@ export function BacktestPanel() {
                     : s === "ETHUSDT" || s === "SOLUSDT"
                       ? "secondary"
                       : null;
-                const badge = symTier && comparability.productionComparable ? v1TierBadge(symTier) : null;
+                const badge = symTier && frozenV1Settings ? v1TierBadge(symTier) : null;
                 return (
                   <button
                     key={s}
                     type="button"
                     title={
                       preset
-                        ? comparability.productionComparable
+                        ? frozenV1Settings
                           ? symbolRoleDisplay(s, primaryTf)
                           : `${s} — in this run, click to remove`
                         : `Remove ${s}`
@@ -1759,7 +1791,7 @@ export function BacktestPanel() {
               {symbols.map((s) => symbolRoleDisplay(s, primaryTf)).join("; ") || "—"}
             </div>
             <div>
-              Strategy: {autoPassed ? "Passed strategies (auto)" : bookChipLabel(strategyId, book)}
+              Strategy: {autoPassed ? passedAutoLabel(book) : bookChipLabel(strategyId, book)}
               {isSd
                 ? ` · ${sdVariant} · RESEARCH ONLY`
                 : isV21A || isDirect
@@ -1768,7 +1800,7 @@ export function BacktestPanel() {
             </div>
             <div>
               Status:{" "}
-              {comparability.productionComparable ? "Paper forward-test" : "Research"}
+              {formStatusLabel}
             </div>
             <div>
               Direction: {isV21A ? "LONG+SHORT (native)" : direction}
@@ -1830,6 +1862,9 @@ export function BacktestPanel() {
               >
                 {comparability.productionComparable ? "YES" : "NO"}
               </span>
+              {!comparability.productionComparable && comparability.note ? (
+                <span className="ml-2 text-[10px] text-amber-100/80">({comparability.note})</span>
+              ) : null}
             </div>
           </div>
 
@@ -2210,6 +2245,11 @@ export function BacktestPanel() {
               {job?.mismatch_reasons?.length ? (
                 <span className="ml-2 text-[10px] text-amber-100/80">
                   Reasons: {job.mismatch_reasons.join(", ")}
+                </span>
+              ) : null}
+              {!jobProductionComparable && job?.production_comparable_note ? (
+                <span className="ml-2 text-[10px] text-amber-100/80" data-testid="job-fill-book-note">
+                  ({job.production_comparable_note})
                 </span>
               ) : null}
             </div>

@@ -186,8 +186,12 @@ describe("BacktestPanel interaction paths", () => {
     expect(root.getAllByText(/Direction:\s*LONG/i).length).toBeGreaterThan(0);
     expect(root.getByText(/Setup TF:\s*1h/i)).toBeTruthy();
     expect(root.getByText(/HTF:\s*1h \+ 4h bullish alignment/i)).toBeTruthy();
-    expect(root.getByText(/FROZEN V1 CONFIGURATION/i)).toBeTruthy();
-    expect(root.getByText(/Production-comparable research run/i)).toBeTruthy();
+    // Frozen settings, but the screen shows the next-open book: not production comparable.
+    expect(root.getByText(/FROZEN V1 SETTINGS · NOT PRODUCTION COMPARABLE/i)).toBeTruthy();
+    expect(root.queryByText(/Production-comparable research run/i)).toBeNull();
+    expect(root.getByTestId("fill-book-note").textContent).toBe(
+      "Not production comparable: next-open fill book; v1 production profile was signal-close",
+    );
 
     await waitFor(() => {
       const riskPct = root.getByLabelText(/Risk % of principal/i) as HTMLInputElement;
@@ -200,7 +204,10 @@ describe("BacktestPanel interaction paths", () => {
 
     expect(root.getByText(/BTCUSDT core — 2% \/ \$20/i)).toBeTruthy();
     expect(root.getAllByText(/BTCUSDT — v1 CORE/i).length).toBeGreaterThan(0);
-    expect(container.textContent).toMatch(/Production comparable:\s*YES/);
+    expect(container.textContent).toMatch(
+      /Production comparable:\s*NO\s*\(next-open fill book; v1 production profile was signal-close\)/,
+    );
+    expect(container.textContent).not.toMatch(/Production comparable:\s*YES/);
     expect(container.textContent).toMatch(/Risk source:\s*V1 production profile/);
   });
 
@@ -264,7 +271,7 @@ describe("BacktestPanel interaction paths", () => {
     ).toBeTruthy();
   });
 
-  it("5. frozen v1 view has no SHORT button and its status reads Paper forward-test", async () => {
+  it("5. frozen v1 view has no SHORT button and its status reads Research on the next-open book", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
@@ -275,7 +282,9 @@ describe("BacktestPanel interaction paths", () => {
     expect(root.getByRole("button", { name: /^LONG$/i })).toBeTruthy();
     expect(root.queryByText(/COMBO_04_HTF reverse of long/i)).toBeNull();
     expect(root.queryByText(/→ COMBO_04_HTF SHORT/i)).toBeNull();
-    expect(root.getByTestId("backtest-status-chip").textContent).toBe("Status: Paper forward-test");
+    expect(root.getByTestId("backtest-status-chip").textContent).toBe(
+      "Status: Research · next-open fill book",
+    );
     expect(root.queryAllByText(/Production candidate \(frozen v1\)/i)).toHaveLength(0);
     expect(root.getAllByText(/Direction:\s*LONG/i).length).toBeGreaterThan(0);
   });
@@ -403,6 +412,26 @@ describe("BacktestPanel interaction paths", () => {
     expect(startBacktestJob).not.toHaveBeenCalled();
     const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
     expect(body?.symbols).toEqual(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
+    // The Short book runs only the short rows of the passed book.
+    expect(body?.directions).toEqual(["SHORT"]);
+  });
+
+  it("6b1-long. the Long book's passed-auto run posts only the long side", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+
+    await user.click(root.getByRole("tab", { name: "Long trades" }));
+    expect(root.getByDisplayValue("Passed long strategies (auto)")).toBeTruthy();
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startRegimeBacktest).toHaveBeenCalledTimes(1);
+    });
+    expect(startBacktestJob).not.toHaveBeenCalled();
+    const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
+    expect(body?.directions).toEqual(["LONG"]);
+    expect(container.textContent).toMatch(/Long book: passed long strategies only/);
+    expect(container.textContent).not.toMatch(/Passed shorts while bearish/);
   });
 
   it("6b1a. untouched screen keeps the passed-auto option and posts the regime book", async () => {
@@ -602,10 +631,12 @@ describe("BacktestPanel interaction paths", () => {
     expect(box.getByText(/Leverage:/i)).toBeTruthy();
     expect(box.getByText(/Bars\/date range:/i)).toBeTruthy();
     expect(box.getByText(/Production comparable:/i)).toBeTruthy();
-    expect(summary.textContent).toMatch(/Status:\s*Paper forward-test/);
+    expect(summary.textContent).toMatch(/Status:\s*Research · next-open fill book/);
+    expect(summary.textContent).not.toMatch(/Paper forward-test/);
+    expect(summary.textContent).toMatch(/Production comparable:\s*NO/);
     expect(summary.textContent).not.toMatch(/as selected/);
     expect(root.getByTestId("backtest-status-chip").textContent).toMatch(
-      /^Status:\s*Paper forward-test$/
+      /^Status:\s*Research · next-open fill book$/
     );
 
     await user.click(root.getByRole("checkbox", { name: /Research risk override/i }));
@@ -622,8 +653,9 @@ describe("BacktestPanel interaction paths", () => {
     await selectOnlySymbol(user, root, "BTCUSDT");
 
     const chip = root.getByTestId("backtest-status-chip");
-    expect(chip.textContent).toMatch(/Paper forward-test/);
-    expect(chip.className).toMatch(/emerald/);
+    // Not production comparable on the next-open book, so never Paper forward-test.
+    expect(chip.textContent).toMatch(/^Status:\s*Research · next-open fill book$/);
+    expect(chip.className).toMatch(/amber/);
 
     const leverageInput = (root.getByText("Leverage (x)").parentElement as HTMLElement).querySelector(
       "input"
@@ -636,15 +668,17 @@ describe("BacktestPanel interaction paths", () => {
     expect(root.getByText(/Direction:\s*LONG/, { selector: "span" })).toBeTruthy();
   });
 
-  it("17. Frozen v1 banner appears after leaving the passed selection", async () => {
+  it("17. Frozen v1 settings banner appears after leaving the passed selection", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
     expect(root.getByText(/RESEARCH-ONLY CONFIGURATION/i)).toBeTruthy();
     expect(root.getByTestId("passed-strategy-selection")).toBeTruthy();
     await selectFrozenV1(user, root);
-    expect(root.getByText(/FROZEN V1 CONFIGURATION/i)).toBeTruthy();
-    expect(root.getByText(/Production-comparable research run/i)).toBeTruthy();
+    expect(root.getByTestId("v1-fill-book-banner").textContent).toMatch(
+      /FROZEN V1 SETTINGS · NOT PRODUCTION COMPARABLE/,
+    );
+    expect(root.queryByText(/FROZEN V1 CONFIGURATION/i)).toBeNull();
   });
 
   it("18. Research-only mismatch banner", async () => {
