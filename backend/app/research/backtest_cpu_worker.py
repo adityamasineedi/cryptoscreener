@@ -350,6 +350,45 @@ def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def apply_vectorbt_rows(data: dict[str, Any]) -> list[Any]:
+    """VectorBT execution gate over one cell's rows (child-process entry).
+
+    ``data``: ``rows``, ``strategy_id``, ``family``, ``adapter_kwargs`` and
+    ``include_trades``. Never raises for a row: an error leaves the bar-loop row
+    with an ERROR annotation. Trades are stripped after the replay when the
+    caller did not ask for them.
+    """
+    from app.research import vectorbt_execution as vx
+
+    strategy_id = str(data["strategy_id"])
+    family = data["family"]
+    adapter_kwargs = data.get("adapter_kwargs") or {}
+    include_trades = bool(data.get("include_trades", True))
+
+    def _one(row: Any) -> Any:
+        if not isinstance(row, dict):
+            return row
+        try:
+            out = vx.apply_vectorbt_execution(
+                row, strategy_id=strategy_id, family=family, adapter_kwargs=adapter_kwargs
+            )
+        except Exception as exc:  # noqa: BLE001
+            out = {
+                **row,
+                "execution_engine": "bar_loop",
+                "vectorbt_parity": {
+                    "verdict": "ERROR",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                },
+                "vectorbt_mismatches": 0,
+            }
+        if not include_trades:
+            out = {**out, "trades": []}
+        return out
+
+    return [_one(r) for r in data.get("rows") or []]
+
+
 def run_matrix_postprocess_worker(payload: dict[str, Any]) -> dict[str, Any]:
     os.environ["RESEARCH_CPU_WORKER"] = "1"
     _assert_research_only_worker()

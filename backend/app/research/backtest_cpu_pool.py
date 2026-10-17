@@ -26,6 +26,8 @@ from typing import Any, Callable, Mapping, Sequence
 from app.research.backtest_cpu_worker import run_combination_backtest_worker
 
 _MAX_WORKERS = 1
+# After a cancel, the walk child gets this long to stop on its own before it is killed.
+_CANCEL_GRACE_SECONDS = 5.0
 
 _lock = threading.Lock()
 _pool: ProcessPoolExecutor | None = None
@@ -167,7 +169,10 @@ def pool_stats() -> dict[str, Any]:
         "pool_started": alive,
         "research_only": True,
         "ipc": "tempfile_pickle_payload",
-        "note": "CPU-bound run_combination_backtest runs off the API event loop",
+        "note": (
+            "CPU-bound walk, matrix postprocess (analytics) and VectorBT gate "
+            "run in child processes, off the API process"
+        ),
     }
 
 
@@ -268,6 +273,7 @@ async def run_combination_backtest_isolated(
             stderr=subprocess.PIPE,
         )
         last_keep_alive = time.perf_counter()
+        cancel_seen_at: float | None = None
         try:
             while proc.poll() is None:
                 if should_cancel is not None and should_cancel():
@@ -278,6 +284,13 @@ async def run_combination_backtest_isolated(
                             Path(cancel_path).write_text("1", encoding="utf-8")
                     except Exception:  # noqa: BLE001
                         pass
+                    # The walk stops at its next cancel check; pre-walk feature
+                    # builds have none, so a child that ignores the flag is killed.
+                    if cancel_seen_at is None:
+                        cancel_seen_at = time.perf_counter()
+                    elif time.perf_counter() - cancel_seen_at >= _CANCEL_GRACE_SECONDS:
+                        proc.kill()
+                        return {"status": "CANCELLED", "reason": "cancelled; worker killed"}
                 saw_worker_progress = False
                 if progress_callback is not None and progress_path:
                     progress = Path(progress_path)
@@ -403,40 +416,42 @@ async def run_combination_backtest_isolated(
                 pass
 
 
+# ``module:function`` the postprocess child runs (a test points it at a slow stand-in).
+_POSTPROCESS_TARGET = "app.research.backtest_cpu_worker:build_matrix_row_postprocess"
+
+
 async def run_matrix_postprocess_isolated(
     payload: dict[str, Any],
     *,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
-    """Run fee enrich + analytics attach off the event loop.
+    """Run fee enrich + causal book + analytics attach in a child process.
 
-    Uses a worker thread (not a second process pickle of multi-10k candle
-    arrays) while emitting heartbeats so the job watchdog does not stall.
-    Strategy trade results are already finalized before this runs.
+    ``build_matrix_row_postprocess`` is pure Python (swing scans, feature
+    tables) and holds the GIL for minutes on multi-year 1h runs. A thread in
+    the API process froze the event loop (health timeouts, missed paper bars),
+    so it runs in its own interpreter with the tempfile-pickle IPC. The same
+    function sees the same payload; the row it returns is unchanged.
+
+    Phase-only heartbeats (never zero bars/trades) keep the job watchdog fed.
+    A cancel kills the child and raises ``ResearchChildCancelled``. A failure
+    in the child re-raises the child's own exception type.
     """
-    from app.research.backtest_cpu_worker import build_matrix_row_postprocess
+    from app.research.research_child import run_in_child
 
-    loop = asyncio.get_running_loop()
-    done = loop.create_future()
-
-    def _run() -> None:
-        try:
-            result = build_matrix_row_postprocess(payload)
-            loop.call_soon_threadsafe(done.set_result, result)
-        except Exception as exc:  # noqa: BLE001
-            loop.call_soon_threadsafe(done.set_exception, exc)
-
-    threading.Thread(target=_run, name="matrix_postprocess", daemon=True).start()
-    while not done.done():
+    def _beat() -> None:
         if progress_callback is not None:
             try:
-                # Phase-only heartbeat: never zero bars/trades — that made the
-                # UI look stuck at 0% for the entire analytics attach window.
                 progress_callback({"phase": "ANALYTICS_ATTACH"})
             except Exception:  # noqa: BLE001
                 pass
-        try:
-            return await asyncio.wait_for(asyncio.shield(done), timeout=2.0)
-        except asyncio.TimeoutError:
-            continue
-    return done.result()
+
+    _beat()
+    return await run_in_child(
+        _POSTPROCESS_TARGET,
+        payload,
+        should_cancel=should_cancel,
+        heartbeat=_beat,
+        heartbeat_every=2.0,
+    )

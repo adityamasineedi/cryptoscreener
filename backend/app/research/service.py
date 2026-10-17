@@ -1231,8 +1231,8 @@ class BosResearchService:
                         "elapsed_seconds": round(time.perf_counter() - t0, 3),
                     }
 
-                # Fee enrich + market-structure attach are also CPU-heavy —
-                # keep them off the interactive event loop (same bounded pool).
+                # Fee enrich + market-structure attach are also CPU-heavy (minutes
+                # on multi-year 1h runs) — they run in a child process too.
                 from app.config import get_settings
                 from app.research.backtest_cpu_pool import (
                     run_matrix_postprocess_isolated,
@@ -1241,6 +1241,7 @@ class BosResearchService:
                 from app.research.market_structure.config import (
                     assert_regime_filtering_safe,
                 )
+                from app.research.research_child import ResearchChildCancelled
 
                 settings = get_settings()
                 analytics_on, regime_filter = resolve_analytics_flags(settings)
@@ -1299,6 +1300,7 @@ class BosResearchService:
                             "write_artifacts": True,
                         },
                         progress_callback=progress_callback,
+                        should_cancel=should_cancel,
                     )
                     ms = row_payload.get("market_structure") or {}
                     if analytics_on:
@@ -1313,6 +1315,13 @@ class BosResearchService:
                         )
                 except ValueError:
                     raise
+                except ResearchChildCancelled:
+                    return {
+                        "status": "CANCELLED",
+                        "combination_id": combination_id,
+                        "rows": rows,
+                        "elapsed_seconds": round(time.perf_counter() - t0, 3),
+                    }
                 except Exception as analytics_exc:  # noqa: BLE001
                     logger.warning(
                         "market_structure_analytics_failed",
