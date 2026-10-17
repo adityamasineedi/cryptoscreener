@@ -9,9 +9,8 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelRegimeBacktest,
   fetchBacktestLossAnalysis,
@@ -29,6 +28,7 @@ import {
 } from "../backtest/v1Config";
 import { useBacktestHandoffStore } from "../store/backtestHandoffStore";
 import { useBacktestJobStore } from "../store/backtestJobStore";
+import { setupUser } from "../test/user";
 import { BacktestPanel } from "./BacktestPanel";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -104,12 +104,25 @@ function renderPanel() {
   );
 }
 
+// The first BacktestPanel render in a file compiles the ~3.5k-line panel, its
+// stores and child panels (1-3 s on a loaded machine). Pay that once here,
+// outside every test's 5 s budget, instead of inside whichever test runs
+// first ("1. BTC v1 risk rendering" used to time out on it). A plain render
+// and one role query: no clicks, nothing persisted, and the mock call history
+// it leaves is cleared.
+beforeAll(() => {
+  const { container } = renderPanel();
+  within(container).getByRole("tab", { name: "Long trades" });
+  cleanup();
+  vi.clearAllMocks();
+});
+
 function isSelected(el: HTMLElement): boolean {
   return el.className.includes("border-terminal-accent");
 }
 
 async function selectFrozenV1(
-  user: ReturnType<typeof userEvent.setup>,
+  user: ReturnType<typeof setupUser>,
   root: ReturnType<typeof within>
 ) {
   await user.click(root.getByRole("tab", { name: "Long trades" }));
@@ -117,7 +130,7 @@ async function selectFrozenV1(
 }
 
 async function selectOnlySymbol(
-  user: ReturnType<typeof userEvent.setup>,
+  user: ReturnType<typeof setupUser>,
   root: ReturnType<typeof within>,
   symbol: "BTCUSDT" | "ETHUSDT" | "SOLUSDT"
 ) {
@@ -130,7 +143,7 @@ async function selectOnlySymbol(
 }
 
 async function selectOnlyTimeframe(
-  user: ReturnType<typeof userEvent.setup>,
+  user: ReturnType<typeof setupUser>,
   root: ReturnType<typeof within>,
   tf: "15m" | "1h" | "4h"
 ) {
@@ -195,7 +208,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("1. BTC v1 risk rendering", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -231,7 +244,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("2. ETH v1 risk rendering", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -249,7 +262,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("3. SOL v1 risk rendering", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -266,7 +279,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("4. Research override banner", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -291,7 +304,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("5. frozen v1 view has no SHORT button and its status reads Research on the next-open book", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -309,7 +322,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6. frozen v1 runs COMBO_02 v1 LONG and never sends COMBO_04_HTF", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -325,7 +338,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6-direct. a direct book keeps its own SHORT button and runs its own id", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -343,7 +356,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6a. COMBO_02_V1 is listed first under Working in the long book only", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -366,7 +379,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6a1. COMBO_02_V1 in the long book posts COMBO_02 v1 LONG", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -397,7 +410,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6b. V2.1-A sends research combo id and RESEARCH ONLY label", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -418,7 +431,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6b1. passed strategies are selected automatically and run the regime book", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -440,7 +453,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6b1-long. the Long book's passed-auto run posts only the long side", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -458,7 +471,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6b1a. untouched screen keeps the passed-auto option and posts the regime book", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -477,7 +490,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6b2. passed cap-book strategy is selectable and is not rewritten to COMBO_04", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -500,7 +513,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6c. SD structure is in the strategy menu and auto-sends COMBO_SD_C", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -527,7 +540,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("6d. SD structure SHORT stays on the selected variant", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -568,7 +581,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("10. 4h mismatch warning", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectOnlyTimeframe(user, root, "4h");
@@ -583,7 +596,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("11. 5,760-bar duration for 15m", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectOnlyTimeframe(user, root, "15m");
@@ -600,7 +613,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("13. 5,760-bar duration for 4h", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectOnlyTimeframe(user, root, "4h");
@@ -620,7 +633,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("15. Calendar-range mode label", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     const modeButtons = root.getAllByRole("button", { name: /Calendar-range mode/i });
@@ -632,7 +645,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("16. Pre-run summary", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -669,7 +682,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("16a. Status chip follows production comparability, not just direction", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectFrozenV1(user, root);
@@ -692,7 +705,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("17. Frozen v1 settings banner appears after leaving the passed selection", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     expect(root.getByText(/RESEARCH-ONLY CONFIGURATION/i)).toBeTruthy();
@@ -705,7 +718,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("18. Research-only mismatch banner", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1003,7 +1016,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("23. The result header describes a SHORT research job while the form is on LONG", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     useBacktestJobStore.setState({
       job: {
         status: "done",
@@ -1303,7 +1316,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("keeps long, short, hedge, and grid in separate books", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1345,7 +1358,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("opens grid backtest on this page and returns to the strategy book", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("tab", { name: "Grid trades" }));
@@ -1381,7 +1394,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("selects every large and mid cap coin from its chip", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1396,10 +1409,13 @@ describe("BacktestPanel interaction paths", () => {
     expect([...coinsIn(root, "selected-coins")].sort()).toEqual([...CAP_BOOK].sort());
     expect(coinsIn(root, "available-coins")).toEqual([]);
     expect(root.queryByTestId("coin-filter-notice")).toBeNull();
+    // Inherently heavy: 24 sequential chip clicks, each re-rendering the whole
+    // panel and re-reading both chip lists (~1.5-3 s idle, up to ~7 s under
+    // load), so it keeps an explicit budget instead of the 5 s default.
   }, 30000);
 
   it("does not add a typed coin outside the cap book with the Add button", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1415,7 +1431,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("does not add a typed coin outside the cap book with Enter", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1429,7 +1445,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("adds a typed mid cap coin that is not in the default selection", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1443,7 +1459,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("adds only the cap book coin from a mixed typed entry", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1471,7 +1487,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("posts only cap book symbols after a rejected coin was typed", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
 
@@ -1490,7 +1506,7 @@ describe("BacktestPanel interaction paths", () => {
   });
 
   it("posts only the cap book coin from a mixed screener handoff", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     useBacktestHandoffStore.getState().queue(["WIFUSDT", "LINKUSDT"]);
     const { container } = renderPanel();
     const root = within(container);
@@ -1513,7 +1529,7 @@ describe("BacktestPanel interaction paths", () => {
     });
 
     it("1.15 switching books restores the new book's coins, strategy and direction", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const { container } = renderPanel();
       const root = within(container);
 
@@ -1549,7 +1565,7 @@ describe("BacktestPanel interaction paths", () => {
     });
 
     it("1.15 choosing Passed (auto) again in the same book keeps the coins", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const { container } = renderPanel();
       const root = within(container);
       const select = root.getByRole("combobox", { name: /^Strategy/i });
@@ -1708,7 +1724,7 @@ describe("BacktestPanel interaction paths", () => {
     });
 
     it("COMBO_02_V2 and COMBO_02_V2_1B are hedge-book runs, labelled LONG+SHORT, not long or short", async () => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const { container } = renderPanel();
       const root = within(container);
       const values = () =>
@@ -1738,7 +1754,7 @@ describe("BacktestPanel interaction paths", () => {
       ["COMBO_02_V2_1B", "v2.1-b-choppy-15m"],
     ] as const) {
       it(`${id} on the hedge book posts its own id with direction BOTH: LONG+SHORT, no side buttons`, async () => {
-        const user = userEvent.setup();
+        const user = setupUser();
         const { container } = renderPanel();
         const root = within(container);
         await user.click(root.getByRole("tab", { name: "Hedge trades" }));
@@ -2052,7 +2068,7 @@ describe("BacktestPanel regime-book run", () => {
   });
 
   it("R4 lookback run sends 1h, the requested bar count, and nothing the book ignores", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
@@ -2063,7 +2079,7 @@ describe("BacktestPanel regime-book run", () => {
   });
 
   it("R4 calendar run sends the selected UTC days and no bar limit", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("button", { name: "Calendar-range mode" }));
@@ -2083,7 +2099,7 @@ describe("BacktestPanel regime-book run", () => {
   });
 
   it("R4 a timeframe other than 1h blocks the regime run with a reason", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await selectOnlyTimeframe(user, root, "15m");
@@ -2106,7 +2122,7 @@ describe("BacktestPanel regime-book run", () => {
       status: "REJECTED",
       error: "The regime book runs on 1h bars only; timeframe 4h is not supported.",
     }));
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
@@ -2121,7 +2137,7 @@ describe("BacktestPanel regime-book run", () => {
       ownJobId: "single-job",
     });
     vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     expect(root.queryByTestId("backtest-trade-blotter")).not.toBeNull();
@@ -2140,7 +2156,7 @@ describe("BacktestPanel regime-book run", () => {
       status: "CANCELLED",
       job: regimeJob({ status: "cancelled", phase: "cancelled" }),
     }));
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
@@ -2172,7 +2188,7 @@ describe("BacktestPanel regime-book run", () => {
 
   it("R7 choosing a single strategy, then running it, hides the regime panel", async () => {
     vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
@@ -2186,7 +2202,7 @@ describe("BacktestPanel regime-book run", () => {
 
   it("R7 switching the trade book hides the regime panel", async () => {
     vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
@@ -2197,7 +2213,7 @@ describe("BacktestPanel regime-book run", () => {
 
   it("R8 the regime results show the requested and evaluated period", async () => {
     vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
@@ -2229,7 +2245,7 @@ describe("BacktestPanel VectorBT execution toggle", () => {
   });
 
   async function runWith(vectorbt: boolean) {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { container } = renderPanel();
     const root = within(container);
     await user.click(root.getByRole("tab", { name: "Long trades" }));
