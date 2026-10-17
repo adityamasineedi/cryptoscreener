@@ -17,7 +17,9 @@ import {
   fetchRegimeBacktest,
   startBacktestJob,
   startRegimeBacktest,
+  type BacktestJob,
   type RegimeBacktestStatus,
+  type StrategyTradeRow,
 } from "../api/client";
 import {
   BACKTEST_CAP_SYMBOLS,
@@ -80,8 +82,14 @@ vi.mock("../api/client", async (importOriginal) => {
   };
 });
 
+/** Trades the panel handed to the trade chart overlay, in render order. */
+const chartTrades = vi.hoisted(() => [] as Array<{ symbol?: string; timeframe?: string }>);
+
 vi.mock("./BacktestTradeChart", () => ({
-  BacktestTradeChart: () => null,
+  BacktestTradeChart: ({ trade }: { trade: { symbol?: string; timeframe?: string } }) => {
+    chartTrades.push(trade);
+    return null;
+  },
 }));
 
 function renderPanel() {
@@ -331,13 +339,17 @@ describe("BacktestPanel interaction paths", () => {
     const shortValues = Array.from(shortSelect.options).map((o) => o.value);
     expect(shortValues[0]).toBe("PASSED_AUTO");
     expect(shortValues).not.toContain("COMBO_02_V1");
-    expect(shortValues).toContain("COMBO_02_V2");
+    // The COMBO_02_V2 family runs LONG+SHORT together, so it lives in the hedge book.
+    expect(shortValues).not.toContain("COMBO_02_V2");
+    expect(shortValues).not.toContain("COMBO_02_V2_1B");
 
     await user.click(root.getByRole("tab", { name: "Long trades" }));
     const longValues = expectWorkingStrategyFirst(root);
     expect(longValues[1]).toBe("PASSED_AUTO");
     expect(longValues).toContain("COMBO_03_TRANSITION_B");
     expect(longValues).toContain("COMBO_SD_STRUCTURE");
+    expect(longValues).not.toContain("COMBO_02_V2");
+    expect(longValues).not.toContain("COMBO_02_V2_1B");
   });
 
   it("6a1. COMBO_02_V1 in the long book posts COMBO_02 v1 LONG", async () => {
@@ -398,7 +410,7 @@ describe("BacktestPanel interaction paths", () => {
     const root = within(container);
 
     expect(root.getByDisplayValue("Passed strategies (auto)")).toBeTruthy();
-    expect(root.getByRole("button", { name: "COMBO_02_V2 · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
+    expect(root.queryByRole("button", { name: /^COMBO_02_V2/ })).toBeNull();
     expect(root.getByRole("button", { name: "COMBO_01 · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
     expect(root.getByRole("button", { name: "COMBO_03_TRANSITION_B · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
     expect(root.queryByRole("button", { name: "COMBO_02 V2.1-A" })).toBeNull();
@@ -437,20 +449,20 @@ describe("BacktestPanel interaction paths", () => {
     const root = within(container);
 
     const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
-    expect(root.getByRole("option", { name: "COMBO_02_V2 · 1h SHORT" })).toBeTruthy();
+    expect(root.queryByRole("option", { name: /^COMBO_02_V2/ })).toBeNull();
     expect(root.getByRole("option", { name: "COMBO_01 · 1h SHORT" })).toBeTruthy();
     expect(root.getByRole("option", { name: "COMBO_03_TRANSITION_B · 1h SHORT" })).toBeTruthy();
-    await user.selectOptions(select, "COMBO_02_V2");
+    await user.selectOptions(select, "COMBO_01");
 
-    expect(root.getAllByText(/COMBO_02_V2 · 1h SHORT/i).length).toBeGreaterThan(0);
+    expect(root.getAllByText(/COMBO_01 · 1h SHORT/i).length).toBeGreaterThan(0);
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
       expect(startBacktestJob).toHaveBeenCalled();
     });
     const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
     expect(body?.direction).toBe("SHORT");
-    expect(body?.combination_id).toBe("COMBO_02_V2");
-    expect(body?.strategy_id).toBe("COMBO_02_V2");
+    expect(body?.combination_id).toBe("COMBO_01");
+    expect(body?.strategy_id).toBe("COMBO_01");
     expect(body?.combination_id).not.toBe("COMBO_04_HTF");
   });
 
@@ -857,9 +869,8 @@ describe("BacktestPanel interaction paths", () => {
     expect(sideEffects.textContent).toMatch(/paper_trade_created = false/i);
     expect(sideEffects.textContent).toMatch(/live_trade_created = false/i);
     expect(sideEffects.textContent).toMatch(/telegram_sent = false/i);
-    expect(root.getByTestId("backtest-in-sample-warning").textContent).toBe(
-      "In-sample only: every figure is computed on the same history used to pick the strategy and settings. There is no out-of-sample split and no multiple-comparison adjustment, so a positive result is a hypothesis, not evidence of an edge."
-    );
+    // The payload carries no in_sample field, so the in-sample warning is not shown.
+    expect(root.queryByTestId("backtest-in-sample-warning")).toBeNull();
     expect(startBacktestJob).not.toHaveBeenCalled();
   });
 
@@ -1456,6 +1467,341 @@ describe("BacktestPanel interaction paths", () => {
     });
     const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
     expect(body?.symbols).toEqual(["LINKUSDT"]);
+  });
+  describe("audit 2026-10-17 fixes", () => {
+    beforeEach(() => {
+      chartTrades.length = 0;
+      Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    it("1.15 switching books restores the new book's coins, strategy and direction", async () => {
+      const user = userEvent.setup();
+      const { container } = renderPanel();
+      const root = within(container);
+
+      await user.click(root.getByRole("tab", { name: "Long trades" }));
+      await user.selectOptions(root.getByRole("combobox", { name: /^Strategy/i }), "COMBO_02_V1");
+      await selectOnlySymbol(user, root, "BTCUSDT");
+      expect(coinsIn(root, "selected-coins")).toEqual(["BTCUSDT"]);
+
+      await user.click(root.getByRole("tab", { name: "Short trades" }));
+      expect(coinsIn(root, "selected-coins")).toEqual(DEFAULT_COINS);
+      expect((root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement).value).toBe(
+        "PASSED_AUTO",
+      );
+      expect(root.getAllByText(/Direction:\s*SHORT/).length).toBeGreaterThan(0);
+
+      // Same for hedge, and back to long.
+      await selectOnlySymbol(user, root, "SOLUSDT");
+      await user.click(root.getByRole("tab", { name: "Hedge trades" }));
+      expect(coinsIn(root, "selected-coins")).toEqual(DEFAULT_COINS);
+      await selectOnlySymbol(user, root, "ETHUSDT");
+      await user.click(root.getByRole("tab", { name: "Long trades" }));
+      expect(coinsIn(root, "selected-coins")).toEqual(DEFAULT_COINS);
+      expect(root.getAllByText(/Direction:\s*LONG/).length).toBeGreaterThan(0);
+
+      // Merged with 0ff796f: the long book's Passed (auto) run goes to the regime book.
+      vi.mocked(startRegimeBacktest).mockClear();
+      await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+      await waitFor(() => {
+        expect(startRegimeBacktest).toHaveBeenCalledTimes(1);
+      });
+      expect(startBacktestJob).not.toHaveBeenCalled();
+      expect(vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0]?.symbols).toEqual(DEFAULT_COINS);
+    });
+
+    it("1.15 choosing Passed (auto) again in the same book keeps the coins", async () => {
+      const user = userEvent.setup();
+      const { container } = renderPanel();
+      const root = within(container);
+      const select = root.getByRole("combobox", { name: /^Strategy/i });
+      await user.selectOptions(select, "COMBO_01");
+      await selectOnlySymbol(user, root, "BTCUSDT");
+      await user.selectOptions(select, "PASSED_AUTO");
+      expect(coinsIn(root, "selected-coins")).toEqual(["BTCUSDT"]);
+    });
+
+    it("1.42b leverage below 1 clamps to 1, zero included; an empty field is the 2x default", () => {
+      const { container } = renderPanel();
+      const root = within(container);
+      const lev = root.getByLabelText(/Leverage/i) as HTMLInputElement;
+      for (const [typed, shown] of [
+        ["0", "1"],
+        ["0.5", "1"],
+        ["-3", "1"],
+        ["5", "5"],
+        ["", "2"],
+      ] as const) {
+        fireEvent.change(lev, { target: { value: typed } });
+        expect(`${typed}->${lev.value}`).toBe(`${typed}->${shown}`);
+      }
+    });
+
+    const doneJob = (extra: Record<string, unknown> = {}, rowExtra: Record<string, unknown> = {}): BacktestJob =>
+      ({
+        status: "done",
+        job_id: "in-sample-check",
+        direction: "LONG",
+        strategy_id: "COMBO_02_V1",
+        paper_trade_created: false,
+        live_trade_created: false,
+        telegram_sent: false,
+        rows: [
+          {
+            combination_id: "COMBO_02",
+            symbol: "BTCUSDT",
+            timeframe: "1h",
+            direction: "LONG",
+            sample_size: 0,
+            risk_usd: 20,
+            bars_loaded: 100,
+            trades: [],
+            ...rowExtra,
+          },
+        ],
+        ...extra,
+      }) as BacktestJob;
+
+    it("1.50 shows the in-sample warning only when the job or a row says in_sample", () => {
+      for (const [label, job, shown] of [
+        ["no field", doneJob(), false],
+        ["job false", doneJob({ in_sample: false }), false],
+        ["job true", doneJob({ in_sample: true }), true],
+        ["row true", doneJob({}, { in_sample: true }), true],
+      ] as const) {
+        useBacktestJobStore.setState({ job, request: null, foreignJob: false, active: false, error: null });
+        const view = renderPanel();
+        const warning = within(view.container).queryByTestId("backtest-in-sample-warning");
+        expect(`${label}:${warning != null}`).toBe(`${label}:${shown}`);
+        if (warning) expect(warning.textContent).toMatch(/^In-sample only:/);
+        view.unmount();
+      }
+    });
+
+    // OSE trade dicts carry no symbol/timeframe; outcomes are target / stop / timeout.
+    const oseTrade = (trade_no: number, outcome: string, net: number) =>
+      ({
+        trade_no,
+        trade_id: `t${trade_no}`,
+        direction: "LONG",
+        entry_price: 100,
+        stop_price: 98,
+        exit_price: outcome === "target" ? 104 : outcome === "stop" ? 98 : 100.5,
+        tp1: 104,
+        outcome,
+        net_pnl_usd: net,
+        signal_time: `2026-09-0${trade_no}T10:00:00+00:00`,
+        exit_time: `2026-09-0${trade_no}T14:00:00+00:00`,
+      }) as unknown as StrategyTradeRow;
+    const oseJob = (): BacktestJob => ({
+      status: "done",
+      job_id: "ose-d",
+      symbols: ["ETHUSDT"],
+      timeframes: ["15m"],
+      direction: "LONG",
+      strategy_id: "OSE_D_faster_confirmation",
+      combo_version: "engine-ose",
+      production_comparable: false,
+      research_only: true,
+      principal_usd: 1000,
+      limit: 5760,
+      paper_trade_created: false,
+      live_trade_created: false,
+      telegram_sent: false,
+      rows: [
+        {
+          combination_id: "OSE_D_faster_confirmation",
+          engine_family: "ohlcv_structure_experiment",
+          engine_fill_model: "next-open",
+          symbol: "ETHUSDT",
+          timeframe: "15m",
+          direction: "LONG",
+          sample_size: 4,
+          risk_usd: 20,
+          bars_loaded: 5760,
+          period_start: "2026-09-01T00:00:00+00:00",
+          period_end: "2026-09-30T00:00:00+00:00",
+          production_comparable: false,
+          research_only: true,
+          trades: [
+            oseTrade(1, "stop", -20),
+            oseTrade(2, "target", 40),
+            oseTrade(3, "timeout", 2),
+            oseTrade(4, "stop", -20),
+          ],
+        },
+      ],
+    });
+
+    it("1.52 the trade chart overlay gets the row's symbol and timeframe for OSE trades", () => {
+      useBacktestJobStore.setState({ job: oseJob(), request: null, foreignJob: false, active: false, error: null });
+      const { container } = renderPanel();
+      expect(within(container).queryByTestId("backtest-run-mismatch")).toBeNull();
+      expect(chartTrades.length).toBeGreaterThan(0);
+      const last = chartTrades.at(-1);
+      expect(last?.symbol).toBe("ETHUSDT");
+      expect(last?.timeframe).toBe("15m");
+    });
+
+    it("1.52 a trade's own symbol and timeframe still win over the row's", () => {
+      const job = oseJob();
+      job.rows![0].trades = [{ ...oseTrade(1, "stop", -20), symbol: "BTCUSDT", timeframe: "1h" }];
+      useBacktestJobStore.setState({ job, request: null, foreignJob: false, active: false, error: null });
+      renderPanel();
+      expect(chartTrades.at(-1)).toMatchObject({ symbol: "BTCUSDT", timeframe: "1h" });
+    });
+
+    it("1.53 the run lead counts OSE target as TP and stop as a stop-out, timeout as neither", () => {
+      useBacktestJobStore.setState({ job: oseJob(), request: null, foreignJob: false, active: false, error: null });
+      const { container } = renderPanel();
+      expect(container.textContent).toMatch(/The 4 trades run from .* \(1 TP, 2 stop-outs\)\./);
+    });
+
+    it("1.53 the run lead still counts TP1/TP2 and SL outcomes", () => {
+      const job = doneJob({ symbols: ["BTCUSDT"], timeframes: ["1h"] });
+      job.rows![0].trades = [
+        { ...oseTrade(1, "TP1", 20), symbol: "BTCUSDT", timeframe: "1h" },
+        { ...oseTrade(2, "TP2", 30), symbol: "BTCUSDT", timeframe: "1h" },
+        { ...oseTrade(3, "SL", -20), symbol: "BTCUSDT", timeframe: "1h" },
+      ];
+      useBacktestJobStore.setState({ job, request: null, foreignJob: false, active: false, error: null });
+      const { container } = renderPanel();
+      expect(container.textContent).toMatch(/\(2 TP, 1 stop-outs\)/);
+    });
+
+    it("COMBO_02_V2 and COMBO_02_V2_1B are hedge-book runs, labelled LONG+SHORT, not long or short", async () => {
+      const user = userEvent.setup();
+      const { container } = renderPanel();
+      const root = within(container);
+      const values = () =>
+        Array.from((root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement).options).map(
+          (o) => o.value,
+        );
+
+      expect(values()).not.toContain("COMBO_02_V2");
+      expect(values()).not.toContain("COMBO_02_V2_1B");
+      await user.click(root.getByRole("tab", { name: "Long trades" }));
+      expect(values()).not.toContain("COMBO_02_V2");
+      expect(values()).not.toContain("COMBO_02_V2_1B");
+
+      await user.click(root.getByRole("tab", { name: "Hedge trades" }));
+      expect(values()).toEqual(
+        expect.arrayContaining(["PASSED_AUTO", "COMBO_02_V2_1_A", "COMBO_02_V2", "COMBO_02_V2_1B"]),
+      );
+      expect(root.getByRole("option", { name: "COMBO_02_V2 · 1h LONG+SHORT" })).toBeTruthy();
+      expect(root.getByRole("option", { name: "COMBO_02_V2_1B · 1h LONG+SHORT" })).toBeTruthy();
+      // Only V2.1-A is the hedge book's passed run.
+      expect(root.getByRole("button", { name: "COMBO_02 V2.1-A" })).toBeTruthy();
+      expect(root.queryByRole("button", { name: /^COMBO_02_V2/ })).toBeNull();
+    });
+
+    for (const [id, version] of [
+      ["COMBO_02_V2", "v2-combo02-adaptive-3-regime"],
+      ["COMBO_02_V2_1B", "v2.1-b-choppy-15m"],
+    ] as const) {
+      it(`${id} on the hedge book posts its own id like V2.1-A: native LONG+SHORT, no side buttons`, async () => {
+        const user = userEvent.setup();
+        const { container } = renderPanel();
+        const root = within(container);
+        await user.click(root.getByRole("tab", { name: "Hedge trades" }));
+        await user.selectOptions(root.getByRole("combobox", { name: /^Strategy/i }), id);
+
+        expect(root.queryByRole("button", { name: /^LONG$/ })).toBeNull();
+        expect(root.queryByTitle(/SHORT research-only/i)).toBeNull();
+        expect(root.getAllByText(/Direction:\s*LONG\+SHORT \(native\)/).length).toBeGreaterThan(0);
+        expect(
+          root.getAllByText(new RegExp(`${id} runs native LONG\\+SHORT \\(direction filter off\\)`)).length,
+        ).toBeGreaterThan(0);
+
+        await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+        await waitFor(() => {
+          expect(startBacktestJob).toHaveBeenCalledTimes(1);
+        });
+        expect(vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0]).toMatchObject({
+          combination_id: id,
+          strategy_id: id,
+          combo_version: version,
+          // Same as V2.1-A: LONG is the request placeholder for a native LONG+SHORT run.
+          direction: "LONG",
+          research_risk_override: true,
+        });
+      });
+    }
+
+    const v2Job = (direction: "LONG" | "SHORT"): BacktestJob => ({
+      status: "done",
+      job_id: `v2-${direction}`,
+      symbols: ["BTCUSDT"],
+      timeframes: ["1h"],
+      direction,
+      strategy_id: "COMBO_02_V2",
+      combo_version: "v2-combo02-adaptive-3-regime",
+      production_comparable: false,
+      research_only: true,
+      principal_usd: 1000,
+      paper_trade_created: false,
+      live_trade_created: false,
+      telegram_sent: false,
+      rows: [
+        {
+          combination_id: "COMBO_02_V2",
+          symbol: "BTCUSDT",
+          timeframe: "1h",
+          direction,
+          sample_size: 2,
+          risk_usd: 20,
+          bars_loaded: 100,
+          production_comparable: false,
+          research_only: true,
+          trades: [
+            { ...oseTrade(1, "TP1", 20), symbol: "BTCUSDT", timeframe: "1h", direction: "LONG" },
+            { ...oseTrade(2, "SL", -20), symbol: "BTCUSDT", timeframe: "1h", direction: "SHORT" },
+          ],
+        },
+      ],
+    });
+
+    it("a hedge-book COMBO_02_V2 run with LONG and SHORT trades is shown, labelled LONG+SHORT", () => {
+      useBacktestJobStore.setState({
+        job: v2Job("LONG"),
+        request: {
+          symbols: ["BTCUSDT"],
+          timeframes: ["1h"],
+          direction: "LONG",
+          strategy_id: "COMBO_02_V2",
+          research_risk_override: true,
+        },
+        foreignJob: false,
+        ownJobId: "v2-LONG",
+        active: false,
+        error: null,
+      });
+      const { container } = renderPanel();
+      const root = within(container);
+      expect(root.queryByTestId("backtest-run-mismatch")).toBeNull();
+      expect(root.getByTestId("backtest-trade-blotter")).toBeTruthy();
+      expect(root.getAllByText(/LONG\+SHORT \(native\)/).length).toBeGreaterThan(0);
+    });
+
+    it("a COMBO_02_V2 SHORT request that returns LONG trades is still hidden by the mismatch guard", () => {
+      useBacktestJobStore.setState({
+        job: v2Job("SHORT"),
+        request: {
+          symbols: ["BTCUSDT"],
+          timeframes: ["1h"],
+          direction: "SHORT",
+          strategy_id: "COMBO_02_V2",
+          research_risk_override: true,
+        },
+        foreignJob: false,
+        ownJobId: "v2-SHORT",
+        active: false,
+        error: null,
+      });
+      const { container } = renderPanel();
+      const banner = within(container).getByTestId("backtest-run-mismatch");
+      expect(banner.textContent).toMatch(/trade_no 1 is LONG in a SHORT run\./);
+    });
   });
 });
 

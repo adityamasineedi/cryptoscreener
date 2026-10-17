@@ -380,7 +380,13 @@ def build_engine_row(
         dd_r = max(dd_r, peak - cum)
         curve_r.append(round(cum, 6))
     n = len(trades)
-    tp_hits = sum(1 for t in trades if str(t.get("outcome") or "").upper().startswith("TP"))
+    # Display counts only. OSE outcomes are "target" / "stop" / "timeout"; a timeout is neither.
+    tp_hits = sum(
+        1
+        for t in trades
+        if str(t.get("outcome") or "").upper().startswith("TP")
+        or str(t.get("outcome") or "").upper() == "TARGET"
+    )
     sl_hits = sum(
         1 for t in trades if str(t.get("outcome") or "").upper() in ("SL", "STOP", "STOP_LOSS")
     )

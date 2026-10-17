@@ -12,6 +12,8 @@ import {
   filterBacktestCapSymbols,
   isBacktestCapSymbol,
   PASSED_STRATEGY_IDS,
+  passedIdsForBook,
+  strategyIdsForBook,
   formatBarsDuration,
   lastNDaysUtc,
   symbolRoleDisplay,
@@ -156,6 +158,19 @@ describe("v1Config working strategy order", () => {
       expect(opt, id).toBeDefined();
       expect(`${id}:${opt?.status}`).toBe(`${id}:Research`);
     }
+  });
+});
+
+describe("v1Config trade books", () => {
+  it("puts the two-sided COMBO_02_V2 family only in the hedge book", () => {
+    for (const book of ["long", "short"] as const) {
+      expect(strategyIdsForBook(book)).not.toContain("COMBO_02_V2");
+      expect(strategyIdsForBook(book)).not.toContain("COMBO_02_V2_1B");
+      expect(passedIdsForBook(book)).not.toContain("COMBO_02_V2");
+      expect(passedIdsForBook(book)).not.toContain("COMBO_02_V2_1B");
+    }
+    expect([...strategyIdsForBook("hedge")]).toEqual(["COMBO_02_V2_1_A", "COMBO_02_V2", "COMBO_02_V2_1B"]);
+    expect([...passedIdsForBook("hedge")]).toEqual(["COMBO_02_V2_1_A"]);
   });
 });
 
