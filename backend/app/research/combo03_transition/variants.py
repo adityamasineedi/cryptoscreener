@@ -33,6 +33,14 @@ def require_15m_confirmation(variant: str) -> bool:
     return variant != VARIANT_B_NO_15M
 
 
+def combination_requires_15m(combination_id: str | None) -> bool:
+    """True for COMBO_03 family ids whose variant needs 15m confirmation candles."""
+    cid = str(combination_id or "")
+    return cid in COMBO_03_FAMILY and require_15m_confirmation(
+        variant_for_combination_id(cid)
+    )
+
+
 def require_displacement(variant: str) -> bool:
     return variant == VARIANT_C_DISPLACEMENT
 
