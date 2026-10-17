@@ -53,7 +53,11 @@ import {
   V1_PRODUCTION_RISK,
   v1RiskForSymbol,
 } from "../backtest/v1Config";
-import { tradeRowKey } from "../chart/backtestTradeOverlay";
+import {
+  hasSeparateFillBar,
+  tradeEntryTime,
+  tradeRowKey,
+} from "../chart/backtestTradeOverlay";
 import {
   mergeSymbols,
   parseSymbolList,
@@ -208,12 +212,27 @@ function Sparkline({ values }: { values: number[] }) {
   );
 }
 
-/** Peak-to-trough drawdown of cumulative net $ over the trades. Peak starts at 0. */
+/**
+ * Trade indexes in the order the trades closed (exit time), ties and missing
+ * exit times kept in list order. Realized equity only moves when a trade exits.
+ */
+function exitOrderIndexes(trades: StrategyTradeRow[]): number[] {
+  const exitMs = trades.map((t) => {
+    const ms = t.exit_time ? Date.parse(t.exit_time) : NaN;
+    return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+  });
+  return trades
+    .map((_, i) => i)
+    .sort((a, b) => (exitMs[a] === exitMs[b] ? a - b : exitMs[a] < exitMs[b] ? -1 : 1));
+}
+
+/** Peak-to-trough drawdown of cumulative net $ over the trades, in exit order. Peak starts at 0. */
 function tradesMaxDrawdownUsd(trades: StrategyTradeRow[]): number {
   let cum = 0;
   let peak = 0;
   let dd = 0;
-  for (const t of trades) {
+  for (const i of exitOrderIndexes(trades)) {
+    const t = trades[i];
     cum += Number(t.net_pnl_usd || 0);
     if (cum > peak) peak = cum;
     if (peak - cum > dd) dd = peak - cum;
@@ -809,19 +828,33 @@ export function BacktestPanel() {
   const selected = rows.find(
     (r) => `${r.symbol}:${r.timeframe}` === selectedKey
   );
-  const viewingSymbol = preferredSymbol && symbols.includes(preferredSymbol) ? preferredSymbol : symbols[0] || null;
-  const viewingIndex = viewingSymbol ? symbols.indexOf(viewingSymbol) : -1;
+  // Coins the output can step through: the job's result rows, not the form's
+  // coins. With no result yet, the form's coins.
+  const stepSymbols = useMemo(() => {
+    const fromRows = Array.from(new Set(rows.map((r) => r.symbol)));
+    return fromRows.length ? fromRows : symbols;
+  }, [rows, symbols]);
+  const viewingSymbol =
+    selected?.symbol ??
+    (preferredSymbol && stepSymbols.includes(preferredSymbol) ? preferredSymbol : stepSymbols[0] || null);
+  const viewingIndex = viewingSymbol ? stepSymbols.indexOf(viewingSymbol) : -1;
   function stepCoin(delta: number) {
-    if (symbols.length < 2) return;
+    if (stepSymbols.length < 2) return;
     const base = viewingIndex >= 0 ? viewingIndex : 0;
-    const next = (base + delta + symbols.length) % symbols.length;
-    const symbol = symbols[next];
+    const next = (base + delta + stepSymbols.length) % stepSymbols.length;
+    const symbol = stepSymbols[next];
     setPreferredSymbol(symbol);
-    const row = rows.find((item) => item.symbol === symbol);
+    // Keep the timeframe being viewed when the next coin has it.
+    const row =
+      rows.find((item) => item.symbol === symbol && item.timeframe === selected?.timeframe) ??
+      rows.find((item) => item.symbol === symbol);
     if (row) setSelectedKey(`${row.symbol}:${row.timeframe}`);
   }
   const pooled = useMemo(() => {
+    // n counts every closed trade. Avg R gross is over the rows that report it
+    // (OSE rows have no gross R), so a missing R never zeroes n.
     let n = 0;
+    let nR = 0;
     let sumR = 0;
     let pnl = 0;
     let pnlNet = 0;
@@ -829,8 +862,9 @@ export function BacktestPanel() {
     for (const r of rows) {
       const s = Number(r.sample_size || 0);
       if (!s) continue;
+      n += s;
       if (r.average_R != null) {
-        n += s;
+        nR += s;
         sumR += Number(r.average_R) * s;
       }
       pnl += Number(r.pnl_usd || 0);
@@ -839,12 +873,33 @@ export function BacktestPanel() {
     }
     return {
       n,
-      avgR: n ? sumR / n : null,
+      nR,
+      avgR: nR ? sumR / nR : null,
       pnl,
       pnlNet,
       fees,
     };
   }, [rows]);
+  const ddHeaderBasis = commonBasis(rows, maxDdRBasis);
+  const equityHeaderBasis = commonBasis(rows, equityRBasis);
+
+  // A job that stopped before every cell ran is a partial result, not a finished run.
+  const partialRun = useMemo(() => {
+    if (!job || !shownResult) return null;
+    const status = job.status;
+    if (status !== "cancelled" && status !== "stalled" && status !== "error") return null;
+    if (status !== "cancelled" && !rows.length) return null;
+    const total =
+      job.total_cells ??
+      ((job.symbols?.length ?? 0) * (job.timeframes?.length ?? 0) || null);
+    const done = job.done_cells ?? rows.length;
+    const label =
+      status === "cancelled" ? "Cancelled" : status === "stalled" ? "Stalled" : "Failed";
+    return {
+      status,
+      text: `${label} — partial result: ${done} of ${total ?? "?"} cells`,
+    };
+  }, [job, shownResult, rows.length]);
 
   const selectedCapital = useMemo(() => {
     const net = selected?.pnl_usd_net ?? null;
@@ -1205,7 +1260,7 @@ export function BacktestPanel() {
             <div className="mb-1 text-[11px] uppercase tracking-wide text-terminal-muted">
               Coins in this run ({symbols.length})
             </div>
-            {symbols.length > 1 ? (
+            {stepSymbols.length > 1 ? (
               <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]" data-testid="coin-stepper">
                 <button
                   type="button"
@@ -1215,7 +1270,7 @@ export function BacktestPanel() {
                   Previous coin
                 </button>
                 <span className="font-mono text-terminal-text">
-                  Coin {viewingIndex + 1} of {symbols.length}: {(viewingSymbol || "").replace("USDT", "")}
+                  Coin {viewingIndex + 1} of {stepSymbols.length}: {(viewingSymbol || "").replace("USDT", "")}
                 </span>
                 <button
                   type="button"
@@ -1953,7 +2008,7 @@ export function BacktestPanel() {
         Backtest output
         {selected ? ` · ${selected.symbol.replace("USDT", "")}` : viewingSymbol ? ` · ${viewingSymbol.replace("USDT", "")}` : ""}
       </h2>
-      {symbols.length > 1 && selected ? (
+      {stepSymbols.length > 1 && selected ? (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
           <button
             type="button"
@@ -1963,7 +2018,7 @@ export function BacktestPanel() {
             Previous coin
           </button>
           <span className="font-mono text-terminal-text">
-            {selected.symbol} · {selected.timeframe} · coin {Math.max(1, symbols.indexOf(selected.symbol) + 1)} of {symbols.length}
+            {selected.symbol} · {selected.timeframe} · coin {Math.max(1, stepSymbols.indexOf(selected.symbol) + 1)} of {stepSymbols.length}
           </span>
           <button
             type="button"
@@ -2014,11 +2069,24 @@ export function BacktestPanel() {
 
       {shownResult ? (
         <>
+          {partialRun ? (
+            <div
+              className="mb-3 rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100"
+              data-testid="backtest-partial-run"
+            >
+              <div className="font-semibold">{partialRun.text}</div>
+              <div className="mt-0.5 text-[11px] text-amber-100/80">
+                The run did not finish. Totals below cover only the cells that completed and
+                are not a completed run&apos;s result.
+              </div>
+            </div>
+          ) : null}
           {selected ? (
             <RunLead
               row={selected}
               strategyLabel={jobStrategyLabel(job?.strategy_id)}
-              requestedBars={job?.limit ?? 0}
+              // Calendar runs send the API safety cap as `limit`; it is not a bar request.
+              requestedBars={job?.start_date || job?.end_date ? 0 : (job?.limit ?? 0)}
               productionComparable={jobProductionComparable}
             />
           ) : null}
@@ -2035,7 +2103,9 @@ export function BacktestPanel() {
               <div className="text-[10px] uppercase tracking-wide text-terminal-muted">
                 {selected
                   ? `Net profit (${selected.symbol} ${selected.timeframe})`
-                  : "Net profit (summed over cells)"}
+                  : partialRun
+                    ? "Net profit (summed over completed cells, partial)"
+                    : "Net profit (summed over cells)"}
               </div>
               <div
                 className={`font-mono text-lg ${
@@ -2052,7 +2122,9 @@ export function BacktestPanel() {
               <div className="text-[10px] uppercase tracking-wide text-terminal-muted">
                 {selected
                   ? `Ending equity (${selected.symbol} ${selected.timeframe} only)`
-                  : "Principal + summed net"}
+                  : partialRun
+                    ? "Principal + summed net (partial)"
+                    : "Principal + summed net"}
               </div>
               <div className="font-mono text-lg text-terminal-accent">
                 {selected
@@ -2246,7 +2318,10 @@ export function BacktestPanel() {
               </span>
             </div>
             <div>
-              Pooled n={pooled.n} · avg R gross={num(pooled.avgR)} · gross PnL={money(pooled.pnl)}
+              {partialRun ? "Partial (run did not finish) · " : ""}
+              Pooled n={pooled.n} · avg R gross={num(pooled.avgR)}
+              {pooled.avgR != null && pooled.nR < pooled.n ? ` (over ${pooled.nR} trades)` : ""}
+              {" · "}gross PnL={money(pooled.pnl)}
               {" · "}net PnL={money(pooled.pnlNet)}
             </div>
             <div>
@@ -2325,11 +2400,15 @@ export function BacktestPanel() {
               <th className="px-2 py-2">SL</th>
               <th className="px-2 py-2">PF gross</th>
               <th className="px-2 py-2">PF net</th>
-              <th className="px-2 py-2">Max DD R (gross)</th>
+              <th className="px-2 py-2">
+                {ddHeaderBasis ? `Max DD R (${ddHeaderBasis})` : "Max DD R"}
+              </th>
               <th className="px-2 py-2">Gross PnL</th>
               <th className="px-2 py-2">Net PnL</th>
               <th className="px-2 py-2">Fees</th>
-              <th className="px-2 py-2">Equity R (gross)</th>
+              <th className="px-2 py-2">
+                {equityHeaderBasis ? `Equity R (${equityHeaderBasis})` : "Equity R"}
+              </th>
               <th className="px-2 py-2">Period</th>
             </tr>
           </thead>
@@ -2409,7 +2488,12 @@ export function BacktestPanel() {
                     <td className="px-2 py-2 font-mono">{pct(row.sl_rate)}</td>
                     <td className="px-2 py-2 font-mono">{num(row.profit_factor)}</td>
                     <td className="px-2 py-2 font-mono">{num(row.profit_factor_net)}</td>
-                    <td className="px-2 py-2 font-mono">{num(row.max_drawdown_R)}</td>
+                    <td className="px-2 py-2 font-mono">
+                      {num(row.max_drawdown_R)}
+                      {ddHeaderBasis ? null : (
+                        <div className="text-[9px] text-terminal-muted">{maxDdRBasis(row)} R</div>
+                      )}
+                    </td>
                     <td
                       className={`px-2 py-2 font-mono ${
                         (row.pnl_usd ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
@@ -2449,7 +2533,9 @@ export function BacktestPanel() {
                       />
                       {row.pnl_model === "CAUSAL_NEXT_OPEN" && row.trades?.length ? (
                         <div className="text-[9px] text-terminal-muted">causal net R</div>
-                      ) : null}
+                      ) : equityHeaderBasis ? null : (
+                        <div className="text-[9px] text-terminal-muted">{equityRBasis(row)} R</div>
+                      )}
                     </td>
                     <td className="px-2 py-2 font-mono text-terminal-muted">
                       <div className="text-[10px]">
@@ -2478,8 +2564,17 @@ export function BacktestPanel() {
       </div>
 
       <BacktestDataMap
-        strategyLabel={backtestStrategyLabel(strategyId)}
-        symbols={symbols.length}
+        // Describes the job whose rows it counts; the form only before any run.
+        strategyLabel={
+          job && job.status !== "idle" && job.strategy_id
+            ? `${jobStrategyLabel(job.strategy_id)} · ${directionLabel(job)}`
+            : backtestStrategyLabel(strategyId)
+        }
+        symbols={
+          job && job.status !== "idle"
+            ? jobSymbols.length || new Set(rows.map((row) => row.symbol)).size
+            : symbols.length
+        }
         ohlcvBars={
           rows.length
             ? rows.reduce((sum, row) => sum + Number(row.bars_loaded || 0), 0)
@@ -2514,6 +2609,40 @@ function causalEquityR(trades: StrategyTradeRow[]): number[] {
   });
 }
 
+/** Which R a row's R figures are in. Label only; the values come from the backend. */
+type RBasis = "gross" | "net" | "causal net" | "causal gross";
+
+function isCausalRow(row: StrategyMatrixRow): boolean {
+  return row.pnl_model === "CAUSAL_NEXT_OPEN";
+}
+
+/**
+ * max_drawdown_R: the causal book reports it on net R; ranked-engine rows
+ * (engine_family) build it from each trade's r_net; COMBO rows from gross R.
+ */
+function maxDdRBasis(row: StrategyMatrixRow): RBasis {
+  if (isCausalRow(row)) return "causal net";
+  if (row.engine_family) return "net";
+  return "gross";
+}
+
+/**
+ * The matrix Equity R line: causal rows with trades are redrawn from r_net
+ * (causalEquityR); causal equity_curve_r is gross; engine rows' is net.
+ */
+function equityRBasis(row: StrategyMatrixRow): RBasis {
+  if (isCausalRow(row)) return row.trades?.length ? "causal net" : "causal gross";
+  if (row.engine_family) return "net";
+  return "gross";
+}
+
+/** One basis for the column header when every row agrees, else null (each cell says it). */
+function commonBasis(rows: StrategyMatrixRow[], pick: (row: StrategyMatrixRow) => RBasis): RBasis | null {
+  if (!rows.length) return "gross";
+  const first = pick(rows[0]);
+  return rows.every((row) => pick(row) === first) ? first : null;
+}
+
 function SelectedDetail({
   row,
   principalUsd,
@@ -2528,16 +2657,20 @@ function SelectedDetail({
   const selectedTrade =
     trades.find((t) => tradeRowKey(t) === selectedTradeKey) || null;
 
+  // Realized equity after each trade's exit, accumulated in exit order so
+  // overlapping trades are counted when they close. Rows stay in list order.
+  const equityAfter: number[] = new Array(trades.length).fill(principalUsd);
   let running = principalUsd;
-  const withEquity = trades.map((t) => {
-    running += Number(t.net_pnl_usd || 0);
-    return { t, equity: running };
-  });
+  for (const i of exitOrderIndexes(trades)) {
+    running += Number(trades[i].net_pnl_usd || 0);
+    equityAfter[i] = running;
+  }
+  const withEquity = trades.map((t, i) => ({ t, equity: equityAfter[i] }));
   const endingFromRow = principalUsd + Number(row.pnl_usd_net || 0);
-  // Same principal and trades as the Equity $ column, so the total is its last cell.
+  // Same principal and trades as the Equity $ column, so the total is its last exit.
   const ending =
     withEquity.length && trades.every((t) => t.net_pnl_usd != null)
-      ? withEquity[withEquity.length - 1].equity
+      ? running
       : endingFromRow;
   const winRateNet = trades.length
     ? trades.filter((t) => Number(t.net_pnl_usd || 0) > 0).length / trades.length
@@ -2555,7 +2688,10 @@ function SelectedDetail({
     ? { label: "Equity curve ($ net, equity_curve_usd_net)", values: row.equity_curve_usd_net }
     : row.pnl_model === "CAUSAL_NEXT_OPEN" && trades.length
       ? { label: "Equity curve (causal net R, from trades)", values: causalEquityR(trades) }
-      : { label: "Equity curve (gross R, equity_curve_r)", values: row.equity_curve_r || [] };
+      : {
+          label: `Equity curve (${equityRBasis(row)} R, equity_curve_r)`,
+          values: row.equity_curve_r || [],
+        };
   const blotterScrollRef = useRef<HTMLDivElement | null>(null);
   const blotterVirtualizer = useVirtualizer({
     count: withEquity.length,
@@ -2576,8 +2712,12 @@ function SelectedDetail({
           {money(row.pnl_usd_net)} · net R {num(row.average_R_net)} · win rate (net &gt; 0){" "}
           {pct(winRateNet)} · max DD {maxDdUsd == null ? "—" : `$${maxDdUsd.toFixed(2)}`} /{" "}
           {num(row.max_drawdown_R)}
-          {row.pnl_model === "CAUSAL_NEXT_OPEN" ? " causal R" : "R gross"} · fees{" "}
-          {money(-(row.fees_usd ?? 0)).replace("+", "-")}
+          {row.pnl_model === "CAUSAL_NEXT_OPEN"
+            ? " causal R"
+            : maxDdRBasis(row) === "net"
+              ? "R net"
+              : "R gross"}{" "}
+          · fees {row.fees_usd == null ? "—" : money(-row.fees_usd).replace("+", "-")}
         </span>
       </div>
       {row.pnl_model === "CAUSAL_NEXT_OPEN" && trades[0] ? (
@@ -2663,7 +2803,12 @@ function SelectedDetail({
           <thead className="sticky top-0 z-10 bg-black/80 text-[10px] uppercase tracking-wide text-terminal-muted">
             <tr>
               <th className="px-2 py-2">#</th>
-              <th className="px-2 py-2">Entry time</th>
+              <th
+                className="px-2 py-2"
+                title="Bar the position opened: the fill bar for next-open fills, else the signal bar."
+              >
+                Entry time
+              </th>
               <th className="px-2 py-2">Exit time</th>
               <th className="px-2 py-2">Side</th>
               <th className="px-2 py-2">Entry</th>
@@ -2803,6 +2948,7 @@ function TradeRow({
   onSelect: () => void;
 }) {
   const net = t.net_pnl_usd;
+  const separateFill = hasSeparateFillBar(t);
   const netCls =
     net == null ? "text-terminal-muted" : net >= 0 ? "text-emerald-400" : "text-red-400";
   const marginTitle = [
@@ -2833,7 +2979,22 @@ function TradeRow({
       }`}
     >
       <td className="px-2 py-1.5 font-mono text-terminal-muted">{t.trade_no ?? "—"}</td>
-      <td className="px-2 py-1.5 font-mono whitespace-nowrap">{fmtTime(t.signal_time)}</td>
+      <td
+        className="px-2 py-1.5 font-mono whitespace-nowrap"
+        title={
+          separateFill
+            ? `Signal bar ${fmtTime(t.signal_time)}; filled at the next bar's open ${fmtTime(t.fill_time)}.`
+            : undefined
+        }
+        data-testid="trade-entry-time"
+      >
+        <span data-testid="trade-fill-time">{fmtTime(tradeEntryTime(t))}</span>
+        {separateFill ? (
+          <div className="text-[9px] text-terminal-muted" data-testid="trade-signal-time">
+            Signal {fmtTime(t.signal_time)}
+          </div>
+        ) : null}
+      </td>
       <td className="px-2 py-1.5 font-mono whitespace-nowrap">{fmtTime(t.exit_time)}</td>
       <td className="px-2 py-1.5 font-mono">{t.direction}</td>
       <td className="px-2 py-1.5 font-mono">{px(t.entry_price)}</td>
@@ -2853,7 +3014,7 @@ function TradeRow({
       </td>
       <td className="px-2 py-1.5 font-mono text-terminal-muted">{t.entry_type || "—"}</td>
       <td className="px-2 py-1.5 font-mono text-terminal-muted">
-        {money(-(t.fee_total_usd ?? 0)).replace("+", "-")}
+        {t.fee_total_usd == null ? "—" : money(-t.fee_total_usd).replace("+", "-")}
       </td>
       <td
         className={`px-2 py-1.5 font-mono ${
@@ -2903,10 +3064,13 @@ function RunLead({
   const warmup = warmupBars > 0 ? `plus ${warmupBars.toLocaleString()} warm-up, ` : "";
   const range = `${formatUtcDay(row.period_start, true)} → ${formatUtcDay(row.period_end, true)}`;
   // Warm-up bars are not part of the request, so only the evaluated count is compared with it.
+  // requestedBars is 0 for calendar runs: the bars come from the row, not the request.
   const bars =
-    counted != null && requestedBars && counted !== requestedBars
-      ? `${requestedBars.toLocaleString()} bars (${counted.toLocaleString()} ${countedLabel}, ${warmup}${range})`
-      : `${(counted ?? requestedBars ?? 0).toLocaleString()} bars (${warmup}${range})`;
+    counted != null && !requestedBars
+      ? `${counted.toLocaleString()} bars ${countedLabel} (${warmup}${range})`
+      : counted != null && requestedBars && counted !== requestedBars
+        ? `${requestedBars.toLocaleString()} bars (${counted.toLocaleString()} ${countedLabel}, ${warmup}${range})`
+        : `${(counted ?? requestedBars ?? 0).toLocaleString()} bars (${warmup}${range})`;
   const trades = row.trades || [];
   const wins = trades.filter((trade) => isTargetOutcome(trade.outcome)).length;
   const stops = trades.filter((trade) => isStopOutcome(trade.outcome)).length;
@@ -2914,15 +3078,20 @@ function RunLead({
     .flatMap((trade) => [trade.signal_time, trade.exit_time])
     .map((value) => (value ? Date.parse(value) : NaN))
     .filter((value) => Number.isFinite(value));
+  const firstStamp = stamps.length ? new Date(Math.min(...stamps)) : null;
+  const lastStamp = stamps.length ? new Date(Math.max(...stamps)) : null;
+  // Name the start year too when the trades cross a year end.
+  const spanCrossesYear =
+    firstStamp != null && lastStamp != null && firstStamp.getUTCFullYear() !== lastStamp.getUTCFullYear();
   return (
     <div className="mb-3">
       <div className="font-mono text-[12px] text-terminal-text">
         {row.symbol} · {row.timeframe} · {strategyLabel} · {row.direction} · {bars}
       </div>
-      {stamps.length ? (
+      {firstStamp && lastStamp ? (
         <p className="mt-1 text-[11px] text-terminal-muted">
-          The {trades.length} trades run from {formatUtcDay(new Date(Math.min(...stamps)).toISOString(), false)} through{" "}
-          {formatUtcDay(new Date(Math.max(...stamps)).toISOString(), true)} ({wins} TP, {stops} stop-outs).{" "}
+          The {trades.length} trades run from {formatUtcDay(firstStamp.toISOString(), spanCrossesYear)} through{" "}
+          {formatUtcDay(lastStamp.toISOString(), true)} ({wins} TP, {stops} stop-outs).{" "}
           {productionComparable
             ? "Production comparable is YES."
             : "This is a research run: production comparable is NO."}

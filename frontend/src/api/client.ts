@@ -493,6 +493,12 @@ export type StrategyTradeRow = {
   timeframe: string;
   direction: string;
   signal_time?: string | null;
+  /** CAUSAL_NEXT_OPEN: open time of the bar after the signal, where the entry filled. */
+  fill_time?: string | null;
+  signal_index?: number | null;
+  fill_index?: number | null;
+  /** e.g. "CAUSAL_NEXT_OPEN" on trades from the causal book. */
+  execution_model?: string | null;
   exit_time?: string | null;
   entry_price: number;
   exit_price?: number | null;
@@ -511,7 +517,7 @@ export type StrategyTradeRow = {
   liquidation_price?: number | null;
   fee_entry_usd?: number;
   fee_exit_usd?: number;
-  fee_total_usd?: number;
+  fee_total_usd?: number | null;
   fee_entry_rate?: number;
   fee_exit_rate?: number;
   gross_pnl_usd?: number | null;

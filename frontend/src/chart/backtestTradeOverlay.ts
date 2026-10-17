@@ -55,7 +55,31 @@ function snapToCandle(
   return best;
 }
 
-/** Stable key for blotter row selection. */
+/**
+ * Time the position was opened. CAUSAL_NEXT_OPEN trades fill at the open of the
+ * bar after the signal (`fill_time`); other trades enter on the signal bar.
+ */
+export function tradeEntryTime(t: StrategyTradeRow): string | null {
+  return t.fill_time || t.signal_time || null;
+}
+
+/** True when the trade filled on a later bar than its signal. */
+export function hasSeparateFillBar(t: StrategyTradeRow): boolean {
+  return Boolean(t.fill_time && t.signal_time && t.fill_time !== t.signal_time);
+}
+
+/**
+ * Stop-loss exit (SL, SL_*, STOP, STOP_LOSS, GAP_THROUGH_STOP …).
+ * A time stop or timeout is a neutral exit, not a stop loss.
+ */
+export function isStopLossOutcome(outcome: string | null | undefined): boolean {
+  const o = String(outcome || "").toUpperCase();
+  if (!o) return false;
+  if (o.includes("TIME") || o.includes("EXPIR")) return false;
+  return o.startsWith("SL") || o.includes("STOP");
+}
+
+/** Stable key for blotter row selection. Uses the signal time, never the fill time. */
 export function tradeRowKey(t: StrategyTradeRow): string {
   if (t.trade_no != null) return `n${t.trade_no}`;
   return `${t.signal_time ?? ""}|${t.entry_price}|${t.direction}`;
@@ -70,11 +94,24 @@ export function buildTradeOverlay(
   candleTimes: number[],
 ): TradeOverlayPlan {
   const isLong = String(trade.direction || "").toUpperCase() !== "SHORT";
-  const entryT = snapToCandle(toUnixSec(trade.signal_time), candleTimes);
+  const entryT = snapToCandle(toUnixSec(tradeEntryTime(trade)), candleTimes);
   const exitT = snapToCandle(toUnixSec(trade.exit_time), candleTimes);
   const outcome = String(trade.outcome || "").toUpperCase();
 
   const markers: TradeOverlayMarker[] = [];
+  // Next-open fills: mark the decision bar too, so the signal stays visible.
+  const signalT = hasSeparateFillBar(trade)
+    ? snapToCandle(toUnixSec(trade.signal_time), candleTimes)
+    : null;
+  if (signalT != null && entryT != null && signalT < entryT) {
+    markers.push({
+      time: signalT,
+      position: isLong ? "belowBar" : "aboveBar",
+      color: "#8b95a8",
+      shape: "circle",
+      text: "SIGNAL",
+    });
+  }
   if (entryT != null) {
     markers.push({
       time: entryT,
@@ -87,7 +124,7 @@ export function buildTradeOverlay(
 
   if (exitT != null) {
     const hitTp = outcome.startsWith("TP");
-    const hitSl = outcome === "SL" || outcome.includes("STOP");
+    const hitSl = isStopLossOutcome(outcome);
     markers.push({
       time: exitT,
       position: isLong ? "aboveBar" : "belowBar",

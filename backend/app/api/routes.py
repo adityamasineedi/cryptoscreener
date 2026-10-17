@@ -1140,6 +1140,23 @@ async def research_cap_book_agents() -> dict[str, Any]:
     return out
 
 
+def _first_given(body: dict[str, Any], *keys: str, default: Any = None) -> Any:
+    """First value under ``keys`` that was actually supplied, else ``default``.
+
+    Missing, ``None`` and blank strings count as "not supplied"; an explicit
+    ``0`` / ``"0"`` is a real request and is returned as-is (``x or default``
+    would silently replace it).
+    """
+    for key in keys:
+        value = body.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return default
+
+
 @router.post("/research/long-strategy/backtest/start")
 async def research_long_strategy_backtest_start(
     body: dict[str, Any] = Body(default_factory=dict),
@@ -1208,8 +1225,9 @@ async def research_long_strategy_backtest_start(
             ),
             principal_usd=principal,
             leverage=float(body.get("leverage") or 2.0),
-            taker_fee_pct=float(body.get("taker_fee_pct") or 0.04),
-            maker_fee_pct=float(body.get("maker_fee_pct") or 0.02),
+            # Explicit 0 fees are honoured; only absent/blank uses the default.
+            taker_fee_pct=float(_first_given(body, "taker_fee_pct", default=0.04)),
+            maker_fee_pct=float(_first_given(body, "maker_fee_pct", default=0.02)),
             include_trades=bool(body.get("include_trades", True)),
             start_date=(
                 str(body.get("start_date")).strip()[:10]
@@ -2367,9 +2385,10 @@ async def research_multi_cap_strategies_run(
         end=body.get("end") or body.get("end_date"),
         limit=body.get("limit"),
         max_symbols=body.get("max_symbols"),
-        taker_fee=body.get("taker_fee") or body.get("fees"),
-        maker_fee=body.get("maker_fee"),
-        slippage_rate=body.get("slippage") or body.get("slippage_rate"),
+        # Explicit 0 is honoured; absent/blank leaves the service default.
+        taker_fee=_first_given(body, "taker_fee", "fees"),
+        maker_fee=_first_given(body, "maker_fee"),
+        slippage_rate=_first_given(body, "slippage", "slippage_rate"),
         persist=bool(body.get("persist", True)),
         market_caps=body.get("market_caps"),
     )
