@@ -1089,6 +1089,9 @@ class BosResearchService:
                 _notify(HTF_DATA_LOAD_START, symbol=sym, timeframe=tf)
                 t_htf = time.perf_counter()
                 from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
+                from app.research.combo03_transition.variants import (
+                    combination_requires_15m,
+                )
                 from app.research.sd_structure.variants import SD_STRUCTURE_FAMILY
 
                 is_v2_family = str(combo.combination_id) in COMBO_V2_FAMILY
@@ -1110,7 +1113,10 @@ class BosResearchService:
                 c5m_strategy: list[dict[str, Any]] | None = None
                 c1d_strategy: list[dict[str, Any]] | None = None
                 needs_ltf = is_sd and str(tf).lower() not in {"5m", "15m"}
-                if is_v2_family or needs_ltf:
+                # COMBO_03 variants with mandatory 15m confirmation read the same
+                # 15m strategy series as the V2 family.
+                needs_15m_confirm = combination_requires_15m(str(combo.combination_id))
+                if is_v2_family or needs_ltf or needs_15m_confirm:
                     c15m_strategy, _, _ = await _load_research_candles(
                         sym,
                         "15m",
