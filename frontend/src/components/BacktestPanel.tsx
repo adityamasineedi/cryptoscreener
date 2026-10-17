@@ -13,6 +13,7 @@ import {
   type StrategyRankResponse,
   type StrategyMatrixResponse,
   type StrategyMatrixRow,
+  type LossAnalysisTrade,
   type StrategyTradeRow,
 } from "../api/client";
 import { pickAutoSetupTimeframe } from "../backtest/autoTimeframe";
@@ -72,6 +73,7 @@ import {
 import { useBacktestHandoffStore } from "../store/backtestHandoffStore";
 import { useBacktestJobStore } from "../store/backtestJobStore";
 import { BacktestDataMap } from "./BacktestDataMap";
+import { BacktestLossAnalysis } from "./BacktestLossAnalysis";
 import { BacktestTradeChart } from "./BacktestTradeChart";
 import { GridTradingPanel } from "../gridTrading/GridTradingPanel";
 import { RegimeBookResults } from "./RegimeBookResults";
@@ -733,6 +735,14 @@ export function BacktestPanel() {
   }, [job, storedRequest, foreignJob]);
   const runBlocked = runProblems.length > 0;
   const shownResult = runBlocked ? null : result;
+  /** Open state of the blotter's Loss analysis; kept here so it survives a cell change. */
+  const [lossAnalysisOpen, setLossAnalysisOpen] = useState(false);
+  // Loss analysis reads the server's finished job: only for this form's own,
+  // finished, consistent single-strategy job (regime-book results render elsewhere).
+  const lossAnalysisJobId =
+    !regimeActive && !foreignJob && !runBlocked && !loading && job?.status === "done" && job.job_id
+      ? job.job_id
+      : null;
 
   // The result header describes the job that ran, not the form.
   const jobProductionComparable = job?.production_comparable === true;
@@ -2464,6 +2474,15 @@ export function BacktestPanel() {
               key={`${selected.symbol}:${selected.timeframe}:${selected.direction}`}
               row={selected}
               principalUsd={jobPrincipalUsd}
+              lossAnalysis={
+                lossAnalysisJobId
+                  ? {
+                      jobId: lossAnalysisJobId,
+                      open: lossAnalysisOpen,
+                      onOpenChange: setLossAnalysisOpen,
+                    }
+                  : null
+              }
             />
           ) : null}
           <div
@@ -2964,12 +2983,31 @@ function commonBasis(rows: StrategyMatrixRow[], pick: (row: StrategyMatrixRow) =
   return rows.every((row) => pick(row) === first) ? first : null;
 }
 
+/** The blotter trade a loss-analysis entry refers to: trade_id first, then trade_no (+ side). */
+function findLossTradeIndex(trades: StrategyTradeRow[], loss: LossAnalysisTrade): number {
+  if (loss.trade_id != null) {
+    const byId = trades.findIndex((t) => t.trade_id != null && String(t.trade_id) === String(loss.trade_id));
+    if (byId >= 0) return byId;
+  }
+  if (loss.trade_no != null) {
+    const sameNo = trades
+      .map((t, i) => ({ t, i }))
+      .filter(({ t }) => t.trade_no === loss.trade_no);
+    const sameSide = sameNo.find(({ t }) => !loss.direction || !t.direction || t.direction === loss.direction);
+    if (sameSide) return sameSide.i;
+  }
+  return -1;
+}
+
 function SelectedDetail({
   row,
   principalUsd,
+  lossAnalysis = null,
 }: {
   row: StrategyMatrixRow;
   principalUsd: number;
+  /** Set only for a finished single-strategy job this form owns. */
+  lossAnalysis?: { jobId: string; open: boolean; onOpenChange: (open: boolean) => void } | null;
 }) {
   const trades = row.trades || [];
   const [selectedTradeKey, setSelectedTradeKey] = useState<string | null>(
@@ -3020,6 +3058,21 @@ function SelectedDetail({
     estimateSize: () => 28,
     overscan: 16,
   });
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  /** A loss-analysis entry selects its trade like a blotter click, so the chart overlays it. */
+  function selectLossTrade(loss: LossAnalysisTrade) {
+    const index = findLossTradeIndex(trades, loss);
+    if (index < 0) return;
+    setSelectedTradeKey(tradeRowKey(trades[index]));
+    try {
+      blotterVirtualizer.scrollToIndex(index, { align: "center" });
+    } catch {
+      // No scroll element (tests); the selection still applies.
+    }
+    if (typeof chartRef.current?.scrollIntoView === "function") {
+      chartRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }
   return (
     <section className="mt-4 rounded border border-terminal-border/80 p-3">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -3103,7 +3156,7 @@ function SelectedDetail({
       </div>
 
       {selectedTrade ? (
-        <div className="mb-3">
+        <div className="mb-3" ref={chartRef}>
           <BacktestTradeChart
             trade={{
               ...selectedTrade,
@@ -3202,6 +3255,21 @@ function SelectedDetail({
           </tbody>
         </table>
       </div>
+
+      {lossAnalysis ? (
+        <BacktestLossAnalysis
+          jobId={lossAnalysis.jobId}
+          symbol={row.symbol}
+          timeframe={row.timeframe}
+          open={lossAnalysis.open}
+          onOpenChange={lossAnalysis.onOpenChange}
+          onSelectTrade={selectLossTrade}
+          isTradeSelected={(loss) => {
+            const index = findLossTradeIndex(trades, loss);
+            return index >= 0 && tradeRowKey(trades[index]) === selectedTradeKey;
+          }}
+        />
+      ) : null}
 
       <StopOutShortReplay
         trades={trades}

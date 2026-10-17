@@ -1130,6 +1130,38 @@ async def research_long_strategy_backtest_job_status() -> dict[str, Any]:
     return out
 
 
+@router.get("/research/long-strategy/backtest/loss-analysis")
+async def research_long_strategy_backtest_loss_analysis(
+    symbol: str = Query(..., description="Cell symbol, e.g. BTCUSDT"),
+    timeframe: str = Query(..., description="Cell timeframe, e.g. 1h"),
+    max_hold_after_exit: int = Query(
+        default=168,
+        ge=1,
+        le=2000,
+        description="Hindsight bars looked at after each losing trade's exit",
+    ),
+) -> dict[str, Any]:
+    """Why each losing trade of the finished backtest cell lost. Read-only research.
+
+    Uses the current finished job's row (its trades) and the cell's candles.
+    409 when there is no finished job, no row for the cell, or no trades.
+    Never changes a strategy rule, fill, fee, size or stored trade.
+    """
+    from app.research.trade_loss_analysis import (
+        LossAnalysisUnavailable,
+        loss_analysis_for_current_job,
+    )
+
+    try:
+        out = await loss_analysis_for_current_job(
+            symbol, timeframe, max_hold_after_exit=max_hold_after_exit
+        )
+    except LossAnalysisUnavailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    out["timestamp"] = datetime.now(timezone.utc).isoformat()
+    return out
+
+
 @router.get("/research/cap-book-agents")
 async def research_cap_book_agents() -> dict[str, Any]:
     """Read current cap/MTF research shards without controlling their workers."""
