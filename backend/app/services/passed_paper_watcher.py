@@ -27,16 +27,28 @@ that coin's test. A signal from any other passed side on that coin is
 recorded as not opened with reason ``symbol_side_not_allowed``, ahead of the
 open-position check, as the backtest regime book does. Coins with no entry
 run every passed side.
+
+Every closed 1h bar is evaluated once, oldest first (``catch_up``). A
+per-symbol watermark (the newest bar with every bar up to it processed) is
+kept in a local state file, so a restart or a stalled loop resumes from it
+instead of jumping to the latest bar. Only the closed tip can still be inside
+the late-open bound; a signal on any bar evaluated after that bound is
+journaled as ``missed`` with how late it was and counted in
+``missed_signals``. Nothing late is opened.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import threading
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from app.config import ROOT
 from app.core.logging import get_logger
 from app.research.bos_combinations import get_combination
 from app.research.btc_daily_regime import (
@@ -95,12 +107,33 @@ FILL_OK = "ok"
 FILL_PENDING = "fill_bar_pending"
 FILL_GAP = SKIP_FILL_BAR_GAP
 
+# Closed 1h bars back from the closed tip that a restart or a stalled loop
+# still evaluates. Unprocessed bars older than that are journaled as not
+# evaluated; a bar inside it that cannot be evaluated yet is retried.
+MAX_CATCHUP_BARS = 24
+
+# Journal outcomes for bars the watcher reached after the late-open bound.
+MISSED_OUTCOME = "missed"
+NOT_EVALUATED_OUTCOME = "not_evaluated"
+MAX_RECENT_MISSED = 20
+
+# Watermarks, the missed counters and the latest missed rows survive a restart
+# here. A local file, not the paper ledger. Without a path they stay in memory.
+DEFAULT_STATE_PATH = ROOT / "data" / "paper" / "passed_paper_watermark.json"
+STATE_VERSION = 1
+
+# One bar closes every hour: no evaluation for an hour plus the late-open
+# bound means at least one bar was not evaluated in time.
+HEARTBEAT_STALE_SECONDS = 3600.0 + 900.0
+
 _watcher: PassedPaperWatcher | None = None
 _watcher_lock = threading.Lock()
 
 
 HOUR = timedelta(hours=1)
 DAY = timedelta(days=1)
+H4 = timedelta(hours=4)
+M15 = timedelta(minutes=15)
 
 
 def _utc(ts: datetime) -> datetime:
@@ -113,6 +146,32 @@ def _iso(ts: datetime | None) -> str:
     if ts is None:
         return ""
     return _utc(ts).isoformat()
+
+
+def _parse_iso(raw: Any) -> datetime | None:
+    try:
+        return _utc(datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
+    except (TypeError, ValueError):
+        return None
+
+
+def _wall_now() -> datetime:
+    """Same clock as the late-open bound (``v1_paper_watcher._utc_now``)."""
+    from app.services import v1_paper_watcher
+
+    return _utc(v1_paper_watcher._utc_now())
+
+
+def _closed_by(
+    candles: Sequence[Mapping[str, Any]], close: datetime, step: timedelta
+) -> list[Mapping[str, Any]]:
+    """Bars of ``candles`` already closed at ``close``."""
+    out = []
+    for candle in candles:
+        ts = candle_time(candle)
+        if ts is not None and _utc(ts) + step <= close:
+            out.append(candle)
+    return out
 
 
 @dataclass(frozen=True)
@@ -131,6 +190,7 @@ class PassedPaperWatcher:
         enabled: bool = True,
         paper_engine: Any | None = None,
         symbol_allowlist: SymbolAllowlist | None = None,
+        state_path: str | os.PathLike[str] | None = None,
     ) -> None:
         self.enabled = bool(enabled)
         self.symbols = cap_symbols()
@@ -152,6 +212,18 @@ class PassedPaperWatcher:
         self.last_evaluated_bar: dict[str, Any] | None = None
         self.last_regime: dict[str, Any] | None = None
         self._signals: deque[dict[str, Any]] = deque(maxlen=MAX_LATEST_SIGNALS)
+        # Newest bar per symbol with every bar up to it processed (ISO open time).
+        self._watermarks: dict[str, str] = {}
+        self._pending_bars: dict[str, int] = {}
+        self.missed_signals = 0
+        self.unevaluated_bars = 0
+        self._recent_missed: deque[dict[str, Any]] = deque(maxlen=MAX_RECENT_MISSED)
+        self.last_eval: dict[str, Any] | None = None
+        self.last_catchup_at = ""
+        self._state_dirty = False
+        self.state_path: Path | None = None
+        if state_path is not None:
+            self.attach_state(state_path)
 
     def _paper_engine(self) -> Any:
         if self._paper is not None:
@@ -262,11 +334,172 @@ class PassedPaperWatcher:
             return f"engine_refused:{detail[len(prefix):]}"
         return "engine_refused"
 
-    def _record_signal(self, **fields: Any) -> None:
+    def _record_signal(self, **fields: Any) -> dict[str, Any]:
         row = dict(fields)
         row["recorded_at"] = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._signals.appendleft(row)
+        return row
+
+    def _record_missed(self, signal: Mapping[str, Any], lag: float | None) -> None:
+        """A permitted signal on a bar evaluated after the late-open bound. Nothing opens."""
+        lag_s = float(lag or 0.0)
+        row = self._record_signal(
+            **signal,
+            outcome=MISSED_OUTCOME,
+            reason="late_tip",
+            note=f"missed: evaluated late ({int(lag_s // 60)}m)",
+            lag_seconds=round(lag_s, 1),
+        )
+        logger.warning(
+            "passed_paper_signal_missed",
+            symbol=row.get("symbol"),
+            strategy_id=row.get("strategy_id"),
+            direction=row.get("direction"),
+            bar=row.get("setup_bar_time"),
+            lag_seconds=row["lag_seconds"],
+        )
+        with self._lock:
+            self.missed_signals += 1
+            self._recent_missed.appendleft(dict(row))
+            self._state_dirty = True
+
+    def _record_not_evaluated(
+        self, sym: str, bar: str, reason: str, *, bars: int = 1, last_bar: str = ""
+    ) -> None:
+        """Due bars never evaluated: a signal on them is unknown, not absent."""
+        first = _parse_iso(bar)
+        lag = (_wall_now() - (first + HOUR)).total_seconds() if first is not None else 0.0
+        span = f"{bars} bars" if bars != 1 else "bar"
+        row = self._record_signal(
+            symbol=sym,
+            timeframe="1h",
+            setup_bar_time=bar,
+            last_bar_time=last_bar or bar,
+            bars=bars,
+            outcome=NOT_EVALUATED_OUTCOME,
+            reason=reason,
+            note=f"missed: {span} not evaluated ({reason}, {int(max(lag, 0.0) // 60)}m late)",
+        )
+        logger.warning(
+            "passed_paper_bar_not_evaluated",
+            symbol=sym,
+            bar=bar,
+            last_bar=row["last_bar_time"],
+            bars=bars,
+            reason=reason,
+        )
+        with self._lock:
+            self.unevaluated_bars += bars
+            self._recent_missed.appendleft(dict(row))
+            self._state_dirty = True
+
+    def _note_evaluated(self, sym: str, bar_iso: str, bar_ts: datetime | None) -> None:
+        """Heartbeat: the last bar the watcher finished, when, and how long after its close."""
+        now = _wall_now()
+        lag = (now - (_utc(bar_ts) + HOUR)).total_seconds() if bar_ts is not None else None
+        with self._lock:
+            self.last_eval = {
+                "at": now.isoformat(),
+                "symbol": sym,
+                "bar": bar_iso,
+                "lag_seconds": round(lag, 1) if lag is not None else None,
+            }
+
+    # --- watermark state ---------------------------------------------------------
+
+    def attach_state(self, path: str | os.PathLike[str]) -> None:
+        """Keep watermarks in ``path`` and resume from what it holds."""
+        with self._lock:
+            self.state_path = Path(path)
+        self._load_state()
+
+    def _load_state(self) -> None:
+        path = self.state_path
+        if path is None or not path.exists():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            # Unreadable: no watermarks, so the tip only, as on a first run.
+            logger.warning("passed_paper_state_unreadable", path=str(path), error=str(exc))
+            return
+        if not isinstance(raw, dict) or raw.get("version") != STATE_VERSION:
+            logger.warning("passed_paper_state_unreadable", path=str(path), error="version")
+            return
+        marks: dict[str, str] = {}
+        for sym, iso in dict(raw.get("watermarks") or {}).items():
+            ts = _parse_iso(iso)
+            if ts is not None and normalize_symbol(sym) in self.symbols:
+                marks[normalize_symbol(sym)] = _iso(ts)
+        with self._lock:
+            self._watermarks.update(marks)
+            self.missed_signals = int(raw.get("missed_signals") or 0)
+            self.unevaluated_bars = int(raw.get("unevaluated_bars") or 0)
+            self._recent_missed.clear()
+            for row in list(raw.get("recent_missed") or [])[:MAX_RECENT_MISSED]:
+                if isinstance(row, dict):
+                    self._recent_missed.append(dict(row))
+        logger.info("passed_paper_state_loaded", path=str(path), symbols=len(marks))
+
+    def save_state(self) -> None:
+        """Write the state file when something changed. A failed write is retried next call."""
+        with self._lock:
+            path = self.state_path
+            if path is None or not self._state_dirty:
+                return
+            payload = {
+                "version": STATE_VERSION,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "watermarks": dict(sorted(self._watermarks.items())),
+                "missed_signals": self.missed_signals,
+                "unevaluated_bars": self.unevaluated_bars,
+                "recent_missed": [dict(row) for row in self._recent_missed],
+            }
+            self._state_dirty = False
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError as exc:
+            logger.warning("passed_paper_state_write_failed", path=str(path), error=str(exc))
+            with self._lock:
+                self._state_dirty = True
+
+    def _set_watermark(self, sym: str, ts: datetime) -> None:
+        iso = _iso(ts)
+        with self._lock:
+            if self._watermarks.get(sym) != iso:
+                self._watermarks[sym] = iso
+                self._state_dirty = True
+
+    def heartbeat(self) -> dict[str, Any]:
+        """Last finished bar and how far behind the watcher is. Reads only."""
+        from app.services.v1_paper_watcher import MAX_OPEN_LAG_SECONDS
+
+        now = _wall_now()
+        with self._lock:
+            last = dict(self.last_eval) if self.last_eval else {}
+            pending = {sym: n for sym, n in sorted(self._pending_bars.items()) if n}
+            out: dict[str, Any] = {
+                "last_eval_at": str(last.get("at") or ""),
+                "last_eval_symbol": str(last.get("symbol") or ""),
+                "last_eval_bar": str(last.get("bar") or ""),
+                "last_eval_lag_seconds": last.get("lag_seconds"),
+                "last_catchup_at": self.last_catchup_at,
+                "pending_bars": sum(pending.values()),
+                "pending_by_symbol": pending,
+                "watermarks": dict(sorted(self._watermarks.items())),
+                "state_file": str(self.state_path or ""),
+                "max_catchup_bars": MAX_CATCHUP_BARS,
+                "max_open_lag_seconds": MAX_OPEN_LAG_SECONDS,
+            }
+        at = _parse_iso(out["last_eval_at"]) if out["last_eval_at"] else None
+        since = (now - at).total_seconds() if at is not None else None
+        out["seconds_since_last_eval"] = round(since, 1) if since is not None else None
+        out["stale"] = since is not None and since > HEARTBEAT_STALE_SECONDS
+        return out
 
     def regime_status(self) -> dict[str, Any]:
         """Read-only view for the admin screen. Opens and evaluates nothing.
@@ -304,6 +537,12 @@ class PassedPaperWatcher:
                 ),
                 "last_skip": self.last_skip,
                 "opened_count": self.opened_count,
+                # Signals on bars evaluated after the late-open bound (never opened)
+                # and due bars never evaluated. Kept across restarts with a state file.
+                "missed_signals": self.missed_signals,
+                "unevaluated_bars": self.unevaluated_bars,
+                "recent_missed": [dict(row) for row in self._recent_missed],
+                "heartbeat": self.heartbeat(),
                 "book_open": REGIME_BOOK_OPEN,
                 "book_note": "" if REGIME_BOOK_OPEN else REGIME_BOOK_CLOSED_NOTE,
                 "symbols": list(cap_symbols()),
@@ -433,6 +672,7 @@ class PassedPaperWatcher:
 
         # A closed bar is not opened long after it closed, and is not retried.
         late = False
+        lag: float | None = None
         if not force:
             from app.services.v1_paper_watcher import (
                 MAX_OPEN_LAG_SECONDS,
@@ -486,6 +726,7 @@ class PassedPaperWatcher:
                 self.last_evaluated_bar = bar_info
                 self._inflight.discard(bar_key)
                 self._processed.add(bar_key)
+            self._note_evaluated(sym, tip_iso, tip_ts)
             return []
 
         paper = self._paper_engine()
@@ -556,8 +797,9 @@ class PassedPaperWatcher:
                 )
                 continue
             if late:
+                # Past the late-open bound: journaled and counted, never opened.
                 late_refused = True
-                self._record_signal(**signal, outcome="not_opened", reason="late_tip")
+                self._record_missed(signal, lag)
                 continue
             # One open paper position per symbol, whichever stream holds it.
             try:
@@ -649,12 +891,179 @@ class PassedPaperWatcher:
         elif not opened:
             self.last_skip = f"{sym}:no_passed_entry"
         bar_info["sides_evaluated"] = evaluated
+        if late and failed:
+            # Not retried past the bound: a side that could not be evaluated is unknown.
+            self._record_not_evaluated(sym, tip_iso, "eval_failed")
+        done = (not failed and not pending) or late
         with self._lock:
             self.last_evaluated_bar = bar_info
             self._inflight.discard(bar_key)
             # A signal waiting for its fill bar is retried, up to the late bound.
-            if (not failed and not pending) or late:
+            if done:
                 self._processed.add(bar_key)
+        if done:
+            self._note_evaluated(sym, tip_iso, tip_ts)
+        return opened
+
+    def catch_up(self, symbol: str, *, daily: DailySnapshot | None = None) -> list[Any]:
+        """Evaluate every closed 1h bar of ``symbol`` after its watermark, oldest first.
+
+        The closed tip goes through ``on_closed_1h`` exactly as before. A bar
+        before the tip is evaluated on the 1h/4h/15m bars closed at its close,
+        with the bar after it as the fill bar. It closed over an hour ago, so
+        it is past the late-open bound: a signal on it is journaled as missed
+        and never opened. A bar that cannot be evaluated yet (series fault,
+        daily bar pending) stays unprocessed and is retried on the next call
+        while it is within ``MAX_CATCHUP_BARS`` of the tip; older unprocessed
+        bars are journaled as not evaluated. The watermark then moves to the
+        newest bar with every bar up to it processed.
+
+        A symbol with no watermark (first run, no state file) evaluates only
+        the tip, with the first-sight rule in ``on_closed_1h``.
+        """
+        if not self.enabled:
+            self.last_skip = "watcher_disabled"
+            return []
+        sym = normalize_symbol(symbol)
+        if sym not in self.symbols:
+            self.last_skip = f"{sym}:not_in_universe"
+            return []
+
+        from app.services.ohlcv_store import ohlcv_store
+
+        series_1h = list(ohlcv_store.get_candles_for_engine(sym, "1h", include_open=False) or [])
+        series_4h = list(ohlcv_store.get_candles_for_engine(sym, "4h", include_open=False) or [])
+        series_15m = list(
+            ohlcv_store.get_candles_for_engine(sym, "15m", include_open=False) or []
+        )
+        with self._lock:
+            mark = _parse_iso(self._watermarks[sym]) if sym in self._watermarks else None
+        tip_ts = candle_time(series_1h[-1]) if series_1h else None
+        try:
+            if mark is None or tip_ts is None:
+                opened = self.on_closed_1h(
+                    sym,
+                    candles_1h=series_1h,
+                    candles_4h=series_4h,
+                    candles_15m=series_15m,
+                    daily=daily,
+                )
+                self._start_watermark(sym, tip_ts)
+                return opened
+            return self._catch_up_from(sym, mark, series_1h, series_4h, series_15m, daily)
+        finally:
+            with self._lock:
+                self.last_catchup_at = _wall_now().isoformat()
+            self.save_state()
+
+    def _start_watermark(self, sym: str, tip_ts: datetime | None) -> None:
+        """First sight: start at the tip, or just before it while the tip is retried."""
+        if tip_ts is None:
+            return
+        with self._lock:
+            if sym not in self._seeded:
+                return
+            done = f"{sym}|{_iso(tip_ts)}" in self._processed
+            self._pending_bars[sym] = 0 if done else 1
+        self._set_watermark(sym, _utc(tip_ts) if done else _utc(tip_ts) - HOUR)
+
+    def _catch_up_from(
+        self,
+        sym: str,
+        mark: datetime,
+        series_1h: list[Mapping[str, Any]],
+        series_4h: list[Mapping[str, Any]],
+        series_15m: list[Mapping[str, Any]],
+        daily: DailySnapshot | None,
+    ) -> list[Any]:
+        last = len(series_1h) - 1
+        tip_ts = _utc(candle_time(series_1h[last]))
+        # The watermark covers every bar up to it: the first-sight rule does not apply.
+        with self._lock:
+            self._seeded.add(sym)
+        window_start = tip_ts - HOUR * (MAX_CATCHUP_BARS - 1)
+
+        # Due bars older than the window, whether or not the store still has them.
+        beyond: list[str] = []
+        slot = mark + HOUR
+        with self._lock:
+            while slot < window_start:
+                key = f"{sym}|{_iso(slot)}"
+                if key not in self._processed:
+                    beyond.append(_iso(slot))
+                    self._processed.add(key)
+                slot += HOUR
+        if beyond:
+            self._record_not_evaluated(
+                sym, beyond[0], "beyond_catchup_window", bars=len(beyond), last_bar=beyond[-1]
+            )
+
+        opened: list[Any] = []
+        for idx, bar in enumerate(series_1h):
+            ts = candle_time(bar)
+            if ts is None or _utc(ts) <= mark or _utc(ts) < window_start:
+                continue
+            if idx == last:
+                # The tip: the live path, unchanged (late bound, next-open fill, retries).
+                opened.extend(
+                    self.on_closed_1h(
+                        sym,
+                        candles_1h=series_1h,
+                        candles_4h=series_4h,
+                        candles_15m=series_15m,
+                        daily=daily,
+                    )
+                )
+                break
+            bar_iso = _iso(ts)
+            key = f"{sym}|{bar_iso}"
+            with self._lock:
+                if key in self._processed or key in self._inflight:
+                    continue
+            close = _utc(ts) + HOUR
+            s1 = series_1h[: idx + 1]
+            s4 = _closed_by(series_4h, close, H4)
+            s15 = _closed_by(series_15m, close, M15)
+            if (
+                len(s1) < MIN_CLOSED_1H_BARS
+                or len(s4) < MIN_CLOSED_4H_BARS
+                or len(s15) < MIN_CLOSED_15M_BARS
+            ):
+                # The store does not reach back far enough; that does not heal.
+                self._record_not_evaluated(sym, bar_iso, "history_short")
+                with self._lock:
+                    self._processed.add(key)
+                continue
+            opened.extend(
+                self.on_closed_1h(
+                    sym,
+                    candles_1h=s1,
+                    candles_4h=s4,
+                    candles_15m=s15,
+                    daily=daily,
+                    next_bar=series_1h[idx + 1],
+                )
+            )
+            with self._lock:
+                retry = key not in self._processed
+            if retry:
+                logger.info(
+                    "passed_paper_catchup_bar_retry", symbol=sym, bar=bar_iso, reason=self.last_skip
+                )
+
+        # Move the watermark over the processed prefix and count what is still owed.
+        new_mark = mark
+        owed = 0
+        slot = mark + HOUR
+        with self._lock:
+            while slot <= tip_ts:
+                if f"{sym}|{_iso(slot)}" not in self._processed:
+                    owed += 1
+                elif owed == 0:
+                    new_mark = slot
+                slot += HOUR
+            self._pending_bars[sym] = owed
+        self._set_watermark(sym, new_mark)
         return opened
 
     def _next_open_fill(
@@ -711,6 +1120,9 @@ def get_passed_paper_watcher(**kwargs: Any) -> PassedPaperWatcher:
                 _watcher.enabled = bool(kwargs["enabled"])
             if "paper_engine" in kwargs:
                 _watcher._paper = kwargs["paper_engine"]
+            path = kwargs.get("state_path")
+            if path is not None and _watcher.state_path != Path(path):
+                _watcher.attach_state(path)
         return _watcher
 
 
