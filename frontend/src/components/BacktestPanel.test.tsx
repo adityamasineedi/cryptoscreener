@@ -14,6 +14,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelRegimeBacktest,
+  fetchBacktestLossAnalysis,
   fetchRegimeBacktest,
   startBacktestJob,
   startRegimeBacktest,
@@ -79,6 +80,9 @@ vi.mock("../api/client", async (importOriginal) => {
     startRegimeBacktest: vi.fn(async () => ({ status: "STARTED" })),
     fetchRegimeBacktest: vi.fn(async () => ({ status: "idle" })),
     cancelRegimeBacktest: vi.fn(async () => ({ status: "CANCELLED", job: { status: "cancelled" } })),
+    fetchBacktestLossAnalysis: vi.fn(async () => {
+      throw new Error("not mocked for this test");
+    }),
   };
 });
 
@@ -2351,5 +2355,189 @@ describe("BacktestPanel VectorBT execution toggle", () => {
     });
     const { container } = renderPanel();
     expect(within(container).queryAllByTestId("execution-engine")).toEqual([]);
+  });
+});
+
+describe("BacktestPanel loss analysis", () => {
+  function lossTrade(n: number, net: number) {
+    return {
+      trade_no: n,
+      symbol: "BTCUSDT",
+      timeframe: "1h",
+      direction: "LONG",
+      entry_price: 100,
+      stop_price: 99,
+      tp1: 102,
+      exit_price: net > 0 ? 102 : 99,
+      outcome: net > 0 ? "TP1" : "SL",
+      net_pnl_usd: net,
+      signal_time: `2025-01-0${n}T00:00:00+00:00`,
+      exit_time: `2025-01-0${n}T04:00:00+00:00`,
+    };
+  }
+
+  function job(status: string, jobId = "loss-job") {
+    return {
+      status,
+      job_id: jobId,
+      symbols: ["BTCUSDT"],
+      timeframes: ["1h"],
+      direction: "LONG",
+      strategy_id: "COMBO_01",
+      combination_id: "COMBO_01",
+      principal_usd: 1000,
+      rows: [
+        {
+          combination_id: "COMBO_01",
+          symbol: "BTCUSDT",
+          timeframe: "1h",
+          direction: "LONG",
+          sample_size: 2,
+          pnl_usd_net: 0,
+          risk_usd: 20,
+          bars_loaded: 100,
+          trades: [lossTrade(1, 20), lossTrade(2, -20)],
+        },
+      ],
+    };
+  }
+
+  function analysisFor(jobRow: { symbol: string; timeframe: string }) {
+    return {
+      symbol: jobRow.symbol,
+      timeframe: jobRow.timeframe,
+      strategy_id: "COMBO_01",
+      direction: "LONG",
+      frozen_book: false,
+      suggestions_note: null,
+      period: { start: null, end: null },
+      hindsight_bars: 48,
+      summary: {
+        trades: 2,
+        winners: 1,
+        losers: 1,
+        scratches: 0,
+        net_usd: 0,
+        gross_usd: 1,
+        fees_usd: 1,
+        by_reason: [{ reason: "STOP_BEFORE_PROGRESS", count: 1, net_usd: -20, share_of_loss: 1 }],
+        by_context: [],
+        largest_losses: [],
+        loss_weeks: [],
+        held_would_have_won: { count: 0, net_usd: 0 },
+      },
+      losses: [
+        {
+          trade_no: 2,
+          trade_id: null,
+          entry_time: "2025-01-02T00:00:00+00:00",
+          exit_time: "2025-01-02T04:00:00+00:00",
+          direction: "LONG",
+          outcome: "SL",
+          net_usd: -20,
+          gross_usd: -19,
+          fees_usd: 1,
+          r_net: -1,
+          primary_reason: "STOP_BEFORE_PROGRESS",
+          flags: [],
+          metrics: {
+            stop_distance_pct: 1,
+            stop_distance_atr: 1.1,
+            tp1_distance_r: 2,
+            mfe_r_before_exit: 0.1,
+            mfe_pct_to_tp1: 5,
+            bars_to_mfe: 1,
+            hold_bars: 4,
+            mae_r: -1,
+            fees_r: 0.05,
+          },
+          hindsight: null,
+          explanation: "Stopped after 4 bars without real progress.",
+        },
+      ],
+      fee_flipped: [],
+      what_ifs: [],
+      suggestions: [],
+      disclaimer: "Research only.",
+    };
+  }
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    chartTrades.length = 0;
+    useBacktestJobStore.setState({
+      job: null,
+      request: null,
+      foreignJob: false,
+      ownJobId: null,
+      error: null,
+      active: false,
+      starting: false,
+      _gen: 0,
+    });
+    useBacktestHandoffStore.setState({ symbols: [], revision: 0 });
+    vi.mocked(fetchBacktestLossAnalysis).mockReset();
+    vi.mocked(fetchBacktestLossAnalysis).mockImplementation(async (symbol, timeframe) =>
+      analysisFor({ symbol, timeframe }) as never,
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.mocked(fetchRegimeBacktest).mockImplementation(async () => ({ status: "idle" }));
+  });
+
+  it("appears under the blotter of a finished single-strategy job and selects a loss on the chart", async () => {
+    useBacktestJobStore.setState({ job: job("done") as never });
+    const { container } = renderPanel();
+    const root = within(container);
+    const section = root.getByTestId("backtest-loss-analysis");
+    // Below the blotter, inside the same cell detail.
+    const blotter = root.getByTestId("backtest-trade-blotter");
+    expect(blotter.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(fetchBacktestLossAnalysis).not.toHaveBeenCalled();
+
+    fireEvent.click(within(section).getByRole("button", { name: "Analyze losses" }));
+    const item = await within(section).findByTestId("loss-item");
+    expect(vi.mocked(fetchBacktestLossAnalysis).mock.calls[0].slice(0, 2)).toEqual(["BTCUSDT", "1h"]);
+    expect(item.textContent).toContain("Stopped after 4 bars without real progress.");
+
+    const before = chartTrades.length;
+    fireEvent.click(item);
+    await waitFor(() =>
+      expect(chartTrades.slice(before).some((t) => (t as { trade_no?: number }).trade_no === 2)).toBe(true),
+    );
+    expect((chartTrades.at(-1) as { trade_no?: number }).trade_no).toBe(2);
+  });
+
+  it("is not shown while the job is running", () => {
+    useBacktestJobStore.setState({ job: job("running") as never, active: true });
+    const { container } = renderPanel();
+    expect(within(container).queryByTestId("backtest-loss-analysis")).toBeNull();
+  });
+
+  it("is not shown for a job this form did not start", () => {
+    useBacktestJobStore.setState({ job: job("done") as never, foreignJob: true });
+    const { container } = renderPanel();
+    expect(within(container).queryByTestId("backtest-loss-analysis")).toBeNull();
+  });
+
+  it("is not shown when a regime-book run is the current run", async () => {
+    useBacktestJobStore.setState({ job: job("done") as never });
+    vi.mocked(fetchRegimeBacktest).mockImplementation(async () => ({
+      status: "running",
+      job_id: "regime-1",
+      phase: "running",
+      symbols: ["BTCUSDT"],
+      total_cells: 1,
+      done_cells: 0,
+      pct: 10,
+      progress_percent: 10,
+      started_at: new Date().toISOString(),
+    }) as never);
+    const { container } = renderPanel();
+    const root = within(container);
+    await waitFor(() => expect(root.getByTestId("regime-backtest")).toBeTruthy());
+    expect(root.queryByTestId("backtest-loss-analysis")).toBeNull();
   });
 });

@@ -1537,6 +1537,137 @@ export function fetchBacktestJobStatus() {
   );
 }
 
+/** One losing (or fee-flipped) trade in GET .../backtest/loss-analysis. Display only. */
+export type LossAnalysisTrade = {
+  trade_no: number | null;
+  trade_id: string | number | null;
+  entry_time: string | null;
+  exit_time: string | null;
+  direction: string | null;
+  outcome: string | null;
+  net_usd: number | null;
+  gross_usd: number | null;
+  fees_usd: number | null;
+  r_net: number | null;
+  primary_reason: string;
+  flags: string[];
+  metrics: {
+    stop_distance_pct: number | null;
+    stop_distance_atr: number | null;
+    tp1_distance_r: number | null;
+    mfe_r_before_exit: number | null;
+    mfe_pct_to_tp1: number | null;
+    bars_to_mfe: number | null;
+    hold_bars: number | null;
+    mae_r: number | null;
+    fees_r: number | null;
+  };
+  hindsight: {
+    reached_tp1_after_exit: boolean | null;
+    bars_after_exit: number | null;
+    stop_needed_r: number | null;
+    max_favourable_after_exit_r: number | null;
+  } | null;
+  explanation: string | null;
+  hindsight_label?: string | null;
+};
+
+export type LossAnalysisWhatIf = {
+  id: string;
+  label: string;
+  /** false: not computable from this job; `caveat` says why. */
+  computable: boolean;
+  trades: number | null;
+  net_usd: number | null;
+  delta_usd: number | null;
+  winners_lost: number | null;
+  caveat: string | null;
+};
+
+export type LossAnalysisSuggestion = {
+  rule: string;
+  reason_bucket: string;
+  trades_affected: number | null;
+  net_change_usd: number | null;
+  winners_lost: number | null;
+  label: string;
+};
+
+export type LossAnalysisResponse = {
+  symbol: string;
+  timeframe: string;
+  strategy_id: string | null;
+  direction: string | null;
+  /** The frozen BTC 1h CANDLE12_V2 LONG book: diagnostics only, no suggestions. */
+  frozen_book: boolean;
+  suggestions_note: string | null;
+  period: { start: string | null; end: string | null };
+  hindsight_bars: number | null;
+  summary: {
+    trades: number;
+    winners: number;
+    losers: number;
+    scratches: number;
+    net_usd: number | null;
+    gross_usd: number | null;
+    fees_usd: number | null;
+    by_reason: Array<{ reason: string; count: number; net_usd: number | null; share_of_loss: number | null }>;
+    by_context: Array<{ structure: string; count: number; net_usd: number | null }>;
+    largest_losses: Array<{ trade_no: number | null; entry_time: string | null; net_usd: number | null; reason: string }>;
+    loss_weeks: Array<{ week: string; count: number; net_usd: number | null }>;
+    held_would_have_won: { count: number; net_usd: number | null };
+    /** Flags left out of the reasons because winners carry them about as often (rates 0..1). */
+    non_discriminating_flags?: Array<{
+      flag: string;
+      losers_rate: number | null;
+      winners_rate: number | null;
+      reason: string | null;
+    }>;
+    loss_usd?: number | null;
+    trades_unmatched_to_candles?: number | null;
+  };
+  losses: LossAnalysisTrade[];
+  fee_flipped: LossAnalysisTrade[];
+  what_ifs: LossAnalysisWhatIf[];
+  suggestions: LossAnalysisSuggestion[];
+  disclaimer: string;
+  /** Not in the contract; checked when the server sends it. */
+  job_id?: string | null;
+};
+
+/** A refusal from the loss-analysis endpoint (409: no finished job / no trades). */
+export class LossAnalysisError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "LossAnalysisError";
+    this.status = status;
+  }
+}
+
+/** Read-only diagnostics of the finished backtest job's losing trades for one cell. */
+export async function fetchBacktestLossAnalysis(
+  symbol: string,
+  timeframe: string,
+  opts?: { signal?: AbortSignal },
+): Promise<LossAnalysisResponse> {
+  const q = new URLSearchParams({ symbol, timeframe });
+  const path = `/api/research/long-strategy/backtest/loss-analysis?${q.toString()}`;
+  const res = await fetch(`${API_BASE}${path}`, { signal: opts?.signal });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = (await res.json()) as { detail?: unknown };
+      if (typeof body?.detail === "string") detail = body.detail;
+      else if (body?.detail != null) detail = JSON.stringify(body.detail);
+    } catch {
+      detail = "";
+    }
+    throw new LossAnalysisError(detail || `API ${path} failed: ${res.status}`, res.status);
+  }
+  return res.json() as Promise<LossAnalysisResponse>;
+}
+
 export type CapBookRow = {
   combination_id: string;
   symbol: string;
