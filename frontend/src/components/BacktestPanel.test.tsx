@@ -1798,7 +1798,7 @@ describe("BacktestPanel interaction paths", () => {
         },
       ],
     });
-    const ownV2 = (job: BacktestJob, direction: string) =>
+    const ownV2 = (job: BacktestJob, direction: "LONG" | "SHORT" | "BOTH") =>
       useBacktestJobStore.setState({
         job,
         request: {

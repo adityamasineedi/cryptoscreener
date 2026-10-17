@@ -24,9 +24,9 @@ Fields read per closed trade:
   fills are the ones ``enrich_trade_execution`` charges fees on:
   LONG entry x (1 + s), exit x (1 - s); SHORT entry x (1 - s), exit x (1 + s).
   They are cross-checked against ``notional_entry_usd / qty`` and
-  ``notional_exit_usd / qty``. Note that the same function computes gross P&L
-  from the *unslipped* entry, so the engine's own ``r_net`` and a replay of its
-  fills can legitimately disagree; that shows up as a ``net_r`` mismatch.
+  ``notional_exit_usd / qty``. The same function computes gross P&L from
+  these slipped fills too, so the engine's own ``r_net`` and a replay of its
+  fills agree (before that fee-helper fix they showed a ``net_r`` mismatch).
 - ``qty``, ``fee_entry_rate``, ``fee_exit_rate`` (fractions of notional)
 - ``risk_usd`` (realized risk after the leverage cap: the ``r_net`` denominator)
 - ``stop_price``; target = ``tp<n>`` for a ``TP<n>`` outcome, else ``tp1``

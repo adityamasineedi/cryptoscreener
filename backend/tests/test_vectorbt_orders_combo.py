@@ -142,16 +142,17 @@ def test_causal_row_enters_on_fill_index():
     assert check_parity([o]).passed
 
 
-def test_slippage_rows_use_slipped_fills_and_expose_gross_basis_gap():
-    # enrich_trade_execution charges fees on the slipped entry but computes
-    # gross P&L from the unslipped entry: VectorBT disagrees on net R.
+def test_slippage_rows_use_slipped_fills_and_now_reach_parity():
+    # enrich_trade_execution now computes gross P&L from the same slipped fills
+    # it charges fees on (fix/locked-trade-fixes), so VectorBT agrees on net R.
+    # Before that fix this row was a net_r mismatch.
     t = _trade(entry_index=3, exit_index=6, slippage_rate=0.0002)
     (o,) = combo_replay_orders("COMBO_SD_C", [t])
     assert o.entry_price == pytest.approx(100.0 * 1.0002, rel=1e-15)
     assert o.exit_price == pytest.approx(104.0 * 0.9998, rel=1e-15)
     res = check_parity([o])
-    assert not res.passed
-    assert res.first_mismatch_field == "net_r"
+    assert res.passed, res
+    assert res.first_mismatch_field is None
 
 
 def test_slipped_notional_disagreeing_raises():
