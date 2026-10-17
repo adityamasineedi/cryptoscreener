@@ -1140,6 +1140,25 @@ async def research_cap_book_agents() -> dict[str, Any]:
     return out
 
 
+@router.post("/research/regime-backtest/start")
+async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict)) -> dict[str, Any]:
+    """Run the passed book. The BTC daily regime chooses the side on each bar."""
+    from app.research.regime_backtest_job import start
+
+    symbols = body.get("symbols") or []
+    if isinstance(symbols, str):
+        symbols = [part for part in symbols.split(",") if part.strip()]
+    limit = int(body.get("limit") or 1440)
+    return await start([str(s) for s in symbols], limit)
+
+
+@router.get("/research/regime-backtest")
+async def regime_backtest_status() -> dict[str, Any]:
+    from app.research.regime_backtest_job import status
+
+    return status()
+
+
 @router.post("/research/long-strategy/backtest/start")
 async def research_long_strategy_backtest_start(
     body: dict[str, Any] = Body(default_factory=dict),

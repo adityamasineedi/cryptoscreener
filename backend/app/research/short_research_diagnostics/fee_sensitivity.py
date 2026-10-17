@@ -83,7 +83,7 @@ def fee_sensitivity_matrix(
     risk_usd: float = 20.0,
 ) -> dict[str, Any]:
     scenarios = {
-        "live_model": {"entry_type": None, "taker_fee": DEFAULT_TAKER_FEE, "maker_fee": DEFAULT_MAKER_FEE, "slippage_bps": 0.0},
+        "live_model": {"entry_type": None, "taker_fee": DEFAULT_TAKER_FEE, "maker_fee": DEFAULT_MAKER_FEE, "slippage_bps": 2.0},
         "market_entry_taker": {"entry_type": "MARKET", "taker_fee": DEFAULT_TAKER_FEE, "maker_fee": DEFAULT_MAKER_FEE, "slippage_bps": 0.0},
         "limit_retest_maker": {"entry_type": "LIMIT_RETEST", "taker_fee": DEFAULT_TAKER_FEE, "maker_fee": DEFAULT_MAKER_FEE, "slippage_bps": 0.0},
         "market_exit_taker": {"entry_type": None, "taker_fee": DEFAULT_TAKER_FEE, "maker_fee": DEFAULT_MAKER_FEE, "slippage_bps": 0.0},

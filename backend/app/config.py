@@ -182,9 +182,8 @@ class Settings(BaseSettings):
         default=False, alias="PAPER_V21A_DAILY_SUMMARY_ENABLED"
     )
     # Every cap-book side with net > $0 and at least 5 trades (paper only).
-    # Off unless set: those sides fail the strategy_rank pass rule.
     paper_passed_watcher_enabled: bool = Field(
-        default=False, alias="PAPER_PASSED_WATCHER_ENABLED"
+        default=True, alias="PAPER_PASSED_WATCHER_ENABLED"
     )
     # Explicit trading mode separation (V2.1-A LIVE is never auto-enabled)
     trading_mode: str = Field(default="PAPER", alias="TRADING_MODE")

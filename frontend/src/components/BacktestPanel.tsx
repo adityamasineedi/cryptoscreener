@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   fetchResearchOhlcvRange,
   fetchStrategyRank,
+  startRegimeBacktest,
   type OhlcvRangeRow,
   type StrategyRankResponse,
   type StrategyMatrixResponse,
@@ -62,6 +63,7 @@ import { useBacktestJobStore } from "../store/backtestJobStore";
 import { BacktestDataMap } from "./BacktestDataMap";
 import { BacktestTradeChart } from "./BacktestTradeChart";
 import { GridTradingPanel } from "../gridTrading/GridTradingPanel";
+import { RegimeBookResults } from "./RegimeBookResults";
 import { StopOutShortReplay } from "./StopOutShortReplay";
 import { CapBookAgentsPanel } from "./CapBookAgentsPanel";
 import { DiscoveryRankingPanel } from "./DiscoveryRankingPanel";
@@ -248,6 +250,7 @@ export function BacktestPanel() {
   const handoffRevision = useBacktestHandoffStore((s) => s.revision);
   const handoffSymbols = useBacktestHandoffStore((s) => s.symbols);
   const [autoPassed, setAutoPassed] = useState(true);
+  const [regimeActive, setRegimeActive] = useState(false);
   const [strategyId, setStrategyId] = useState<BacktestStrategyId>(PASSED_RUN_STRATEGY_ID);
   const [sdVariant, setSdVariant] = useState(SD_DEFAULT_VARIANT);
   const [direction, setDirection] = useState<"LONG" | "SHORT">("SHORT");
@@ -261,7 +264,7 @@ export function BacktestPanel() {
   const [riskUsd, setRiskUsd] = useState(20);
   const [researchRiskOverride, setResearchRiskOverride] = useState(false);
   const [shortNotice, setShortNotice] = useState<string | null>(
-    "Passed strategies are selected. Run uses COMBO_02_V2 SHORT."
+    "Passed strategies stay selected. Run applies the BTC daily regime on each 1h bar."
   );
   const [leverage, setLeverage] = useState(2);
   const [takerFeePct, setTakerFeePct] = useState(0.04);
@@ -699,6 +702,18 @@ export function BacktestPanel() {
       return;
     }
     setSelectedKey(null);
+    if (autoPassed && book !== "hedge") {
+      setRegimeActive(true);
+      setShortNotice(
+        "BTC daily regime picks the side on each closed 1h bar. Passed shorts while bearish. COMBO_03_TRANSITION_B long while bullish."
+      );
+      try {
+        await startRegimeBacktest({ symbols, limit });
+      } catch (err) {
+        setStoreError(err instanceof Error ? err.message : "Regime backtest failed to start");
+      }
+      return;
+    }
     if (isSd) {
       setShortNotice(
         sdVariant === "COMBO_SD_LIQ"
@@ -760,6 +775,8 @@ export function BacktestPanel() {
   }, [
     symbols,
     timeframes,
+    autoPassed,
+    book,
     direction,
     strategyId,
     strategyMeta,
@@ -854,7 +871,7 @@ export function BacktestPanel() {
     if (next === "long") {
       setStrategyId(LONG_RUN_STRATEGY_ID);
       setDirection("LONG");
-      setShortNotice("Passed long strategies. Run uses COMBO_03_TRANSITION_B LONG.");
+      setShortNotice("Passed long strategies. The regime run uses COMBO_03_TRANSITION_B only while BTC daily is bullish.");
       return;
     }
     if (next === "hedge") {
@@ -867,7 +884,9 @@ export function BacktestPanel() {
     }
     setStrategyId(PASSED_RUN_STRATEGY_ID);
     setDirection("SHORT");
-    setShortNotice("Passed strategies are selected. Run uses COMBO_02_V2 SHORT.");
+    setShortNotice(
+      "Passed strategies stay selected. Run applies the BTC daily regime on each 1h bar."
+    );
   }
 
   /** Adds typed coins. Only large-cap and mid-cap book symbols are merged. */
@@ -944,12 +963,11 @@ export function BacktestPanel() {
           Strategy Backtest
         </h1>
         <p className="mt-1 max-w-3xl text-xs text-terminal-muted">
-          Research backtest on Postgres OHLCV. Long, short, hedge, and grid each
-          have their own book. The short book runs COMBO_02_V2 SHORT until another
-          short strategy is picked. COMBO_02 V1 SHORT still uses research-only
-          COMBO_04_HTF. Same engines as research scripts — not a profitability
-          claim. No paper or live trade is created from this screen.
+          Research backtest on Postgres OHLCV. Passed strategies (auto) apply the BTC daily
+          regime on each 1h bar and show that book's results. Picking one strategy runs that
+          strategy alone. Same engines as the research scripts.
         </p>
+        <RegimeBookResults active={regimeActive} />
         <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Trade book">
           {(
             [
@@ -1057,7 +1075,7 @@ export function BacktestPanel() {
                   ? "Passed long strategies stay selected. Run uses COMBO_03_TRANSITION_B LONG."
                   : book === "hedge"
                     ? "Hedge strategy stays selected. Run uses COMBO_02 V2.1-A LONG and SHORT together."
-                    : "Passed short strategies stay selected. Run uses COMBO_02_V2 SHORT. Results open one coin at a time."}
+                    : "Passed short strategies stay selected. Run applies the BTC daily regime on each 1h bar."}
               </span>
               {passedIds.map((id) => (
                 <button

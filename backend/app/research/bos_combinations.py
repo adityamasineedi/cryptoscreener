@@ -300,18 +300,20 @@ COMBINATIONS: dict[str, CombinationDefinition] = {
         name="TREND_BOS_IMPULSE_PULLBACK_HTF",
         description=(
             "Research-only reverse of COMBO_02 long: BOS + setup-TF trend + "
-            "4h+1h HTF alignment + impulse + pullback. Used for SHORT "
-            "Strategy Backtest. Not v1 production."
+            "4h+1h HTF alignment from bars fully closed at the setup close "
+            "+ impulse + pullback. Used for SHORT Strategy Backtest. Not v1 production."
         ),
         require_bos=True,
         require_trend=True,
         require_impulse=True,
         require_pullback=True,
         require_htf_alignment=True,
+        htf_require_fully_closed=True,
         conditions=(
             "BOS confirmed",
             "Trend agrees with BOS direction",
             "4h+1h HTF structure aligned (hard gate)",
+            "HTF candles fully closed at setup bar close",
             "Impulse confirmed",
             "Pullback confirmed",
         ),

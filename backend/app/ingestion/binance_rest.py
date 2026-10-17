@@ -139,6 +139,12 @@ class BinanceRestClient:
                     )
 
                     delay = self.limiter.backoff_delay(attempt)
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            delay = max(delay, float(retry_after))
+                        except ValueError:
+                            pass
 
                     logger.warning(
 

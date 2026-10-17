@@ -29,6 +29,7 @@ from typing import Any, Mapping, Sequence
 from app.research.config import RESEARCH_ENGINE_VERSION, SIGNAL_ENGINE_VERSION, ResearchConfig
 from app.research.metrics import expectancy_r, profit_factor
 from app.research.trade_fees import enrich_trade_execution
+from app.research.ohlcv_continuity import bars_adjacent, step_seconds
 from app.signals._candle_utils import candle_time
 
 EXECUTION_MODEL_VERSION = "causal_next_open_v1"
@@ -98,11 +99,18 @@ def _walk_exit(
     side: str,
     stop: float,
     target: float | None,
+    *,
+    step: int | None = None,
 ) -> tuple[int, float, str]:
-    """Walk from the fill bar. Stop wins when both levels print. Gaps at the open."""
+    """Walk from the fill bar. Stop wins when both levels print. Gaps at the open.
+
+    A row whose open is not one bar after the previous row is not used.
+    """
     last_i = start
     last_close = _num(candles[start], "close", "c") if start < len(candles) else 0.0
     for i in range(start, len(candles)):
+        if i > start and not bars_adjacent(candles[i - 1], candles[i], step):
+            return last_i, last_close, "OPEN"
         candle = candles[i]
         opened = _num(candle, "open", "o")
         high = _num(candle, "high", "h")
@@ -236,6 +244,7 @@ def _fill_causal_trade(
     side = str(trade.get("direction") or trade.get("side") or "LONG").upper()
     signal_index = int(trade.get("entry_index") or 0)
     fill_index = signal_index + 1
+    step = step_seconds(str(trade.get("timeframe") or ""))
     stop = float(trade.get("stop_price") or trade.get("stop") or 0.0)
     target_raw = trade.get("tp1")
     target = float(target_raw) if target_raw not in (None, "") else None
@@ -253,6 +262,13 @@ def _fill_causal_trade(
         row["exit_price"] = None
         return row
 
+    if not bars_adjacent(candles[signal_index], candles[fill_index], step):
+        row["outcome"] = "OPEN"
+        row["entry_price"] = None
+        row["exit_price"] = None
+        row["fill_index"] = None
+        return row
+
     raw_open = _num(candles[fill_index], "open", "o")
     fill = _adverse(raw_open, side, is_entry=True, rate=entry_slippage_rate)
     row["next_open"] = raw_open
@@ -266,7 +282,9 @@ def _fill_causal_trade(
         row["slippage_applied_once"] = True
         return row
 
-    exit_index, raw_exit, outcome = _walk_exit(candles, fill_index, side, stop, target)
+    exit_index, raw_exit, outcome = _walk_exit(
+        candles, fill_index, side, stop, target, step=step
+    )
     row["exit_index"] = exit_index
     row["outcome"] = outcome
     if outcome == "OPEN":

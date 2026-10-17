@@ -179,6 +179,9 @@ class PaperTradeEngine:
         # Legacy setup→paper auto-entry (default OFF — research only when explicitly enabled).
         self.legacy_auto_entry_enabled = False
         self.realized_pnl = 0.0
+        # Closed-bar open times already applied to stops. The orchestrator
+        # seeds this on the first poll so stored history is not a new wick.
+        self._replayed_bar_opens: dict[str, set[str]] = {}
         # Runtime halt trackers (paper opens only)
         self.peak_equity = float(starting_equity)
         self._day_key: str | None = None
@@ -1928,6 +1931,46 @@ class PaperTradeEngine:
                 risk_percent=risk_pct,
             )
             return pos
+
+    def _range_exit(
+        self, pos: PaperPosition, high: float, low: float
+    ) -> tuple[float, str] | None:
+        """Stop wins when the bar's range touches the stop and the target."""
+        side = str(getattr(pos, "side", "") or "").upper()
+        stop = float(pos.stop_price or 0)
+        tp = float(pos.tp1_price) if pos.tp1_price is not None else None
+        if side == "SHORT":
+            if stop > 0 and high >= stop:
+                return stop, "STOP"
+            if tp is not None and low <= tp:
+                return tp, "TP1"
+        else:
+            if stop > 0 and low <= stop:
+                return stop, "STOP"
+            if tp is not None and high >= tp:
+                return tp, "TP1"
+        return None
+
+    def replay_bar_ranges(
+        self, ranges: dict[str, list[tuple[float, float]]]
+    ) -> list[PaperPosition]:
+        """Apply closed-bar high/low, in order, to open positions.
+
+        A single sampled price misses a wick. The caller passes bars that
+        closed while the mark feed was down, oldest first.
+        """
+        closed: list[PaperPosition] = []
+        with self._lock:
+            for _key, pos in list(self._open.items()):
+                for high, low in ranges.get(pos.symbol) or []:
+                    if self._key_for(pos) not in self._open:
+                        break
+                    hit = self._range_exit(pos, float(high), float(low))
+                    if hit is None:
+                        continue
+                    closed.append(self._close_locked(pos, hit[0], hit[1]))
+                    break
+        return closed
 
     def tick(self, prices: dict[str, float]) -> list[PaperPosition]:
         """Manage open positions against mark/last prices. Returns newly closed."""

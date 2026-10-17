@@ -296,7 +296,7 @@ def test_short_15m_does_not_burn_the_passed_bar():
     assert "BTCUSDT" not in watcher._seeded
 
 
-def test_passed_watcher_is_off_unless_configured():
+def test_passed_watcher_is_on_by_default():
     from app.config import Settings
 
-    assert Settings.model_fields["paper_passed_watcher_enabled"].default is False
+    assert Settings.model_fields["paper_passed_watcher_enabled"].default is True

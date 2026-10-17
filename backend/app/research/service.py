@@ -952,11 +952,19 @@ class BosResearchService:
                 "combination_id": combination_id,
                 "rows": [],
             }
+        from app.research.causal_execution import DUAL_LEGACY_AND_CAUSAL
+        from app.research.sd_structure.variants import SD_STRUCTURE_FAMILY
+
         rcfg = (
             ResearchConfig.for_new_combo02_v2_run()
             if str(combo.combination_id) == "COMBO_02_V2"
             else ResearchConfig()
         )
+        # Signal-close books stay in the result as the optimistic comparison.
+        # The displayed P&L is the next-open book. Supply/demand already fills
+        # at the next open inside its own walk, so it is not shifted again.
+        if combo.combination_id not in SD_STRUCTURE_FAMILY:
+            rcfg.execution_model = DUAL_LEGACY_AND_CAUSAL
         warmup = max(int(rcfg.min_bars), 100)
         direction_u = direction.upper().strip() if direction else "LONG"
         if direction_u not in {"LONG", "SHORT"}:

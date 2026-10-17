@@ -5,6 +5,7 @@ Only closed bars leave this module: a bar is closed when open_time + interval <=
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
@@ -37,12 +38,31 @@ class BinanceKlineSource:
         self.base_url = base_url.rstrip("/")
         self.client = client or httpx.Client(timeout=10.0)
 
+    def _get(self, path: str, params: dict[str, Any]) -> httpx.Response:
+        """GET with backoff. Honors Retry-After on HTTP 429."""
+        delay = 0.5
+        resp: httpx.Response | None = None
+        for _attempt in range(5):
+            resp = self.client.get(f"{self.base_url}{path}", params=params)
+            if resp.status_code != 429:
+                resp.raise_for_status()
+                return resp
+            retry_after = resp.headers.get("Retry-After")
+            try:
+                wait = float(retry_after) if retry_after is not None else delay
+            except ValueError:
+                wait = delay
+            time.sleep(max(wait, delay))
+            delay = min(delay * 2.0, 60.0)
+        assert resp is not None
+        resp.raise_for_status()
+        return resp
+
     def klines(self, *, start: datetime | None = None, limit: int = 1500) -> list[dict[str, Any]]:
         params: dict[str, Any] = {"symbol": self.symbol, "interval": self.timeframe, "limit": limit}
         if start is not None:
             params["startTime"] = _ms(start)
-        resp = self.client.get(f"{self.base_url}/fapi/v1/klines", params=params)
-        resp.raise_for_status()
+        resp = self._get("/fapi/v1/klines", params)
         return [
             {"time": datetime.fromtimestamp(row[0] / 1000, tz=UTC), "open": float(row[1]), "high": float(row[2]),
              "low": float(row[3]), "close": float(row[4]), "volume": float(row[5])}
@@ -69,8 +89,7 @@ class BinanceKlineSource:
         return live[-1] if live else None
 
     def last_price(self) -> float:
-        resp = self.client.get(f"{self.base_url}/fapi/v1/ticker/price", params={"symbol": self.symbol})
-        resp.raise_for_status()
+        resp = self._get("/fapi/v1/ticker/price", {"symbol": self.symbol})
         return float(resp.json()["price"])
 
 

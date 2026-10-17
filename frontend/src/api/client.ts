@@ -1601,6 +1601,14 @@ export type PassedRegimeResponse = {
   /** False while new passed-regime entries are off; signals are still recorded. */
   book_open?: boolean;
   book_note?: string;
+  /** Coins the passed book may open. Large 2%, mid 1%. */
+  symbols?: string[];
+  symbol_risk?: {
+    large_symbols: string[];
+    mid_symbols: string[];
+    large_risk_percent: number;
+    mid_risk_percent: number;
+  };
   watcher_loop_enabled?: boolean;
   timestamp?: string;
 };
@@ -1608,6 +1616,64 @@ export type PassedRegimeResponse = {
 /** Read-only: the passed-book regime view. There is no write counterpart. */
 export function fetchPassedRegime(signal?: AbortSignal) {
   return getJson<PassedRegimeResponse>("/api/paper/passed-regime", { signal });
+}
+
+export type RegimeBacktestStatus = {
+  status: "idle" | "running" | "done" | "error" | "cancelled" | string;
+  phase?: string;
+  current?: string;
+  symbols?: string[];
+  limit?: number;
+  error?: string | null;
+  skipped_symbols?: string[];
+  summary?: {
+    trades?: number;
+    wins?: number;
+    losses?: number;
+    win_rate?: number | null;
+    pnl_usd_net?: number;
+    final_equity_usd?: number;
+    max_drawdown_pct?: number;
+    signals?: number;
+    signals_taken?: number;
+    by_strategy?: Array<{
+      strategy_id?: string;
+      direction?: string;
+      timeframe?: string;
+      signals?: number;
+      taken?: number;
+      trades?: number;
+      wins?: number;
+      losses?: number;
+      pnl_usd_net?: number;
+    }>;
+  } | null;
+  trades?: Array<{
+    symbol?: string;
+    strategy_id?: string;
+    direction?: string;
+    trend_at_entry?: string;
+    signal_time?: string;
+    exit_time?: string;
+    outcome?: string;
+    net_pnl_usd?: number | null;
+    r_net?: number | null;
+  }>;
+};
+
+export function startRegimeBacktest(body: { symbols: string[]; limit: number }) {
+  return fetch(`${API_BASE}/api/research/regime-backtest/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`API /api/research/regime-backtest/start failed: ${res.status}`);
+    return res.json() as Promise<Record<string, unknown>>;
+  });
+}
+
+export function fetchRegimeBacktest() {
+  return getJson<RegimeBacktestStatus>("/api/research/regime-backtest");
 }
 
 export async function startBacktestJob(body: {

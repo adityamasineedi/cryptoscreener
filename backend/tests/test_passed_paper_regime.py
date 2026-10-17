@@ -3,9 +3,9 @@
 BULLISH runs the LONG rows, BEARISH the SHORT rows, NEUTRAL none. A symbol
 with an open paper position does not get another one.
 
-The regime book is closed: signals are recorded as not opened with reason
-regime_book_closed. Tests marked ``passed_book_open`` reopen it to check the
-open path.
+The regime book is open: a passed-side signal opens a paper position.
+Tests marked ``passed_book_closed`` close it and expect reason
+regime_book_closed.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 import app.services.passed_paper_watcher as watcher_mod
-from app.research.passed_cap_book import PASSED_SIDES, passed_risk_percent
+from app.research.passed_cap_book import PASSED_SIDES, cap_symbols, passed_risk_percent
 from app.research.passed_regime_router import allowed_passed_sides, route_passed_book
 from app.services.paper_risk import PaperRiskPolicy
 from app.services.paper_trade import PaperTradeEngine
@@ -266,6 +266,7 @@ def test_watcher_takes_the_book_from_the_router(rig, monkeypatch):
 # --- closed regime book -------------------------------------------------------
 
 
+@pytest.mark.usefixtures("passed_book_closed")
 def test_bearish_tick_evaluates_the_short_sides_records_them_and_opens_nothing(rig, monkeypatch):
     r = rig(lambda _cid: SHORT_PLAN)
     _set_daily(monkeypatch, r.watcher, "BEARISH")
@@ -290,6 +291,7 @@ def test_bearish_tick_evaluates_the_short_sides_records_them_and_opens_nothing(r
     assert r.watcher.last_evaluated_bar["sides_evaluated"] == len(shorts)
 
 
+@pytest.mark.usefixtures("passed_book_closed")
 def test_closed_book_keeps_the_one_position_check(rig):
     r = rig({"COMBO_01": SHORT_PLAN})
     held = r.eng.open_passed_position(
@@ -485,6 +487,8 @@ STATUS_KEYS = {
     "short_history",
     "book_open",
     "book_note",
+    "symbols",
+    "symbol_risk",
 }
 
 
@@ -513,14 +517,18 @@ def test_regime_status_shape(rig, monkeypatch, trend, n_allowed):
     assert status["last_skip"] is None
     assert status["opened_count"] == 0
     assert status["enabled"] is True
-    assert status["book_open"] is False
-    assert status["book_note"] == REGIME_BOOK_CLOSED_NOTE
+    assert status["book_open"] is True
+    assert status["book_note"] == ""
+    assert status["symbols"] == list(cap_symbols())
+    assert status["symbol_risk"]["large_risk_percent"] == 0.02
+    assert status["symbol_risk"]["mid_risk_percent"] == 0.01
     # Reading the status runs nothing.
     assert r.evaluated == []
     assert r.opens == []
     assert r.eng.status()["open_count"] == 0
 
 
+@pytest.mark.usefixtures("passed_book_closed")
 def test_regime_status_after_a_bar(rig, monkeypatch):
     r = rig({"COMBO_01": SHORT_PLAN})
     _set_daily(monkeypatch, r.watcher, "BEARISH", bars=77)

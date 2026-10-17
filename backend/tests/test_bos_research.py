@@ -91,6 +91,7 @@ class TestCombinationsDefined:
         assert COMBINATIONS["COMBO_04_HTF"].require_impulse is True
         assert COMBINATIONS["COMBO_04_HTF"].require_pullback is True
         assert COMBINATIONS["COMBO_04_HTF"].require_htf_alignment is True
+        assert COMBINATIONS["COMBO_04_HTF"].htf_require_fully_closed is True
 
     def test_list_and_get(self):
         assert len(list_combinations()) == len(COMBINATIONS)

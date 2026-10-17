@@ -720,9 +720,23 @@ class V1PaperWatcher:
             self._note_skip(book.symbol, f"{book.symbol}:ohlcv_catchup", catchup_bar)
             return None
         tip_idx = len(series_1h) - 1
-        tip_ts = candle_time(series_1h[tip_idx])
+        tip_bar = series_1h[tip_idx]
+        tip_ts = candle_time(tip_bar)
         tip_iso = _iso(tip_ts)
         key = bar_key(book.symbol, self.timeframe, tip_iso)
+        if from_live_store and not self.replay_mode:
+            from app.services.v21a_paper_validation import is_candle_fully_closed
+
+            if tip_bar.get("is_closed") is False or tip_bar.get("closed") is False:
+                self._note_skip(book.symbol, f"{book.symbol}:forming_candle", tip_iso)
+                return None
+            if (
+                tip_bar.get("is_closed") is not True
+                and tip_bar.get("closed") is not True
+                and not is_candle_fully_closed(tip_bar, "1h")
+            ):
+                self._note_skip(book.symbol, f"{book.symbol}:forming_candle", tip_iso)
+                return None
 
         with self._lock:
             if not force and not self.replay_mode and book.symbol not in self._seeded:
@@ -836,6 +850,23 @@ class V1PaperWatcher:
             if lag is not None and lag > MAX_OPEN_LAG_SECONDS:
                 self._note_skip(book.symbol, f"{book.symbol}:late_tip", tip_iso)
                 return None
+
+        if not self.replay_mode:
+            from app.research.ohlcv_continuity import bars_adjacent, step_seconds
+            from app.services.ohlcv_store import ohlcv_store
+            from app.services.paper_sizing import DEFAULT_PAPER_SLIPPAGE_RATE
+
+            forming = ohlcv_store.get_open(book.symbol, "1h")
+            if (
+                forming is not None
+                and tip_ts is not None
+                and bars_adjacent(tip_bar, {"time": forming.open_time}, step_seconds("1h"))
+            ):
+                result = dict(result)
+                result["entry_price"] = float(forming.open) * (
+                    1.0 + DEFAULT_PAPER_SLIPPAGE_RATE
+                )
+                result["entry_type"] = "NEXT_OPEN"
 
         pos = paper.open_v1_combo_position(
             symbol=book.symbol,

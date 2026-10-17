@@ -12,7 +12,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { startBacktestJob } from "../api/client";
+import { startBacktestJob, startRegimeBacktest } from "../api/client";
 import {
   BACKTEST_CAP_SYMBOLS,
   BACKTEST_LARGE_SYMBOLS,
@@ -68,6 +68,8 @@ vi.mock("../api/client", async (importOriginal) => {
       rows: [],
     })),
     cancelBacktestJob: vi.fn(async () => ({ status: "idle" })),
+    startRegimeBacktest: vi.fn(async () => ({ status: "STARTED" })),
+    fetchRegimeBacktest: vi.fn(async () => ({ status: "idle" })),
   };
 });
 
@@ -383,7 +385,7 @@ describe("BacktestPanel interaction paths", () => {
     expect(body?.research_risk_override).toBe(true);
   });
 
-  it("6b1. passed strategies are selected automatically and run COMBO_02_V2 SHORT", async () => {
+  it("6b1. passed strategies are selected automatically and run the regime book", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
@@ -396,15 +398,14 @@ describe("BacktestPanel interaction paths", () => {
 
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
-      expect(startBacktestJob).toHaveBeenCalled();
+      expect(startRegimeBacktest).toHaveBeenCalled();
     });
-    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
-    expect(body?.direction).toBe("SHORT");
-    expect(body?.combination_id).toBe("COMBO_02_V2");
-    expect(body?.strategy_id).toBe("COMBO_02_V2");
+    expect(startBacktestJob).not.toHaveBeenCalled();
+    const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
+    expect(body?.symbols).toEqual(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
   });
 
-  it("6b1a. untouched screen keeps the passed-auto option and posts the full COMBO_02_V2 SHORT request", async () => {
+  it("6b1a. untouched screen keeps the passed-auto option and posts the regime book", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
     const root = within(container);
@@ -416,21 +417,11 @@ describe("BacktestPanel interaction paths", () => {
 
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
-      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+      expect(startRegimeBacktest).toHaveBeenCalledTimes(1);
     });
-    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
-    expect(body).toMatchObject({
-      combination_id: "COMBO_02_V2",
-      strategy_id: "COMBO_02_V2",
-      combo_version: "v2-combo02-adaptive-3-regime",
-      direction: "SHORT",
-      symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-      risk_usd: 20,
-      principal_usd: 1000,
-      leverage: 2,
-      taker_fee_pct: 0.04,
-      maker_fee_pct: 0.02,
-    });
+    expect(startBacktestJob).not.toHaveBeenCalled();
+    const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
+    expect(body?.symbols).toEqual(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
   });
 
   it("6b2. passed cap-book strategy is selectable and is not rewritten to COMBO_04", async () => {
@@ -1436,14 +1427,10 @@ describe("BacktestPanel interaction paths", () => {
 
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
-      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+      expect(startRegimeBacktest).toHaveBeenCalledTimes(1);
     });
-    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
     expect(body?.symbols).toEqual([...DEFAULT_COINS, "INJUSDT"]);
-    expect((body?.symbols ?? []).filter((s) => !CAP_BOOK.includes(s))).toEqual([]);
-    expect(body?.combination_id).toBe("COMBO_02_V2");
-    expect(body?.strategy_id).toBe("COMBO_02_V2");
-    expect(body?.direction).toBe("SHORT");
   });
 
   it("posts only the cap book coin from a mixed screener handoff", async () => {
@@ -1458,9 +1445,9 @@ describe("BacktestPanel interaction paths", () => {
 
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
-      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+      expect(startRegimeBacktest).toHaveBeenCalledTimes(1);
     });
-    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
     expect(body?.symbols).toEqual(["LINKUSDT"]);
   });
 });

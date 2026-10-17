@@ -216,10 +216,7 @@ def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
         "execution_model": out.get("execution_model"),
         "htf_fully_closed": out.get("htf_fully_closed"),
     }
-    if (
-        combination_id == "COMBO_02_V2"
-        and str(out.get("execution_model") or "") == "DUAL_LEGACY_AND_CAUSAL"
-    ):
+    if str(out.get("execution_model") or "") == "DUAL_LEGACY_AND_CAUSAL" and candles:
         from app.research.causal_execution import (
             apply_causal_primary_display,
             build_execution_run_record,
@@ -227,7 +224,9 @@ def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
         )
         from app.research.config import ResearchConfig
 
-        run_cfg = ResearchConfig.for_new_combo02_v2_run()
+        run_cfg = ResearchConfig()
+        run_cfg.execution_model = "DUAL_LEGACY_AND_CAUSAL"
+        run_cfg.htf_fully_closed = bool(out.get("htf_fully_closed"))
         run_cfg.risk_usd = risk_usd
         run_cfg.taker_fee_rate = taker_fee
         run_cfg.maker_fee_rate = maker_fee

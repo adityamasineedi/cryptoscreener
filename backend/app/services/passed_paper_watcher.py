@@ -6,9 +6,9 @@ Does not place exchange orders.
 The BTC daily trend picks which sides run: BULLISH the LONG rows, BEARISH the
 SHORT rows, NEUTRAL none. One open paper position per symbol.
 
-The regime book is closed (``REGIME_BOOK_OPEN``): no side passed its regime
-window, so each signal the allowed book emits is recorded as not opened with
-reason ``regime_book_closed`` and no paper position is opened.
+The regime book is open (``REGIME_BOOK_OPEN``): a signal from a side that
+passed the cap-book backtest opens a paper position. Setting the flag false
+records that signal as not opened with reason ``regime_book_closed``.
 
 The trend for a 1h bar is read at that bar's close with the backtest's
 ``RegimeClock``, from BTC daily bars read once per tick. A failed daily read
@@ -34,6 +34,8 @@ from app.research.btc_daily_regime import (
 from app.research.combination_engine import evaluate_combination_at_bar
 from app.research.config import ResearchConfig
 from app.research.passed_cap_book import (
+    LARGE,
+    MID,
     PASSED_SIDES,
     cap_symbols,
     passed_risk_percent,
@@ -59,9 +61,9 @@ MIN_CLOSED_15M_BARS = 100
 # Signals kept in memory for the admin status.
 MAX_LATEST_SIGNALS = 50
 
-# New passed-regime entries are off: no side passed its regime window. Signals
-# are still evaluated and recorded; open_passed_position is not called.
-REGIME_BOOK_OPEN = False
+# Cap-book sides that passed the backtest may open paper positions.
+# False records each signal as regime_book_closed and opens nothing.
+REGIME_BOOK_OPEN = True
 REGIME_BOOK_CLOSED_REASON = "regime_book_closed"
 REGIME_BOOK_CLOSED_NOTE = (
     "New passed-regime entries are off because no side passed its regime window."
@@ -268,6 +270,13 @@ class PassedPaperWatcher:
                 "opened_count": self.opened_count,
                 "book_open": REGIME_BOOK_OPEN,
                 "book_note": "" if REGIME_BOOK_OPEN else REGIME_BOOK_CLOSED_NOTE,
+                "symbols": list(cap_symbols()),
+                "symbol_risk": {
+                    "large_symbols": list(LARGE),
+                    "mid_symbols": list(MID),
+                    "large_risk_percent": 0.02,
+                    "mid_risk_percent": 0.01,
+                },
             }
 
     def on_closed_1h(
@@ -324,6 +333,19 @@ class PassedPaperWatcher:
         if not tip_iso:
             self.last_skip = f"{sym}:missing_bar_time"
             return []
+        if not force:
+            from app.services.v21a_paper_validation import is_candle_fully_closed
+
+            if tip.get("is_closed") is False or tip.get("closed") is False:
+                self.last_skip = f"{sym}:forming_candle"
+                return []
+            if (
+                tip.get("is_closed") is not True
+                and tip.get("closed") is not True
+                and not is_candle_fully_closed(tip, "1h")
+            ):
+                self.last_skip = f"{sym}:forming_candle"
+                return []
         with self._lock:
             if not force and sym not in self._seeded:
                 from app.services.v1_paper_watcher import closed_tip_is_current
@@ -502,12 +524,32 @@ class PassedPaperWatcher:
                     **signal, outcome="not_opened", reason=REGIME_BOOK_CLOSED_REASON
                 )
                 continue
+            eval_result = dict(result or {})
+            if not force:
+                from app.research.ohlcv_continuity import bars_adjacent, step_seconds
+                from app.services.ohlcv_store import ohlcv_store
+                from app.services.paper_sizing import DEFAULT_PAPER_SLIPPAGE_RATE
+
+                forming = ohlcv_store.get_open(sym, "1h")
+                if (
+                    forming is not None
+                    and tip_ts is not None
+                    and bars_adjacent(
+                        tip, {"time": forming.open_time}, step_seconds("1h")
+                    )
+                ):
+                    raw = float(forming.open)
+                    slip = DEFAULT_PAPER_SLIPPAGE_RATE
+                    eval_result["entry_price"] = (
+                        raw * (1.0 - slip) if direction == "SHORT" else raw * (1.0 + slip)
+                    )
+                    eval_result["entry_type"] = "NEXT_OPEN"
             pos = paper.open_passed_position(
                 symbol=sym,
                 combination_id=combination_id,
                 timeframe="1h",
                 direction=direction,
-                eval_result=dict(result or {}),
+                eval_result=eval_result,
                 risk_percent=passed_risk_percent(sym, direction, market),
                 setup_bar_time_utc=tip_iso,
                 market_direction=market,

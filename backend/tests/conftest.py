@@ -19,14 +19,18 @@ def _echo_closed_path_a_eval(monkeypatch):
 
 @pytest.fixture
 def passed_book_open(monkeypatch):
-    """Reopen the passed-regime book for a test that observes the open path.
-
-    Production keeps it closed (REGIME_BOOK_OPEN = False). Gate tests use an open
-    as their observable; the gates themselves are unchanged.
-    """
+    """Passed-regime book open, matching production (REGIME_BOOK_OPEN = True)."""
     import app.services.passed_paper_watcher as watcher
 
     monkeypatch.setattr(watcher, "REGIME_BOOK_OPEN", True)
+
+
+@pytest.fixture
+def passed_book_closed(monkeypatch):
+    """Close the passed-regime book to observe the refuse-to-open path."""
+    import app.services.passed_paper_watcher as watcher
+
+    monkeypatch.setattr(watcher, "REGIME_BOOK_OPEN", False)
 
 
 @pytest.fixture
