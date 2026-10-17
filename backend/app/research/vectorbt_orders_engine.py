@@ -20,6 +20,14 @@ Fields read per family (all from the trade dict):
 - ohlcv_structure_experiment (``engine_backtest._run_ose`` + ``trade_fees``):
   same keys as multicap; entry_price is the slipped next-bar open, exit_price
   the engine's exit fill.
+- trade_fees ``slippage_rate`` (all three families above): with 0 the prices
+  above are the fills. With ``slippage_rate > 0`` ``enrich_trade_execution``
+  slips both legs adversely (LONG entry x (1 + s), exit x (1 - s); SHORT entry
+  x (1 - s), exit x (1 + s)) and prices fees *and* gross P&L on those fills
+  (``trade_fees`` fix 00e0673; before it gross used the unslipped entry, so no
+  single fill reproduced ``r_net`` and these rows were refused). The replay
+  orders use the slipped fills, cross-checked against ``notional_entry_usd /
+  qty`` and ``notional_exit_usd / qty``.
 - candle12_v3 (built inside ``candle12_v3.run_candle12_v3``, not trade_fees):
   entry_index, legs[0].bar (== exit_index), entry_price (slipped fill),
   legs[0].fill (slipped exit fill), qty, risk_usd (qty x |entry - initial stop|),
@@ -139,19 +147,44 @@ def _common(trade: Mapping[str, Any], pos: int) -> dict[str, Any]:
     }
 
 
+# notional / qty versus the slipped fill: float round trip only.
+_FILL_XCHECK_REL_TOL = 1e-9
+
+
+def _trade_fees_fills(base: Mapping[str, Any], trade: Mapping[str, Any], key: str) -> tuple[float, float]:
+    """(entry fill, exit fill) that trade_fees charged fees and gross P&L on."""
+    entry = base["entry_price"]
+    exit_px = _num(trade, "exit_price", key)
+    v = trade.get("slippage_rate")
+    slip = 0.0 if v is None else _num(trade, "slippage_rate", key, positive=False)
+    if slip < 0:
+        raise ReplayUnsupported(f"{key}: slippage_rate={slip} < 0")
+    if slip == 0.0:
+        return entry, exit_px
+    # Same adverse slip as enrich_trade_execution; it now prices gross P&L on
+    # these fills too, so one fill per leg reproduces fees and r_net.
+    if base["direction"] == "SHORT":
+        fills = (entry * (1.0 - slip), exit_px * (1.0 + slip))
+    else:
+        fills = (entry * (1.0 + slip), exit_px * (1.0 - slip))
+    qty = base["qty"]
+    for name, fill in zip(("notional_entry_usd", "notional_exit_usd"), fills):
+        per_unit = _num(trade, name, key) / qty
+        if not math.isclose(per_unit, fill, rel_tol=_FILL_XCHECK_REL_TOL, abs_tol=0.0):
+            raise ReplayUnsupported(f"{key}: {name}/qty={per_unit!r} disagrees with the slipped fill {fill!r}")
+    return fills
+
+
 def _order_trade_fees(trade: Mapping[str, Any], pos: int) -> ReplayOrder:
     """multicap / candle12 / OSE: trades sized and charged by trade_fees."""
     base = _common(trade, pos)
     key = base["trade_key"]
-    slip = _opt_num(trade, "slippage_rate") or 0.0
-    if slip != 0.0:
-        # trade_fees then prices gross PnL on the unslipped entry but the fee on
-        # the slipped fill; no single entry fill reproduces both.
-        raise ReplayUnsupported(f"{key}: trade_fees slippage_rate={slip} (gross and fee use different entry prices)")
+    entry_fill, exit_fill = _trade_fees_fills(base, trade, key)
+    base["entry_price"] = entry_fill
     return ReplayOrder(
         **base,
         exit_index=_index(trade, "exit_index", key),
-        exit_price=_num(trade, "exit_price", key),
+        exit_price=exit_fill,
         entry_fee_rate=_num(trade, "fee_entry_rate", key, positive=False),
         exit_fee_rate=_num(trade, "fee_exit_rate", key, positive=False),
     )

@@ -192,14 +192,56 @@ def test_open_trade_is_unsupported():
         engine_replay_orders("OSE_C_retest", [t])
 
 
-def test_trade_fees_slippage_path_is_unsupported():
-    # gross on the unslipped entry, fee on the slipped fill: no single fill fits both.
-    t = enrich_trade_execution(
-        {"direction": "LONG", "entry_price": 100.0, "stop_price": 98.0, "exit_price": 104.0,
-         "outcome": "TP1", "entry_index": 1, "exit_index": 2},
-        slippage_rate=0.0005,
+def _slipped_trade(direction, entry_i, exit_i, entry, stop, exit_px, tp1, outcome, slip=0.0005):
+    """SD-style row: trade_fees slips both legs (slippage_rate > 0)."""
+    return enrich_trade_execution(
+        {"direction": direction, "entry_price": entry, "stop_price": stop, "exit_price": exit_px,
+         "tp1": tp1, "outcome": outcome, "entry_type": "NEXT_OPEN",
+         "entry_index": entry_i, "exit_index": exit_i},
+        slippage_rate=slip,
         **SIZING,
     )
+
+
+def test_trade_fees_slippage_rows_replay_on_slipped_fills_and_pass():
+    # enrich_trade_execution prices gross P&L on the same slipped fills it
+    # charges fees on (00e0673), so one fill per leg reproduces r_net.
+    trades = [
+        _slipped_trade("LONG", 1, 4, 100.0, 98.0, 104.0, 104.0, "TP1"),
+        _slipped_trade("SHORT", 6, 6, 100.0, 102.0, 102.0, 96.0, "SL"),  # same-bar exit
+    ]
+    orders = engine_replay_orders("MID_CAP_FVG_DISCOUNT", trades)
+    assert orders[0].entry_price == pytest.approx(100.0 * 1.0005, rel=1e-15)
+    assert orders[0].exit_price == pytest.approx(104.0 * 0.9995, rel=1e-15)
+    assert orders[1].entry_price == pytest.approx(100.0 * 0.9995, rel=1e-15)
+    assert orders[1].exit_price == pytest.approx(102.0 * 1.0005, rel=1e-15)
+    assert [o.net_r for o in orders] == [t["r_net"] for t in trades]
+    res = check_parity(orders)
+    assert res.passed, res.to_dict()
+    assert res.bar_loop_trades == res.vectorbt_trades == 2
+
+
+def test_slipped_row_with_pre_fix_gross_fails_on_net_r():
+    # Negative control: r_net as the old helper computed it (gross on the
+    # unslipped entry, fees on the slipped fills) must not pass.
+    t = _slipped_trade("LONG", 1, 4, 100.0, 98.0, 104.0, 104.0, "TP1")
+    exit_fill = 104.0 * 0.9995
+    t["r_net"] = (t["qty"] * (exit_fill - 100.0) + t["fee_total_usd"]) / t["risk_usd"]
+    res = check_parity(engine_replay_orders("MID_CAP_FVG_DISCOUNT", [t]))
+    assert not res.passed and res.first_mismatch_field == "net_r"
+
+
+@pytest.mark.parametrize("field", ["notional_entry_usd", "notional_exit_usd"])
+def test_slipped_notional_disagreeing_with_fill_is_unsupported(field):
+    t = _slipped_trade("SHORT", 1, 4, 100.0, 102.0, 96.0, 96.0, "TP1")
+    t[field] = t[field] * 1.001
+    with pytest.raises(ReplayUnsupported, match=field):
+        engine_replay_orders("OSE_B_acceptance", [t])
+
+
+def test_negative_slippage_rate_is_unsupported():
+    t = _slipped_trade("LONG", 1, 4, 100.0, 98.0, 104.0, 104.0, "TP1")
+    t["slippage_rate"] = -0.0005
     with pytest.raises(ReplayUnsupported, match="slippage_rate"):
         engine_replay_orders("MID_CAP_FVG_DISCOUNT", [t])
 

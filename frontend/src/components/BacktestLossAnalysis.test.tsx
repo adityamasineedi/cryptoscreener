@@ -414,9 +414,13 @@ describe("BacktestLossAnalysis", () => {
     const list = await screen.findByTestId("loss-analysis-losses");
     expect(within(list).getAllByTestId("loss-item")).toHaveLength(50);
     expect(list.textContent).toContain("1/3");
-    fireEvent.click(within(list).getByRole("button", { name: "Next" }));
-    fireEvent.click(within(list).getByRole("button", { name: "Next" }));
+    // The 50 loss items are role="button" too, so a by-role "Next" query
+    // computes the accessible name of every item's full text (seconds in
+    // jsdom). Match the pager's own <button> by its text instead.
+    const next = () => within(list).getByText("Next", { selector: "button" });
+    fireEvent.click(next());
+    fireEvent.click(next());
     expect(within(list).getAllByTestId("loss-item")).toHaveLength(5);
     expect(within(list).getAllByTestId("loss-item")[0].textContent).toContain("#101");
-  }, 20000);
+  });
 });

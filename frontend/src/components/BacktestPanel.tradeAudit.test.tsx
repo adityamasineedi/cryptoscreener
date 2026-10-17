@@ -5,10 +5,10 @@
  * the exit-order equity). Display only: every value comes from the job payload.
  */
 import { cleanup, render, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useBacktestJobStore } from "../store/backtestJobStore";
+import { setupUser } from "../test/user";
 import { BacktestPanel } from "./BacktestPanel";
 
 // jsdom has no layout, so render every blotter row.
@@ -49,6 +49,19 @@ function renderPanel() {
     </MemoryRouter>,
   );
 }
+
+// The first BacktestPanel render in a file compiles the ~3.5k-line panel, its
+// stores and child panels (1-3 s on a loaded machine). Pay that once here,
+// outside every test's 5 s budget, instead of inside whichever test runs
+// first ("1. BTC v1 risk rendering" used to time out on it). A plain render
+// and one role query: no clicks, nothing persisted, and the mock call history
+// it leaves is cleared.
+beforeAll(() => {
+  const { container } = renderPanel();
+  within(container).getByRole("tab", { name: "Long trades" });
+  cleanup();
+  vi.clearAllMocks();
+});
 
 type T = Record<string, unknown>;
 
@@ -221,7 +234,7 @@ describe("Backtest screen trade-audit display fixes", () => {
   });
 
   it("B5 coin stepper steps through the job's coins, not the form's", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const btc = row([trade(1, 20)]);
     const eth = row([trade(1, -5, { symbol: "ETHUSDT" })], { symbol: "ETHUSDT" });
     // Form opens with BTC, ETH, SOL; the job ran BTC and ETH only.
@@ -371,7 +384,7 @@ describe("Backtest screen trade-audit display fixes", () => {
   });
 
   it("B11 the data map names the job's strategy and coin count, not the form's", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     setJob(job([row([trade(1, 20), trade(2, 5)])]));
     const { container } = renderPanel();
     const root = within(container);
