@@ -297,6 +297,47 @@ class BacktestJob:
         return {"vectorbt_mismatch_total": total, "vectorbt_rows": per_row}
 
 
+def _strip_trades(row: Any, include_trades: bool) -> Any:
+    if include_trades or not isinstance(row, dict):
+        return row
+    return {**row, "trades": []}
+
+
+def _vectorbt_error_row(row: Any, exc: BaseException, include_trades: bool) -> Any:
+    """The bar-loop row with an ERROR verdict (same shape as a per-row failure)."""
+    if not isinstance(row, dict):
+        return row
+    out = {
+        **row,
+        "execution_engine": "bar_loop",
+        "vectorbt_parity": {"verdict": "ERROR", "reason": f"{type(exc).__name__}: {exc}"},
+        "vectorbt_mismatches": 0,
+    }
+    return _strip_trades(out, include_trades)
+
+
+async def _vectorbt_rows_in_child(
+    data: dict[str, Any],
+    *,
+    should_cancel: Any = None,
+    heartbeat: Any = None,
+) -> list[Any]:
+    from app.research.research_child import run_in_child
+
+    return await run_in_child(
+        "app.research.backtest_cpu_worker:apply_vectorbt_rows",
+        data,
+        should_cancel=should_cancel,
+        heartbeat=heartbeat,
+        heartbeat_every=5.0,
+    )
+
+
+# Swapped in tests for an in-process runner (a monkeypatched gate lives only in
+# the test process).
+_vectorbt_runner = _vectorbt_rows_in_child
+
+
 class BacktestJobService:
     """Single-flight backtest job manager (one active matrix at a time)."""
 
@@ -561,51 +602,39 @@ class BacktestJobService:
         strategy_id: str,
         family: Literal["engine", "combo"],
     ) -> list[Any]:
-        """VectorBT execution gate for one cell's rows, off the event loop.
+        """VectorBT execution gate for one cell's rows, in a child process.
 
         Runs on the raw strategy rows (before config enrichment / slimming) so
-        the replay sees the engine's own trade dicts. The first vectorbt import
-        and numba JIT can take tens of seconds, so the job heartbeat is fed
-        while the worker thread runs. Never fails the job: any error leaves the
-        bar-loop row with an ERROR annotation.
+        the replay sees the engine's own trade dicts. The vectorbt import, numba
+        JIT and pandas work hold the GIL for tens of seconds, so they run in a
+        child (``backtest_cpu_worker.apply_vectorbt_rows``) while the job
+        heartbeat is fed. Never fails the job: any error leaves the bar-loop
+        row with an ERROR annotation.
         """
-        from app.research.vectorbt_execution import apply_vectorbt_execution
+        from app.research.research_child import ResearchChildCancelled
 
-        adapter_kwargs = {"taker_fee": job.taker_fee_pct / 100.0} if family == "engine" else {}
-
-        def _one(row: Any) -> Any:
-            if not isinstance(row, dict):
-                return row
-            try:
-                out = apply_vectorbt_execution(
-                    row, strategy_id=strategy_id, family=family, adapter_kwargs=adapter_kwargs
-                )
-            except Exception as exc:  # noqa: BLE001
-                out = {
-                    **row,
-                    "execution_engine": "bar_loop",
-                    "vectorbt_parity": {
-                        "verdict": "ERROR",
-                        "reason": f"{type(exc).__name__}: {exc}",
-                    },
-                    "vectorbt_mismatches": 0,
-                }
-            if not job.include_trades:
-                out = {**out, "trades": []}
-            return out
-
-        def _all() -> list[Any]:
-            return [_one(r) for r in rows]
-
+        data = {
+            "rows": rows,
+            "strategy_id": strategy_id,
+            "family": family,
+            "adapter_kwargs": (
+                {"taker_fee": job.taker_fee_pct / 100.0} if family == "engine" else {}
+            ),
+            "include_trades": job.include_trades,
+        }
         job.heartbeat(phase=VECTORBT_REPLAY)
-        task = asyncio.ensure_future(asyncio.to_thread(_all))
-        while True:
-            done, _ = await asyncio.wait({task}, timeout=5.0)
-            if done:
-                break
-            job.heartbeat(phase=VECTORBT_REPLAY)
+        try:
+            out = await _vectorbt_runner(
+                data,
+                should_cancel=lambda: job._cancel,
+                heartbeat=lambda: job.heartbeat(phase=VECTORBT_REPLAY),
+            )
+        except ResearchChildCancelled:
+            out = [_strip_trades(r, job.include_trades) for r in rows]
+        except Exception as exc:  # noqa: BLE001
+            out = [_vectorbt_error_row(r, exc, job.include_trades) for r in rows]
         job.heartbeat(phase=VECTORBT_REPLAY)
-        return task.result()
+        return out
 
     async def _run(self, job: BacktestJob) -> None:
         from app.research.service import get_bos_research_service
@@ -855,6 +884,12 @@ class BacktestJobService:
         finally:
             if self._watchdog is not None and not self._watchdog.done():
                 self._watchdog.cancel()
+            # The run is over: drop the cancel flag file so jobs leave no temp files.
+            if job._cancel_event is not None:
+                try:
+                    job._cancel_event.clear()
+                except Exception:  # noqa: BLE001
+                    pass
 
 
 backtest_job_service = BacktestJobService()

@@ -327,6 +327,15 @@ def _run_job(monkeypatch, *, vectorbt_execution, include_trades, engine=False):
 
     monkeypatch.setattr(svc_mod, "get_bos_research_service", lambda: Fake())
     monkeypatch.setattr(eb, "engine_strategy_matrix", _fake_matrix)
+    # The job runs the gate in a child process; the gates these tests patch
+    # live in this process, so run the same entry point in-process.
+    import app.research.backtest_job as bj
+    from app.research.backtest_cpu_worker import apply_vectorbt_rows
+
+    async def _in_process(data, *, should_cancel=None, heartbeat=None):
+        return await asyncio.to_thread(apply_vectorbt_rows, data)
+
+    monkeypatch.setattr(bj, "_vectorbt_runner", _in_process)
     svc = BacktestJobService()
 
     async def _go():
