@@ -18,6 +18,12 @@ structlog==24.4.0
 prometheus-client==0.21.1
 psutil==6.1.1
 
+# Research-only order replay (backtest screen "VectorBT execution"). plotly<6:
+# vectorbt's theme templates use trace types plotly 6+ removed. numpy stays 2.2.1.
+vectorbt==0.28.2
+numba==0.68.0
+plotly==5.24.1
+
 # tests
 pytest==8.3.4
 pytest-asyncio==0.25.0

@@ -1211,6 +1211,11 @@ async def research_long_strategy_backtest_start(
             taker_fee_pct=float(body.get("taker_fee_pct") or 0.04),
             maker_fee_pct=float(body.get("maker_fee_pct") or 0.02),
             include_trades=bool(body.get("include_trades", True)),
+            # Research-only VectorBT execution gate; strict opt-in ("false" stays off).
+            vectorbt_execution=(
+                body.get("vectorbt_execution") is True
+                or str(body.get("vectorbt_execution")).strip().lower() in ("true", "1")
+            ),
             start_date=(
                 str(body.get("start_date")).strip()[:10]
                 if body.get("start_date")

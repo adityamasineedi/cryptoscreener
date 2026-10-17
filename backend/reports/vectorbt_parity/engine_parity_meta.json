@@ -1,0 +1,48 @@
+{
+  "datasets": {
+    "fixture": {
+      "bars": 3000,
+      "index_start": 1000
+    },
+    "real": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-06-30",
+      "error": null,
+      "by_warmup": {
+        "500": {
+          "bars": 4868,
+          "index_start": 500,
+          "first_bar": "2023-12-11 04:00:00+00:00",
+          "first_eval_bar": "2024-01-01 00:00:00+00:00",
+          "last_bar": "2024-06-30 23:00:00+00:00",
+          "candle_source": "postgresql_ohlcv",
+          "market_cap": null
+        },
+        "1000": {
+          "bars": 5368,
+          "index_start": 1000,
+          "first_bar": "2023-11-20 08:00:00+00:00",
+          "first_eval_bar": "2024-01-01 00:00:00+00:00",
+          "last_bar": "2024-06-30 23:00:00+00:00",
+          "candle_source": "postgresql_ohlcv",
+          "market_cap": null
+        }
+      }
+    }
+  },
+  "request": {
+    "symbol": "BTCUSDT",
+    "timeframe": "1h",
+    "risk_usd": 20.0,
+    "taker_fee": 0.0004,
+    "maker_fee": 0.0002,
+    "leverage": 2.0,
+    "principal": 1000.0
+  },
+  "family_seconds": {
+    "candle12": 9.95,
+    "candle12_v3": 7.82,
+    "multicap": 3.16,
+    "ohlcv_structure_experiment": 20.3
+  }
+}

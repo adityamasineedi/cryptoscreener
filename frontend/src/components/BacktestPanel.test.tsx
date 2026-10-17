@@ -1464,3 +1464,153 @@ describe("BacktestPanel interaction paths", () => {
     expect(body?.symbols).toEqual(["LINKUSDT"]);
   });
 });
+
+describe("BacktestPanel VectorBT execution toggle", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  beforeEach(() => {
+    useBacktestJobStore.setState({
+      job: null,
+      request: null,
+      foreignJob: false,
+      ownJobId: null,
+      error: null,
+      active: false,
+      starting: false,
+      _gen: 0,
+    });
+    useBacktestHandoffStore.setState({ symbols: [], revision: 0 });
+    vi.mocked(startBacktestJob).mockClear();
+  });
+
+  async function runWith(vectorbt: boolean) {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("tab", { name: "Long trades" }));
+    const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
+    await user.selectOptions(select, "COMBO_02_V1");
+    const before = select.value;
+    const toggle = root.getByRole("checkbox", { name: "VectorBT execution" }) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    if (vectorbt) await user.click(toggle);
+    expect(toggle.checked).toBe(vectorbt);
+    // Toggling never changes the selected strategy.
+    expect(select.value).toBe(before);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => {
+      expect(startBacktestJob).toHaveBeenCalledTimes(1);
+    });
+    const body = vi.mocked(startBacktestJob).mock.calls.at(-1)?.[0];
+    cleanup();
+    vi.mocked(startBacktestJob).mockClear();
+    useBacktestJobStore.setState({ job: null, request: null, active: false, starting: false });
+    return body;
+  }
+
+  it("is off by default and sends vectorbt_execution false", async () => {
+    const body = await runWith(false);
+    expect(body?.vectorbt_execution).toBe(false);
+  });
+
+  it("sends vectorbt_execution true and leaves the strategy identity unchanged", async () => {
+    const off = await runWith(false);
+    const on = await runWith(true);
+    expect(on?.vectorbt_execution).toBe(true);
+    for (const key of ["combination_id", "strategy_id", "combo_version", "direction"] as const) {
+      expect(on?.[key]).toBe(off?.[key]);
+    }
+    expect(on?.strategy_id).toBe("COMBO_02_V1");
+    const { vectorbt_execution: _a, ...restOn } = on ?? ({} as NonNullable<typeof on>);
+    const { vectorbt_execution: _b, ...restOff } = off ?? ({} as NonNullable<typeof off>);
+    expect(restOn).toEqual(restOff);
+  });
+
+  it("shows which engine ran each row and why a row stayed on the bar loop", () => {
+    const base = {
+      combination_id: "CANDLE12_V2",
+      direction: "LONG",
+      sample_size: 3,
+      average_R: 0.1,
+      trades: [],
+      equity_curve_r: [0, 0.1],
+    };
+    useBacktestJobStore.setState({
+      job: {
+        status: "done",
+        job_id: "vbt-1",
+        symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        timeframes: ["1h"],
+        direction: "LONG",
+        strategy_id: "CANDLE12_V2",
+        vectorbt_execution: true,
+        vectorbt_mismatch_total: 2,
+        rows: [
+          {
+            ...base,
+            symbol: "BTCUSDT",
+            timeframe: "1h",
+            execution_engine: "vectorbt",
+            vectorbt_mismatches: 0,
+            vectorbt_parity: { verdict: "PASS", mismatches: 0, first_mismatch_field: null },
+          },
+          {
+            ...base,
+            symbol: "ETHUSDT",
+            timeframe: "1h",
+            execution_engine: "bar_loop",
+            vectorbt_mismatches: 2,
+            vectorbt_parity: { verdict: "FAIL", mismatches: 2, first_mismatch_field: "exit_price" },
+          },
+          {
+            ...base,
+            symbol: "SOLUSDT",
+            timeframe: "1h",
+            execution_engine: "bar_loop",
+            vectorbt_mismatches: 0,
+            vectorbt_parity: { verdict: "UNAVAILABLE", reason: "vectorbt is not installed" },
+          },
+        ],
+      },
+      active: false,
+      error: null,
+    });
+    const { container } = renderPanel();
+    const labels = within(container)
+      .getAllByTestId("execution-engine")
+      .map((el) => el.textContent);
+    expect(labels).toEqual([
+      "vectorbt",
+      "bar loop · 2 mismatches (exit_price)",
+      "bar loop · unavailable",
+    ]);
+  });
+
+  it("shows no engine label on rows from a run without the flag", () => {
+    useBacktestJobStore.setState({
+      job: {
+        status: "done",
+        job_id: "plain-1",
+        symbols: ["BTCUSDT"],
+        timeframes: ["1h"],
+        direction: "LONG",
+        rows: [
+          {
+            combination_id: "COMBO_02",
+            symbol: "BTCUSDT",
+            timeframe: "1h",
+            direction: "LONG",
+            sample_size: 1,
+            trades: [],
+          },
+        ],
+      },
+      active: false,
+      error: null,
+    });
+    const { container } = renderPanel();
+    expect(within(container).queryAllByTestId("execution-engine")).toEqual([]);
+  });
+});

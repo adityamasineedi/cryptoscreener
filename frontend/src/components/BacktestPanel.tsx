@@ -214,6 +214,17 @@ function tradesMaxDrawdownUsd(trades: StrategyTradeRow[]): number {
   return dd;
 }
 
+/** Which engine produced a row's numbers when VectorBT execution was requested. */
+export function executionEngineLabel(row: StrategyMatrixRow): string {
+  if (row.execution_engine === "vectorbt") return "vectorbt";
+  const parity = row.vectorbt_parity;
+  if (parity?.verdict === "FAIL") {
+    const n = row.vectorbt_mismatches ?? parity.mismatches ?? 0;
+    return `bar loop · ${n} mismatch${n === 1 ? "" : "es"} (${parity.first_mismatch_field ?? "?"})`;
+  }
+  return parity?.verdict ? `bar loop · ${parity.verdict.toLowerCase()}` : "bar loop";
+}
+
 function jobStrategyLabel(strategyId: string | undefined): string {
   if (!strategyId) return "—";
   if (strategyId === "COMBO_02_V2_1_A") return "COMBO_02 V2.1-A";
@@ -260,6 +271,7 @@ export function BacktestPanel() {
   const [riskPct, setRiskPct] = useState(2);
   const [riskUsd, setRiskUsd] = useState(20);
   const [researchRiskOverride, setResearchRiskOverride] = useState(false);
+  const [vectorbtExecution, setVectorbtExecution] = useState(false);
   const [shortNotice, setShortNotice] = useState<string | null>(
     "Passed strategies are selected. Run uses COMBO_02_V2 SHORT."
   );
@@ -754,10 +766,12 @@ export function BacktestPanel() {
       taker_fee_pct: takerFeePct,
       maker_fee_pct: makerFeePct,
       include_trades: true,
+      vectorbt_execution: vectorbtExecution,
       start_date: effectiveStart,
       end_date: effectiveEnd,
     });
   }, [
+    vectorbtExecution,
     symbols,
     timeframes,
     direction,
@@ -1524,6 +1538,21 @@ export function BacktestPanel() {
             ) : (
               <span>Non-v1 symbols use the configured research risk.</span>
             )}
+            <label className="flex items-start gap-2 text-terminal-text">
+              <input
+                type="checkbox"
+                aria-label="VectorBT execution"
+                checked={vectorbtExecution}
+                onChange={(e) => setVectorbtExecution(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                VectorBT execution
+                <span className="block text-[10px] text-terminal-muted">
+                  Replays the trades in VectorBT; used only when parity passes
+                </span>
+              </span>
+            </label>
           </div>
         </div>
         {researchRiskOverride ? (
@@ -2353,7 +2382,22 @@ export function BacktestPanel() {
                         );
                       })()}
                     </td>
-                    <td className="px-2 py-2 font-mono">{row.timeframe}</td>
+                    <td className="px-2 py-2 font-mono">
+                      {row.timeframe}
+                      {row.execution_engine ? (
+                        <div
+                          data-testid="execution-engine"
+                          className={`text-[9px] uppercase tracking-wide ${
+                            row.execution_engine === "vectorbt"
+                              ? "text-terminal-accent"
+                              : "text-terminal-muted"
+                          }`}
+                          title={row.vectorbt_parity?.reason ?? undefined}
+                        >
+                          {executionEngineLabel(row)}
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="px-2 py-2 font-mono">{row.sample_size}</td>
                     <td className={`px-2 py-2 font-mono ${avgCls}`}>
                       {row.sample_size ? num(avg) : "—"}
