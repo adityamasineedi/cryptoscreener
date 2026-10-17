@@ -4,6 +4,7 @@ import {
   type PassedRegimeResponse,
   type PassedRegimeSide,
 } from "../api/client";
+import { PassedBookHealth } from "./PassedBookHealth";
 import { SymbolAllowlistLines } from "./SymbolAllowlistLines";
 
 const POLL_MS = 5000;
@@ -91,6 +92,7 @@ export function PassedRegimePanel() {
 
       {snapshot ? (
         <>
+          <PassedBookHealth snapshot={snapshot} />
           {bookClosed ? (
             <p
               className="mb-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200"

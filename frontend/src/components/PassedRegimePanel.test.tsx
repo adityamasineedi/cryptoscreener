@@ -382,3 +382,196 @@ describe("PassedRegimePanel", () => {
     expect(screen.queryByTestId("passed-regime-allowlist")).toBeNull();
   });
 });
+
+const HEARTBEAT = {
+  last_eval_at: "2026-10-17T12:05:00+00:00",
+  last_eval_symbol: "ETHUSDT",
+  last_eval_bar: "2026-10-17T11:00:00+00:00",
+  last_eval_lag_seconds: 300,
+  seconds_since_last_eval: 120,
+  stale: false,
+  last_catchup_at: "2026-10-17T12:06:00+00:00",
+  pending_bars: 0,
+  pending_by_symbol: {},
+  watermarks: { ETHUSDT: "2026-10-17T11:00:00+00:00" },
+  state_file: "data/paper/passed_paper_watermark.json",
+  max_catchup_bars: 24,
+  max_open_lag_seconds: 900,
+};
+
+const MISSED_LATE = {
+  strategy_id: "COMBO_02_V2",
+  direction: "SHORT",
+  timeframe: "1h",
+  symbol: "ARBUSDT",
+  setup_bar_time: "2026-10-17T09:00:00+00:00",
+  trend: "BEARISH",
+  as_of_daily_bar: "2026-10-16T00:00:00+00:00",
+  outcome: "missed",
+  reason: "late_tip",
+  note: "missed: evaluated late (56m)",
+  lag_seconds: 3360,
+  recorded_at: "2026-10-17T10:56:01+00:00",
+};
+
+const NOT_EVALUATED = {
+  symbol: "SOLUSDT",
+  timeframe: "1h",
+  setup_bar_time: "2026-10-16T06:00:00+00:00",
+  last_bar_time: "2026-10-16T11:00:00+00:00",
+  bars: 6,
+  outcome: "not_evaluated",
+  reason: "beyond_catchup_window",
+  note: "missed: 6 bars not evaluated (beyond_catchup_window, 1745m late)",
+  recorded_at: "2026-10-17T12:06:00+00:00",
+};
+
+function health(testId: string): string {
+  return screen.getByTestId(`passed-health-${testId}`).textContent ?? "";
+}
+
+describe("PassedRegimePanel · passed book health", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it("shows the last evaluated bar, its lag and zero counts when healthy", async () => {
+    await renderWith(
+      response({ heartbeat: HEARTBEAT, missed_signals: 0, unevaluated_bars: 0, recent_missed: [] }),
+    );
+
+    expect(health("last-bar")).toBe(`ETH ${new Date("2026-10-17T11:00:00+00:00").toLocaleString()}`);
+    expect(health("lag")).toBe("5m");
+    expect(health("since")).toBe("2m ago");
+    expect(health("missed")).toBe("0");
+    expect(health("unevaluated")).toBe("0");
+    expect(health("owed")).toBe("0");
+    expect(screen.queryByTestId("passed-health-stale")).toBeNull();
+    expect(screen.queryByTestId("passed-health-missed-list")).toBeNull();
+  });
+
+  it("shows a red STALE badge when the heartbeat is stale, and picks it up on the next poll", async () => {
+    vi.mocked(fetchPassedRegime)
+      .mockResolvedValueOnce(response({ heartbeat: HEARTBEAT }))
+      .mockResolvedValueOnce(
+        response({ heartbeat: { ...HEARTBEAT, stale: true, seconds_since_last_eval: 4860 } }),
+      );
+    render(<PassedRegimePanel />);
+    await act(async () => Promise.resolve());
+    expect(screen.queryByTestId("passed-health-stale")).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+
+    expect(fetchPassedRegime).toHaveBeenCalledTimes(2);
+    const badge = screen.getByTestId("passed-health-stale");
+    expect(badge.textContent).toBe("STALE");
+    expect(badge.className).toContain("text-red-300");
+    expect(screen.getByTestId("passed-health").className).toContain("border-red-500/50");
+    expect(health("since")).toBe("1h 21m ago");
+  });
+
+  it("counts missed signals and lists recent missed rows with note and lag, collapsed", async () => {
+    await renderWith(
+      response({
+        heartbeat: { ...HEARTBEAT, pending_bars: 1, pending_by_symbol: { ARBUSDT: 1, BTCUSDT: 0 } },
+        missed_signals: 2,
+        unevaluated_bars: 6,
+        recent_missed: [MISSED_LATE, NOT_EVALUATED],
+      }),
+    );
+
+    expect(health("missed")).toBe("2");
+    expect(health("unevaluated")).toBe("6");
+    expect(health("owed")).toBe("1 (ARB 1)");
+    const list = screen.getByTestId("passed-health-missed-list") as HTMLDetailsElement;
+    expect(list.tagName).toBe("DETAILS");
+    expect(list.open).toBe(false);
+    expect(list.querySelector("summary")?.textContent).toBe("Recent missed · 2");
+
+    const rows = screen.getAllByTestId("passed-health-missed-row").map((row) => row.textContent ?? "");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain(new Date("2026-10-17T09:00:00+00:00").toLocaleString());
+    expect(rows[0]).toContain("ARB · COMBO_02_V2 · SHORT");
+    expect(rows[0]).toContain("missed: evaluated late (56m)");
+    expect(rows[0]).toContain("lag 56m");
+    expect(rows[1]).toContain("SOL · 6 bars");
+    expect(rows[1]).toContain("missed: 6 bars not evaluated (beyond_catchup_window, 1745m late)");
+    expect(rows[1]).toContain("lag —");
+
+    // The expander is a <details>, not a control.
+    expect(
+      screen
+        .getByTestId("passed-regime")
+        .querySelectorAll("button, input, select, textarea, a, form, [role='button'], [onclick]"),
+    ).toHaveLength(0);
+  });
+
+  it("shows — for every field an older backend does not send", async () => {
+    await renderWith(response());
+
+    expect(health("last-bar")).toBe("—");
+    expect(health("lag")).toBe("—");
+    expect(health("since")).toBe("—");
+    expect(health("missed")).toBe("—");
+    expect(health("unevaluated")).toBe("—");
+    expect(health("owed")).toBe("—");
+    expect(screen.queryByTestId("passed-health-stale")).toBeNull();
+    expect(screen.queryByTestId("passed-health-missed-list")).toBeNull();
+  });
+
+  it("shows — for a heartbeat that has not evaluated anything yet, and for rows missing fields", async () => {
+    await renderWith(
+      response({
+        heartbeat: {
+          last_eval_at: "",
+          last_eval_symbol: "",
+          last_eval_bar: "",
+          last_eval_lag_seconds: null,
+          seconds_since_last_eval: null,
+          stale: false,
+        },
+        missed_signals: 1,
+        recent_missed: [{ outcome: "missed" }],
+      }),
+    );
+
+    expect(health("last-bar")).toBe("—");
+    expect(health("lag")).toBe("—");
+    expect(health("since")).toBe("—");
+    expect(health("owed")).toBe("—");
+    expect(health("unevaluated")).toBe("—");
+    expect(health("missed")).toBe("1");
+    const spans = screen
+      .getAllByTestId("passed-health-missed-row")[0]
+      .querySelectorAll("span");
+    // Bar time, coin/strategy, note, lag.
+    expect(Array.from(spans).map((span) => span.textContent)).toEqual(["—", "—", "—", "lag —"]);
+  });
+
+  it("keeps the allowlist lines next to the health strip", async () => {
+    await renderWith(
+      response({
+        heartbeat: HEARTBEAT,
+        symbol_allowlist: {
+          version: 1,
+          source: "passed_symbol_allowlist.json",
+          symbols: {
+            BTCUSDT: {
+              allowed_sides: [{ strategy_id: "COMBO_01", timeframe: "1h", direction: "SHORT" }],
+              blocked_sides: [],
+            },
+          },
+        },
+      }),
+    );
+    expect(screen.getByTestId("passed-health")).toBeTruthy();
+    expect(screen.getByTestId("passed-regime-allowlist-BTCUSDT").textContent).toContain(
+      "Allowed sides on BTC: COMBO_01 SHORT",
+    );
+  });
+});

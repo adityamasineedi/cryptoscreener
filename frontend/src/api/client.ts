@@ -1723,10 +1723,53 @@ export type PassedRegimeSignal = {
   setup_bar_time: string;
   trend: string;
   as_of_daily_bar: string;
-  outcome: "opened" | "not_opened" | string;
+  outcome: "opened" | "not_opened" | "missed" | string;
   reason: string;
   position_id?: string | number | null;
   recorded_at: string;
+  /** Missed rows only, e.g. "missed: evaluated late (56m)". */
+  note?: string;
+  lag_seconds?: number | null;
+};
+
+/**
+ * A bar the watcher reached too late. "missed": a signal on a bar evaluated
+ * after the late-open bound (never opened). "not_evaluated": due bars that were
+ * never evaluated (no strategy fields; ``bars`` from ``setup_bar_time`` to ``last_bar_time``).
+ */
+export type PassedRegimeMissedRow = {
+  outcome: "missed" | "not_evaluated" | string;
+  reason?: string;
+  note?: string;
+  symbol?: string;
+  strategy_id?: string;
+  direction?: string;
+  timeframe?: string;
+  setup_bar_time?: string;
+  last_bar_time?: string;
+  bars?: number;
+  lag_seconds?: number | null;
+  recorded_at?: string;
+};
+
+/** When the watcher last finished a bar, and how far behind it is. */
+export type PassedRegimeHeartbeat = {
+  last_eval_at?: string;
+  last_eval_symbol?: string;
+  last_eval_bar?: string;
+  /** Seconds from that bar's close to its evaluation. */
+  last_eval_lag_seconds?: number | null;
+  seconds_since_last_eval?: number | null;
+  /** True after more than an hour plus the late-open bound with no evaluation. */
+  stale?: boolean;
+  last_catchup_at?: string;
+  /** Closed bars after the watermark not processed yet. */
+  pending_bars?: number;
+  pending_by_symbol?: Record<string, number>;
+  watermarks?: Record<string, string>;
+  state_file?: string;
+  max_catchup_bars?: number;
+  max_open_lag_seconds?: number;
 };
 
 export type PassedRegimeEvaluatedBar = {
@@ -1779,6 +1822,13 @@ export type PassedRegimeResponse = {
   last_evaluated_bar: PassedRegimeEvaluatedBar | null;
   last_skip: string | null;
   opened_count: number;
+  /** Signals on bars evaluated after the late-open bound. Absent on older backends. */
+  missed_signals?: number;
+  /** Due bars that were never evaluated. */
+  unevaluated_bars?: number;
+  /** Newest first, up to 20. */
+  recent_missed?: PassedRegimeMissedRow[];
+  heartbeat?: PassedRegimeHeartbeat | null;
   /** False while new passed-regime entries are off; signals are still recorded. */
   book_open?: boolean;
   book_note?: string;
