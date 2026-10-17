@@ -24,6 +24,7 @@ STATUS_V1_BLOCKED_HTF = "V1_BLOCKED_HTF"
 STATUS_V1_BLOCKED_1H = "V1_BLOCKED_1H_TREND"
 STATUS_V1_BLOCKED_4H = "V1_BLOCKED_4H_TREND"
 STATUS_V1_BLOCKED_OPEN = "V1_BLOCKED_OPEN_POSITION"
+STATUS_V1_BLOCKED_WATCHER = "V1_BLOCKED_WATCHER_SKIP"
 STATUS_V1_ELIGIBLE = "V1_ELIGIBLE"
 STATUS_V1_PAPER_OPEN = "V1_PAPER_OPEN"
 STATUS_V1_DATA_UNAVAILABLE = "V1_DATA_UNAVAILABLE"
@@ -65,9 +66,23 @@ def _as_float(value: Any) -> float | None:
     return n
 
 
+_UNCONFIRMED_SETUPS = ("", "WAITING", "CONFLICT", "NO_SETUP", "INVALIDATED")
+
+
 def screen_setup_unconfirmed(setup: Any) -> bool:
     s = str(setup or "").upper().strip()
-    return s in ("", "WAITING", "CONFLICT", "NO_SETUP")
+    return s in _UNCONFIRMED_SETUPS
+
+
+def tp1_r_multiple(entry: float | None, stop: float | None, tp1: float | None) -> float | None:
+    """Signed R of TP1 from the three shown prices. Negative when TP1 is on the stop side."""
+    if entry is None or stop is None or tp1 is None:
+        return None
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    reward = tp1 - entry if stop < entry else entry - tp1
+    return reward / risk
 
 
 def build_potential_levels(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -76,13 +91,10 @@ def build_potential_levels(row: Mapping[str, Any]) -> dict[str, Any]:
     entry = _as_float(_fv_value(row, "setup_entry"))
     stop = _as_float(_fv_value(row, "setup_sl"))
     tp1 = _as_float(_fv_value(row, "setup_tp1"))
-    rr = _as_float(_fv_value(row, "setup_rr"))
-    confirmed = entry is not None and setup not in (
-        "",
-        "WAITING",
-        "CONFLICT",
-        "NO_SETUP",
-    )
+    rr = tp1_r_multiple(entry, stop, tp1)
+    if rr is None:
+        rr = _as_float(_fv_value(row, "setup_rr"))
+    confirmed = entry is not None and setup not in _UNCONFIRMED_SETUPS
     reference_only = screen_setup_unconfirmed(setup) or not confirmed
     return {
         "entry": entry,
@@ -252,6 +264,24 @@ def classify_v1_status(
 
     # Never mark ELIGIBLE from anything except the combo evaluator snapshot.
     if is_v1_long_entry(eval_result):
+        refusal = snapshot.get("watcher_refusal")
+        if isinstance(refusal, Mapping) and refusal.get("reason"):
+            # The watcher evaluated this bar and still did not open it.
+            reason = str(refusal.get("reason"))
+            detail = str(refusal.get("detail") or "")
+            base.update(
+                {
+                    "status": STATUS_V1_BLOCKED_WATCHER,
+                    "label": f"V1 BLOCKED — watcher skipped this bar ({reason})",
+                    "watcher_skip": reason,
+                    "watcher_skip_detail": detail or None,
+                    "tooltip": (
+                        f"The 1h entry passed the combo gates, but the v1 watcher did not "
+                        f"open it: {reason}" + (f" ({detail})" if detail else "") + "."
+                    ),
+                }
+            )
+            return base
         base.update(
             {
                 "status": STATUS_V1_ELIGIBLE,

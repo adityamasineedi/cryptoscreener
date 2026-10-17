@@ -35,7 +35,6 @@ from app.research.rolling_structure import (
     lookback_documentation,
 )
 from app.research.schemas import ResearchTrade
-from app.research.ohlcv_continuity import bars_adjacent, prepare_series, step_seconds
 from app.signals._candle_utils import candle_time, ohlc
 from app.signals.config import SignalConfig
 from app.signals.risk_engine import risk_reward
@@ -542,14 +541,7 @@ def _simulate_forward(
     targets = [t for t in (trade.tp1, trade.tp2, trade.tp3) if t is not None]
     highs: list[float] = []
     lows: list[float] = []
-    step = step_seconds(trade.timeframe)
     for i in range(start_index, len(candles)):
-        if i > start_index and not bars_adjacent(candles[i - 1], candles[i], step):
-            break
-        if i == start_index and start_index > 0 and not bars_adjacent(
-            candles[start_index - 1], candles[i], step
-        ):
-            break
         high = float(candles[i].get("high") or 0)
         low = float(candles[i].get("low") or 0)
         highs.append(high)
@@ -655,7 +647,6 @@ def run_candle12_v2(
         symbol=symbol,
         timeframe=timeframe,
     )
-    candles = prepare_series(candles)
     swing_state.bind(candles)
 
     trades: list[ResearchTrade] = []
@@ -709,8 +700,6 @@ def run_candle12_v2(
         )
         setups_evaluated += 1
         if not setup:
-            continue
-        if not bars_adjacent(candles[i], candles[i + 1], step_seconds(timeframe)):
             continue
         plan = try_c2_entry_v2(
             setup=setup,

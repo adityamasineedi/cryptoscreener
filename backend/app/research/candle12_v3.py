@@ -25,7 +25,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
-from app.research.ohlcv_continuity import bars_adjacent, prepare_series, step_seconds
 from app.research.candle12_v2 import (
     Candle12V2Config,
     _structural_stop,
@@ -664,8 +663,6 @@ def run_candle12_v3(
     step, min_qty, min_notional, filter_source = cfg.exchange_filter(symbol)
     walker = _Walker(cfg, step, min_qty)
     sym = symbol.upper()
-    candles = prepare_series(candles)
-    bar_step = step_seconds(timeframe)
     n = len(candles)
     sc = scfg.swing_for(timeframe)
     swing_state = RollingSwingState(left=sc.swing_left_bars, right=sc.swing_right_bars, symbol=sym, timeframe=timeframe)
@@ -711,17 +708,12 @@ def run_candle12_v3(
         held = open_until.get(lock_key)
         if held is not None and i <= held[0]:
             if held[1] != direction:
-                if bars_adjacent(candles[i], candles[i + 1], bar_step) and _plan(
-                    setup, candles, i, cfg, scfg
-                ) is not None:
+                if _plan(setup, candles, i, cfg, scfg) is not None:
                     counts["blocked_by_opposite"] += 1
             else:
                 counts["blocked_same_side"] += 1
             continue
 
-        if not bars_adjacent(candles[i], candles[i + 1], bar_step):
-            counts["no_fill"] += 1
-            continue
         plan = _plan(setup, candles, i, cfg, scfg)
         if plan is None:
             counts["no_fill"] += 1
@@ -780,8 +772,6 @@ def run_candle12_v3(
             )
             pos.tags.append(f"RUNNER_TARGET_{pos.runner_name}" if pos.runner_name else TAG_NO_RUNNER_TARGET)
         for k in range(i + 1, n):
-            if k > i + 1 and not bars_adjacent(candles[k - 1], candles[k], bar_step):
-                break
             walker.bar(pos, k, ohlc(candles, k), entry_bar=k == i + 1)
             if pos.exit_index is not None:
                 break

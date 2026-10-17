@@ -13,7 +13,7 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Awaitable
 
 from app.core.logging import get_logger
@@ -179,9 +179,10 @@ class PaperTradeEngine:
         # Legacy setup→paper auto-entry (default OFF — research only when explicitly enabled).
         self.legacy_auto_entry_enabled = False
         self.realized_pnl = 0.0
-        # Closed-bar open times already applied to stops. The orchestrator
-        # seeds this on the first poll so stored history is not a new wick.
-        self._replayed_bar_opens: dict[str, set[str]] = {}
+        # Closed-bar open times already applied to stops, per symbol and
+        # timeframe. The orchestrator seeds this on the first poll so stored
+        # history is not a new wick.
+        self._replayed_bar_opens: dict[tuple[str, str], set[str]] = {}
         # Runtime halt trackers (paper opens only)
         self.peak_equity = float(starting_equity)
         self._day_key: str | None = None
@@ -1803,6 +1804,18 @@ class PaperTradeEngine:
         if side == "SHORT" and stop_price <= entry_price:
             self._last_skip_reason = f"{sym}:passed_bad_stop"
             return None
+        risk_dist = abs(entry_price - stop_price)
+        if tp1 is None or risk_dist <= 0:
+            self._last_skip_reason = f"{sym}:passed_rr"
+            return None
+        tp1_r = (
+            (tp1 - entry_price) / risk_dist
+            if side == "LONG"
+            else (entry_price - tp1) / risk_dist
+        )
+        if tp1_r + 1e-9 < self.min_rr:
+            self._last_skip_reason = f"{sym}:passed_rr"
+            return None
 
         risk_pct = float(risk_percent or 0.0)
         if risk_pct <= 0:
@@ -1932,6 +1945,28 @@ class PaperTradeEngine:
             )
             return pos
 
+    def replay_key(self, symbol: str, timeframe: str) -> tuple[str, str]:
+        """Bar-replay identity. A 15m book and a 1h book do not share bars."""
+        return (str(symbol or "").upper(), str(timeframe or "1h").lower())
+
+    def _bar_closes_after_entry(self, pos: PaperPosition, bar_open: Any) -> bool:
+        """True when this bar's close is after the position opened.
+
+        The still-forming bar qualifies once its scheduled close is later than
+        ``opened_at``. A bar that already closed before entry does not.
+        """
+        opened = _parse_utc(pos.opened_at)
+        start = _parse_utc(bar_open)
+        if opened is None or start is None:
+            return False
+        from app.ingestion.klines import TIMEFRAME_MS, normalize_timeframe
+
+        step_ms = int(TIMEFRAME_MS.get(normalize_timeframe(pos.timeframe)) or 0)
+        if step_ms <= 0:
+            return False
+        close_at = start + timedelta(milliseconds=step_ms)
+        return close_at > opened
+
     def _range_exit(
         self, pos: PaperPosition, high: float, low: float
     ) -> tuple[float, str] | None:
@@ -1952,19 +1987,24 @@ class PaperTradeEngine:
         return None
 
     def replay_bar_ranges(
-        self, ranges: dict[str, list[tuple[float, float]]]
+        self,
+        ranges: dict[tuple[str, str], list[tuple[Any, float, float]]],
     ) -> list[PaperPosition]:
-        """Apply closed-bar high/low, in order, to open positions.
+        """Apply bar high/low, in order, to open positions on that timeframe.
 
-        A single sampled price misses a wick. The caller passes bars that
-        closed while the mark feed was down, oldest first.
+        Keys are ``replay_key(symbol, timeframe)``. Each bar is
+        ``(bar_open, high, low)``. A bar can close a position only when that
+        bar's close is after ``opened_at``. The caller includes the forming bar.
         """
         closed: list[PaperPosition] = []
         with self._lock:
             for _key, pos in list(self._open.items()):
-                for high, low in ranges.get(pos.symbol) or []:
+                bars = ranges.get(self.replay_key(pos.symbol, pos.timeframe)) or []
+                for bar_open, high, low in bars:
                     if self._key_for(pos) not in self._open:
                         break
+                    if not self._bar_closes_after_entry(pos, bar_open):
+                        continue
                     hit = self._range_exit(pos, float(high), float(low))
                     if hit is None:
                         continue
@@ -2062,8 +2102,9 @@ class PaperTradeEngine:
     ) -> dict[str, Any]:
         """Operator action: archive open legacy/research paper positions.
 
-        Requires explicit ``confirm=True``. Never touches COMBO_02_V1 watcher books.
-        Does not auto-run — only when requested via API/UI.
+        Requires explicit ``confirm=True``. Never touches COMBO_02_V1 watcher
+        books or PASSED_CAP_BOOK positions. Does not auto-run — only when
+        requested via API/UI.
         """
         if not confirm:
             return {
@@ -2071,6 +2112,7 @@ class PaperTradeEngine:
                 "error": "confirmation_required",
                 "closed": [],
                 "skipped_v1": [],
+                "skipped_passed": [],
                 "message": "Pass confirm=true to close/archive legacy paper positions.",
             }
         from app.services.paper_classification import (
@@ -2082,6 +2124,7 @@ class PaperTradeEngine:
 
         closed: list[dict[str, Any]] = []
         skipped_v1: list[str] = []
+        skipped_passed: list[str] = []
         with self._lock:
             targets = list(self._open.values())
         for pos in targets:
@@ -2091,6 +2134,9 @@ class PaperTradeEngine:
                 and str(fields.get("source") or "") == SOURCE_V1_PAPER_WATCHER
             ):
                 skipped_v1.append(pos.symbol)
+                continue
+            if str(fields.get("source") or "") == "PASSED_CAP_BOOK":
+                skipped_passed.append(pos.symbol)
                 continue
             # Ensure archived rows stay research-classified
             snip = dict(pos.signal_snippet or {})
@@ -2109,6 +2155,7 @@ class PaperTradeEngine:
             reason=reason,
             closed=len(closed),
             skipped_v1=len(skipped_v1),
+            skipped_passed=len(skipped_passed),
         )
         return {
             "ok": True,
@@ -2116,6 +2163,7 @@ class PaperTradeEngine:
             "closed_count": len(closed),
             "closed": closed,
             "skipped_v1": skipped_v1,
+            "skipped_passed": skipped_passed,
         }
 
     def _close_locked(self, pos: PaperPosition, exit_price: float, reason: str) -> PaperPosition:
@@ -2414,8 +2462,16 @@ def list_trade_opportunities(
 
     open_set = {s.upper() for s in (open_symbols or set())}
     mode = PATH_A
+    legacy_opens = False
     try:
-        mode = get_paper_trade_engine().entry_mode
+        eng = get_paper_trade_engine()
+        mode = eng.entry_mode
+        # Mirrors the early returns in on_setup_signal. Label only.
+        legacy_opens = (
+            bool(eng.enabled)
+            and bool(getattr(eng, "legacy_auto_entry_enabled", False))
+            and not (bool(getattr(eng, "v1_watcher_owns_entries", False)) and mode != PATH_B)
+        )
     except Exception:  # noqa: BLE001
         mode = PATH_A
     rows: list[dict[str, Any]] = []
@@ -2431,6 +2487,7 @@ def list_trade_opportunities(
             already_open=sym.upper() in open_set,
             include_waiting=include_waiting,
             entry_mode=mode,
+            legacy_opens=legacy_opens,
         )
         if row is None:
             continue
@@ -2462,6 +2519,7 @@ def _opportunity_from_payload(
     already_open: bool,
     include_waiting: bool = True,
     entry_mode: str = PATH_A,
+    legacy_opens: bool = False,
 ) -> dict[str, Any] | None:
     status = str(payload.get("status") or "")
     direction = str(payload.get("direction") or "").upper() or None
@@ -2552,10 +2610,19 @@ def _opportunity_from_payload(
 
     if status in ENTRY_STATUSES and longish and entry_mode == PATH_B:
         tier = "READY"
-        chance = "Auto will open (Path B experimental — not COMBO_02 v1)"
+        chance = (
+            "Auto will open (15m Path B experimental — not COMBO_02 v1)"
+            if legacy_opens
+            else "15m Path B research — legacy auto-entry is off, does not open. Not COMBO_02 v1"
+        )
     elif path_a_ready:
         tier = "READY"
-        chance = "Auto will open (Path A · COMBO_02 v1: Trend+BOS+HTF)"
+        chance = (
+            "Auto will open (15m RESEARCH_15M Path A — not COMBO_02 v1)"
+            if legacy_opens
+            else "15m RESEARCH_15M research — legacy auto-entry is off, does not open. "
+            "Not COMBO_02 v1"
+        )
     elif status in ("CONFLICT", "INVALIDATED"):
         tier = "BLOCKED"
         chance = status + (f" — {payload.get('invalidation_reason')}" if payload.get("invalidation_reason") else "")

@@ -278,3 +278,97 @@ describe("V1 presentation safety", () => {
     expect(btc.is_telegram_eligible).toBe(false);
   });
 });
+
+describe("Audit label fixes (S1, S2, S3, S4)", () => {
+  it("S1: INVALIDATED levels are reference-only candidates, prices kept", () => {
+    const inv = row({
+      setup_signal: fv("INVALIDATED", "LIVE"),
+      setup_entry: fv(105, "LIVE"),
+      setup_sl: fv(98, "LIVE"),
+      setup_tp1: fv(104, "LIVE"),
+      setup_rr: fv(4, "LIVE"),
+    });
+    const levels = potentialLevelsForRow(inv);
+    expect(levels.referenceOnly).toBe(true);
+    expect(levels.confirmed).toBe(false);
+    expect([levels.entry, levels.stop, levels.tp1]).toEqual([105, 98, 104]);
+    const sl = formatPotentialLevel(levels.stop, {
+      kind: "stop",
+      referenceOnly: levels.referenceOnly,
+      entryMissing: false,
+    });
+    expect(sl.text).toBe("candidate 98");
+  });
+
+  it("S1: an API INVALIDATED payload marked reference_only renders as candidate", () => {
+    const inv = row({
+      setup_signal: fv("INVALIDATED", "LIVE"),
+      potential_levels: {
+        entry: 105,
+        stop: 98,
+        tp1: 104,
+        rr: -0.142857,
+        is_confirmed: false,
+        reference_only: true,
+      },
+    });
+    const levels = potentialLevelsForRow(inv);
+    expect(levels.referenceOnly).toBe(true);
+    const rr = formatPotentialLevel(levels.rr, {
+      kind: "rr",
+      referenceOnly: levels.referenceOnly,
+      entryMissing: false,
+    });
+    expect(rr.text).toBe("candidate -0.14");
+  });
+
+  it("S2: fallback R:R is TP1's R from the shown prices, not best of targets", () => {
+    const cand = row({
+      setup_signal: fv("LONG_ENTRY_CANDIDATE", "LIVE"),
+      setup_entry: fv(100, "LIVE"),
+      setup_sl: fv(98, "LIVE"),
+      setup_tp1: fv(104, "LIVE"),
+      setup_rr: fv(4, "LIVE"),
+    });
+    expect(potentialLevelsForRow(cand).rr).toBeCloseTo(2.0, 9);
+  });
+
+  it("S3: stale setup marks the status and the level cells, numbers unchanged", () => {
+    const stale = row({
+      setup_signal: fv("LONG_ENTRY_CANDIDATE", "STALE"),
+      setup_entry: fv(100, "STALE"),
+      setup_sl: fv(98, "STALE"),
+      setup_tp1: fv(104, "STALE"),
+      setup_rr: fv(2, "STALE"),
+    });
+    expect(tradeStatusLabel(stale).text).toBe("LONG CANDIDATE · STALE");
+    const levels = potentialLevelsForRow(stale);
+    expect(levels.stale).toBe(true);
+    const entry = formatPotentialLevel(levels.entry, {
+      kind: "entry",
+      referenceOnly: levels.referenceOnly,
+      entryMissing: false,
+      stale: levels.stale,
+    });
+    expect(entry.text).toBe("100 · stale");
+    expect(entry.title).toMatch(/STALE/);
+    const fresh = row({ setup_signal: fv("LONG_ENTRY_CANDIDATE", "LIVE") });
+    expect(tradeStatusLabel(fresh).text).toBe("LONG CANDIDATE");
+  });
+
+  it("S4: ENTRY READY filter keeps the same rows as the server filter", () => {
+    const long = row({ setup_signal: fv("LONG_ENTRY_CANDIDATE", "LIVE") });
+    const short = row({ setup_signal: fv("SHORT_ENTRY_CANDIDATE", "LIVE") });
+    const none = row({ setup_signal: fv("NO_SETUP", "LIVE") });
+    const waiting = row({ setup_signal: fv("WAITING", "LIVE") });
+    const invalid = row({ setup_signal: fv("INVALIDATED", "LIVE") });
+    expect(matchesSetupFilter(long, "ENTRY_READY")).toBe(true);
+    expect(matchesSetupFilter(short, "ENTRY_READY")).toBe(true);
+    expect(matchesSetupFilter(none, "ENTRY_READY")).toBe(false);
+    expect(matchesSetupFilter(waiting, "ENTRY_READY")).toBe(false);
+    expect(matchesSetupFilter(invalid, "ENTRY_READY")).toBe(false);
+    // The single-state filters are unchanged.
+    expect(matchesSetupFilter(long, "LONG_ENTRY_CANDIDATE")).toBe(true);
+    expect(matchesSetupFilter(short, "LONG_ENTRY_CANDIDATE")).toBe(false);
+  });
+});

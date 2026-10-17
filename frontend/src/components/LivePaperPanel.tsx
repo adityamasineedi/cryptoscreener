@@ -6,7 +6,7 @@ import {
   type PaperStatus,
   type PassedRegimeResponse,
 } from "../api/client";
-import { isLivePaperPosition, liveAutoStrategies } from "../paper/livePaper";
+import { liveAutoStrategies, splitLivePaperRows } from "../paper/livePaper";
 
 const POLL_MS = 15000;
 
@@ -108,9 +108,7 @@ export function LivePaperPanel() {
   }, []);
 
   const book = liveAutoStrategies(status, regime);
-  const live = positions.filter(isLivePaperPosition);
-  const open = live.filter((row) => String(row.status || "").toUpperCase() === "OPEN");
-  const closed = live.filter((row) => String(row.status || "").toUpperCase() !== "OPEN");
+  const { open, closed, cancelled } = splitLivePaperRows(positions);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 text-terminal-text">
@@ -213,6 +211,13 @@ export function LivePaperPanel() {
           Closed live paper trades
         </h2>
         <LiveRows rows={closed} />
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
+          Cancelled ({cancelled.length})
+        </h2>
+        <LiveRows rows={cancelled} />
       </section>
     </div>
   );
