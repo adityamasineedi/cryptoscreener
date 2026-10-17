@@ -428,10 +428,6 @@ class PaperAdapter:
 
     def _entry_gate(self, slot: Slot, open_time: datetime) -> str | None:
         """Why a new entry may not be placed now, or None. Never applies to exits."""
-        if self.closed:
-            prev = candle_time(self.closed[-1])
-            if prev is not None and open_time - prev != self.interval:
-                return "DATA_GAP"
         if self.halted:
             return HALTED
         if self.safety.kill_switch_engaged():

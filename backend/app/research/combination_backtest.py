@@ -419,20 +419,18 @@ def _run_combination_backtest_impl(
 
     clear_structure_cache()
     # Keep HTF references (no deep copy) — gate must not mutate series.
-    from app.research.ohlcv_continuity import prepare_series
-
-    htf_1h = prepare_series(candles_1h) if candles_1h is not None else None
-    htf_4h = prepare_series(candles_4h) if candles_4h is not None else None
-    series_15m = prepare_series(candles_15m) if candles_15m is not None else None
-    series_5m = prepare_series(candles_5m) if candles_5m is not None else None
-    series_1d = prepare_series(candles_1d) if candles_1d is not None else None
+    htf_1h = list(candles_1h) if candles_1h is not None else None
+    htf_4h = list(candles_4h) if candles_4h is not None else None
+    series_15m = list(candles_15m) if candles_15m is not None else None
+    series_5m = list(candles_5m) if candles_5m is not None else None
+    series_1d = list(candles_1d) if candles_1d is not None else None
     # Setup TF may itself be 1h/4h — reuse when HTF series not supplied.
     tf_l = (timeframe or "").lower()
     if combo.require_htf_alignment:
         if htf_1h is None and tf_l == "1h":
-            htf_1h = prepare_series(candles)
+            htf_1h = list(candles)
         if htf_4h is None and tf_l == "4h":
-            htf_4h = prepare_series(candles)
+            htf_4h = list(candles)
 
     def _progress(phase: str, *, bars: int = 0, total: int = 0, trades_n: int = 0, **extra: Any) -> None:
         payload = {
@@ -487,10 +485,7 @@ def _run_combination_backtest_impl(
             "disclaimer": "INSUFFICIENT_DATA — no silent fill, no TF substitution",
         }
 
-    from app.research.ohlcv_continuity import bars_adjacent, prepare_series, step_seconds
-
-    series = prepare_series(candles)
-    bar_step = step_seconds(timeframe)
+    series = list(candles)
     start = index_start if index_start is not None else 0
     end = index_end if index_end is not None else len(series)
     start = max(0, start)
@@ -753,19 +748,11 @@ def _run_combination_backtest_impl(
         swing_grew = len(swings) != prev_swing_n
         prev_swing_n = len(swings)
         if open_trade is not None:
-            # A jumped timestamp is not the next bar. Leave the trade open
-            # and do not read this bar's high or low as the exit.
-            if i > 0 and not bars_adjacent(series[i - 1], series[i], bar_step):
-                open_trade.outcome = "OPEN"
-                open_trade.exit_price = None
-                trades.append(open_trade)
-                open_trade = None
-                prev_break = False
-            else:
-                entry_diagnostics[i] = record_for_bar(
-                    i, classified=classify_position_bar(exited=_manage_open_trade(i))
-                )
-                continue
+            # Manage with current bar (after entry)
+            entry_diagnostics[i] = record_for_bar(
+                i, classified=classify_position_bar(exited=_manage_open_trade(i))
+            )
+            continue
 
         # COMBO_* that require BOS: skip full structure scan when break impossible.
         # Also skip sticky same-level breaks until structure (swings) updates —
