@@ -31,7 +31,7 @@ from app.research.strategy_candidate_registry import (
     strategy_candidate_registry,
 )
 from app.research.v1_production import FROZEN_V1_SYMBOLS, V1_SYMBOLS, enabled_v1_books
-from app.services.paper_trade import PaperTradeEngine
+from app.services.paper_trade import STREAM_V1, STREAM_V2, PaperTradeEngine
 from app.services.telegram_alerts import is_v1_paper_alert
 from app.services.v2_candidate_paper_watcher import (
     V2CandidatePaperWatcher,
@@ -605,7 +605,48 @@ async def test_validation_restart_persistence_no_duplicate_open():
 
     assert again is None
     assert len(paper2._open) == 1
-    assert "BNBUSDT" in paper2._open
+    # Open books are keyed by (symbol, stream) since cd9bd14, so one symbol can
+    # hold a V1 and a V2 position side by side. The hydrated V2 position must be
+    # the same one that was saved, not a fresh open.
+    assert paper2.has_open("BNBUSDT", STREAM_V2)
+    assert paper2.get_open("BNBUSDT", STREAM_V2).id == pos.id
+
+    # max_open_positions=1 above stops the watcher before it reaches the paper
+    # engine. With room for more positions the restart dedupe itself must hold:
+    # the watcher and a direct open of the same bar both refuse.
+    roomy = V2CandidatePaperWatcher(
+        enabled=True,
+        replay_mode=True,
+        emit_alerts=False,
+        paper_engine=paper2,
+        max_open_positions=5,
+        max_total_risk_percent=0.05,
+    )
+    roomy.evaluate_closed_bar = lambda *a, **k: _eval_long()  # type: ignore[method-assign]
+    mod.is_v1_long_entry = lambda _r: True  # type: ignore[assignment]
+    try:
+        again2 = await roomy.on_closed_1h(
+            "BNBUSDT",
+            candles_1h=_candles(60),
+            candles_4h=_candles(15, hours=4),
+            force=True,
+        )
+    finally:
+        mod.is_v1_long_entry = original  # type: ignore[assignment]
+    assert again2 is None
+    dup = paper2.open_experimental_position(
+        symbol="BNBUSDT",
+        timeframe="1h",
+        eval_result=_eval_long(),
+        risk_percent=0.0025,
+        signal_snippet=snip,
+        setup_bar_time_utc="2026-01-01T59:00:00+00:00",
+        replay=True,
+        emit_alert=False,
+    )
+    assert dup is None
+    assert len(paper2._open) == 1
+    assert paper2.get_open("BNBUSDT", STREAM_V2).id == pos.id
     # Prior audit snapshot existed (restart cleared memory audit — gap if DB not used)
     assert any(a.get("action") == "APPROVE_PAPER" for a in saved_audit)
 
@@ -620,9 +661,16 @@ async def test_validation_production_and_telegram_isolation():
     row = await _approve_bnb()
     assert row["production_approved"] is False
     assert row["telegram_eligible"] is False
-    assert row["symbol"] not in V1_SYMBOLS
-    books = enabled_v1_books()
-    assert "BNBUSDT" not in {b.symbol for b in books}
+    # Since f34df75 BNBUSDT is an extended v1 paper book (see
+    # test_validation_static_safety_invariants), so this candidate overlaps the
+    # v1 universe. Isolation must therefore come from the candidate's identity
+    # (strategy, source, stream), never from the symbol. Discovery still keeps
+    # v1 symbols out of the dynamic pipeline by default.
+    from app.research.combo02_candidate_selector import exclusion_reason
+
+    assert row["symbol"] in V1_SYMBOLS
+    assert "BNBUSDT" in {b.symbol for b in enabled_v1_books()}
+    assert exclusion_reason("BNBUSDT") == "v1_universe_reserved"
 
     snip = classify_v2_candidate(
         symbol="BNBUSDT",
@@ -656,6 +704,17 @@ async def test_validation_production_and_telegram_isolation():
     )
     assert pos is not None
     assert pos.signal_snippet.get("telegram_eligible") is False
+    assert pos.signal_snippet.get("production_approved") is False
+    # The V2 open sits in its own book and leaves the v1 BNB book free.
+    assert PaperTradeEngine.stream_of(pos) == STREAM_V2
+    assert paper.has_open("BNBUSDT", STREAM_V2)
+    assert not paper.has_open("BNBUSDT", STREAM_V1)
+    stored_alert = {
+        "type": "PAPER_ENTRY",
+        "symbol": "BNBUSDT",
+        "payload": {"symbol": "BNBUSDT", "timeframe": "1h", "signal_snippet": pos.signal_snippet},
+    }
+    assert is_v1_paper_alert(stored_alert) is False
 
 
 # ---------------------------------------------------------------------------
