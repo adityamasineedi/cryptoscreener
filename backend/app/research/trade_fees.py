@@ -9,6 +9,10 @@ Canonical fee model (research):
 - leverage never multiplies fee notional
 
 net_pnl = gross_pnl + total_fee  (total_fee <= 0)
+
+With ``slippage_rate`` > 0 both legs are slipped adversely and gross PnL is
+qty * (slipped exit - slipped entry), the same fills the fees use. Quantity
+and ``risk_usd`` stay on the planned (unslipped) entry.
 """
 
 from __future__ import annotations
@@ -263,10 +267,13 @@ def enrich_trade_execution(
                 taker_rate=taker_fee,
                 fee_sign=fee_sign,
             )
+        # Gross from the same slipped fills the fees are charged on. Size and
+        # risk stay on the planned entry (``risk_per_unit``), so r_net is
+        # net / the planned risk. With zero slippage fill_entry == entry.
         if direction == "SHORT":
-            gross_pnl = qty * (entry - exit_f)
+            gross_pnl = qty * (fill_entry - exit_f)
         else:
-            gross_pnl = qty * (exit_f - entry)
+            gross_pnl = qty * (exit_f - fill_entry)
         total_fee = fee_entry + fee_exit
         if str(fee_sign).upper() == FEE_SIGN_POSITIVE_COST:
             net_pnl = float(gross_pnl) - total_fee
