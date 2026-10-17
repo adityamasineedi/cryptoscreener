@@ -157,6 +157,7 @@ def build_strategy_catalog() -> dict[str, Any]:
                 "example_risk_usd": 20,
             },
             "where_to_run": [
+                {"label": "Strategy Backtest", "path": "/backtest"},
                 {
                     "label": "Research backtest script",
                     "path": "backend/scripts/run_combo02_v2_january_compare.py",
@@ -377,6 +378,7 @@ def build_strategy_catalog() -> dict[str, Any]:
             "gates": list(COMBINATIONS["COMBO_03_TRANSITION"].conditions),
             "where_to_run": [
                 {"label": "BOS Research", "path": "/bos-research"},
+                {"label": "Strategy Backtest", "path": "/backtest"},
                 {
                     "label": "Validation script",
                     "path": "backend/scripts/run_combo03_transition_validation.py",
@@ -412,6 +414,9 @@ def build_strategy_catalog() -> dict[str, Any]:
             "setup_timeframe": "1h",
             "summary": COMBINATIONS["COMBO_03_TRANSITION_B"].description,
             "gates": list(COMBINATIONS["COMBO_03_TRANSITION_B"].conditions),
+            "where_to_run": [
+                {"label": "Strategy Backtest", "path": "/backtest"},
+            ],
             "do_not": [
                 "Comparison variant only — not the primary COMBO_03_TRANSITION baseline",
                 "Do not promote to production",
@@ -464,12 +469,14 @@ def build_strategy_catalog() -> dict[str, Any]:
             "status": "BASELINE",
             "tier": "research_baseline",
             "combo_id": "COMBO_02_LOCAL",
-            "direction": "LONG",
+            # The Strategy Backtest menu runs this id on the short book ("COMBO_02_LOCAL · 1h SHORT").
+            "direction": "LONG / SHORT",
             "setup_timeframe": "1h / 15m",
             "summary": COMBINATIONS["COMBO_02_LOCAL"].description,
             "gates": list(COMBINATIONS["COMBO_02_LOCAL"].conditions),
             "where_to_run": [
                 {"label": "BOS Research", "path": "/bos-research"},
+                {"label": "Strategy Backtest", "path": "/backtest"},
             ],
             "example": {
                 "title": "Why it exists",
@@ -481,6 +488,7 @@ def build_strategy_catalog() -> dict[str, Any]:
             },
             "combo_definition": combos.get("COMBO_02_LOCAL"),
         },
+        *_backtest_menu_cards(combos),
         {
             "id": "PATH_B_EXPERIMENTAL",
             "name": "Path B — full setup (experimental)",
@@ -718,3 +726,129 @@ def _combo02_example() -> dict[str, Any]:
             "sizing (tick/lot/leverage/fees) on the Path A watcher."
         ),
     }
+
+
+# Small screen run behind the summaries below: Strategy Backtest, BTCUSDT 1h only, DB-tail
+# 1,200 bars (the screen's "12d" preset, about 50 days at 1h: 2026-08-27 to 2026-10-16 UTC),
+# principal $1000, leverage 2, taker 0.04 %, maker 0.02 %. Run once on 2026-10-17
+# (docs/strategies_screen_audit_2026-10-17.md). In-sample, one window, one coin.
+_SMALL_RUN = "BTC 1h, DB-tail 1,200 bars (12d preset, about 50 days to 2026-10-16)"
+
+
+def _backtest_menu_card(
+    strategy_id: str,
+    name: str,
+    direction: str,
+    setup_timeframe: str,
+    summary: str,
+    *,
+    combo_id: str | None = None,
+    gates: list[str] | None = None,
+    do_not: list[str] | None = None,
+    combo_definition: Any = None,
+) -> dict[str, Any]:
+    """RESEARCH card for a Strategy Backtest / rank-board id that had no catalog card."""
+    card: dict[str, Any] = {
+        "id": strategy_id,
+        "name": name,
+        "status": "RESEARCH",
+        "tier": "research_only",
+        "direction": direction,
+        "setup_timeframe": setup_timeframe,
+        "summary": summary,
+        "gates": list(gates or []),
+        "where_to_run": [{"label": "Strategy Backtest", "path": "/backtest"}],
+        "do_not": list(do_not or ["Do not promote to production / paper on this evidence"]),
+    }
+    if combo_id:
+        card["combo_id"] = combo_id
+    if combo_definition is not None:
+        card["combo_definition"] = combo_definition
+    return card
+
+
+def _backtest_menu_cards(combos: dict[str, Any]) -> list[dict[str, Any]]:
+    """Ids on the Strategy Backtest menu that the rank board marked "Not in catalog".
+
+    Text only. Engines, gates, fills, fees and risk are unchanged and live in their own modules.
+    """
+    return [
+        _backtest_menu_card(
+            "COMBO_01",
+            "COMBO_01 — BOS only",
+            "LONG / SHORT",
+            "1h",
+            f"Research only: small run, {_SMALL_RUN}: LONG 13 trades, net +$1.09; "
+            "SHORT 8 trades, net −$39.81.",
+            combo_id="COMBO_01",
+            gates=list(COMBINATIONS["COMBO_01"].conditions),
+            combo_definition=combos.get("COMBO_01"),
+        ),
+        _backtest_menu_card(
+            "COMBO_02_V2_1B",
+            "COMBO_02_V2_1B — v2.1-B, CHOPPY needs 15M",
+            "LONG / SHORT",
+            "1h",
+            f"Research only: small run, {_SMALL_RUN}: 18 trades (9 long, 9 short), net "
+            "+$67.77, from both the long and the short book, so the screen hides the result "
+            "as a direction mismatch.",
+            combo_id="COMBO_02_V2_1B",
+            gates=list(COMBINATIONS["COMBO_02_V2_1B"].conditions),
+            combo_definition=combos.get("COMBO_02_V2_1B"),
+        ),
+        _backtest_menu_card(
+            "COMBO_SD_STRUCTURE",
+            "SD + CHoCH + BOS (COMBO_SD_STRUCTURE)",
+            "LONG / SHORT",
+            "1h (auto)",
+            f"Research only: small run of the default variant COMBO_SD_C LONG, {_SMALL_RUN}: "
+            "0 trades.",
+        ),
+        _backtest_menu_card(
+            "CANDLE12_V2",
+            "CANDLE12_V2",
+            "LONG",
+            "1h",
+            f"Research only, frozen BTC 1h book (not production, not paper): small run, "
+            f"{_SMALL_RUN}: 3 trades, net −$2.50.",
+            do_not=[
+                "Do not call the frozen BTC 1h CANDLE12_V2 book production or paper",
+                "Do not add the stop-out short to the frozen book",
+            ],
+        ),
+        _backtest_menu_card(
+            "LARGE_CAP_SWEEP_CHOCH",
+            "LARGE_CAP_SWEEP_CHOCH",
+            "LONG",
+            "1h",
+            f"Research only: small run, {_SMALL_RUN}: 13 trades, net −$97.03.",
+        ),
+        _backtest_menu_card(
+            "SMALL_CAP_VOLUME_BOS",
+            "SMALL_CAP_VOLUME_BOS",
+            "LONG",
+            "1h",
+            f"Research only: small run, {_SMALL_RUN}: 3 trades, net +$7.68.",
+        ),
+        _backtest_menu_card(
+            "OSE_A_corrected_baseline",
+            "OSE_A corrected baseline",
+            "LONG",
+            "1h",
+            f"Research only: small run, {_SMALL_RUN}: 30 trades, net −$75.82.",
+        ),
+        _backtest_menu_card(
+            "OSE_B_acceptance",
+            "OSE_B acceptance",
+            "LONG",
+            "1h",
+            f"Research only: small run, {_SMALL_RUN}: 23 trades, net −$76.02.",
+        ),
+        _backtest_menu_card(
+            "OSE_D_faster_confirmation",
+            "OSE_D faster confirmation",
+            "LONG",
+            "1h",
+            f"Research only: small run, {_SMALL_RUN}: 31 trades, net −$107.56.",
+        ),
+    ]
