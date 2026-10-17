@@ -43,6 +43,22 @@ SHORT_RESEARCH_PAUSED_CODE = "short_research_paused"
 SHORT_RESEARCH_COMBO_ID = "COMBO_04_HTF"
 V1_SHORT_REMOVED_CODE = "v1_short_removed"
 
+# Two-sided requests for the COMBO_02_V2 family (combo02_v2.research_variants.COMBO_V2_FAMILY).
+# A LONG or SHORT request returns that side only. Both sides come back from one walk when
+#   - the combination is V2.1-A (native LONG+SHORT; the hedge book posts it as LONG), or
+#   - the request direction is TWO_SIDED_DIRECTION ("BOTH"), accepted for the V2 family only.
+TWO_SIDED_DIRECTION = "BOTH"
+NATIVE_TWO_SIDED_COMBOS = frozenset({COMBINATION_ID_V21A, "COMBO_02_V2_1A"})
+
+
+def v2_family_direction_filter(combination_id: str | None, direction: str | None) -> str | None:
+    """Walk ``direction_filter`` for a COMBO_02_V2-family run; None walks both sides."""
+    combo = str(combination_id or "").upper().strip()
+    side = str(direction or "").upper().strip()
+    if combo in NATIVE_TWO_SIDED_COMBOS or side == TWO_SIDED_DIRECTION:
+        return None
+    return side if side in {"LONG", "SHORT"} else "LONG"
+
 # Frozen COMBO_02 v1 production setup (docs/v1_freeze.md / v1_production.py).
 V1_SETUP_TIMEFRAME = "1h"
 V1_HTF_TIMEFRAMES = ("1h", "4h")
@@ -292,18 +308,30 @@ def validate_backtest_request(
         )
 
     direction_raw = (direction or "").strip().upper()
-    if not direction_raw or direction_raw in {"ALL", "BOTH", "ANY", "AMBIGUOUS"}:
+    two_sided = False
+    if direction_raw == TWO_SIDED_DIRECTION:
+        from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
+
+        requested = {
+            str(combination_id or "").upper().strip(),
+            str(strategy_id or "").upper().strip(),
+        }
+        two_sided = bool(requested & set(COMBO_V2_FAMILY))
+    if two_sided:
+        pass
+    elif not direction_raw or direction_raw in {"ALL", "BOTH", "ANY", "AMBIGUOUS"}:
         raise BacktestConfigError(
             "ambiguous_direction",
             "Direction must be explicitly LONG or SHORT",
         )
-    if direction_raw not in {"LONG", "SHORT"}:
+    elif direction_raw not in {"LONG", "SHORT"}:
         raise BacktestConfigError(
             "ambiguous_direction",
             f"Unsupported direction {direction_raw!r}",
         )
 
-    if direction_raw == "SHORT" and not allow_short:
+    # BOTH holds SHORT trades, so it needs the same SHORT permission.
+    if direction_raw in {"SHORT", TWO_SIDED_DIRECTION} and not allow_short:
         raise BacktestConfigError(
             SHORT_RESEARCH_PAUSED_CODE,
             "SHORT research is paused. SHORT paper trading, production, and Telegram "

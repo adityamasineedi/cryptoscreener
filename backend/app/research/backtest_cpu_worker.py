@@ -169,7 +169,11 @@ def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
     pnl_net = sum(net_pnls) if net_pnls else None
     fee_total = sum(float(t.get("fee_total_usd") or 0) for t in enriched)
     structure = (
-        "HL (bullish HH+HL)" if direction_u == "LONG" else "LH (bearish LH+LL)"
+        "HL (bullish HH+HL)"
+        if direction_u == "LONG"
+        else "HL+LH (both sides)"
+        if direction_u == "BOTH"
+        else "LH (bearish LH+LL)"
     )
     row_payload: dict[str, Any] = {
         "combination_id": combination_id,

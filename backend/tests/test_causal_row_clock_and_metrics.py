@@ -397,6 +397,7 @@ def test_causal_row_with_no_closed_trades_has_empty_metrics():
         "tp1_hits": 0,
         "sl_hits": 0,
         "gap_through_stop_hits": 0,
+        "gap_exit_hits": 0,
         "r_values": [],
         "equity_curve_r": [],
     }

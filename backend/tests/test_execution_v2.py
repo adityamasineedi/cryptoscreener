@@ -28,14 +28,17 @@ def _trade(direction="LONG", entry=100.0, stop=98.0, exit_=104.0):
 # ---- fix 1: fee helper ----------------------------------------------------------
 
 
-def test_v1_fee_helper_ignores_entry_slippage_in_gross_v2_does_not():
+def test_fee_helper_and_v2_both_take_gross_from_slipped_fills():
     slip = 0.0005
     v1 = enrich_trade_execution(_trade(), slippage_rate=slip, **SIZING)
     v2 = enrich_trade_execution_v2(_trade(), slippage_rate=slip, **SIZING)
     qty = v1["qty"]
     fill_in, fill_out = 100.0 * (1 + slip), 104.0 * (1 - slip)
-    # v1: the archived defect, kept so archived results reproduce.
-    assert v1["gross_pnl_usd"] == pytest.approx(qty * (fill_out - 100.0))
+    # The fee helper's old defect (gross from the unslipped entry) is fixed, so
+    # both helpers now agree on gross, net and r_net.
+    assert v1["gross_pnl_usd"] == pytest.approx(qty * (fill_out - fill_in))
+    for k in ("gross_pnl_usd", "net_pnl_usd", "r_net"):
+        assert v1[k] == pytest.approx(v2[k], abs=1e-9)
     # v2: both fills slipped.
     assert v2["gross_pnl_usd"] == pytest.approx(qty * (fill_out - fill_in))
     assert v2["fill_entry_price"] == pytest.approx(fill_in) and v2["fill_exit_price"] == pytest.approx(fill_out)

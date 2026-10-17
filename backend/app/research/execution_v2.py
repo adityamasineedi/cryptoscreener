@@ -5,8 +5,10 @@ Version 1 stays unchanged so archived results reproduce:
 evaluate_candidate_trades, resolve_intrabar_outcome). Version 2 fixes two dormant
 v1 defects:
 
-1. Fee helper: v1 slips the entry for the fee but computes gross PnL from the
-   unslipped entry. v2 computes gross PnL from both slipped fills.
+1. Fee helper: v1 slipped the entry for the fee but computed gross PnL from the
+   unslipped entry. v2 computes gross PnL from both slipped fills. The v1 fee
+   helper was corrected on 2026-10-17 (fix/locked-trade-fixes) and now matches
+   v2, so archived slipped v1 results no longer reproduce from it.
 2. Gap through the stop: v1 exits at the stop level when a bar opens beyond it.
    v2 exits at that bar's open (slippage, when modelled, is applied on top by
    the fee helper).

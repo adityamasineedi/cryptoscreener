@@ -11,6 +11,17 @@ Model ``CAUSAL_NEXT_OPEN`` (version ``causal_next_open_v1``):
 - a gap through the stop is labeled ``GAP_THROUGH_STOP`` and slippage is
   applied once
 - the working target is the trade's TP1 (the audited book)
+- a missing bar (timestamp jump) inside an open trade closes it as
+  ``GAP_EXIT`` at the open of the first bar after the gap, with adverse exit
+  slippage. That is the first price at which the position could be closed
+  without knowing in advance that bars will be missing; the gap's risk is
+  carried, not avoided. The position stays held until that exit.
+- one position per book: a causal fill on or before the previous causal
+  trade's exit bar is skipped and recorded with reason ``POSITION_OPEN``.
+  (The fill is at the bar's open, before an intrabar exit on that bar, so a
+  fill on the exit bar would overlap; the legacy walk likewise opens nothing
+  on its exit bar.) A signal whose next bar is missing never fills and is
+  recorded with reason ``FILL_BAR_GAP``.
 
 Dollar P&L, fees, and the leverage cap go through ``enrich_trade_execution``
 with slippage already applied to the prices, so the fee helper does not
@@ -42,6 +53,9 @@ OPTIMISTIC_COMPARISON_LABEL = (
 PROTECTED_RESEARCH_RUNS = frozenset({"9f1709ac13d4"})
 DUAL_LEGACY_AND_CAUSAL = "DUAL_LEGACY_AND_CAUSAL"
 OUTCOME_GAP_THROUGH_STOP = "GAP_THROUGH_STOP"
+OUTCOME_GAP_EXIT = "GAP_EXIT"
+SKIP_POSITION_OPEN = "POSITION_OPEN"
+SKIP_FILL_BAR_GAP = "FILL_BAR_GAP"
 # Copied from the legacy trade by ``dict(trade)``; they describe the legacy walk.
 LEGACY_CLOCK_KEYS = (
     "exit_time",
@@ -104,13 +118,14 @@ def _walk_exit(
 ) -> tuple[int, float, str]:
     """Walk from the fill bar. Stop wins when both levels print. Gaps at the open.
 
-    A row whose open is not one bar after the previous row is not used.
+    A row whose open is not one bar after the previous row ends the trade as
+    ``GAP_EXIT`` at that row's open (raw price; the caller slips it).
     """
     last_i = start
     last_close = _num(candles[start], "close", "c") if start < len(candles) else 0.0
     for i in range(start, len(candles)):
         if i > start and not bars_adjacent(candles[i - 1], candles[i], step):
-            return last_i, last_close, "OPEN"
+            return i, _num(candles[i], "open", "o"), OUTCOME_GAP_EXIT
         candle = candles[i]
         opened = _num(candle, "open", "o")
         high = _num(candle, "high", "h")
@@ -201,6 +216,10 @@ def _stamp_causal_clock(row: dict[str, Any], candles: Sequence[Mapping[str, Any]
     if outcome == OUTCOME_GAP_THROUGH_STOP and exit_index == fill_index:
         # Filled and closed at the same open: no time in the market.
         bars = []
+    elif outcome == OUTCOME_GAP_EXIT:
+        # Closed at the open after the gap: that bar's range is not held.
+        exit_open = _num(candles[exit_index], "open", "o")
+        bars = list(candles[fill_index:exit_index]) + [{"high": exit_open, "low": exit_open}]
     row["mae"], row["mfe"], row["mae_r"], row["mfe_r"] = _excursions(
         side, float(entry), stop, bars
     )
@@ -263,10 +282,12 @@ def _fill_causal_trade(
         return row
 
     if not bars_adjacent(candles[signal_index], candles[fill_index], step):
+        # The next bar is missing: there is no next open to fill at.
         row["outcome"] = "OPEN"
         row["entry_price"] = None
         row["exit_price"] = None
         row["fill_index"] = None
+        row["causal_skip_reason"] = SKIP_FILL_BAR_GAP
         return row
 
     raw_open = _num(candles[fill_index], "open", "o")
@@ -290,6 +311,15 @@ def _fill_causal_trade(
     if outcome == "OPEN":
         row["exit_price"] = None
         return row
+    if outcome == OUTCOME_GAP_EXIT:
+        # The last bar that printed before the gap, and the first one after it.
+        row["gap_last_bar_time"] = _bar_time(candles[exit_index - 1])
+        row["gap_resume_time"] = _bar_time(candles[exit_index])
+        before, after = candle_time(candles[exit_index - 1]), candle_time(candles[exit_index])
+        if step and before is not None and after is not None:
+            row["gap_missing_bars"] = max(
+                0, int(round((after - before).total_seconds() / step)) - 1
+            )
     if outcome == OUTCOME_GAP_THROUGH_STOP and exit_index == fill_index:
         row["exit_price"] = fill
         row["slippage_applied_once"] = True
@@ -394,6 +424,56 @@ def price_r(side: str, entry: float, exit_px: float, stop: float) -> float | Non
     return (exit_px - entry) / risk
 
 
+def _fill_order_key(row: Mapping[str, Any]) -> tuple[int, int]:
+    fill = row.get("fill_index")
+    if fill is None:
+        fill = int(row.get("signal_index") or 0) + 1
+    return int(fill), int(row.get("signal_index") or 0)
+
+
+def _one_position_book(
+    causal_rows: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Keep at most one causal position open per book.
+
+    Walks the rows in fill order. A row whose fill bar is on or before the
+    held trade's exit bar is skipped with ``SKIP_POSITION_OPEN``. A row that
+    could not fill because the next bar is missing is skipped with
+    ``SKIP_FILL_BAR_GAP``. Returns (kept rows in input order, skipped rows).
+    The legacy book is not consulted.
+    """
+    skipped_ids: set[int] = set()
+    skipped: list[dict[str, Any]] = []
+    holder: Mapping[str, Any] | None = None
+    busy_until: int | None = None
+    for row in sorted(causal_rows, key=_fill_order_key):
+        if row.get("causal_skip_reason") == SKIP_FILL_BAR_GAP:
+            skipped_ids.add(id(row))
+            skipped.append(row)
+            continue
+        if row.get("entry_price") in (None, "") or row.get("fill_index") is None:
+            # Signal on the last bar: no fill yet, so no position.
+            continue
+        fill = int(row["fill_index"])
+        if busy_until is not None and holder is not None and fill <= busy_until:
+            row["causal_skip_reason"] = SKIP_POSITION_OPEN
+            row["blocked_by"] = {
+                "entry_index": holder.get("entry_index"),
+                "signal_time": holder.get("signal_time"),
+                "direction": holder.get("direction"),
+                "fill_index": holder.get("fill_index"),
+                "exit_index": holder.get("exit_index"),
+                "outcome": holder.get("outcome"),
+            }
+            skipped_ids.add(id(row))
+            skipped.append(row)
+            continue
+        holder = row
+        busy_until = int(row["exit_index"]) if row.get("exit_index") is not None else fill
+    kept = [row for row in causal_rows if id(row) not in skipped_ids]
+    return kept, skipped
+
+
 def compare_execution_models(
     trades: Sequence[Mapping[str, Any]],
     candles: Sequence[Mapping[str, Any]],
@@ -401,10 +481,15 @@ def compare_execution_models(
     *,
     account_equity: float | None = None,
 ) -> dict[str, Any]:
-    """Legacy dollar book and causal book. Neither input trade is mutated."""
+    """Legacy dollar book and causal book. Neither input trade is mutated.
+
+    The causal book holds one position at a time (see ``_one_position_book``);
+    its skipped fills are returned under ``causal.skipped``. The legacy book
+    keeps every input trade.
+    """
     cfg = config or ResearchConfig()
     legacy_rows: list[dict[str, Any]] = []
-    causal_rows: list[dict[str, Any]] = []
+    causal_fills: list[dict[str, Any]] = []
     for trade in trades:
         frozen = copy.deepcopy(dict(trade))
         legacy = _dollarize(
@@ -426,6 +511,13 @@ def compare_execution_models(
             entry_slippage_rate=cfg.entry_slippage_rate,
             exit_slippage_rate=cfg.exit_slippage_rate,
         )
+        causal_fills.append(causal)
+        if frozen != dict(trade):
+            raise RuntimeError("execution comparison mutated the source trade")
+
+    kept, skipped = _one_position_book(causal_fills)
+    causal_rows: list[dict[str, Any]] = []
+    for causal in kept:
         if causal.get("entry_price") not in (None, "") and causal.get("exit_price") not in (None, ""):
             gross = price_r(
                 str(causal.get("direction") or "LONG"),
@@ -444,8 +536,10 @@ def compare_execution_models(
             account_equity=account_equity,
         )
         causal_rows.append(causal)
-        if frozen != dict(trade):
-            raise RuntimeError("execution comparison mutated the source trade")
+    skipped_counts: dict[str, int] = {}
+    for row in skipped:
+        reason = str(row.get("causal_skip_reason"))
+        skipped_counts[reason] = skipped_counts.get(reason, 0) + 1
 
     legacy_stats = _stats(legacy_rows)
     causal_stats = _stats(causal_rows)
@@ -454,7 +548,7 @@ def compare_execution_models(
         "legacy_model": LEGACY_SIGNAL_CLOSE,
         "causal_model": CAUSAL_NEXT_OPEN,
         "legacy": {"summary": legacy_stats, "trades": legacy_rows},
-        "causal": {"summary": causal_stats, "trades": causal_rows},
+        "causal": {"summary": causal_stats, "trades": causal_rows, "skipped": skipped},
         "reconciliation": {
             "legacy": legacy_stats,
             "causal": causal_stats,
@@ -463,6 +557,7 @@ def compare_execution_models(
             "delta_net_r": round(causal_stats["net_r"] - legacy_stats["net_r"], 6),
             "delta_fees": round(causal_stats["fees"] - legacy_stats["fees"], 6),
             "winner_count_unchanged": legacy_stats["winners"] == causal_stats["winners"],
+            "causal_skipped": skipped_counts,
         },
     }
 
@@ -521,6 +616,7 @@ def build_execution_run_record(
         "reconciliation": book["reconciliation"],
         "legacy_trades": book["legacy"]["trades"],
         "causal_trades": book["causal"]["trades"],
+        "causal_skipped_trades": list(book["causal"].get("skipped") or []),
     }
 
 
@@ -567,6 +663,7 @@ def causal_r_metrics(causal_trades: Sequence[Mapping[str, Any]]) -> dict[str, An
     tp1 = sum(1 for t in closed if t.get("outcome") == "TP1")
     sl = sum(1 for t in closed if t.get("outcome") == "SL")
     gaps = sum(1 for t in closed if t.get("outcome") == OUTCOME_GAP_THROUGH_STOP)
+    gap_exits = sum(1 for t in closed if t.get("outcome") == OUTCOME_GAP_EXIT)
     equity: list[float] = []
     if rs:
         equity = [0.0]
@@ -580,6 +677,7 @@ def causal_r_metrics(causal_trades: Sequence[Mapping[str, Any]]) -> dict[str, An
         "tp1_hits": tp1,
         "sl_hits": sl,
         "gap_through_stop_hits": gaps,
+        "gap_exit_hits": gap_exits,
         "r_values": rs,
         "equity_curve_r": equity,
     }
@@ -613,6 +711,8 @@ def apply_causal_primary_display(
     row["legacy_trades"] = list(record.get("legacy_trades") or [])
     if include_trades:
         row["trades"] = list(record.get("causal_trades") or [])
+    # Causal fills left out of the book (one position at a time, missing fill bar).
+    row["causal_skipped_trades"] = list(record.get("causal_skipped_trades") or [])
     row["optimistic_comparison"] = {
         "model": LEGACY_SIGNAL_CLOSE,
         "label": OPTIMISTIC_COMPARISON_LABEL,
@@ -649,6 +749,7 @@ def write_execution_run_artifact(job_id: str, row: Mapping[str, Any], *, reports
     payload = {
         **dict(execution),
         "causal_trades": row.get("causal_trades") or [],
+        "causal_skipped_trades": row.get("causal_skipped_trades") or [],
         "legacy_trades": row.get("legacy_trades") or [],
     }
     path.write_text(json.dumps(payload, default=str), encoding="utf-8")

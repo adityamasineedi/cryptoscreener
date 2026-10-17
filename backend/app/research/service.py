@@ -966,9 +966,20 @@ class BosResearchService:
         if combo.combination_id not in SD_STRUCTURE_FAMILY:
             rcfg.execution_model = DUAL_LEGACY_AND_CAUSAL
         warmup = max(int(rcfg.min_bars), 100)
+        from app.research.backtest_ui_config import (
+            TWO_SIDED_DIRECTION,
+            v2_family_direction_filter,
+        )
+        from app.research.combo02_v2.research_variants import COMBO_V2_FAMILY
+
         direction_u = direction.upper().strip() if direction else "LONG"
         if direction_u not in {"LONG", "SHORT"}:
-            direction_u = "LONG"
+            # "BOTH" is a two-sided request, honoured for the V2 family only.
+            two_sided_ok = (
+                direction_u == TWO_SIDED_DIRECTION
+                and str(combo.combination_id) in COMBO_V2_FAMILY
+            )
+            direction_u = TWO_SIDED_DIRECTION if two_sided_ok else "LONG"
         rows: list[dict[str, Any]] = []
 
         def _notify(phase: str, **kwargs: Any) -> None:
@@ -1159,9 +1170,14 @@ class BosResearchService:
                 sym_u = load_meta["symbol"]
                 tf_u = load_meta["timeframe"]
                 idx0 = eval_start if eval_start > 0 else None
-                # V2 family is native LONG+SHORT (research parity); do not
-                # silently fall back to another combo when UI direction is set.
-                matrix_direction = None if is_v2_family else direction_u
+                # V2 family: a LONG or SHORT request walks that side only.
+                # V2.1-A (native LONG+SHORT, posted as LONG by the hedge book)
+                # and a "BOTH" request walk both sides in one walk.
+                matrix_direction = (
+                    v2_family_direction_filter(str(combo.combination_id), direction_u)
+                    if is_v2_family
+                    else direction_u
+                )
 
                 out = await run_combination_backtest_isolated(
                     symbol=sym_u,
@@ -1362,7 +1378,9 @@ class BosResearchService:
             "combination_id": combination_id,
             "combination_name": combo.name,
             "playbook": (
-                "HL Long Path A (Trend + BOS + HTF 4h/1h)"
+                "HL Long + LH Short (both sides, one walk)"
+                if direction_u == TWO_SIDED_DIRECTION
+                else "HL Long Path A (Trend + BOS + HTF 4h/1h)"
                 if direction_u == "LONG" and combo.require_htf_alignment
                 else "HL Long Path A local (Trend + BOS, no HTF)"
                 if direction_u == "LONG"
