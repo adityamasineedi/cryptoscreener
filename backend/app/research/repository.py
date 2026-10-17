@@ -102,11 +102,45 @@ def _new_run_id() -> str:
     return str(uuid.uuid4())
 
 
+def _as_timestamptz(value: Any) -> datetime | None:
+    """Coerce a stored timestamp to a timezone-aware datetime for binding.
+
+    asyncpg infers TIMESTAMPTZ for ``CAST(:x AS TIMESTAMPTZ)`` parameters and
+    rejects ``str`` arguments with DataError, so ISO strings are parsed here.
+    Naive values are taken as UTC; unparseable values return None.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        seconds = value / 1000 if abs(value) >= 1e11 else value  # epoch ms vs s
+        parsed = datetime.fromtimestamp(seconds, tz=timezone.utc)
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 async def save_research_run(summary: dict[str, Any]) -> str:
     """Persist a research run. Never writes to setup_analyses / live signal tables."""
     run_id = summary.get("run_id") or _new_run_id()
     summary = {**summary, "run_id": run_id}
-    created = summary.get("created_at") or datetime.now(timezone.utc).isoformat()
+    created = _as_timestamptz(summary.get("created_at"))
+    if created is None:
+        if summary.get("created_at"):
+            logger.warning(
+                "research_run_created_at_unparseable",
+                run_id=run_id,
+                created_at=str(summary.get("created_at")),
+            )
+        created = datetime.now(timezone.utc)
 
     if not db_manager.enabled or db_manager.engine is None:
         _MEMORY_RUNS[run_id] = summary
@@ -209,7 +243,7 @@ async def save_research_run(summary: dict[str, Any]) -> str:
                     "timeframe": t.get("timeframe"),
                     "direction": t.get("direction"),
                     "entry_index": t.get("entry_index"),
-                    "signal_time": t.get("signal_time"),
+                    "signal_time": _as_timestamptz(t.get("signal_time")),
                     "entry_price": t.get("entry_price"),
                     "stop_price": t.get("stop_price"),
                     "tp1": t.get("tp1"),

@@ -404,14 +404,25 @@ class BosResearchService:
                     # Store memory path via create_task not always available; use memory
                     from app.research import repository as repo
 
+                    logger.warning(
+                        "research_run_db_save_skipped_memory_fallback",
+                        run_id=summary["run_id"],
+                        reason="event_loop_running",
+                    )
                     repo._MEMORY_RUNS[summary["run_id"]] = summary
                     for row in summary["results"]:
                         repo._MEMORY_RESULTS.append({**row, "run_id": summary["run_id"]})
                 else:
                     loop.run_until_complete(save_research_run(summary))
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 from app.research import repository as repo
 
+                logger.warning(
+                    "research_run_db_save_failed_memory_fallback",
+                    run_id=summary["run_id"],
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
                 repo._MEMORY_RUNS[summary["run_id"]] = summary
         return {**run, "run_id": summary["run_id"]}
 
