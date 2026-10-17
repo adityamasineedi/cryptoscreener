@@ -105,8 +105,23 @@ export function formatMarketSignalLabel(raw: unknown): string {
   return s || "WAITING";
 }
 
+const STALE_TITLE = "STALE — the source candle advanced; these values are from the previous bar until recompute.";
+
+/** True when the setup or any of its levels is from a source candle that has since advanced. */
+export function isStaleSetup(row: ScreenerRow): boolean {
+  return [row.setup_signal, row.setup_entry, row.setup_sl, row.setup_tp1, row.setup_rr].some(
+    (fv) => String(fv?.status || "").toUpperCase() === "STALE",
+  );
+}
+
 /** Trade-view STATUS summary from existing setup/market fields. */
 export function tradeStatusLabel(row: ScreenerRow): { text: string; title: string } {
+  const base = tradeStatusBase(row);
+  if (!isStaleSetup(row)) return base;
+  return { text: `${base.text} · STALE`, title: `${STALE_TITLE}\n${base.title}` };
+}
+
+function tradeStatusBase(row: ScreenerRow): { text: string; title: string } {
   const setupFv = row.setup_signal;
   const setup = String(setupFv?.value ?? "").toUpperCase();
   const method = setupFv?.methodology || undefined;
@@ -228,10 +243,19 @@ export function matchesSignalFilter(row: ScreenerRow, filter: SignalFilter): boo
   return true;
 }
 
+/** Same set as the server ENTRY READY screen filter (screen_universe.matches_screen_filter). */
+const ENTRY_READY_SETUPS = new Set([
+  "ENTRY_READY",
+  "LONG_ENTRY_CANDIDATE",
+  "SHORT_ENTRY_CANDIDATE",
+  "ENTRY_CANDIDATE",
+]);
+
 export function matchesSetupFilter(row: ScreenerRow, filter: SetupFilter): boolean {
   if (filter === "ALL") return true;
   const s = String(row.setup_signal?.value ?? "WAITING").toUpperCase();
   if (filter === "WAITING") return s === "WAITING" || s === "";
+  if (filter === "ENTRY_READY") return ENTRY_READY_SETUPS.has(s);
   return s === filter;
 }
 
@@ -400,9 +424,11 @@ export function potentialLevelsForRow(row: ScreenerRow): {
   rr: number | null;
   referenceOnly: boolean;
   confirmed: boolean;
+  stale: boolean;
   tooltip: string;
 } {
   const pl = row.potential_levels;
+  const stale = isStaleSetup(row);
   if (pl) {
     return {
       entry: pl.entry,
@@ -411,6 +437,7 @@ export function potentialLevelsForRow(row: ScreenerRow): {
       rr: pl.rr,
       referenceOnly: Boolean(pl.reference_only ?? !pl.is_confirmed),
       confirmed: Boolean(pl.is_confirmed),
+      stale,
       tooltip: pl.tooltip || POTENTIAL_LEVELS_TOOLTIP,
     };
   }
@@ -418,12 +445,14 @@ export function potentialLevelsForRow(row: ScreenerRow): {
   const entry = isMissingLevel(row.setup_entry) ? null : Number(row.setup_entry?.value);
   const stop = isMissingLevel(row.setup_sl) ? null : Number(row.setup_sl?.value);
   const tp1 = isMissingLevel(row.setup_tp1) ? null : Number(row.setup_tp1?.value);
-  const rr = isMissingLevel(row.setup_rr) ? null : Number(row.setup_rr?.value);
+  const rr = tp1RMultiple(entry, stop, tp1) ??
+    (isMissingLevel(row.setup_rr) ? null : Number(row.setup_rr?.value));
   const unconfirmed =
     setup === "" ||
     setup === "WAITING" ||
     setup === "CONFLICT" ||
     setup === "NO_SETUP" ||
+    setup === "INVALIDATED" ||
     entry == null;
   return {
     entry: Number.isFinite(entry as number) ? entry : null,
@@ -432,13 +461,42 @@ export function potentialLevelsForRow(row: ScreenerRow): {
     rr: Number.isFinite(rr as number) ? rr : null,
     referenceOnly: unconfirmed,
     confirmed: !unconfirmed,
+    stale,
     tooltip:
       POTENTIAL_LEVELS_TOOLTIP +
       (unconfirmed ? " Reference only — setup not confirmed." : ""),
   };
 }
 
+/** Signed R of TP1 from the shown prices (matches backend tp1_r_multiple). */
+export function tp1RMultiple(
+  entry: number | null,
+  stop: number | null,
+  tp1: number | null,
+): number | null {
+  if (entry == null || stop == null || tp1 == null) return null;
+  if (![entry, stop, tp1].every(Number.isFinite)) return null;
+  const risk = Math.abs(entry - stop);
+  if (risk <= 0) return null;
+  const reward = stop < entry ? tp1 - entry : entry - tp1;
+  return reward / risk;
+}
+
 export function formatPotentialLevel(
+  value: number | null,
+  opts: {
+    kind: "entry" | "stop" | "tp1" | "rr";
+    referenceOnly: boolean;
+    entryMissing: boolean;
+    stale?: boolean;
+  },
+): { text: string; muted: boolean; title: string } {
+  const out = formatPotentialLevelBase(value, opts);
+  if (!opts.stale || out.text === "—") return out;
+  return { text: `${out.text} · stale`, muted: true, title: `${STALE_TITLE}\n${out.title}` };
+}
+
+function formatPotentialLevelBase(
   value: number | null,
   opts: {
     kind: "entry" | "stop" | "tp1" | "rr";

@@ -72,6 +72,7 @@ function LevelCell({
     kind,
     referenceOnly: levels.referenceOnly,
     entryMissing,
+    stale: levels.stale,
   });
   return (
     <span
@@ -696,15 +697,19 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
 
   const loading = domainLoading || switching;
 
+  const allRows = useMemo(
+    () =>
+      ordered
+        .map((sym, i) => ({ ...rows[sym], rank: rows[sym]?.rank ?? i + 1 }))
+        .filter(Boolean) as ScreenerRow[],
+    [ordered, rows],
+  );
   const data = useMemo(() => {
-    const all = ordered
-      .map((sym, i) => ({ ...rows[sym], rank: rows[sym]?.rank ?? i + 1 }))
-      .filter(Boolean) as ScreenerRow[];
-    if (domain !== "Futures") return all;
-    return all.filter(
+    if (domain !== "Futures") return allRows;
+    return allRows.filter(
       (r) => matchesSignalFilter(r, signalFilter) && matchesSetupFilter(r, setupFilter),
     );
-  }, [ordered, rows, domain, signalFilter, setupFilter]);
+  }, [allRows, domain, signalFilter, setupFilter]);
 
   const headerHeight = 32;
   const virtualizer = useVirtualizer({
@@ -973,8 +978,13 @@ export function ScreenerTable({ domain = "Futures" }: { domain?: string }) {
 
       <div ref={scrollRef} className="table-scroll min-w-0 min-h-0" data-testid="screener-table-scroll">
         {data.length === 0 && !loading ? (
-          <div className="flex h-full min-h-[10rem] items-center justify-center text-sm text-terminal-muted">
-            Waiting for live data...
+          <div
+            className="flex h-full min-h-[10rem] items-center justify-center text-sm text-terminal-muted"
+            data-testid="screener-empty"
+          >
+            {allRows.length > 0
+              ? `No rows match the selected Screen Signal / Screen Setup filter (${allRows.length} rows loaded).`
+              : "Waiting for live data..."}
           </div>
         ) : data.length === 0 ? (
           <div className="h-full min-h-[10rem]" />

@@ -3046,7 +3046,8 @@ async def paper_opportunities(
             except Exception:  # noqa: BLE001
                 continue
 
-    open_syms = eng.open_symbols("LEGACY")
+    # Any stream: a symbol held by V1 or the passed book is open, not an "Auto open" row.
+    open_syms = eng.open_symbols()
     rows = list_trade_opportunities(limit=limit, open_symbols=open_syms, include_waiting=True)
     by_tier: dict[str, int] = {}
     for r in rows:
@@ -3059,6 +3060,12 @@ async def paper_opportunities(
             "15m screener research only — auto paper opens come from the "
             "COMBO_02 v1 1h watcher (its own book list, shown in the book "
             "table), not these READY rows."
+        )
+    elif not legacy_on:
+        note = (
+            "15m RESEARCH_15M research only — legacy auto-entry is off, so READY rows "
+            "do not open. Auto paper opens come from the COMBO_02 v1 1h watcher and "
+            "the passed book."
         )
     elif eng.entry_mode == "path_a":
         note = f"Auto mode={eng.entry_mode}. READY = Path A Trend+BOS opens when Auto ON"

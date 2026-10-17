@@ -12,6 +12,12 @@ import {
   type PaperWatcherBookLive,
 } from "../api/client";
 import { PassedRegimePanel } from "./PassedRegimePanel";
+import {
+  CLOSED_LIMIT,
+  closedTruncationNote,
+  opportunityAction,
+  paperRiskLabel,
+} from "../paper/paperLabels";
 
 function fmt(n: number | null | undefined, digits = 2): string {
   if (n == null || Number.isNaN(n)) return "—";
@@ -85,7 +91,7 @@ export function PaperTradePanel() {
 
   const refreshBook = useCallback(async () => {
     try {
-      const data = await fetchPaperPositions(100);
+      const data = await fetchPaperPositions(CLOSED_LIMIT);
       setStatus(data.status);
       setOpen(data.open || []);
       setClosed(data.closed || []);
@@ -142,9 +148,11 @@ export function PaperTradePanel() {
   }, [refreshBook, refreshOpps]);
 
   async function toggleEnabled() {
+    // Before status loads the current state is unknown: send nothing.
+    if (!status) return;
     setBusy(true);
     try {
-      const currentlyOn = status?.enabled ?? true;
+      const currentlyOn = status.enabled === true;
       const next = currentlyOn ? await disablePaperTrade() : await enablePaperTrade();
       setStatus(next);
       try {
@@ -201,7 +209,9 @@ export function PaperTradePanel() {
     }
   }
 
-  const autoOn = status?.enabled ?? true;
+  const statusLoaded = status != null;
+  const autoOn = status?.enabled === true;
+  const legacyAutoOn = status?.legacy_auto_entry_enabled === true;
   const watcherOwns = status?.v1_watcher_owns_entries ?? oppMeta.watcherOwns;
   const telegram = status?.telegram;
   const watcher = status?.v1_watcher;
@@ -248,8 +258,9 @@ export function PaperTradePanel() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !statusLoaded}
             onClick={toggleEnabled}
+            data-testid="paper-auto-toggle"
             title={status ? (autoOn ? "Paper auto entries enabled" : "Paper auto entries paused") : "Loading…"}
             className={`rounded border px-3 py-1.5 text-[11px] uppercase tracking-wide ${
               autoOn
@@ -257,7 +268,7 @@ export function PaperTradePanel() {
                 : "border-terminal-border text-terminal-muted"
             }`}
           >
-            {autoOn ? "Auto ON" : "Auto OFF"}
+            {!statusLoaded ? "Auto …" : autoOn ? "Auto ON" : "Auto OFF"}
           </button>
           <button
             type="button"
@@ -295,9 +306,13 @@ export function PaperTradePanel() {
       <PassedRegimePanel />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-        <Stat label="Equity" value={`$${fmt(status?.equity)}`} />
         <Stat
-          label="Realized PnL"
+          label="Equity (all streams)"
+          value={`$${fmt(status?.equity)}`}
+          title="Pooled paper equity: starting equity + realized PnL of every stream (v1, passed book, research). New positions size from this number."
+        />
+        <Stat
+          label="Realized PnL (all streams)"
           value={`$${fmt(status?.realized_pnl_usd)}`}
           tone={(status?.realized_pnl_usd ?? 0) >= 0 ? "up" : "down"}
         />
@@ -344,6 +359,7 @@ export function PaperTradePanel() {
           empty="No setups in cache yet — open Screener so symbols warm, then refresh."
           autoOn={autoOn}
           watcherOwns={watcherOwns}
+          legacyAutoOn={legacyAutoOn}
         />
       </section>
 
@@ -362,6 +378,11 @@ export function PaperTradePanel() {
         <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
           Closed trades
         </h2>
+        {closedTruncationNote(closed.length, CLOSED_LIMIT) ? (
+          <p className="mb-2 text-[11px] text-amber-200/90" data-testid="paper-closed-truncated">
+            {closedTruncationNote(closed.length, CLOSED_LIMIT)}
+          </p>
+        ) : null}
         <TradeTable
           rows={closed.filter((r) => String(r.status || "").toUpperCase() !== "CANCELLED")}
           empty="No closed paper trades yet."
@@ -435,7 +456,7 @@ function MonitorPanel({
                   : "border-terminal-border text-terminal-muted"
               }`}
             >
-              Paper Auto {autoOn ? "ON" : "OFF"}
+              Paper Auto {status == null ? "…" : autoOn ? "ON" : "OFF"}
             </span>
             <span className="rounded border border-terminal-border bg-white/5 px-1.5 py-0.5 font-mono text-terminal-text">
               source={monitor?.auto_source || "V1_PAPER_WATCHER"}
@@ -455,6 +476,15 @@ function MonitorPanel({
             >
               research default {fmtPct(status?.risk_percent_legacy_research_15m ?? status?.risk_percent)}
             </span>
+            {status?.last_skip_reason ? (
+              <span
+                className="max-w-full truncate rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-100"
+                title={status.last_skip_reason}
+                data-testid="engine-last-skip-chip"
+              >
+                engine last skip: {status.last_skip_reason}
+              </span>
+            ) : null}
             {headerSkip ? (
               <span
                 className="max-w-full truncate rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-100"
@@ -633,11 +663,13 @@ function OpportunityTable({
   empty,
   autoOn,
   watcherOwns,
+  legacyAutoOn,
 }: {
   rows: PaperOpportunity[];
   empty: string;
   autoOn: boolean;
   watcherOwns: boolean;
+  legacyAutoOn: boolean;
 }) {
   if (!rows.length) {
     return (
@@ -683,16 +715,8 @@ function OpportunityTable({
               <td className="max-w-[14rem] truncate px-2 py-1.5 text-terminal-muted" title={r.chance}>
                 {r.chance}
               </td>
-              <td className="px-2 py-1.5">
-                {r.already_open
-                  ? "Open"
-                  : watcherOwns
-                    ? "Research only"
-                    : r.tier === "READY" && autoOn
-                      ? "Auto open"
-                      : r.tier === "READY"
-                        ? "Ready (Auto OFF)"
-                        : "Watch"}
+              <td className="px-2 py-1.5" data-testid="opportunity-action">
+                {opportunityAction(r, { autoOn, watcherOwns, legacyAutoOn })}
               </td>
             </tr>
           ))}
@@ -746,7 +770,9 @@ function TradeTable({
                 {mode === "open" ? (
                   <>
                     <th className="px-2 py-1.5">Mark</th>
-                    <th className="px-2 py-1.5">Current profit</th>
+                    <th className="px-2 py-1.5" title="Gross: mark vs entry × qty. Excludes entry/exit fees and slippage; closed PnL is net.">
+                      Current profit (excl. fees)
+                    </th>
                     <th className="px-2 py-1.5">uR</th>
                   </>
                 ) : (
@@ -792,10 +818,7 @@ function TradeTable({
                 ? snippet.price_source
                 : "—";
             const riskPct = snippet.risk_percent as number | null | undefined;
-            const riskLabel =
-              riskPct != null
-                ? `${fmtPct(riskPct)} / $${fmt(r.risk_usd)}`
-                : `$${fmt(r.risk_usd)}`;
+            const riskLabel = paperRiskLabel(riskPct, r.risk_usd, snippet.paper_execution);
             return (
             <tr key={r.id} className="border-t border-terminal-border/70">
               <td className="px-2 py-1.5 text-terminal-text">{r.symbol}</td>

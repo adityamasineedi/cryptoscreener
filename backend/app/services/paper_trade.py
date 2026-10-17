@@ -2462,8 +2462,16 @@ def list_trade_opportunities(
 
     open_set = {s.upper() for s in (open_symbols or set())}
     mode = PATH_A
+    legacy_opens = False
     try:
-        mode = get_paper_trade_engine().entry_mode
+        eng = get_paper_trade_engine()
+        mode = eng.entry_mode
+        # Mirrors the early returns in on_setup_signal. Label only.
+        legacy_opens = (
+            bool(eng.enabled)
+            and bool(getattr(eng, "legacy_auto_entry_enabled", False))
+            and not (bool(getattr(eng, "v1_watcher_owns_entries", False)) and mode != PATH_B)
+        )
     except Exception:  # noqa: BLE001
         mode = PATH_A
     rows: list[dict[str, Any]] = []
@@ -2479,6 +2487,7 @@ def list_trade_opportunities(
             already_open=sym.upper() in open_set,
             include_waiting=include_waiting,
             entry_mode=mode,
+            legacy_opens=legacy_opens,
         )
         if row is None:
             continue
@@ -2510,6 +2519,7 @@ def _opportunity_from_payload(
     already_open: bool,
     include_waiting: bool = True,
     entry_mode: str = PATH_A,
+    legacy_opens: bool = False,
 ) -> dict[str, Any] | None:
     status = str(payload.get("status") or "")
     direction = str(payload.get("direction") or "").upper() or None
@@ -2600,10 +2610,19 @@ def _opportunity_from_payload(
 
     if status in ENTRY_STATUSES and longish and entry_mode == PATH_B:
         tier = "READY"
-        chance = "Auto will open (Path B experimental — not COMBO_02 v1)"
+        chance = (
+            "Auto will open (15m Path B experimental — not COMBO_02 v1)"
+            if legacy_opens
+            else "15m Path B research — legacy auto-entry is off, does not open. Not COMBO_02 v1"
+        )
     elif path_a_ready:
         tier = "READY"
-        chance = "Auto will open (Path A · COMBO_02 v1: Trend+BOS+HTF)"
+        chance = (
+            "Auto will open (15m RESEARCH_15M Path A — not COMBO_02 v1)"
+            if legacy_opens
+            else "15m RESEARCH_15M research — legacy auto-entry is off, does not open. "
+            "Not COMBO_02 v1"
+        )
     elif status in ("CONFLICT", "INVALIDATED"):
         tier = "BLOCKED"
         chance = status + (f" — {payload.get('invalidation_reason')}" if payload.get("invalidation_reason") else "")

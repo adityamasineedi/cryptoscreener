@@ -354,7 +354,9 @@ class SetupSignalService:
             )
 
         tp1 = targets[0]["target_price"] if targets else None
-        best_r = rr.get("best_R")
+        # The screener R:R cell sits next to TP1, so it shows TP1's R.
+        # best_R (best of TP1-TP3) stays in the cached risk_reward payload.
+        tp1_r = rr.get("TP1_R")
         bos_label = bos.get("direction") if bos.get("state") == "CONFIRMED" else None
         impulse_label = (
             impulse.get("quality")
@@ -392,7 +394,7 @@ class SetupSignalService:
             "setup_entry": wrap(entry.get("entry_price"), methodology=str(entry.get("entry_type"))),
             "setup_sl": wrap(stop.get("final_stop") if stop else None, methodology="Structure + ATR buffer"),
             "setup_tp1": wrap(tp1, methodology="Structural / R-multiple target"),
-            "setup_rr": wrap(best_r, methodology="reward/risk screening param"),
+            "setup_rr": wrap(tp1_r, methodology="TP1 reward/risk (screening param)"),
             "setup_signal": wrap(status, methodology="Structured setup state — not a prediction"),
             "market_signal": wrap(
                 ms,

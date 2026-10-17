@@ -2,6 +2,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  disablePaperTrade,
   fetchPaperOpportunities,
   fetchPaperPositions,
   type PaperPosition,
@@ -15,6 +16,7 @@ vi.mock("../api/client", async (importOriginal) => {
     ...actual,
     fetchPaperPositions: vi.fn(),
     fetchPaperOpportunities: vi.fn(),
+    disablePaperTrade: vi.fn(),
     // Mounted PassedRegimePanel: never resolves, so it stays in its loading state.
     fetchPassedRegime: vi.fn(() => new Promise(() => {})),
   };
@@ -368,5 +370,23 @@ describe("PaperTradePanel open risk stat", () => {
     // Label and value are as before: STATUS.open_risk_usd is 80.
     expect(label.textContent).toBe("Open risk $");
     expect(within(stat).getByText("$80.00")).toBeTruthy();
+  });
+});
+
+describe("PaperTradePanel Auto control before status loads (P6)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("does not read ON and does not send disable before status loads", async () => {
+    vi.mocked(fetchPaperPositions).mockReturnValue(new Promise(() => {}));
+    vi.mocked(fetchPaperOpportunities).mockReturnValue(new Promise(() => {}));
+    render(<PaperTradePanel />);
+    const toggle = screen.getByTestId("paper-auto-toggle") as HTMLButtonElement;
+    expect(toggle.textContent).toBe("Auto …");
+    expect(toggle.disabled).toBe(true);
+    toggle.click();
+    expect(vi.mocked(disablePaperTrade)).not.toHaveBeenCalled();
   });
 });

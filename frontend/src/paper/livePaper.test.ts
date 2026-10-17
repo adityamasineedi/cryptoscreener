@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PaperPosition, PaperStatus, PassedRegimeResponse } from "../api/client";
-import { isLivePaperPosition, liveAutoStrategies } from "./livePaper";
+import { isLivePaperPosition, liveAutoStrategies, splitLivePaperRows } from "./livePaper";
 
 const status = {
   enabled: true,
@@ -66,5 +66,21 @@ describe("isLivePaperPosition", () => {
     expect(isLivePaperPosition(row("V1_PAPER_WATCHER"))).toBe(true);
     expect(isLivePaperPosition(row("LEGACY_SETUP_SIGNAL"))).toBe(false);
     expect(isLivePaperPosition(row("V21A_PAPER_WATCHER"))).toBe(false);
+  });
+});
+
+describe("splitLivePaperRows (N4)", () => {
+  it("keeps cancelled rows out of closed trades", () => {
+    const row = (id: string, source: string, status: string): PaperPosition =>
+      ({ id, status, signal_snippet: { source } }) as unknown as PaperPosition;
+    const split = splitLivePaperRows([
+      row("open", "PASSED_CAP_BOOK", "OPEN"),
+      row("stop", "V1_PAPER_WATCHER", "CLOSED"),
+      row("cleanup", "PASSED_CAP_BOOK", "CANCELLED"),
+      row("research", "LEGACY_SETUP_SIGNAL", "CLOSED"),
+    ]);
+    expect(split.open.map((r) => r.id)).toEqual(["open"]);
+    expect(split.closed.map((r) => r.id)).toEqual(["stop"]);
+    expect(split.cancelled.map((r) => r.id)).toEqual(["cleanup"]);
   });
 });

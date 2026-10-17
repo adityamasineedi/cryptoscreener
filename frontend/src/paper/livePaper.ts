@@ -28,6 +28,21 @@ export function isLivePaperPosition(row: PaperPosition): boolean {
   return (LIVE_PAPER_SOURCES as readonly string[]).includes(positionSource(row));
 }
 
+/** Open / closed / cancelled, as the paper screen splits them. Cancelled is not a closed trade. */
+export function splitLivePaperRows(rows: PaperPosition[]): {
+  open: PaperPosition[];
+  closed: PaperPosition[];
+  cancelled: PaperPosition[];
+} {
+  const live = rows.filter(isLivePaperPosition);
+  const state = (row: PaperPosition) => String(row.status || "").toUpperCase();
+  return {
+    open: live.filter((row) => state(row) === "OPEN"),
+    closed: live.filter((row) => state(row) !== "OPEN" && state(row) !== "CANCELLED"),
+    cancelled: live.filter((row) => state(row) === "CANCELLED"),
+  };
+}
+
 function coinLine(symbols: string[] | undefined, fallback: string): string {
   if (!symbols?.length) return fallback;
   return symbols.map((symbol) => symbol.replace(/USDT$/, "")).join(", ");

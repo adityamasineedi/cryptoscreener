@@ -25,7 +25,8 @@ class _StubEngine:
         self.legacy_auto_entry_enabled = legacy
         self.entry_mode = entry_mode
 
-    def open_symbols(self, _stream: str) -> set[str]:
+    def open_symbols(self, stream: str | None = None) -> set[str]:
+        assert stream is None, "already_open must cover every stream"
         return set()
 
     def __getattr__(self, name: str) -> Any:
@@ -68,9 +69,19 @@ def test_watcher_owned_note_names_the_book_list_not_three_symbols(monkeypatch):
     )
 
 
+def test_legacy_off_note_says_ready_rows_do_not_open(monkeypatch):
+    payload = _note(monkeypatch, owns=False, legacy=False, entry_mode="path_a")
+    note = payload["note"]
+
+    assert payload["legacy_auto_entry_enabled"] is False
+    assert "opens when Auto ON" not in note
+    assert "legacy auto-entry is off" in note
+    assert "15m RESEARCH_15M" in note
+
+
 @pytest.mark.parametrize(
     ("owns", "legacy"),
-    [(False, False), (False, True), (True, True)],
+    [(False, True), (True, True)],
 )
 def test_path_a_note_is_unchanged(monkeypatch, owns: bool, legacy: bool):
     payload = _note(monkeypatch, owns=owns, legacy=legacy, entry_mode="path_a")

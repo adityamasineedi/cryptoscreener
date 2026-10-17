@@ -97,6 +97,12 @@ def closed_tip_is_current(tip: datetime | None, timeframe: str = "1h") -> bool:
 # Ledger: good opens came 51–576 s after the bar close, bad ones 1,165–3,302 s after.
 MAX_OPEN_LAG_SECONDS = 900.0
 
+# Skips after the combo eval: the bar may read V1 ELIGIBLE on screen, but the
+# watcher refused to open it. Shown on the screener; they do not change any gate.
+_POST_EVAL_REFUSALS = frozenset(
+    {"position_open", "exit_bar_no_entry", "sticky_bos_skip", "late_tip", "paper_open_skipped"}
+)
+
 
 def _utc_now() -> datetime:
     """Wall clock for the open-lag bound. Tests replace this."""
@@ -330,6 +336,10 @@ class V1PaperWatcher:
         self._in_trade: dict[str, bool] = {}
         # Read-only UI snapshots (never open trades). symbol -> payload.
         self._presentation_snapshots: dict[str, dict[str, Any]] = {}
+        # symbol -> {"reason", "bar", "detail"}: a bar the combo eval passed or
+        # could pass but the watcher refused. Display only; a later
+        # already_processed note does not overwrite it.
+        self._bar_refusals: dict[str, dict[str, Any]] = {}
         self._presentation_refreshed_at: float = 0.0
         self._presentation_ttl_sec: float = 20.0
 
@@ -354,14 +364,29 @@ class V1PaperWatcher:
 
         return get_paper_trade_engine()
 
-    def _note_skip(self, symbol: str, reason: str, bar: str | None) -> None:
+    def _note_skip(
+        self, symbol: str, reason: str, bar: str | None, *, detail: str | None = None
+    ) -> None:
         """Record a per-symbol skip; a later book's skip does not overwrite it."""
         sym = normalize_symbol(symbol)
         entry = {"reason": reason, "bar": bar}
+        kind = reason.split(":", 1)[1] if ":" in reason else reason
         with self._lock:
             self._last_skip = reason
             self._skip_by_symbol[sym] = entry
             _PROCESS_SKIPS[sym] = dict(entry)
+            if kind in _POST_EVAL_REFUSALS:
+                self._bar_refusals[sym] = {"reason": kind, "bar": bar, "detail": detail}
+
+    def _with_refusals(self, snaps: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Attach the watcher's refusal to a snapshot of the same closed bar."""
+        with self._lock:
+            refusals = {k: dict(v) for k, v in self._bar_refusals.items()}
+        for sym, snap in snaps.items():
+            refusal = refusals.get(sym)
+            if refusal and refusal.get("bar") and refusal.get("bar") == snap.get("tip_bar"):
+                snap["watcher_refusal"] = refusal
+        return snaps
 
     def _clear_skip(self, symbol: str) -> None:
         """Drop one symbol's skip after its position opened. Display only."""
@@ -369,6 +394,7 @@ class V1PaperWatcher:
         with self._lock:
             self._skip_by_symbol.pop(sym, None)
             _PROCESS_SKIPS.pop(sym, None)
+            self._bar_refusals.pop(sym, None)
 
     def seed_watermark(
         self,
@@ -878,7 +904,16 @@ class V1PaperWatcher:
             emit_alert=bool(self.emit_alerts) and not self.replay_mode,
         )
         if pos is None:
-            self._note_skip(book.symbol, f"{book.symbol}:paper_open_skipped", tip_iso)
+            detail = None
+            try:
+                engine_skip = str(paper.status().get("last_skip_reason") or "")
+                if engine_skip.startswith(f"{book.symbol}:"):
+                    detail = engine_skip[len(book.symbol) + 1 :]
+            except Exception:  # noqa: BLE001
+                detail = None
+            self._note_skip(
+                book.symbol, f"{book.symbol}:paper_open_skipped", tip_iso, detail=detail
+            )
         else:
             # An earlier bar's skip no longer describes this book.
             self._clear_skip(book.symbol)
@@ -1115,9 +1150,10 @@ class V1PaperWatcher:
     def get_presentation_snapshots(self, *, refresh: bool = True) -> dict[str, dict[str, Any]]:
         """Return cached tip eval snapshots for v1 books (presentation only)."""
         if refresh:
-            return self.refresh_presentation_snapshots(force=False)
+            return self._with_refusals(self.refresh_presentation_snapshots(force=False))
         with self._lock:
-            return {k: dict(v) for k, v in self._presentation_snapshots.items()}
+            snaps = {k: dict(v) for k, v in self._presentation_snapshots.items()}
+        return self._with_refusals(snaps)
 
     def peek_books(self) -> list[dict[str, Any]]:
         """Cheap tip snapshot per v1 book; merges cached combo eval when present."""
