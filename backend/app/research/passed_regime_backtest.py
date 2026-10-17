@@ -73,7 +73,8 @@ Result of ``run_regime_book`` / ``build_result``
                       signals, taken, trades, wins, losses, pnl_usd_net},
                       regime_timeline [{trend, start_daily_bar, end_daily_bar,
                       daily_bars, short_history}]
-    symbols           per symbol: bars, period_start, period_end, walks,
+    symbols           per symbol: bars (evaluated), bars_loaded, warmup_bars,
+                      bars_evaluated, period_start, period_end, walks,
                       signals, trades, bars_by_trend, short_history_bars,
                       short_history_until, gap_walks, exit_rewalks,
                       signals_outside_trend, errors
@@ -249,12 +250,19 @@ def run_symbol(
     """Pick the shared book's trades for one symbol. JSON-ready, no sizing.
 
     ``book`` is the dict ``run_cap_mtf_risk._load`` returns: ``candles`` (1h,
-    closed, oldest first), ``c1h``, ``c4h``, ``c15``, ``c1d``.
+    closed, oldest first), ``c1h``, ``c4h``, ``c15``, ``c1d``. An optional
+    ``eval_start`` is the index of the first bar of the requested window; the
+    bars before it are warm-up only. The walks start there, as the
+    single-strategy backtest does with its loader's ``eval_start``, and the
+    bar counts, trend counts, and period describe the evaluated bars only.
     """
     backtest = backtest_fn or _default_backtest()
     sym = str(symbol).upper()
     series = list(book.get("candles") or [])
     n = len(series)
+    first = min(max(0, int(book.get("eval_start") or 0)), n)
+    # Same convention as the single-strategy loader: 0 walks from the series edge.
+    first_walk = first if first > 0 else None
 
     regimes: list[dict[str, Any]] = []
     allowed_at: list[tuple[tuple[str, str, str], ...]] = []
@@ -268,6 +276,10 @@ def run_symbol(
         # No bar time means no trend can be dated: nothing may open.
         regime = clock.at(_utc(ts) + BAR) if ts is not None else clock.by_count(0)
         regimes.append(regime)
+        if i < first:
+            # Warm-up bar: never evaluated, so no side can open here.
+            allowed_at.append(())
+            continue
         bars_by_trend[regime["trend"]] += 1
         if regime["short_history"]:
             short_history_bars += 1
@@ -343,16 +355,23 @@ def run_symbol(
             if str(trade.get("direction") or "").upper() == direction
         ]
 
-    def push(side: tuple[str, str, str], start: int | None, keep_to: int) -> None:
+    def push(side: tuple[str, str, str], start: int | None, keep_to: int, *, rewalk: bool = True) -> None:
         """Walk bars ``start`` to ``keep_to`` and queue the signals found."""
         nonlocal seq
         end = min(n, keep_to + 1)
         for trade in walk(side, start, None if end >= n else end):
             i = int(trade["entry_index"])
-            if not ((start or 0) <= i <= keep_to):
+            if not (max(start or 0, first) <= i <= keep_to):
                 continue
             seq += 1
-            item = {"side": side, "trade": trade, "anchor": start, "end": end, "keep_to": keep_to}
+            item = {
+                "side": side,
+                "trade": trade,
+                "anchor": start,
+                "rewalk": rewalk,
+                "end": end,
+                "keep_to": keep_to,
+            }
             rank = allowed_at[i].index(side) if side in allowed_at[i] else len(allowed_at[i])
             heapq.heappush(heap, (i, rank, seq, item))
 
@@ -390,7 +409,7 @@ def run_symbol(
     busy_until = -1  # last bar index the symbol is held on
     try:
         for side in sides:
-            push(side, None, n - 1)
+            push(side, first_walk, n - 1, rewalk=False)
         while heap:
             i, _, _, item = heapq.heappop(heap)
             side = item["side"]
@@ -418,7 +437,7 @@ def run_symbol(
                 "taken": False,
                 "skip_reason": None,
                 "blocked_by": None,
-                "rewalk_first_bar": item["anchor"] is not None and i == item["anchor"],
+                "rewalk_first_bar": item["rewalk"] and item["anchor"] is not None and i == item["anchor"],
             }
             signals.append(signal)
             if holder is not None and i <= busy_until:
@@ -461,8 +480,11 @@ def run_symbol(
     return {
         "symbol": sym,
         "status": "CANCELLED" if cancelled else "OK",
-        "bars": n,
-        "period_start": _bar_iso(series[0]) if series else None,
+        "bars": n - first,
+        "bars_loaded": n,
+        "warmup_bars": first,
+        "bars_evaluated": n - first,
+        "period_start": _bar_iso(series[first]) if first < n else None,
         "period_end": _bar_iso(series[-1]) if series else None,
         "bars_by_trend": bars_by_trend,
         "short_history_bars": short_history_bars,
@@ -704,6 +726,9 @@ def build_result(
                 for key in (
                     "status",
                     "bars",
+                    "bars_loaded",
+                    "warmup_bars",
+                    "bars_evaluated",
                     "period_start",
                     "period_end",
                     "walks",

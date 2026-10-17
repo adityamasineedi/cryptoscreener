@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  cancelRegimeBacktest,
+  fetchRegimeBacktest,
   fetchResearchOhlcvRange,
   fetchStrategyRank,
   startRegimeBacktest,
   type OhlcvRangeRow,
+  type RegimeBacktestStartBody,
+  type RegimeBacktestStatus,
   type StrategyRankResponse,
   type StrategyMatrixResponse,
   type StrategyMatrixRow,
@@ -229,6 +233,19 @@ function toggleInList<T extends string>(list: T[], value: T): T[] {
     : [...list, value];
 }
 
+/**
+ * Sizing and fees the regime book uses whatever the form says
+ * (backend passed_regime_backtest: PRINCIPAL_USD, LEVERAGE, TAKER_FEE, MAKER_FEE).
+ * The run's status reports the values it used as `fixed_config`.
+ */
+const REGIME_BOOK_FIXED = {
+  principalUsd: 1000,
+  leverage: 2,
+  takerFeePct: 0.04,
+  makerFeePct: 0.02,
+  risk: "2% large cap / 1% mid cap of principal, halved when the side is against the BTC daily trend",
+} as const;
+
 function formatDuration(ms: number): string {
   const sec = Math.max(0, Math.round(ms / 1000));
   if (sec < 60) return `${sec}s`;
@@ -250,7 +267,10 @@ export function BacktestPanel() {
   const handoffRevision = useBacktestHandoffStore((s) => s.revision);
   const handoffSymbols = useBacktestHandoffStore((s) => s.symbols);
   const [autoPassed, setAutoPassed] = useState(true);
+  /** True while the regime book is the screen's current run (its results replace the single-strategy output). */
   const [regimeActive, setRegimeActive] = useState(false);
+  const [regimeJob, setRegimeJob] = useState<RegimeBacktestStatus | null>(null);
+  const [regimeStarting, setRegimeStarting] = useState(false);
   const [strategyId, setStrategyId] = useState<BacktestStrategyId>(PASSED_RUN_STRATEGY_ID);
   const [sdVariant, setSdVariant] = useState(SD_DEFAULT_VARIANT);
   const [direction, setDirection] = useState<"LONG" | "SHORT">("SHORT");
@@ -324,8 +344,51 @@ export function BacktestPanel() {
   const startJob = useBacktestJobStore((s) => s.start);
   const cancelJob = useBacktestJobStore((s) => s.cancel);
   const setStoreError = useBacktestJobStore((s) => s.setError);
+  const setJob = useBacktestJobStore((s) => s.setJob);
 
   const loading = active || job?.status === "running";
+  // The regime book is its own background job (POST /research/regime-backtest/start).
+  const regimeMode = autoPassed && book !== "hedge";
+  const regimeRunning = regimeStarting || regimeJob?.status === "running";
+  /** Any run in flight: the Run button, Cancel, and progress follow it. */
+  const busy = loading || regimeRunning;
+
+  // A regime run still going after a reload or route change is the current run.
+  useEffect(() => {
+    let alive = true;
+    Promise.resolve()
+      .then(() => fetchRegimeBacktest())
+      .then((st) => {
+        if (!alive || st?.status !== "running") return;
+        setRegimeJob(st);
+        setRegimeActive(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Poll the regime job while it runs. Stops once it is done, failed, or cancelled.
+  const regimePolling = !regimeStarting && regimeJob?.status === "running";
+  useEffect(() => {
+    if (!regimePolling) return;
+    let alive = true;
+    const poll = async () => {
+      try {
+        const next = await fetchRegimeBacktest();
+        if (alive && next?.status) setRegimeJob(next);
+      } catch {
+        /* transient poll errors are ignored */
+      }
+    };
+    const id = window.setInterval(() => void poll(), 1000);
+    void poll();
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [regimePolling]);
   const frozenV1Selection = allFrozenV1Symbols(symbols);
   const lockV1Risk =
     !researchUi && frozenV1Selection && !researchRiskOverride;
@@ -531,10 +594,10 @@ export function BacktestPanel() {
 
   // Tick clock while running so ETA/elapsed stay live.
   useEffect(() => {
-    if (!loading) return;
+    if (!busy) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 500);
     return () => window.clearInterval(id);
-  }, [loading]);
+  }, [busy]);
 
   const result: StrategyMatrixResponse | null = useMemo(() => {
     if (!job || job.status === "idle") return null;
@@ -646,31 +709,64 @@ export function BacktestPanel() {
   }, [shownResult?.rows, selectedKey, preferredSymbol]);
 
   const progressView = useMemo(() => {
-    // Show as soon as a run is active (optimistic store job) — not only after
+    // Show as soon as a run is active (optimistic job) — not only after
     // the first successful poll, so % is never blank while "Running…".
-    if (!loading || !job?.total_cells) return null;
-    if (job.status !== "running" && !active) return null;
-    const done = job.done_cells ?? 0;
-    const total = job.total_cells;
+    // A running regime-book job uses the same view; its cells are coins.
+    const regime = regimeRunning && regimeJob ? regimeJob : null;
+    let src: {
+      total_cells?: number;
+      done_cells?: number;
+      progress_percent?: number | null;
+      pct?: number | null;
+      started_at?: string | null;
+      elapsed_seconds?: number | null;
+      bars_processed?: number;
+      total_bars?: number;
+      current?: string;
+      phase?: string;
+      trades_generated?: number;
+      trades?: number;
+      last_heartbeat?: string | null;
+      rows_loaded?: number;
+    };
+    if (regime) {
+      src = {
+        total_cells: regime.total_cells ?? regime.symbols?.length ?? 0,
+        done_cells: regime.done_cells ?? 0,
+        progress_percent: regime.progress_percent,
+        pct: regime.pct,
+        started_at: regime.started_at,
+        elapsed_seconds: regime.elapsed_seconds,
+        current: regime.current,
+        phase: regime.phase,
+      };
+    } else {
+      if (!loading || !job?.total_cells) return null;
+      if (job.status !== "running" && !active) return null;
+      src = job;
+    }
+    if (!src.total_cells) return null;
+    const done = src.done_cells ?? 0;
+    const total = src.total_cells;
     const rawPct =
-      job.progress_percent != null && Number.isFinite(job.progress_percent)
-        ? Number(job.progress_percent)
-        : job.pct != null && Number.isFinite(job.pct)
-          ? Number(job.pct)
+      src.progress_percent != null && Number.isFinite(src.progress_percent)
+        ? Number(src.progress_percent)
+        : src.pct != null && Number.isFinite(src.pct)
+          ? Number(src.pct)
           : (done / total) * 100;
     const pctNum = Math.min(100, rawPct);
     const pct =
       pctNum > 0 && pctNum < 10
         ? Number(pctNum.toFixed(1))
         : Math.round(pctNum);
-    const startedMs = job.started_at ? Date.parse(job.started_at) : NaN;
+    const startedMs = src.started_at ? Date.parse(src.started_at) : NaN;
     const elapsedMs = Number.isFinite(startedMs)
       ? Math.max(0, nowMs - startedMs)
-      : (job.elapsed_seconds ?? 0) * 1000;
+      : (src.elapsed_seconds ?? 0) * 1000;
     const remaining = Math.max(0, total - done);
     let etaMs: number | null = null;
-    const bars = job.bars_processed ?? 0;
-    const totalBars = job.total_bars ?? 0;
+    const bars = src.bars_processed ?? 0;
+    const totalBars = src.total_bars ?? 0;
     if (done > 0 && elapsedMs > 0) {
       etaMs = (elapsedMs / done) * remaining;
     } else if (bars > 0 && totalBars > bars && elapsedMs > 0) {
@@ -680,17 +776,20 @@ export function BacktestPanel() {
       pct,
       done,
       total,
-      current: job.current || "",
-      phase: job.phase || "",
+      unit: regime ? "coins" : "cells",
+      regime: Boolean(regime),
+      walks: regime?.walks_in_symbol ?? 0,
+      current: src.current || "",
+      phase: src.phase || "",
       barsProcessed: bars,
       totalBars,
-      trades: job.trades_generated ?? job.trades ?? 0,
-      lastHeartbeat: job.last_heartbeat || null,
-      rowsLoaded: job.rows_loaded ?? 0,
+      trades: src.trades_generated ?? src.trades ?? 0,
+      lastHeartbeat: src.last_heartbeat || null,
+      rowsLoaded: src.rows_loaded ?? 0,
       elapsedLabel: formatDuration(elapsedMs),
       etaLabel: etaMs == null ? "…" : formatDuration(etaMs),
     };
-  }, [job, nowMs, loading, active]);
+  }, [job, nowMs, loading, active, regimeRunning, regimeJob]);
 
   const run = useCallback(async () => {
     if (!symbols.length || !timeframes.length) {
@@ -701,19 +800,71 @@ export function BacktestPanel() {
       setStoreError("Custom dates mode needs a start and/or end day (UTC)");
       return;
     }
-    setSelectedKey(null);
-    if (autoPassed && book !== "hedge") {
+    if (regimeMode) {
+      // The book walks 1h bars only. Another timeframe is refused, never reinterpreted.
+      if (timeframes.length !== 1 || timeframes[0] !== "1h") {
+        setStoreError(
+          `The regime book runs on 1h bars only. Select 1h as the only timeframe (selected: ${timeframes.join(", ")}).`
+        );
+        return;
+      }
+      setSelectedKey(null);
+      // The previous single-strategy output is not this run's result: drop it.
+      setJob(null);
+      setStoreError(null);
       setRegimeActive(true);
       setShortNotice(
         "BTC daily regime picks the side on each closed 1h bar. Passed shorts while bearish. COMBO_03_TRANSITION_B long while bullish."
       );
+      const body: RegimeBacktestStartBody =
+        periodMode === "dates"
+          ? { symbols, timeframe: "1h", start_date: effectiveStart, end_date: effectiveEnd }
+          : { symbols, timeframe: "1h", limit };
+      const optimistic: RegimeBacktestStatus = {
+        status: "running",
+        phase: "starting",
+        current: "Starting…",
+        symbols,
+        timeframe: "1h",
+        total_cells: symbols.length,
+        done_cells: 0,
+        pct: 0,
+        progress_percent: 0,
+        started_at: new Date().toISOString(),
+        window: {
+          requested: {
+            mode: periodMode === "dates" ? "dates" : "lookback",
+            timeframe: "1h",
+            start_date: body.start_date ?? null,
+            end_date: body.end_date ?? null,
+            limit: body.limit ?? null,
+          },
+        },
+      };
+      setRegimeJob(optimistic);
+      setRegimeStarting(true);
       try {
-        await startRegimeBacktest({ symbols, limit });
+        const res = await startRegimeBacktest(body);
+        if (res?.status === "REJECTED") {
+          setRegimeJob(null);
+          setStoreError(res.error || "The regime book refused this run.");
+        } else if (res?.status === "ALREADY_RUNNING") {
+          setRegimeJob(res.job ?? null);
+          setStoreError("A regime-book run is already in progress. Its progress is shown here; cancel it to start another.");
+        } else {
+          setRegimeJob(res?.job ?? optimistic);
+        }
       } catch (err) {
+        setRegimeJob(null);
         setStoreError(err instanceof Error ? err.message : "Regime backtest failed to start");
+      } finally {
+        setRegimeStarting(false);
       }
       return;
     }
+    setSelectedKey(null);
+    // A single-strategy run is now the current run.
+    setRegimeActive(false);
     if (isSd) {
       setShortNotice(
         sdVariant === "COMBO_SD_LIQ"
@@ -775,8 +926,8 @@ export function BacktestPanel() {
   }, [
     symbols,
     timeframes,
-    autoPassed,
-    book,
+    regimeMode,
+    setJob,
     direction,
     strategyId,
     strategyMeta,
@@ -864,7 +1015,22 @@ export function BacktestPanel() {
     setRiskUsd(Math.max(1, Math.round((p * rp) / 100)));
   }
 
+  /** The regime panel belongs to the run that produced it, not to a newly chosen book or strategy. */
+  function leaveRegimeRun() {
+    setRegimeActive(false);
+  }
+
+  async function cancelRegime() {
+    try {
+      const res = await cancelRegimeBacktest();
+      if (res?.job) setRegimeJob(res.job);
+    } catch (err) {
+      setStoreError(err instanceof Error ? err.message : "Cancel failed");
+    }
+  }
+
   function openTradeBook(next: TradeBook) {
+    if (next !== book) leaveRegimeRun();
     setBook(next);
     if (next === "grid") return;
     setAutoPassed(true);
@@ -909,6 +1075,7 @@ export function BacktestPanel() {
       return;
     }
     setAutoPassed(false);
+    leaveRegimeRun();
     const id = next as BacktestStrategyId;
     setStrategyId(id);
     if (book === "hedge" || id === "COMBO_02_V2_1_A") {
@@ -967,7 +1134,6 @@ export function BacktestPanel() {
           regime on each 1h bar and show that book's results. Picking one strategy runs that
           strategy alone. Same engines as the research scripts.
         </p>
-        <RegimeBookResults active={regimeActive} />
         <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Trade book">
           {(
             [
@@ -1808,11 +1974,22 @@ export function BacktestPanel() {
                   : "Research fallback"}
             </div>
             <div>Entry model: MARKET or LIMIT_RETEST</div>
-            <div>
-              Fee model: taker {takerFeePct}% / maker {makerFeePct}% · basis executed
-              notional
-            </div>
-            <div>Leverage: {leverage}×</div>
+            {regimeMode ? (
+              <div>
+                Regime book sizing (form risk, principal, leverage and fees not used): principal $
+                {REGIME_BOOK_FIXED.principalUsd.toLocaleString()} · risk {REGIME_BOOK_FIXED.risk} · fees taker{" "}
+                {REGIME_BOOK_FIXED.takerFeePct}% / maker {REGIME_BOOK_FIXED.makerFeePct}% · leverage{" "}
+                {REGIME_BOOK_FIXED.leverage}×
+              </div>
+            ) : (
+              <>
+                <div>
+                  Fee model: taker {takerFeePct}% / maker {makerFeePct}% · basis executed
+                  notional
+                </div>
+                <div>Leverage: {leverage}×</div>
+              </>
+            )}
             <div>
               Bars/date range:{" "}
               {periodMode === "dates"
@@ -1836,20 +2013,20 @@ export function BacktestPanel() {
           <div className="mt-2 flex flex-wrap items-end gap-3">
             <button
               type="button"
-              disabled={loading}
+              disabled={busy}
               onClick={() => void run()}
               className="rounded border border-terminal-accent bg-terminal-accent/15 px-4 py-1.5 text-sm text-terminal-accent disabled:opacity-50"
             >
-              {loading && progressView
+              {busy && progressView
                 ? `${progressView.pct}%`
-                : loading
+                : busy
                   ? "Running…"
                   : "Run backtest"}
             </button>
-            {loading ? (
+            {busy ? (
               <button
                 type="button"
-                onClick={() => void cancelJob()}
+                onClick={() => void (regimeRunning ? cancelRegime() : cancelJob())}
                 className="rounded border border-rose-500/40 px-3 py-1.5 text-sm text-rose-200 hover:bg-rose-500/10"
               >
                 Cancel
@@ -1861,6 +2038,32 @@ export function BacktestPanel() {
               ? `Calendar-range mode ${effectiveStart || "…"} → ${effectiveEnd || "…"} · ${symbols.length}×${timeframes.length} cells · runs in background`
               : `DB-tail mode · Bars requested: ${limit.toLocaleString()} · ≈ ${approxDays ?? "—"} days at ${primaryTf} · ${symbols.length}×${timeframes.length} cells`}
           </div>
+          {regimeMode ? (
+            <div
+              className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"
+              data-testid="regime-run-scope"
+            >
+              <div className="font-semibold">Regime book run</div>
+              <div className="font-mono">
+                Sends: {symbols.length} coin{symbols.length === 1 ? "" : "s"} · 1h bars ·{" "}
+                {periodMode === "dates"
+                  ? `calendar ${effectiveStart || "…"} → ${effectiveEnd || "…"} (UTC, end inclusive)`
+                  : `latest ${limit.toLocaleString()} 1h bars ≈ ${barsToApproxDays(limit, "1h") ?? "—"} days`}
+                . Warm-up bars load in front and are not traded.
+              </div>
+              {timeframes.length !== 1 || timeframes[0] !== "1h" ? (
+                <div className="mt-1 text-rose-200" data-testid="regime-run-timeframe-block">
+                  Run is blocked: the regime book runs on 1h bars only. Selected: {timeframes.join(", ") || "none"}.
+                </div>
+              ) : null}
+              <div className="mt-1">
+                Not used by this run: the Principal, Risk, Leverage and Fee fields. The book uses principal $
+                {REGIME_BOOK_FIXED.principalUsd.toLocaleString()}, risk {REGIME_BOOK_FIXED.risk}, leverage{" "}
+                {REGIME_BOOK_FIXED.leverage}×, taker {REGIME_BOOK_FIXED.takerFeePct}% / maker{" "}
+                {REGIME_BOOK_FIXED.makerFeePct}%.
+              </div>
+            </div>
+          ) : null}
           {coverage.length ? (
             <div className="mt-1 font-mono text-[11px] text-terminal-muted">
               DB OHLCV:{" "}
@@ -1892,11 +2095,15 @@ export function BacktestPanel() {
               </div>
             </div>
           ) : null}
-          {loading && progressView ? (
-            <div className="mt-3 rounded border border-terminal-border/70 bg-black/25 px-3 py-2">
+          {busy && progressView ? (
+            <div
+              className="mt-3 rounded border border-terminal-border/70 bg-black/25 px-3 py-2"
+              data-testid="backtest-progress"
+            >
               <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
                 <span className="text-terminal-accent">
-                  {progressView.pct}% · {progressView.done}/{progressView.total} cells
+                  {progressView.regime ? "Regime book · " : ""}
+                  {progressView.pct}% · {progressView.done}/{progressView.total} {progressView.unit}
                   <span className="text-terminal-muted"> · background</span>
                 </span>
                 <span className="text-terminal-muted">
@@ -1912,14 +2119,16 @@ export function BacktestPanel() {
               <div className="mt-1.5 font-mono text-[11px] text-terminal-muted">
                 Running {progressView.current}
                 {progressView.phase ? ` · ${progressView.phase}` : ""}
-                {progressView.totalBars > 0
-                  ? ` · bars ${progressView.barsProcessed}/${progressView.totalBars}`
-                  : progressView.rowsLoaded > 0
-                    ? ` · rows loaded ${progressView.rowsLoaded}`
-                    : progressView.done === 0
-                      ? " — first cell scans structure bar-by-bar (15m date windows are heaviest)"
-                      : ""}
-                {` · trades ${progressView.trades}`}
+                {progressView.regime
+                  ? ` · strategy walks ${progressView.walks}`
+                  : progressView.totalBars > 0
+                    ? ` · bars ${progressView.barsProcessed}/${progressView.totalBars}`
+                    : progressView.rowsLoaded > 0
+                      ? ` · rows loaded ${progressView.rowsLoaded}`
+                      : progressView.done === 0
+                        ? " — first cell scans structure bar-by-bar (15m date windows are heaviest)"
+                        : ""}
+                {progressView.regime ? "" : ` · trades ${progressView.trades}`}
                 {" — safe to leave this tab"}
               </div>
               {progressView.lastHeartbeat ? (
@@ -1964,6 +2173,10 @@ export function BacktestPanel() {
         </div>
       ) : null}
 
+      {regimeActive ? (
+        <RegimeBookResults job={regimeJob} />
+      ) : (
+      <>
       {foreignJob && job && job.status !== "idle" ? (
         <div
           className="mb-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"
@@ -2456,6 +2669,8 @@ export function BacktestPanel() {
           </tbody>
         </table>
       </div>
+      )}
+      </>
       )}
       </div>
 

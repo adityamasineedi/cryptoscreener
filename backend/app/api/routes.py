@@ -1142,14 +1142,36 @@ async def research_cap_book_agents() -> dict[str, Any]:
 
 @router.post("/research/regime-backtest/start")
 async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict)) -> dict[str, Any]:
-    """Run the passed book. The BTC daily regime chooses the side on each bar."""
+    """Run the passed book. The BTC daily regime chooses the side on each bar.
+
+    Body: symbols, timeframe ("1h" only; ``timeframes`` must be ["1h"]),
+    start_date/end_date (UTC days, end inclusive) or limit (1h bars). Returns
+    STARTED, ALREADY_RUNNING, or REJECTED with the reason.
+    """
     from app.research.regime_backtest_job import start
 
     symbols = body.get("symbols") or []
     if isinstance(symbols, str):
         symbols = [part for part in symbols.split(",") if part.strip()]
-    limit = int(body.get("limit") or 1440)
-    return await start([str(s) for s in symbols], limit)
+    timeframe = body.get("timeframe")
+    timeframes = body.get("timeframes")
+    if timeframes is not None:
+        if isinstance(timeframes, str):
+            timeframes = [part.strip() for part in timeframes.split(",") if part.strip()]
+        distinct = sorted({str(tf).strip().lower() for tf in timeframes})
+        if len(distinct) != 1 or (timeframe and str(timeframe).strip().lower() != distinct[0]):
+            return {
+                "status": "REJECTED",
+                "error": f"The regime book runs on one timeframe (1h); got {', '.join(distinct) or 'none'}.",
+            }
+        timeframe = distinct[0]
+    return await start(
+        [str(s) for s in symbols],
+        body.get("limit"),
+        timeframe=timeframe,
+        start_date=body.get("start_date"),
+        end_date=body.get("end_date"),
+    )
 
 
 @router.get("/research/regime-backtest")
@@ -1157,6 +1179,14 @@ async def regime_backtest_status() -> dict[str, Any]:
     from app.research.regime_backtest_job import status
 
     return status()
+
+
+@router.post("/research/regime-backtest/cancel")
+async def regime_backtest_cancel() -> dict[str, Any]:
+    """Stop the running regime-book backtest (its worker process is killed)."""
+    from app.research.regime_backtest_job import cancel
+
+    return await cancel()
 
 
 @router.post("/research/long-strategy/backtest/start")

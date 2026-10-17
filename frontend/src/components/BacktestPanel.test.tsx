@@ -12,7 +12,13 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { startBacktestJob, startRegimeBacktest } from "../api/client";
+import {
+  cancelRegimeBacktest,
+  fetchRegimeBacktest,
+  startBacktestJob,
+  startRegimeBacktest,
+  type RegimeBacktestStatus,
+} from "../api/client";
 import {
   BACKTEST_CAP_SYMBOLS,
   BACKTEST_LARGE_SYMBOLS,
@@ -70,6 +76,7 @@ vi.mock("../api/client", async (importOriginal) => {
     cancelBacktestJob: vi.fn(async () => ({ status: "idle" })),
     startRegimeBacktest: vi.fn(async () => ({ status: "STARTED" })),
     fetchRegimeBacktest: vi.fn(async () => ({ status: "idle" })),
+    cancelRegimeBacktest: vi.fn(async () => ({ status: "CANCELLED", job: { status: "cancelled" } })),
   };
 });
 
@@ -1449,5 +1456,295 @@ describe("BacktestPanel interaction paths", () => {
     });
     const body = vi.mocked(startRegimeBacktest).mock.calls.at(-1)?.[0];
     expect(body?.symbols).toEqual(["LINKUSDT"]);
+  });
+});
+
+describe("BacktestPanel regime-book run", () => {
+  type T = Record<string, unknown>;
+
+  function singleJob(): T {
+    const trade = {
+      trade_no: 1,
+      symbol: "BTCUSDT",
+      timeframe: "1h",
+      direction: "LONG",
+      entry_price: 100,
+      stop_price: 99,
+      tp1: 102,
+      exit_price: 101,
+      outcome: "TP1",
+      net_pnl_usd: 20,
+      gross_pnl_usd: 21,
+      fee_total_usd: -1,
+      r_net: 1,
+      signal_time: "2025-01-01T00:00:00+00:00",
+      exit_time: "2025-01-01T04:00:00+00:00",
+    };
+    return {
+      status: "done",
+      job_id: "single-job",
+      symbols: ["BTCUSDT"],
+      timeframes: ["1h"],
+      direction: "LONG",
+      strategy_id: "COMBO_01",
+      combination_id: "COMBO_01",
+      principal_usd: 1000,
+      production_comparable: false,
+      research_only: true,
+      rows: [
+        {
+          combination_id: "COMBO_01",
+          symbol: "BTCUSDT",
+          timeframe: "1h",
+          direction: "LONG",
+          sample_size: 1,
+          pnl_usd: 21,
+          pnl_usd_net: 20,
+          fees_usd: -1,
+          risk_usd: 20,
+          bars_loaded: 100,
+          period_start: "2025-01-01T00:00:00+00:00",
+          period_end: "2025-03-31T23:00:00+00:00",
+          trades: [trade],
+        },
+      ],
+    };
+  }
+
+  function regimeJob(extra: Partial<RegimeBacktestStatus> = {}): RegimeBacktestStatus {
+    return {
+      status: "running",
+      job_id: "regime-1",
+      phase: "running",
+      current: "ETHUSDT 2/3 · COMBO_01 SHORT",
+      symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+      total_cells: 3,
+      done_cells: 1,
+      pct: 37,
+      progress_percent: 37,
+      walks_in_symbol: 4,
+      started_at: new Date().toISOString(),
+      window: {
+        requested: { mode: "lookback", timeframe: "1h", start_date: null, end_date: null, limit: 5760 },
+        evaluated: null,
+        cap: { max_eval_bars: 20000, applied: false, symbols: [] },
+      },
+      ...extra,
+    };
+  }
+
+  function doneRegimeJob(): RegimeBacktestStatus {
+    return regimeJob({
+      status: "done",
+      phase: "done",
+      current: "",
+      done_cells: 3,
+      pct: 100,
+      progress_percent: 100,
+      window: {
+        requested: { mode: "dates", timeframe: "1h", start_date: "2025-01-01", end_date: "2025-03-31", limit: null },
+        evaluated: {
+          period_start: "2025-01-01T00:00:00+00:00",
+          period_end: "2025-03-31T23:00:00+00:00",
+          bars_loaded: 6720,
+          warmup_bars: 240,
+          bars_evaluated: 6480,
+        },
+        cap: { max_eval_bars: 20000, applied: false, symbols: [] },
+      },
+      fixed_config: { principal_usd: 1000, leverage: 2, taker_fee_pct: 0.04, maker_fee_pct: 0.02 },
+      summary: {
+        trades: 4,
+        wins: 1,
+        losses: 3,
+        pnl_usd_net: -12.5,
+        final_equity_usd: 987.5,
+        max_drawdown_pct: 2,
+        by_strategy: [],
+      },
+    });
+  }
+
+  afterEach(() => {
+    cleanup();
+    vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED" }));
+    vi.mocked(fetchRegimeBacktest).mockImplementation(async () => ({ status: "idle" }));
+    vi.mocked(cancelRegimeBacktest).mockImplementation(async () => ({
+      status: "CANCELLED",
+      job: { status: "cancelled" },
+    }));
+  });
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    useBacktestJobStore.setState({
+      job: null,
+      request: null,
+      foreignJob: false,
+      ownJobId: null,
+      error: null,
+      active: false,
+      starting: false,
+      _gen: 0,
+    });
+    useBacktestHandoffStore.setState({ symbols: [], revision: 0 });
+    vi.mocked(startBacktestJob).mockClear();
+    vi.mocked(startRegimeBacktest).mockClear();
+    vi.mocked(fetchRegimeBacktest).mockClear();
+    vi.mocked(cancelRegimeBacktest).mockClear();
+  });
+
+  it("R4 lookback run sends 1h, the requested bar count, and nothing the book ignores", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(startRegimeBacktest).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(startRegimeBacktest).mock.calls[0][0] as Record<string, unknown>;
+    expect(body).toEqual({ symbols: DEFAULT_COINS, timeframe: "1h", limit: 5760 });
+  });
+
+  it("R4 calendar run sends the selected UTC days and no bar limit", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("button", { name: "Calendar-range mode" }));
+    const dates = container.querySelectorAll('input[type="date"]');
+    fireEvent.change(dates[0], { target: { value: "2025-01-01" } });
+    fireEvent.change(dates[1], { target: { value: "2025-03-31" } });
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(startRegimeBacktest).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(startRegimeBacktest).mock.calls[0][0] as Record<string, unknown>;
+    expect(body).toEqual({
+      symbols: DEFAULT_COINS,
+      timeframe: "1h",
+      start_date: "2025-01-01",
+      end_date: "2025-03-31",
+    });
+  });
+
+  it("R4 a timeframe other than 1h blocks the regime run with a reason", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await selectOnlyTimeframe(user, root, "15m");
+    expect(root.getByTestId("regime-run-timeframe-block").textContent).toMatch(/1h bars only/);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    expect(startRegimeBacktest).not.toHaveBeenCalled();
+    expect(container.textContent).toMatch(/The regime book runs on 1h bars only/);
+  });
+
+  it("R4 the screen says which form fields the regime book does not use", () => {
+    const { container } = renderPanel();
+    const scope = within(container).getByTestId("regime-run-scope");
+    expect(scope.textContent).toMatch(/Not used by this run: the Principal, Risk, Leverage and Fee fields/);
+    expect(scope.textContent).toMatch(/principal \$1,000/);
+    expect(scope.textContent).toMatch(/latest 5,760 1h bars ≈ 240 days/);
+  });
+
+  it("R4 a refused regime run shows the server's reason and unlocks Run", async () => {
+    vi.mocked(startRegimeBacktest).mockImplementation(async () => ({
+      status: "REJECTED",
+      error: "The regime book runs on 1h bars only; timeframe 4h is not supported.",
+    }));
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(container.textContent).toMatch(/timeframe 4h is not supported/));
+    expect((root.getByRole("button", { name: /^Run backtest$/i }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("R5 a regime run replaces the previous single-strategy output", async () => {
+    useBacktestJobStore.setState({
+      job: singleJob() as never,
+      request: { symbols: ["BTCUSDT"], timeframes: ["1h"], direction: "LONG", strategy_id: "COMBO_01" } as never,
+      ownJobId: "single-job",
+    });
+    vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    expect(root.queryByTestId("backtest-trade-blotter")).not.toBeNull();
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(root.getByTestId("regime-backtest")).toBeTruthy());
+    expect(root.queryByTestId("backtest-trade-blotter")).toBeNull();
+    expect(useBacktestJobStore.getState().job).toBeNull();
+    const output = container.querySelector("#backtest-output") as HTMLElement;
+    expect(within(output).getByTestId("regime-backtest").textContent).toMatch(/current run/);
+  });
+
+  it("R6 a running regime job drives Running %, progress, and Cancel", async () => {
+    vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: regimeJob() }));
+    vi.mocked(fetchRegimeBacktest).mockImplementation(async () => regimeJob());
+    vi.mocked(cancelRegimeBacktest).mockImplementation(async () => ({
+      status: "CANCELLED",
+      job: regimeJob({ status: "cancelled", phase: "cancelled" }),
+    }));
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    const runButton = await root.findByRole("button", { name: "37%" });
+    expect((runButton as HTMLButtonElement).disabled).toBe(true);
+    const progress = root.getByTestId("backtest-progress");
+    expect(progress.textContent).toMatch(/Regime book · 37% · 1\/3 coins/);
+    expect(progress.textContent).toMatch(/ETHUSDT 2\/3/);
+    vi.mocked(fetchRegimeBacktest).mockImplementation(async () =>
+      regimeJob({ status: "cancelled", phase: "cancelled" }),
+    );
+    await user.click(root.getByRole("button", { name: "Cancel" }));
+    expect(cancelRegimeBacktest).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect((root.getByRole("button", { name: /^Run backtest$/i }) as HTMLButtonElement).disabled).toBe(false),
+    );
+    expect(root.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(root.getByTestId("regime-backtest-status").textContent).toMatch(/cancelled/);
+  });
+
+  it("R6 a regime run still going after a reload shows as the current run", async () => {
+    vi.mocked(fetchRegimeBacktest).mockImplementation(async () => regimeJob());
+    const { container } = renderPanel();
+    const root = within(container);
+    await root.findByRole("button", { name: "37%" });
+    expect(root.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(root.getByTestId("regime-backtest")).toBeTruthy();
+  });
+
+  it("R7 choosing a single strategy, then running it, hides the regime panel", async () => {
+    vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(root.getByTestId("regime-backtest")).toBeTruthy());
+    await user.selectOptions(root.getByRole("combobox", { name: /^Strategy/i }), "COMBO_01");
+    expect(root.queryByTestId("regime-backtest")).toBeNull();
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(startBacktestJob).toHaveBeenCalledTimes(1));
+    expect(root.queryByTestId("regime-backtest")).toBeNull();
+  });
+
+  it("R7 switching the trade book hides the regime panel", async () => {
+    vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(root.getByTestId("regime-backtest")).toBeTruthy());
+    await user.click(root.getByRole("tab", { name: "Long trades" }));
+    expect(root.queryByTestId("regime-backtest")).toBeNull();
+  });
+
+  it("R8 the regime results show the requested and evaluated period", async () => {
+    vi.mocked(startRegimeBacktest).mockImplementation(async () => ({ status: "STARTED", job: doneRegimeJob() }));
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const root = within(container);
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    const period = await root.findByTestId("regime-backtest-period");
+    expect(period.textContent).toMatch(/Requested: Calendar 2025-01-01 → 2025-03-31/);
+    expect(period.textContent).toMatch(/Evaluated: 2025-01-01 00:00 → 2025-03-31 23:00 UTC/);
+    expect(period.textContent).toMatch(/6,480 1h bars evaluated · 240 warm-up bars not traded/);
   });
 });

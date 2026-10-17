@@ -1,35 +1,139 @@
 """Background regime-book backtest for the Backtest tab.
 
-Uses ``run_regime_book``. Entry, stop, target, and fees stay in that module.
-This job only loads candles and keeps one run at a time.
+Uses ``passed_regime_backtest`` (``RegimeClock``, ``run_symbol``,
+``build_result``: the same calls ``run_regime_book`` makes, one symbol at a
+time). Entry, stop, target, exits, sizing, and fees stay in that module. This
+job only chooses the window, loads candles, and keeps one run at a time.
+
+Window
+    The book runs on 1h bars only. A request names a timeframe; anything but
+    1h is rejected, never reinterpreted. Two modes, as on the screen:
+      * dates    start_date / end_date are UTC calendar days (end inclusive).
+      * lookback ``limit`` is a count of 1h bars ending at the latest bar.
+    Warm-up bars are loaded in front of the window and are never traded: each
+    symbol's walk starts at the loader's ``eval_start``.
+    ``MAX_EVAL_BARS`` caps the evaluated 1h bars per symbol. When it applies
+    the latest ``MAX_EVAL_BARS`` bars are kept and the payload says so
+    (``window.requested`` vs ``window.evaluated``, ``window.cap``).
+
+Execution
+    Candles load on the event loop (async DB). Each symbol's walk, and the
+    final sizing step, run in a child interpreter (``python -m
+    app.research.regime_backtest_job``), so the API loop stays free. Progress
+    comes back through a small JSON file; cancel kills the child.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+import json
+import os
+import pickle
+import subprocess
+import sys
+import tempfile
+import time
+import traceback
+import uuid
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any, Awaitable, Callable
 
-from app.research.passed_cap_book import cap_symbols
-from app.research.passed_regime_backtest import run_regime_book
+from app.research.passed_cap_book import PRINCIPAL_USD, cap_symbols
 
+RUN_TIMEFRAME = "1h"
+# Per-symbol cap on evaluated 1h bars. Same as the screen's API bar cap.
+MAX_EVAL_BARS = 20_000
+DEFAULT_LIMIT = 1440
+# Warm-up in front of the window. Never traded.
+_WARMUP_1H = 80
+# Bars a symbol needs (warm-up included) before its walk can emit anything.
 _MIN_BARS = 80
+# BTC daily bars loaded in front of the window for the regime clock.
+_BTC_DAILY_WARMUP = 500
+
+ProgressFn = Callable[[dict[str, Any]], None]
+CancelFn = Callable[[], bool]
+Runner = Callable[[dict[str, Any], CancelFn, ProgressFn], Awaitable[dict[str, Any]]]
+
 _lock = asyncio.Lock()
 _task: asyncio.Task[None] | None = None
-_state: dict[str, Any] = {
-    "status": "idle",
-    "phase": "",
-    "current": "",
-    "symbols": [],
-    "limit": 0,
-    "summary": None,
-    "trades": [],
-    "skipped_symbols": [],
-    "error": None,
-}
+_cancel_flags: dict[str, bool] = {}
+
+
+def _fixed_config() -> dict[str, Any]:
+    """What the book uses regardless of the screen's risk and fee fields."""
+    from app.research.passed_regime_backtest import LEVERAGE, MAKER_FEE, TAKER_FEE
+
+    return {
+        "principal_usd": PRINCIPAL_USD,
+        "taker_fee_pct": TAKER_FEE * 100.0,
+        "maker_fee_pct": MAKER_FEE * 100.0,
+        "leverage": LEVERAGE,
+        "risk_rule": "passed_risk_percent: 2% large / 1% mid of principal, halved when the side is against the BTC daily trend",
+        "fill_model": "existing combination backtest (research_config=None)",
+    }
+
+
+def _idle_state() -> dict[str, Any]:
+    return {
+        "job_id": None,
+        "status": "idle",
+        "phase": "",
+        "current": "",
+        "symbols": [],
+        "timeframe": RUN_TIMEFRAME,
+        "limit": 0,
+        "window": None,
+        "total_symbols": 0,
+        "done_symbols": 0,
+        "walks": 0,
+        "started_at": None,
+        "finished_at": None,
+        "elapsed_seconds": None,
+        "summary": None,
+        "trades": [],
+        "skipped_symbols": [],
+        "error": None,
+        "_t0": 0.0,
+    }
+
+
+_state: dict[str, Any] = _idle_state()
+
+
+def _progress_percent(job: dict[str, Any]) -> float:
+    status = job.get("status")
+    if status == "done":
+        return 100.0
+    total = int(job.get("total_symbols") or 0)
+    if not total:
+        return 0.0
+    done = int(job.get("done_symbols") or 0)
+    intra = {"loading": 0.1, "running": 0.5}.get(str(job.get("phase") or ""), 0.0)
+    if job.get("phase") == "sizing":
+        return 99.0
+    pct = 100.0 * min(1.0, (done + (intra if done < total else 0.0)) / total)
+    return round(min(pct, 99.0), 1)
+
+
+def _public(job: dict[str, Any]) -> dict[str, Any]:
+    out = {k: v for k, v in job.items() if not k.startswith("_")}
+    if job.get("status") == "running" and job.get("_t0"):
+        out["elapsed_seconds"] = round(time.perf_counter() - job["_t0"], 3)
+    pct = _progress_percent(job)
+    out["pct"] = pct
+    out["progress_percent"] = pct
+    # Same names the single-strategy job uses, so the screen shares its progress view.
+    out["total_cells"] = job.get("total_symbols") or 0
+    out["done_cells"] = job.get("done_symbols") or 0
+    out["timeframes"] = [RUN_TIMEFRAME]
+    out["fixed_config"] = _fixed_config()
+    return out
 
 
 def status() -> dict[str, Any]:
-    return dict(_state)
+    return _public(_state)
 
 
 def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, Any]:
@@ -60,94 +164,494 @@ def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, A
     return {"summary": summary, "trades": trades[-trade_limit:]}
 
 
-async def _load_book(symbol: str, limit: int) -> dict[str, Any] | None:
-    from app.research.config import ResearchConfig
+# --- request ---------------------------------------------------------------
+
+
+class RequestError(ValueError):
+    pass
+
+
+def _day(value: Any, name: str) -> str | None:
+    if value is None or str(value).strip() == "":
+        return None
+    text = str(value).strip()[:10]
+    try:
+        return date.fromisoformat(text).isoformat()
+    except ValueError as exc:
+        raise RequestError(f"{name} must be a UTC day YYYY-MM-DD, got {value!r}") from exc
+
+
+def resolve_window(
+    *,
+    limit: Any = None,
+    timeframe: Any = None,
+    start_date: Any = None,
+    end_date: Any = None,
+) -> dict[str, Any]:
+    """The window a request asks for. Raises ``RequestError`` on anything the book cannot run."""
+    tf = str(timeframe or RUN_TIMEFRAME).strip().lower()
+    if tf != RUN_TIMEFRAME:
+        raise RequestError(
+            f"The regime book runs on {RUN_TIMEFRAME} bars only; timeframe {tf} is not supported."
+        )
+    start = _day(start_date, "start_date")
+    end = _day(end_date, "end_date")
+    if start and end and end < start:
+        raise RequestError(f"end_date {end} is before start_date {start}.")
+    if start or end:
+        return {
+            "mode": "dates",
+            "timeframe": RUN_TIMEFRAME,
+            "start_date": start,
+            "end_date": end,
+            "limit": None,
+            "max_eval_bars": MAX_EVAL_BARS,
+        }
+    try:
+        bars = int(limit if limit not in (None, "") else DEFAULT_LIMIT)
+    except (TypeError, ValueError) as exc:
+        raise RequestError(f"limit must be a whole number of {RUN_TIMEFRAME} bars, got {limit!r}") from exc
+    if bars < 1:
+        raise RequestError(f"limit must be at least 1 {RUN_TIMEFRAME} bar, got {bars}.")
+    return {
+        "mode": "lookback",
+        "timeframe": RUN_TIMEFRAME,
+        "start_date": None,
+        "end_date": None,
+        "limit": bars,
+        "max_eval_bars": MAX_EVAL_BARS,
+    }
+
+
+# --- loading (event loop, async DB) ----------------------------------------
+
+
+def _apply_cap(candles: list[dict[str, Any]], eval_start: int) -> tuple[list[dict[str, Any]], int, bool]:
+    """Keep the latest MAX_EVAL_BARS evaluated bars and their warm-up."""
+    if len(candles) - eval_start <= MAX_EVAL_BARS:
+        return candles, eval_start, False
+    first = len(candles) - MAX_EVAL_BARS
+    keep_from = max(0, first - _WARMUP_1H)
+    return candles[keep_from:], first - keep_from, True
+
+
+def _bar_iso(candle: dict[str, Any] | None) -> str | None:
+    if not candle:
+        return None
+    from app.research.query_utils import candle_timestamp
+
+    ts = candle_timestamp(candle)
+    return ts.isoformat() if ts is not None else None
+
+
+async def _load_book(symbol: str, window: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """1h series plus the HTF/LTF series the walks read, for one symbol and window."""
     from app.research.service import _load_htf_candles_for_combo, _load_research_candles
 
-    warmup = max(int(ResearchConfig().min_bars), 80)
-    candles, _, meta = await _load_research_candles(
-        symbol, "1h", limit=limit, warmup_bars=warmup, use_research_cache=False, tail_warmup=True
+    dated = window["mode"] == "dates"
+    start_date = window["start_date"] if dated else None
+    end_date = window["end_date"] if dated else None
+    limit = MAX_EVAL_BARS if dated else min(int(window["limit"]), MAX_EVAL_BARS)
+    candles, eval_start, meta = await _load_research_candles(
+        symbol,
+        RUN_TIMEFRAME,
+        limit=limit,
+        start_date=start_date,
+        end_date=end_date,
+        warmup_bars=_WARMUP_1H,
+        use_research_cache=False,
+        tail_warmup=True,
     )
-    if len(candles) < _MIN_BARS:
-        return None
-    c1h, c4h = await _load_htf_candles_for_combo(
+    candles, eval_start, capped = _apply_cap(list(candles), int(eval_start or 0))
+    # A lookback longer than the cap was loaded at the cap: that is a cap too.
+    capped = capped or (not dated and int(window["limit"]) > MAX_EVAL_BARS)
+    evaluated = len(candles) - eval_start
+    info = {
+        "bars_loaded": len(candles),
+        "warmup_bars": eval_start,
+        "bars_evaluated": evaluated,
+        "period_start": _bar_iso(candles[eval_start]) if evaluated > 0 else None,
+        "period_end": _bar_iso(candles[-1]) if evaluated > 0 else None,
+        "capped": capped,
+        "candle_source": meta.get("candle_source"),
+    }
+    if evaluated <= 0 or len(candles) < _MIN_BARS:
+        return None, info
+    span = len(candles)
+    _, c4h = await _load_htf_candles_for_combo(
         symbol,
         require_htf=True,
-        setup_timeframe="1h",
-        limit=limit,
-        start_date=None,
-        end_date=None,
-        warmup_bars=warmup,
+        setup_timeframe=RUN_TIMEFRAME,
+        limit=span,
+        start_date=start_date,
+        end_date=end_date,
+        warmup_bars=_WARMUP_1H,
         use_research_cache=False,
     )
     c15, _, _ = await _load_research_candles(
-        symbol, "15m", limit=max(limit * 4, 400), warmup_bars=80, use_research_cache=False, tail_warmup=True
+        symbol,
+        "15m",
+        limit=max(span * 4, 400),
+        start_date=start_date,
+        end_date=end_date,
+        warmup_bars=_WARMUP_1H * 4,
+        use_research_cache=False,
+        tail_warmup=True,
     )
     c1d, _, _ = await _load_research_candles(
-        symbol, "1d", limit=max(limit // 24, 120), warmup_bars=20, use_research_cache=False, tail_warmup=True
+        symbol,
+        "1d",
+        limit=max(span // 24 + 2, 120),
+        start_date=start_date,
+        end_date=end_date,
+        warmup_bars=120 if dated else 20,
+        use_research_cache=False,
+        tail_warmup=True,
     )
-    return {"candles": candles, "meta": meta, "c1h": c1h, "c4h": c4h, "c15": c15, "c1d": c1d}
+    book = {
+        "candles": candles,
+        "eval_start": eval_start,
+        "meta": meta,
+        "c1h": None,
+        "c4h": c4h,
+        "c15": c15,
+        "c1d": c1d,
+    }
+    return book, info
 
 
-async def _run(symbols: list[str], limit: int) -> None:
-    global _state
-    skipped: list[str] = []
-    books: dict[str, Any] = {}
+async def _load_btc_daily(window: dict[str, Any]) -> list[dict[str, Any]]:
+    from app.research.service import _load_research_candles
+
+    if window["mode"] == "dates":
+        daily, _, _ = await _load_research_candles(
+            "BTCUSDT",
+            "1d",
+            limit=MAX_EVAL_BARS // 24 + _BTC_DAILY_WARMUP,
+            start_date=window["start_date"],
+            end_date=window["end_date"],
+            warmup_bars=_BTC_DAILY_WARMUP,
+            use_research_cache=False,
+        )
+        return list(daily)
+    span_days = (min(int(window["limit"]), MAX_EVAL_BARS) + _WARMUP_1H) // 24 + 2
+    daily, _, _ = await _load_research_candles(
+        "BTCUSDT",
+        "1d",
+        limit=span_days + _BTC_DAILY_WARMUP,
+        warmup_bars=40,
+        use_research_cache=False,
+        tail_warmup=True,
+    )
+    return list(daily)
+
+
+# --- CPU work (child interpreter) ------------------------------------------
+
+
+def _execute(
+    payload: dict[str, Any],
+    *,
+    should_cancel: CancelFn | None = None,
+    progress: ProgressFn | None = None,
+    backtest_fn: Callable[..., dict[str, Any]] | None = None,
+    postprocess_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """One CPU step. Same calls, in the same order, as ``run_regime_book``."""
+    from app.research.passed_regime_backtest import RegimeClock, build_result, run_symbol
+    from app.signals.config import SignalConfig
+
+    clock = RegimeClock(payload["btc_daily"], SignalConfig())
+    op = payload["op"]
+    if op == "symbol":
+        return run_symbol(
+            payload["symbol"],
+            payload["book"],
+            clock,
+            signal_config=None,
+            research_config=None,
+            market_cap=None,
+            backtest_fn=backtest_fn,
+            should_cancel=should_cancel,
+            progress=progress,
+        )
+    if op == "finish":
+        return build_result(payload["symbol_results"], clock, postprocess_fn=postprocess_fn)
+    raise ValueError(f"unknown op {op!r}")
+
+
+def _cli(argv: list[str]) -> int:
+    """Child entry: pickle payload in, pickle result out, progress as JSON."""
+    if len(argv) != 4:
+        return 2
+    os.environ["RESEARCH_CPU_WORKER"] = "1"
+    progress_path = Path(argv[3])
+    last = [0.0]
+
+    def progress(event: dict[str, Any]) -> None:
+        now = time.perf_counter()
+        if now - last[0] < 0.25:
+            return
+        last[0] = now
+        tmp = progress_path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps(event, default=str), encoding="utf-8")
+            os.replace(tmp, progress_path)
+        except OSError:
+            pass
+
     try:
+        with Path(argv[1]).open("rb") as handle:
+            payload = pickle.load(handle)
+        result = _execute(payload, progress=progress)
+    except Exception as exc:  # noqa: BLE001
+        result = {
+            "status": "ERROR",
+            "reason": f"{type(exc).__name__}: {exc}",
+            "traceback": traceback.format_exc()[-2000:],
+        }
+    Path(argv[2]).write_bytes(pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL))
+    return 0
+
+
+async def _run_child(payload: dict[str, Any], should_cancel: CancelFn, on_progress: ProgressFn) -> dict[str, Any]:
+    """Run ``_execute(payload)`` in its own interpreter. A cancel kills it."""
+    from app.research.backtest_cpu_pool import _spawn_python_executable, _write_payload_blob
+
+    blob_path = await asyncio.to_thread(_write_payload_blob, payload)
+
+    def _run() -> dict[str, Any]:
+        exe = _spawn_python_executable() or sys.executable
+        fd, result_path = tempfile.mkstemp(prefix="regime_bt_", suffix=".pkl")
+        os.close(fd)
+        fd, progress_path = tempfile.mkstemp(prefix="regime_bt_", suffix=".json")
+        os.close(fd)
+        backend = str(Path(__file__).resolve().parents[2])
+        env = os.environ.copy()
+        env["PYTHONPATH"] = backend + os.pathsep + env.get("PYTHONPATH", "")
+        proc = subprocess.Popen(
+            [exe, "-m", "app.research.regime_backtest_job", blob_path, result_path, progress_path],
+            cwd=backend,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        seen = 0.0
+        try:
+            while proc.poll() is None:
+                if should_cancel():
+                    proc.kill()
+                    return {"status": "CANCELLED"}
+                try:
+                    stamp = os.path.getmtime(progress_path)
+                    if stamp != seen:
+                        seen = stamp
+                        text = Path(progress_path).read_text(encoding="utf-8")
+                        if text:
+                            on_progress(json.loads(text))
+                except (OSError, ValueError):
+                    pass
+                time.sleep(0.05)
+            stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+            result_file = Path(result_path)
+            if result_file.exists() and result_file.stat().st_size > 0:
+                with result_file.open("rb") as handle:
+                    return pickle.load(handle)
+            raise OSError(0, f"Regime worker exited {proc.returncode} via {exe}. {stderr[-500:]}")
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            for path in (result_path, progress_path, blob_path):
+                try:
+                    Path(path).unlink()
+                except OSError:
+                    pass
+
+    return await asyncio.to_thread(_run)
+
+
+# Swapped in tests for an in-process runner.
+_runner: Runner = _run_child
+
+
+# --- job -------------------------------------------------------------------
+
+
+def _finish(job: dict[str, Any], status: str, *, error: str | None = None) -> None:
+    job["status"] = status
+    job["phase"] = status
+    job["current"] = ""
+    job["error"] = error
+    job["finished_at"] = datetime.now(timezone.utc).isoformat()
+    if job.get("_t0"):
+        job["elapsed_seconds"] = round(time.perf_counter() - job["_t0"], 3)
+
+
+def _evaluated(per_symbol: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    rows = [row for row in per_symbol.values() if row.get("bars_evaluated")]
+    starts = [row["period_start"] for row in rows if row.get("period_start")]
+    ends = [row["period_end"] for row in rows if row.get("period_end")]
+    return {
+        "period_start": min(starts) if starts else None,
+        "period_end": max(ends) if ends else None,
+        "bars_loaded": sum(int(row.get("bars_loaded") or 0) for row in rows),
+        "warmup_bars": sum(int(row.get("warmup_bars") or 0) for row in rows),
+        "bars_evaluated": sum(int(row.get("bars_evaluated") or 0) for row in rows),
+        "symbols": per_symbol,
+    }
+
+
+async def _run(job: dict[str, Any]) -> None:
+    job_id = job["job_id"]
+
+    def cancelled() -> bool:
+        return bool(_cancel_flags.get(job_id))
+
+    def on_progress(event: dict[str, Any]) -> None:
+        job["walks_in_symbol"] = int(event.get("walks") or 0)
+        side = " ".join(str(event.get(key) or "") for key in ("strategy_id", "direction")).strip()
+        if side:
+            job["current"] = f"{event.get('symbol') or ''} {job['done_symbols'] + 1}/{job['total_symbols']} · {side}"
+
+    window = job["window"]
+    symbols = list(job["symbols"])
+    per_symbol: dict[str, dict[str, Any]] = {}
+    results: list[dict[str, Any]] = []
+    skipped: list[str] = []
+    try:
+        job["phase"] = "loading"
+        job["current"] = "BTCUSDT 1d regime"
+        btc_daily = await _load_btc_daily(window)
         for index, symbol in enumerate(symbols, start=1):
-            _state["phase"] = "loading"
-            _state["current"] = f"{symbol} {index}/{len(symbols)}"
-            book = await _load_book(symbol, limit)
+            if cancelled():
+                break
+            job["phase"] = "loading"
+            job["current"] = f"{symbol} {index}/{len(symbols)}"
+            book, info = await _load_book(symbol, window)
+            per_symbol[symbol] = info
+            job["window"]["evaluated"] = _evaluated(per_symbol)
+            if info.get("capped"):
+                job["window"]["cap"]["applied"] = True
+                job["window"]["cap"]["symbols"].append(symbol)
             if book is None:
                 skipped.append(symbol)
+                job["skipped_symbols"] = list(skipped)
+                job["done_symbols"] = index
                 continue
-            books[symbol] = book
-        if not books:
-            _state["status"] = "error"
-            _state["error"] = "No symbol had enough 1h candles."
-            _state["skipped_symbols"] = skipped
+            if cancelled():
+                break
+            job["phase"] = "running"
+            job["walks_in_symbol"] = 0
+            result = await _runner(
+                {"op": "symbol", "symbol": symbol, "book": book, "btc_daily": btc_daily},
+                cancelled,
+                on_progress,
+            )
+            del book
+            status = str(result.get("status") or "")
+            if status == "ERROR":
+                raise RuntimeError(f"{symbol}: {result.get('reason')}")
+            if status == "CANCELLED" or cancelled():
+                break
+            job["walks"] = int(job.get("walks") or 0) + int(result.get("walks") or 0)
+            results.append(result)
+            job["done_symbols"] = index
+        if cancelled():
+            _finish(job, "cancelled")
             return
-        _state["phase"] = "running"
-        _state["current"] = "regime book"
-        from app.research.service import _load_research_candles
-
-        btc_daily, _, _ = await _load_research_candles(
-            "BTCUSDT", "1d", limit=500, warmup_bars=40, use_research_cache=False, tail_warmup=True
-        )
-        result = await asyncio.to_thread(run_regime_book, books, btc_daily)
-        slim = slim_result(result)
-        _state["summary"] = slim["summary"]
-        _state["trades"] = slim["trades"]
-        _state["skipped_symbols"] = skipped
-        _state["status"] = "done" if result.get("status") != "CANCELLED" else "cancelled"
-        _state["phase"] = "done"
-        _state["error"] = None
+        if not results:
+            _finish(job, "error", error=f"No symbol had {RUN_TIMEFRAME} candles in the requested window.")
+            return
+        job["phase"] = "sizing"
+        job["current"] = "regime book"
+        final = await _runner({"op": "finish", "symbol_results": results, "btc_daily": btc_daily}, cancelled, on_progress)
+        if str(final.get("status") or "") == "ERROR":
+            raise RuntimeError(str(final.get("reason")))
+        if final.get("status") == "CANCELLED" or cancelled():
+            _finish(job, "cancelled")
+            return
+        slim = slim_result(final)
+        job["summary"] = slim["summary"]
+        job["trades"] = slim["trades"]
+        _finish(job, "done")
     except Exception as exc:  # noqa: BLE001
-        _state["status"] = "error"
-        _state["error"] = str(exc)
-        _state["skipped_symbols"] = skipped
+        _finish(job, "error", error=f"{type(exc).__name__}: {exc}")
+    finally:
+        job["skipped_symbols"] = list(skipped)
+        _cancel_flags.pop(job_id, None)
 
 
-async def start(symbols: list[str], limit: int) -> dict[str, Any]:
+async def start(
+    symbols: list[str],
+    limit: Any = None,
+    *,
+    timeframe: Any = None,
+    start_date: Any = None,
+    end_date: Any = None,
+) -> dict[str, Any]:
     """Start one regime-book run. A run already in progress is left alone."""
     global _task, _state
     allowed = set(cap_symbols())
-    chosen = [s for s in (str(sym).upper() for sym in symbols) if s in allowed]
+    chosen: list[str] = []
+    for sym in (str(s).strip().upper() for s in symbols):
+        if sym in allowed and sym not in chosen:
+            chosen.append(sym)
     if not chosen:
         return {"status": "REJECTED", "error": "No large-cap or mid-cap symbols."}
+    try:
+        window = resolve_window(limit=limit, timeframe=timeframe, start_date=start_date, end_date=end_date)
+    except RequestError as exc:
+        return {"status": "REJECTED", "error": str(exc)}
     async with _lock:
-        if _state["status"] == "running":
+        if _task is not None and not _task.done():
             return {"status": "ALREADY_RUNNING", "job": status()}
-        _state = {
-            "status": "running",
-            "phase": "starting",
-            "current": "",
-            "symbols": chosen,
-            "limit": int(limit),
-            "summary": None,
-            "trades": [],
-            "skipped_symbols": [],
-            "error": None,
+        job = _idle_state()
+        job_id = uuid.uuid4().hex[:12]
+        window = {
+            **window,
+            "requested": {
+                "mode": window["mode"],
+                "timeframe": window["timeframe"],
+                "start_date": window["start_date"],
+                "end_date": window["end_date"],
+                "limit": window["limit"],
+            },
+            "evaluated": None,
+            "cap": {"max_eval_bars": MAX_EVAL_BARS, "applied": False, "symbols": []},
         }
-        _task = asyncio.create_task(_run(chosen, max(80, min(int(limit), 5000))))
+        job.update(
+            {
+                "job_id": job_id,
+                "status": "running",
+                "phase": "starting",
+                "symbols": chosen,
+                "limit": window["limit"] or 0,
+                "window": window,
+                "total_symbols": len(chosen),
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "_t0": time.perf_counter(),
+            }
+        )
+        _cancel_flags[job_id] = False
+        _state = job
+        _task = asyncio.create_task(_run(job), name=f"regime_backtest_{job_id}")
     return {"status": "STARTED", "job": status()}
+
+
+async def cancel(wait_seconds: float = 5.0) -> dict[str, Any]:
+    """Stop the running job. Waits briefly so the screen sees it settled."""
+    job = _state
+    task = _task
+    if job.get("status") != "running" or not job.get("job_id"):
+        return {"status": "NOT_RUNNING", "job": status()}
+    _cancel_flags[job["job_id"]] = True
+    job["phase"] = "cancelling"
+    if task is not None and not task.done():
+        await asyncio.wait({task}, timeout=wait_seconds)
+    if job.get("status") == "running":
+        _finish(job, "cancelled")
+    return {"status": "CANCELLED", "job": status()}
+
+
+if __name__ == "__main__":
+    sys.exit(_cli(sys.argv))

@@ -1618,12 +1618,65 @@ export function fetchPassedRegime(signal?: AbortSignal) {
   return getJson<PassedRegimeResponse>("/api/paper/passed-regime", { signal });
 }
 
+export type RegimeBacktestPeriod = {
+  period_start?: string | null;
+  period_end?: string | null;
+  bars_loaded?: number;
+  warmup_bars?: number;
+  bars_evaluated?: number;
+  capped?: boolean;
+};
+
+export type RegimeBacktestWindow = {
+  mode?: "dates" | "lookback";
+  timeframe?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  limit?: number | null;
+  max_eval_bars?: number;
+  /** What the screen asked for. */
+  requested?: {
+    mode?: "dates" | "lookback";
+    timeframe?: string;
+    start_date?: string | null;
+    end_date?: string | null;
+    limit?: number | null;
+  };
+  /** What the book walked: warm-up bars are loaded in front and never traded. */
+  evaluated?: (RegimeBacktestPeriod & { symbols?: Record<string, RegimeBacktestPeriod> }) | null;
+  /** Per-symbol cap on evaluated 1h bars; the latest bars are kept when it applies. */
+  cap?: { max_eval_bars?: number; applied?: boolean; symbols?: string[] };
+};
+
 export type RegimeBacktestStatus = {
   status: "idle" | "running" | "done" | "error" | "cancelled" | string;
+  job_id?: string | null;
   phase?: string;
   current?: string;
   symbols?: string[];
+  timeframe?: string;
   limit?: number;
+  window?: RegimeBacktestWindow | null;
+  total_symbols?: number;
+  done_symbols?: number;
+  total_cells?: number;
+  done_cells?: number;
+  pct?: number;
+  progress_percent?: number;
+  walks?: number;
+  walks_in_symbol?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  elapsed_seconds?: number | null;
+  /** Sizing and fees the book uses whatever the form says. */
+  fixed_config?: {
+    principal_usd?: number;
+    taker_fee_pct?: number;
+    maker_fee_pct?: number;
+    leverage?: number;
+    risk_rule?: string;
+    fill_model?: string;
+  };
   error?: string | null;
   skipped_symbols?: string[];
   summary?: {
@@ -1661,19 +1714,43 @@ export type RegimeBacktestStatus = {
   }>;
 };
 
-export function startRegimeBacktest(body: { symbols: string[]; limit: number }) {
+export type RegimeBacktestStartBody = {
+  symbols: string[];
+  /** The book runs on 1h bars only; the server rejects anything else. */
+  timeframe: "1h";
+  /** Lookback mode: number of 1h bars ending at the latest bar. */
+  limit?: number;
+  /** Calendar mode: UTC days, end inclusive. */
+  start_date?: string;
+  end_date?: string;
+};
+
+export type RegimeBacktestStartResponse = {
+  status: "STARTED" | "ALREADY_RUNNING" | "REJECTED" | string;
+  error?: string;
+  job?: RegimeBacktestStatus;
+};
+
+export function startRegimeBacktest(body: RegimeBacktestStartBody) {
   return fetch(`${API_BASE}/api/research/regime-backtest/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }).then(async (res) => {
     if (!res.ok) throw new Error(`API /api/research/regime-backtest/start failed: ${res.status}`);
-    return res.json() as Promise<Record<string, unknown>>;
+    return res.json() as Promise<RegimeBacktestStartResponse>;
   });
 }
 
 export function fetchRegimeBacktest() {
   return getJson<RegimeBacktestStatus>("/api/research/regime-backtest");
+}
+
+export function cancelRegimeBacktest() {
+  return fetch(`${API_BASE}/api/research/regime-backtest/cancel`, { method: "POST" }).then(async (res) => {
+    if (!res.ok) throw new Error(`API /api/research/regime-backtest/cancel failed: ${res.status}`);
+    return res.json() as Promise<{ status: string; job?: RegimeBacktestStatus }>;
+  });
 }
 
 export async function startBacktestJob(body: {
