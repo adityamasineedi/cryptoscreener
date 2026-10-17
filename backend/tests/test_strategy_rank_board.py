@@ -67,12 +67,14 @@ def test_board_window_and_descriptions():
     assert ("COMBO_02_LOCAL", "LONG") not in rows
     assert "COMBO_02_LOCAL" in [a["id"] for a in rows[("COMBO_01", "LONG")]["aliases"]]
 
-    # Not in the curated catalog: registry text, or family from the rank file.
-    assert rows[("COMBO_01", "LONG")]["description_source"] == "combination_registry"
+    # Backtest-menu ids now have RESEARCH catalog cards (strategies screen audit
+    # 2026-10-17), so their rows take the catalog text.
+    assert rows[("COMBO_01", "LONG")]["catalog_id"] == "COMBO_01"
+    assert rows[("COMBO_01", "LONG")]["description_source"] == "catalog"
     candle = rows[("CANDLE12_V2", "LONG")]
-    assert candle["in_catalog"] is False
-    assert candle["description_source"] == "rank_file"
-    assert "candle12" in candle["summary"]
+    assert candle["in_catalog"] is True
+    assert candle["catalog_id"] == "CANDLE12_V2"
+    assert candle["description_source"] == "catalog"
     assert candle["fill_label"] == "0.02% slippage included"
 
     scalp = next(g for g in board["groups"] if g["id"] == "scalp")
