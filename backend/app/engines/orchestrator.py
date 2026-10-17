@@ -196,7 +196,7 @@ class CalculationOrchestrator:
         self.market = market
         self.rest = rest
         self.ohlcv = ohlcv or ohlcv_store
-        self._paper_replay_seeded: set[str] = set()
+        self._paper_replay_seeded: set[tuple[str, str]] = set()
         self.engines = engines or engine_store
         cfg = settings.indicators_config
         market_cfg = settings.market_config
@@ -1211,19 +1211,22 @@ class CalculationOrchestrator:
                 # Flush opens/closes first so a restart mid-sleep cannot drop them
                 await flush_paper_trade_persists(paper)
                 prices: dict[str, float] = {}
-                ranges: dict[str, list[tuple[float, float]]] = {}
-                fresh_opens: dict[str, list[str]] = {}
+                ranges: dict[tuple[str, str], list[tuple[Any, float, float]]] = {}
+                fresh_opens: dict[tuple[str, str], list[str]] = {}
+                visited: set[tuple[str, str]] = set()
                 for pos in list(paper._open.values()):  # noqa: SLF001
                     sym = getattr(pos, "symbol", None)
-                    if not sym or sym in ranges or sym in fresh_opens:
-                        continue
                     tf = getattr(pos, "timeframe", None) or "1h"
+                    key = paper.replay_key(sym or "", tf)
+                    if not sym or key in visited:
+                        continue
+                    visited.add(key)
                     closed_bars = self.ohlcv.get_closed(sym, tf)
-                    seen = paper._replayed_bar_opens.setdefault(sym, set())
-                    if sym not in self._paper_replay_seeded:
+                    seen = paper._replayed_bar_opens.setdefault(key, set())
+                    if key not in self._paper_replay_seeded:
                         for candle in closed_bars:
                             seen.add(candle.open_time.isoformat())
-                        self._paper_replay_seeded.add(sym)
+                        self._paper_replay_seeded.add(key)
                     else:
                         fresh = [
                             candle
@@ -1232,16 +1235,17 @@ class CalculationOrchestrator:
                         ]
                         fresh.sort(key=lambda candle: candle.open_time)
                         if fresh:
-                            ranges[sym] = [
-                                (float(candle.high), float(candle.low)) for candle in fresh
+                            ranges[key] = [
+                                (candle.open_time, float(candle.high), float(candle.low))
+                                for candle in fresh
                             ]
-                            fresh_opens[sym] = [
+                            fresh_opens[key] = [
                                 candle.open_time.isoformat() for candle in fresh
                             ]
                     forming = self.ohlcv.get_open(sym, tf)
                     if forming is not None:
-                        ranges.setdefault(sym, []).append(
-                            (float(forming.high), float(forming.low))
+                        ranges.setdefault(key, []).append(
+                            (forming.open_time, float(forming.high), float(forming.low))
                         )
 
                     def _last_close(sym: str = sym, pos: Any = pos) -> float | None:
@@ -1255,12 +1259,12 @@ class CalculationOrchestrator:
                         market_store.get_ticker(sym),
                         _last_close,
                     )
-                    if px is not None:
+                    if px is not None and sym not in prices:
                         prices[sym] = px
                 if ranges:
                     paper.replay_bar_ranges(ranges)
-                    for sym, opens in fresh_opens.items():
-                        paper._replayed_bar_opens.setdefault(sym, set()).update(opens)
+                    for key, opens in fresh_opens.items():
+                        paper._replayed_bar_opens.setdefault(key, set()).update(opens)
                 if prices:
                     paper.tick(prices)
                     for sym, px in prices.items():
