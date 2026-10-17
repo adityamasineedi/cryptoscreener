@@ -15,6 +15,7 @@ import app.services.paper_risk as pr
 import app.services.paper_trade as paper_mod
 from app.services.paper_risk import PaperRiskPolicy
 from app.services.paper_trade import PaperPosition, PaperTradeEngine
+from passed_paper_bars import exit_passed_on_bar
 
 SYM = "BTCUSDT"
 PLAN = {"entry": 60000.0, "stop": 59000.0, "tp1": 62000.0}
@@ -239,12 +240,13 @@ def _lose_until_halted(eng: PaperTradeEngine, *, risk: float = 0.03) -> int:
     """Open and stop out passed-book longs until the engine refuses to open."""
     losers = 0
     for i in range(12):
-        # Close inside the setup bar; the next setup bar is the one after it.
-        eng._now = lambda i=i: BAR0 + timedelta(hours=i, minutes=30)
-        pos = _open(eng, "passed", _bar(i), risk=risk)
+        # Setup on bar 2i fills on bar 2i+1 and stops out there; the next
+        # setup bar (2i+2) is the one after the exit bar.
+        eng._now = lambda i=i: BAR0 + timedelta(hours=2 * i + 1, minutes=30)
+        pos = _open(eng, "passed", _bar(2 * i), risk=risk)
         if pos is None:
             return losers
-        closed = eng.tick({SYM: PLAN["stop"]})
+        closed = exit_passed_on_bar(eng, SYM, PLAN["stop"], _bar(2 * i + 1))
         assert [p.exit_reason for p in closed] == ["STOP"]
         losers += 1
     raise AssertionError("engine never halted")
@@ -265,7 +267,7 @@ def test_drawdown_halt_survives_a_restart_from_the_ledger():
 
     assert fresh.peak_equity == pytest.approx(1000.0)
     assert fresh.equity == pytest.approx(eng.equity)
-    next_bar = _bar(losers + 5)
+    next_bar = _bar(2 * losers + 5)
     for opener in OPENERS:
         assert _open(fresh, opener, next_bar) is None
         assert fresh._last_skip_reason.startswith(f"{SYM}:peak_drawdown_halt_pct=")
@@ -278,7 +280,7 @@ def test_reset_still_clears_a_rebuilt_drawdown_halt():
     losers = _lose_until_halted(eng)
     fresh = _engine(policy)
     fresh.hydrate_from_rows(_ledger_rows(eng))
-    assert _open(fresh, "passed", _bar(losers + 5)) is None
+    assert _open(fresh, "passed", _bar(2 * losers + 5)) is None
 
     fresh.reset()
 
@@ -288,7 +290,7 @@ def test_reset_still_clears_a_rebuilt_drawdown_halt():
     assert fresh._day_pnl_r == 0.0
     assert fresh._strategy_equity_r == 0.0
     assert fresh._strategy_peak_r == 0.0
-    assert _open(fresh, "passed", _bar(losers + 5)) is not None
+    assert _open(fresh, "passed", _bar(2 * losers + 5)) is not None
 
 
 def test_peak_is_rebuilt_from_the_running_equity_not_the_final_value():
@@ -452,7 +454,7 @@ def test_rebuilt_trackers_match_the_engine_that_made_the_ledger():
     for i, exit_px in enumerate([PLAN["tp1"], PLAN["stop"], PLAN["stop"]]):
         eng._now = lambda i=i: datetime.now(timezone.utc) + timedelta(microseconds=i)
         assert _open(eng, "passed", _bar(i * 2)) is not None
-        assert len(eng.tick({SYM: exit_px})) == 1
+        assert len(exit_passed_on_bar(eng, SYM, exit_px, _bar(i * 2 + 1))) == 1
         # Later setup bars sit before the wall-clock exit bar; clear the re-entry memory.
         eng._last_exit_bar_open.clear()
 

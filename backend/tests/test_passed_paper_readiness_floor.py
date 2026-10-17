@@ -88,6 +88,8 @@ def rig(monkeypatch):
             candles_15m=_bars(n_15m, minutes=15),
             market_direction="BEARISH",
             force=force,
+            # The causal fill bar: the bar after the tip, opening at the plan.
+            next_bar={"time": TIP_CLOSE, "open": 100.0},
         )
 
     return SimpleNamespace(paper=paper, watcher=watcher, evals=evals, run=_run)

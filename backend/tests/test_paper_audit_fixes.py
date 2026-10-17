@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from app.services.paper_classification import (
     COMBO_ID_V1,
     COMBO_VERSION_V1,
@@ -137,8 +139,33 @@ def _passed(eng: PaperTradeEngine, **overrides):
     return eng.open_passed_position(**payload)
 
 
-def test_passed_open_refused_when_next_open_is_past_tp1():
+def _gated() -> PaperTradeEngine:
+    """The opt-in fill re-check: TP1 must clear 2R from the fill."""
     eng = _engine()
+    eng.passed_fill_min_rr = 2.0
+    return eng
+
+
+def test_fill_min_r_recheck_is_off_by_default_like_the_backtest():
+    # The backtest regime book takes the trade whatever TP1 is worth from the
+    # next-open fill; the signal cleared min R at the signal close.
+    assert _engine().passed_fill_min_rr is None
+    eng = _engine()
+    pos = _passed(
+        eng,
+        eval_result={
+            "status": "LONG_ENTRY_CANDIDATE",
+            "entry_price": 100.0,
+            "stop_price": 98.0,
+            "tp1": 103.0,
+        },
+    )
+    assert pos is not None
+    assert pos.signal_snippet["tp1_r_at_fill"] == pytest.approx(1.5)
+
+
+def test_passed_open_refused_when_next_open_is_past_tp1():
+    eng = _gated()
     pos = _passed(
         eng,
         symbol="BTCUSDT",
@@ -154,7 +181,7 @@ def test_passed_open_refused_when_next_open_is_past_tp1():
 
 
 def test_passed_open_refused_when_tp1_is_inside_min_rr():
-    eng = _engine()
+    eng = _gated()
     pos = _passed(
         eng,
         eval_result={
@@ -169,7 +196,7 @@ def test_passed_open_refused_when_tp1_is_inside_min_rr():
 
 
 def test_passed_short_refused_when_tp1_is_above_entry():
-    eng = _engine()
+    eng = _gated()
     pos = _passed(
         eng,
         combination_id="COMBO_01",
@@ -187,7 +214,7 @@ def test_passed_short_refused_when_tp1_is_above_entry():
 
 
 def test_passed_open_with_target_clearing_min_rr_still_opens():
-    eng = _engine()
+    eng = _gated()
     long_pos = _passed(eng)
     assert long_pos is not None
     assert long_pos.side == "LONG"

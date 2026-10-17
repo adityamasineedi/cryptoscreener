@@ -160,6 +160,8 @@ def passed(monkeypatch, h1):
             candles_15m=_m15(h1[-1]),
             market_direction="BEARISH",
             force=force,
+            # The causal fill bar: the bar after the tip, opening at the plan.
+            next_bar={"time": series_1h[-1]["time"] + H1, "open": 100.0},
         )
 
     return SimpleNamespace(paper=paper, watcher=watcher, evals=evals, run=_run, clock=clock)
@@ -242,6 +244,12 @@ def test_passed_live_store_series_is_gated(passed, monkeypatch, h1, h4):
         store_mod.ohlcv_store,
         "get_candles_for_engine",
         lambda _sym, tf, include_open=False: list(store[tf]),
+    )
+    # The forming bar after the tip is the causal fill bar.
+    monkeypatch.setattr(
+        store_mod.ohlcv_store,
+        "get_open",
+        lambda _sym, _tf: SimpleNamespace(open_time=h1[-1]["time"] + H1, open=100.0),
     )
     watcher = passed.watcher
     assert watcher.on_closed_1h(SYMBOL, market_direction="BEARISH") == []

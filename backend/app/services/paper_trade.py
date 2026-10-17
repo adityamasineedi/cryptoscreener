@@ -18,7 +18,18 @@ from typing import Any, Callable, Awaitable
 
 from app.core.logging import get_logger
 from app.services.paper_risk import PaperRiskPolicy, evaluate_paper_entry_risk, policy_from_settings
+from app.research.causal_execution import (
+    CAUSAL_NEXT_OPEN,
+    EXECUTION_MODEL_VERSION,
+    OUTCOME_GAP_EXIT,
+    OUTCOME_GAP_THROUGH_STOP,
+    causal_exit,
+    causal_exit_price,
+)
 from app.research.combination_engine import revalidate_combo02_long_fill
+from app.research.config import ResearchConfig
+from app.research.ohlcv_continuity import step_seconds
+from app.research.trade_fees import DEFAULT_TAKER_FEE, FEE_TYPE_TAKER, calculate_execution_fee
 from app.services.paper_sizing import (
     DEFAULT_PAPER_LEVERAGE,
     net_paper_pnl,
@@ -110,6 +121,47 @@ def exit_bar_open(closed_at: Any, timeframe: str) -> datetime | None:
     return datetime.fromtimestamp((closed_ms // step) * step / 1000, tz=timezone.utc)
 
 
+def _next_bar_iso(bar_open: Any, timeframe: str) -> str:
+    """Open time (UTC ISO) of the bar after the one opened at ``bar_open``."""
+    start = _parse_utc(canonical_source_candle(bar_open))
+    step = step_seconds(timeframe)
+    if start is None or not step:
+        return ""
+    return (start + timedelta(seconds=step)).isoformat()
+
+
+# A missing bar inside an open causal passed position is booked as GAP_EXIT
+# once the bar after it has been closed this long (REST catch-up runs each
+# minute). Same bound as the watchers' late-open limit.
+PASSED_GAP_EXIT_GRACE_SECONDS = 900.0
+
+# Causal fill model of the backtest regime book (entry/exit slippage rates).
+_CAUSAL_CONFIG = ResearchConfig()
+
+# Paper exit_reason for each causal outcome. GAP_* keep the backtest label.
+_CAUSAL_EXIT_REASON = {
+    "SL": "STOP",
+    "TP1": "TP1",
+    OUTCOME_GAP_THROUGH_STOP: OUTCOME_GAP_THROUGH_STOP,
+    OUTCOME_GAP_EXIT: OUTCOME_GAP_EXIT,
+}
+
+
+def is_causal_passed(pos: Any) -> bool:
+    """True for a passed-book position opened under the causal next-open model.
+
+    These exit only through ``resolve_passed_exits`` (closed bars), never on a
+    live mark or a forming bar, so they exit where the backtest exits.
+    """
+    snip = getattr(pos, "signal_snippet", None) if not isinstance(pos, dict) else pos.get("signal_snippet")
+    if not isinstance(snip, dict):
+        return False
+    return (
+        str(snip.get("source") or "") == "PASSED_CAP_BOOK"
+        and str(snip.get("execution_model") or "") == CAUSAL_NEXT_OPEN
+    )
+
+
 # Do not open paper trades on stale / incomplete OHLCV tips
 _STALE_OHLCV = frozenset({"TRAILING_STALE", "STALE", "WAITING", "UNAVAILABLE"})
 
@@ -167,6 +219,9 @@ class PaperTradeEngine:
         mode = str(entry_mode or PATH_A).strip().lower()
         self.entry_mode = PATH_B if mode == PATH_B else PATH_A
         self.min_rr = float(min_rr)
+        # Minimum TP1 R measured from the passed-book fill. None (default)
+        # takes every signal, as the backtest regime book does.
+        self.passed_fill_min_rr: float | None = None
         self.risk_policy = risk_policy or PaperRiskPolicy()
         # Off by default in unit tests; orchestrator enables via settings.
         self.v1_profile_enabled = bool(v1_profile_enabled)
@@ -260,14 +315,28 @@ class PaperTradeEngine:
             "strategy_drawdown_r": float(strat_dd),
         }
 
-    def _note_close_for_halts(self, *, symbol: str, r_multiple: float | None) -> None:
-        """Update daily / streak / DD trackers after a closed paper trade."""
+    def _note_close_for_halts(
+        self,
+        *,
+        symbol: str,
+        r_multiple: float | None,
+        closed_at: Any = None,
+    ) -> None:
+        """Update daily / streak / DD trackers after a closed paper trade.
+
+        The daily R counts a close stamped on the current UTC date, the same
+        rule ``_rebuild_halts_locked`` applies after a restart. A close stamped
+        at an earlier exit bar (the causal passed book) on another date does
+        not count toward today.
+        """
         r = float(r_multiple or 0.0)
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if self._day_key != today:
             self._day_key = today
             self._day_pnl_r = 0.0
-        self._day_pnl_r += r
+        stamped = _parse_utc(closed_at) if closed_at is not None else None
+        if stamped is None or stamped.strftime("%Y-%m-%d") == today:
+            self._day_pnl_r += r
         self._strategy_equity_r += r
         if self._strategy_equity_r > self._strategy_peak_r:
             self._strategy_peak_r = self._strategy_equity_r
@@ -1798,6 +1867,9 @@ class PaperTradeEngine:
         if entry_price is None or stop_price is None or entry_price <= 0:
             self._last_skip_reason = f"{sym}:passed_missing_prices"
             return None
+        # ``entry_price`` is the causal fill (next open + entry slippage).
+        # A fill at or through the stop is refused; the backtest books it as a
+        # fee-only GAP_THROUGH_STOP at the fill.
         if side == "LONG" and stop_price >= entry_price:
             self._last_skip_reason = f"{sym}:passed_bad_stop"
             return None
@@ -1813,7 +1885,11 @@ class PaperTradeEngine:
             if side == "LONG"
             else (entry_price - tp1) / risk_dist
         )
-        if tp1_r + 1e-9 < self.min_rr:
+        # The backtest regime book takes the trade whatever TP1 is worth from
+        # the fill (the signal already cleared min R at the signal close). The
+        # paper re-check at the fill is off unless ``passed_fill_min_rr`` is set.
+        fill_min_rr = self.passed_fill_min_rr
+        if fill_min_rr is not None and tp1_r + 1e-9 < float(fill_min_rr):
             self._last_skip_reason = f"{sym}:passed_rr"
             return None
 
@@ -1847,38 +1923,49 @@ class PaperTradeEngine:
             self._last_skip_reason = f"{sym}:{gate.reason}"
             return None
 
-        if side == "LONG":
-            sized = size_paper_long(
-                symbol=sym,
-                account_equity=self.equity,
-                risk_percent=risk_pct,
-                entry=entry_price,
-                stop=stop_price,
-                leverage=self.max_leverage,
-                rounding="plan",
-            )
-        else:
-            sized = size_paper_short(
-                symbol=sym,
-                account_equity=self.equity,
-                risk_percent=risk_pct,
-                entry=entry_price,
-                stop=stop_price,
-                leverage=self.max_leverage,
-                rounding="plan",
-            )
+        # Slippage is in the fill prices (entry here, exit in the causal walk),
+        # so the sizer and the close charge none on top.
+        sizer = size_paper_long if side == "LONG" else size_paper_short
+        sized = sizer(
+            symbol=sym,
+            account_equity=self.equity,
+            risk_percent=risk_pct,
+            entry=entry_price,
+            stop=stop_price,
+            leverage=self.max_leverage,
+            slippage_rate=0.0,
+            rounding="plan",
+        )
         if sized.get("reason"):
             self._last_skip_reason = f"{sym}:{sized.get('reason')}"
             return None
-        entry_fill = float(sized["entry_price"])
-        stop_fill = float(sized["stop_price"])
         qty = float(sized.get("quantity") or 0.0)
-        risk_usd = float(sized.get("risk_usd") or 0.0)
-        if tp1 is not None:
-            tp1 = round_price_to_tick(float(tp1), float(sized["tick_size"]), mode="nearest")
         if qty <= 0:
             self._last_skip_reason = f"{sym}:passed_zero_qty"
             return None
+        # Prices stay exactly where the backtest's causal fill puts them (no
+        # tick rounding), so the paper walk and the backtest walk see the same
+        # levels. Quantity is the sizer's (lot step, leverage cap, min notional).
+        entry_fill = float(entry_price)
+        stop_fill = float(stop_price)
+        tp1 = float(tp1)
+        risk_usd = abs(entry_fill - stop_fill) * qty
+        fee_rate = float(sized.get("fee_rate") or DEFAULT_TAKER_FEE)
+        entry_fee = calculate_execution_fee(
+            price=entry_fill, quantity=qty, fee_type=FEE_TYPE_TAKER, taker_rate=fee_rate
+        )
+        exit_slip = _f(eval_result.get("exit_slippage_rate"))
+        entry_slip = _f(eval_result.get("entry_slippage_rate"))
+        execution = {
+            **paper_execution_snippet(sized),
+            "rounding": "none",
+            "entry_fee_usd": entry_fee,
+            "slippage_rate": 0.0,
+            "notional": entry_fill * qty,
+        }
+        fill_bar_time = str(eval_result.get("fill_bar_time") or "") or _next_bar_iso(
+            setup_bar_time_utc, tf
+        )
 
         gate2 = evaluate_paper_entry_risk(
             sym,
@@ -1907,9 +1994,24 @@ class PaperTradeEngine:
             "market_direction": market_direction,
             "backtest_entry": float(entry_price),
             "paper_entry": entry_fill,
-            "price_source": "plan",
-            "paper_execution": paper_execution_snippet(sized),
+            "price_source": (
+                "next_open" if eval_result.get("next_open") is not None else "plan"
+            ),
+            "paper_execution": execution,
             "signal_time": str(setup_bar_time_utc or ""),
+            # Same fill and exit model as the backtest regime book.
+            "execution_model": CAUSAL_NEXT_OPEN,
+            "execution_model_version": EXECUTION_MODEL_VERSION,
+            "signal_entry_price": _f(eval_result.get("signal_entry_price")),
+            "next_open": _f(eval_result.get("next_open")),
+            "fill_bar_time": fill_bar_time,
+            "entry_slippage_rate": (
+                entry_slip if entry_slip is not None else _CAUSAL_CONFIG.entry_slippage_rate
+            ),
+            "exit_slippage_rate": (
+                exit_slip if exit_slip is not None else _CAUSAL_CONFIG.exit_slippage_rate
+            ),
+            "tp1_r_at_fill": tp1_r,
         }
         with self._lock:
             if stream_key in self._open or dedupe_key in self._opened_keys:
@@ -1999,6 +2101,9 @@ class PaperTradeEngine:
         closed: list[PaperPosition] = []
         with self._lock:
             for _key, pos in list(self._open.items()):
+                if is_causal_passed(pos):
+                    # Exits through resolve_passed_exits on closed bars only.
+                    continue
                 bars = ranges.get(self.replay_key(pos.symbol, pos.timeframe)) or []
                 for bar_open, high, low in bars:
                     if self._key_for(pos) not in self._open:
@@ -2011,6 +2116,122 @@ class PaperTradeEngine:
                     closed.append(self._close_locked(pos, hit[0], hit[1]))
                     break
         return closed
+
+    def resolve_passed_exits(
+        self,
+        bars: dict[tuple[str, str], list[dict[str, Any]]],
+    ) -> list[PaperPosition]:
+        """Exit causal passed-book positions the way the backtest regime book does.
+
+        ``bars`` maps ``replay_key(symbol, timeframe)`` to the CLOSED bars of
+        that series (mappings with ``time``, ``open``, ``high``, ``low``,
+        ``close``), oldest first. For each causal passed position the bars from
+        its fill bar on are walked with ``causal_execution.causal_exit``: a bar
+        that opens through the stop exits at that open (GAP_THROUGH_STOP), a
+        bar that reaches both levels exits at the stop, a missing bar exits at
+        the first open after it (GAP_EXIT), and the exit price carries the
+        causal exit slippage. The walk is stateless, so a restart or a late
+        bar resolves the same way. A forming bar is never used.
+        """
+        closed: list[PaperPosition] = []
+        with self._lock:
+            for _key, pos in list(self._open.items()):
+                if not is_causal_passed(pos):
+                    continue
+                series = bars.get(self.replay_key(pos.symbol, pos.timeframe)) or []
+                hit = self._causal_exit_for(pos, series)
+                if hit is None:
+                    continue
+                closed.append(
+                    self._close_locked(
+                        pos,
+                        float(hit["exit_price"]),
+                        _CAUSAL_EXIT_REASON.get(str(hit["outcome"]), str(hit["outcome"])),
+                        closed_at=hit["closed_at"],
+                        causal=hit,
+                    )
+                )
+        return closed
+
+    def _causal_exit_for(
+        self, pos: PaperPosition, series: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """The causal exit of ``pos`` on ``series``, or None while it is open."""
+        snip = pos.signal_snippet if isinstance(pos.signal_snippet, dict) else {}
+        fill_at = _parse_utc(
+            str(snip.get("fill_bar_time") or "")
+            or _next_bar_iso(pos.source_candle_ts, pos.timeframe)
+        )
+        if fill_at is None:
+            # No signal bar on the row: the bar the position opened in.
+            fill_at = exit_bar_open(pos.opened_at, pos.timeframe)
+        if fill_at is None:
+            return None
+        start = None
+        for i, bar in enumerate(series):
+            ts = _parse_utc(bar.get("time") or bar.get("open_time"))
+            if ts is not None and ts >= fill_at:
+                start = i
+                break
+        if start is None:
+            return None
+        walk = series[start:]
+        side = str(pos.side or "LONG").upper()
+        slip_raw = snip.get("exit_slippage_rate")
+        exit_slip = float(
+            slip_raw if slip_raw is not None else _CAUSAL_CONFIG.exit_slippage_rate
+        )
+        step = step_seconds(pos.timeframe) or 0
+        out = causal_exit(
+            walk,
+            0,
+            side,
+            float(pos.stop_price),
+            float(pos.tp1_price) if pos.tp1_price is not None else None,
+            fill_price=float(pos.entry_price),
+            step=step or None,
+            exit_slippage_rate=exit_slip,
+        )
+        if out.get("outcome") in (None, "OPEN") or out.get("exit_price") is None:
+            return None
+        exit_bar = walk[int(out["exit_index"])]
+        exit_ts = _parse_utc(exit_bar.get("time") or exit_bar.get("open_time"))
+        first_ts = _parse_utc(walk[0].get("time") or walk[0].get("open_time"))
+        if (
+            out["outcome"] == OUTCOME_GAP_THROUGH_STOP
+            and int(out["exit_index"]) == 0
+            and first_ts != fill_at
+        ):
+            # The fill bar left the window, so walk[0] is a later bar: its gap
+            # through the stop exits at its own open, slipped, as in the backtest.
+            out["exit_price"] = causal_exit_price(
+                float(walk[0].get("open") or 0.0), side, rate=exit_slip
+            )
+            out["slippage_applied_once"] = False
+        if out["outcome"] == OUTCOME_GAP_EXIT:
+            # The store may still be backfilling the missing bars. Book the gap
+            # only once it has outlasted the REST catch-up (the bars after it
+            # closed PASSED_GAP_EXIT_GRACE_SECONDS ago); a healed gap is walked.
+            if exit_ts is None or self._now() < exit_ts + timedelta(
+                seconds=step + PASSED_GAP_EXIT_GRACE_SECONDS
+            ):
+                return None
+        # Stamp the exit bar's open (the backtest's exit_time), so the re-entry
+        # rule and a restart see the exit bar. An exit on the bar the position
+        # opened in is stamped at the open instead, never before it.
+        stamp = exit_ts
+        opened = _parse_utc(pos.opened_at)
+        if (
+            opened is not None
+            and exit_ts is not None
+            and exit_ts < opened < exit_ts + timedelta(seconds=step)
+        ):
+            stamp = opened
+        out["exit_index"] = int(out["exit_index"])
+        out["exit_bar_time"] = exit_ts.isoformat() if exit_ts is not None else None
+        out["walk_start_bar_time"] = first_ts.isoformat() if first_ts is not None else None
+        out["closed_at"] = stamp.isoformat() if stamp is not None else None
+        return out
 
     def tick(self, prices: dict[str, float]) -> list[PaperPosition]:
         """Manage open positions against mark/last prices. Returns newly closed."""
@@ -2046,6 +2267,10 @@ class PaperTradeEngine:
                     else:
                         pos.unrealized_pnl_usd = (px - pos.entry_price) * pos.quantity
                         pos.unrealized_r = (px - pos.entry_price) / risk_per
+                if is_causal_passed(pos):
+                    # Marked only. The backtest exits on bar prices (stop wins a
+                    # bar that also reaches the target), so this book does too.
+                    continue
                 if side == "SHORT":
                     if px >= pos.stop_price:
                         closed.append(self._close_locked(pos, float(pos.stop_price), "STOP"))
@@ -2166,16 +2391,36 @@ class PaperTradeEngine:
             "skipped_passed": skipped_passed,
         }
 
-    def _close_locked(self, pos: PaperPosition, exit_price: float, reason: str) -> PaperPosition:
+    def _close_locked(
+        self,
+        pos: PaperPosition,
+        exit_price: float,
+        reason: str,
+        *,
+        closed_at: str | None = None,
+        causal: dict[str, Any] | None = None,
+    ) -> PaperPosition:
+        """Close ``pos`` at ``exit_price``.
+
+        ``causal`` (the causal exit fields) marks a causal passed-book exit:
+        ``exit_price`` is already slipped, so it is not tick-rounded and no
+        slippage is charged on top. ``closed_at`` stamps the exit bar instead
+        of now.
+        """
         snip = pos.signal_snippet if isinstance(pos.signal_snippet, dict) else {}
         exec_meta = snip.get("paper_execution") if isinstance(snip, dict) else None
         if not isinstance(exec_meta, dict):
             exec_meta = {}
 
-        tick = _f(exec_meta.get("tick_size"))
-        if tick is None or tick <= 0:
-            tick, _step, _src = resolve_symbol_filters(pos.symbol)
-        exit_px = round_price_to_tick(float(exit_price), float(tick), mode="nearest")
+        if causal is not None:
+            exit_px = float(exit_price)
+        else:
+            tick = _f(exec_meta.get("tick_size"))
+            if tick is None or tick <= 0:
+                tick, _step, _src = resolve_symbol_filters(pos.symbol)
+            exit_px = round_price_to_tick(float(exit_price), float(tick), mode="nearest")
+        # An explicit 0.0 means the slippage is already in the prices.
+        slip_raw = _f(exec_meta.get("slippage_rate"))
         settled = net_paper_pnl(
             entry_price=pos.entry_price,
             exit_price=exit_px,
@@ -2184,7 +2429,7 @@ class PaperTradeEngine:
             side=pos.side,
             entry_fee_usd=_f(exec_meta.get("entry_fee_usd")),
             fee_rate=float(exec_meta.get("fee_rate") or 0.0004),
-            slippage_rate=float(exec_meta.get("slippage_rate") or 0.0002),
+            slippage_rate=0.0002 if slip_raw is None else slip_raw,
         )
         pnl = float(settled["pnl_usd"])
         r_mult = float(settled["r_multiple"])
@@ -2199,8 +2444,10 @@ class PaperTradeEngine:
                     "total_cost_usd": settled["total_cost_usd"],
                 },
             }
+            if causal is not None:
+                pos.signal_snippet["causal_exit"] = dict(causal)
         pos.status = "CLOSED"
-        pos.closed_at = self._now().isoformat()
+        pos.closed_at = closed_at or self._now().isoformat()
         pos.exit_price = exit_px
         pos.exit_reason = reason
         pos.pnl_usd = pnl
@@ -2215,7 +2462,9 @@ class PaperTradeEngine:
             self._last_exit_bar_open[self._key_for(pos)] = exit_open
         self.realized_pnl += pnl
         self._pnl_since_reconcile += pnl
-        self._note_close_for_halts(symbol=pos.symbol, r_multiple=r_mult)
+        self._note_close_for_halts(
+            symbol=pos.symbol, r_multiple=r_mult, closed_at=pos.closed_at if closed_at else None
+        )
         self._closed.insert(0, pos)
         self._trim_closed()
         self._queue_persist(pos)

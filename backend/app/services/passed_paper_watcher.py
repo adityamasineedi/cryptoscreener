@@ -13,6 +13,13 @@ records that signal as not opened with reason ``regime_book_closed``.
 The trend for a 1h bar is read at that bar's close with the backtest's
 ``RegimeClock``, from BTC daily bars read once per tick. A failed daily read
 leaves the bar unprocessed so the next tick retries it.
+
+Fills follow the backtest regime book's ``CAUSAL_NEXT_OPEN`` model
+(``app.research.causal_execution``): a signal on a closed bar fills at the
+next bar's open with the causal entry slippage, and the paper engine walks
+the exit on closed bars with the same rules. A signal whose next bar is
+missing is not opened (``FILL_BAR_GAP``); one whose next bar has not arrived
+yet is retried.
 """
 
 from __future__ import annotations
@@ -31,8 +38,10 @@ from app.research.btc_daily_regime import (
     REGIME_TIMEFRAME,
     daily_trend,
 )
+from app.research.causal_execution import SKIP_FILL_BAR_GAP, causal_entry_fill
 from app.research.combination_engine import evaluate_combination_at_bar
 from app.research.config import ResearchConfig
+from app.research.ohlcv_continuity import bars_adjacent, step_seconds
 from app.research.passed_cap_book import (
     LARGE,
     MID,
@@ -68,6 +77,11 @@ REGIME_BOOK_CLOSED_REASON = "regime_book_closed"
 REGIME_BOOK_CLOSED_NOTE = (
     "New passed-regime entries are off because no side passed its regime window."
 )
+
+# Next-open fill states (see ``PassedPaperWatcher._next_open_fill``).
+FILL_OK = "ok"
+FILL_PENDING = "fill_bar_pending"
+FILL_GAP = SKIP_FILL_BAR_GAP
 
 _watcher: PassedPaperWatcher | None = None
 _watcher_lock = threading.Lock()
@@ -289,7 +303,15 @@ class PassedPaperWatcher:
         market_direction: str | None = None,
         daily: DailySnapshot | None = None,
         force: bool = False,
+        next_bar: Mapping[str, Any] | None = None,
     ) -> list[Any]:
+        """Evaluate the closed tip of ``symbol`` and open the passed sides that signal.
+
+        A signal fills at the open of the bar after the tip (``next_bar``, or
+        the store's forming bar) with the causal model's entry slippage. When
+        that bar is not there yet the bar is retried on the next tick; when the
+        bar after the tip is missing the signal is not opened (``FILL_BAR_GAP``).
+        """
         if not self.enabled:
             self.last_skip = "watcher_disabled"
             return []
@@ -445,6 +467,7 @@ class PassedPaperWatcher:
         failed = False
         blocked = False
         book_closed = False
+        pending = False
         evaluated = 0
         idx = len(series_1h) - 1
         for combination_id, timeframe, direction in sides:
@@ -524,26 +547,31 @@ class PassedPaperWatcher:
                     **signal, outcome="not_opened", reason=REGIME_BOOK_CLOSED_REASON
                 )
                 continue
+            # Fill at the next bar's open with the backtest's causal slippage
+            # (causal_execution, CAUSAL_NEXT_OPEN). No next bar, no fill.
+            fill = self._next_open_fill(sym, tip, direction, next_bar)
+            if fill["status"] == FILL_PENDING:
+                pending = True
+                continue
+            if fill["status"] == FILL_GAP:
+                logger.info(
+                    "passed_paper_fill_bar_gap",
+                    symbol=sym,
+                    combination_id=combination_id,
+                    direction=direction,
+                    bar=tip_iso,
+                    next_bar=fill.get("fill_bar_time"),
+                )
+                self._record_signal(**signal, outcome="not_opened", reason=SKIP_FILL_BAR_GAP)
+                continue
             eval_result = dict(result or {})
-            if not force:
-                from app.research.ohlcv_continuity import bars_adjacent, step_seconds
-                from app.services.ohlcv_store import ohlcv_store
-                from app.services.paper_sizing import DEFAULT_PAPER_SLIPPAGE_RATE
-
-                forming = ohlcv_store.get_open(sym, "1h")
-                if (
-                    forming is not None
-                    and tip_ts is not None
-                    and bars_adjacent(
-                        tip, {"time": forming.open_time}, step_seconds("1h")
-                    )
-                ):
-                    raw = float(forming.open)
-                    slip = DEFAULT_PAPER_SLIPPAGE_RATE
-                    eval_result["entry_price"] = (
-                        raw * (1.0 - slip) if direction == "SHORT" else raw * (1.0 + slip)
-                    )
-                    eval_result["entry_type"] = "NEXT_OPEN"
+            eval_result["signal_entry_price"] = eval_result.get("entry_price")
+            eval_result["entry_price"] = fill["entry_price"]
+            eval_result["next_open"] = fill["next_open"]
+            eval_result["fill_bar_time"] = fill["fill_bar_time"]
+            eval_result["entry_type"] = "NEXT_OPEN"
+            eval_result["entry_slippage_rate"] = fill["entry_slippage_rate"]
+            eval_result["exit_slippage_rate"] = float(self.research_config.exit_slippage_rate)
             pos = paper.open_passed_position(
                 symbol=sym,
                 combination_id=combination_id,
@@ -571,6 +599,8 @@ class PassedPaperWatcher:
                 )
         if late_refused:
             self.last_skip = f"{sym}:late_tip"
+        elif pending and not opened:
+            self.last_skip = f"{sym}:{FILL_PENDING}"
         elif book_closed:
             self.last_skip = f"{sym}:{REGIME_BOOK_CLOSED_REASON}"
         elif blocked and not opened:
@@ -581,9 +611,53 @@ class PassedPaperWatcher:
         with self._lock:
             self.last_evaluated_bar = bar_info
             self._inflight.discard(bar_key)
-            if not failed or late:
+            # A signal waiting for its fill bar is retried, up to the late bound.
+            if (not failed and not pending) or late:
                 self._processed.add(bar_key)
         return opened
+
+    def _next_open_fill(
+        self,
+        sym: str,
+        tip: Mapping[str, Any],
+        direction: str,
+        next_bar: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Causal next-open fill for a signal on ``tip``.
+
+        ``status`` is ``FILL_OK`` with ``entry_price`` (the bar's open slipped
+        by the causal entry rate), ``FILL_PENDING`` when the next bar is not in
+        yet, or ``FILL_GAP`` when the bar after ``tip`` is missing.
+        """
+        bar = next_bar
+        if bar is None:
+            from app.services.ohlcv_store import ohlcv_store
+
+            forming = ohlcv_store.get_open(sym, "1h")
+            if forming is not None:
+                bar = {"time": forming.open_time, "open": forming.open}
+        tip_ts = candle_time(tip)
+        bar_ts = candle_time(bar) if bar is not None else None
+        rate = float(self.research_config.entry_slippage_rate)
+        out: dict[str, Any] = {
+            "status": FILL_PENDING,
+            "entry_slippage_rate": rate,
+            "fill_bar_time": _iso(bar_ts) if bar_ts is not None else "",
+        }
+        if bar is None or tip_ts is None or bar_ts is None or _utc(bar_ts) <= _utc(tip_ts):
+            return out
+        if not bars_adjacent(tip, bar, step_seconds("1h")):
+            out["status"] = FILL_GAP
+            return out
+        raw = float(bar.get("open") or 0.0)
+        if raw <= 0:
+            return out
+        out.update(
+            status=FILL_OK,
+            next_open=raw,
+            entry_price=causal_entry_fill(raw, direction, rate=rate),
+        )
+        return out
 
 
 def get_passed_paper_watcher(**kwargs: Any) -> PassedPaperWatcher:

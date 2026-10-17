@@ -291,42 +291,89 @@ def _fill_causal_trade(
         return row
 
     raw_open = _num(candles[fill_index], "open", "o")
-    fill = _adverse(raw_open, side, is_entry=True, rate=entry_slippage_rate)
+    fill = causal_entry_fill(raw_open, side, rate=entry_slippage_rate)
     row["next_open"] = raw_open
     row["entry_price"] = fill
     row["entry_type"] = "MARKET"
+    row.update(
+        causal_exit(
+            candles,
+            fill_index,
+            side,
+            stop,
+            target,
+            fill_price=fill,
+            step=step,
+            exit_slippage_rate=exit_slippage_rate,
+        )
+    )
+    return row
 
-    if _through_stop(side, fill, stop):
-        row["exit_index"] = fill_index
-        row["exit_price"] = fill
-        row["outcome"] = OUTCOME_GAP_THROUGH_STOP
-        row["slippage_applied_once"] = True
-        return row
+
+def causal_entry_fill(raw_open: float, side: str, *, rate: float) -> float:
+    """The causal MARKET fill: ``raw_open`` slipped against ``side``."""
+    return _adverse(float(raw_open), str(side).upper(), is_entry=True, rate=rate)
+
+
+def causal_exit_price(raw_price: float, side: str, *, rate: float) -> float:
+    """A causal exit at ``raw_price``, slipped against ``side``."""
+    return _adverse(float(raw_price), str(side).upper(), is_entry=False, rate=rate)
+
+
+def causal_exit(
+    candles: Sequence[Mapping[str, Any]],
+    fill_index: int,
+    side: str,
+    stop: float,
+    target: float | None,
+    *,
+    fill_price: float,
+    step: int | None,
+    exit_slippage_rate: float,
+) -> dict[str, Any]:
+    """Exit of a position filled at ``fill_price`` on the open of ``candles[fill_index]``.
+
+    The same rules ``execute_causal_trade`` applies after its fill (see the
+    module docstring). Returns the fields to set on the fill row:
+    ``exit_index``, ``outcome`` (``OPEN``, ``SL``, ``TP1``,
+    ``GAP_THROUGH_STOP`` or ``GAP_EXIT``), ``exit_price`` (slipped; None while
+    ``OPEN``), ``slippage_applied_once`` once closed, and the ``gap_*`` fields
+    for a ``GAP_EXIT``. The paper passed book calls this on closed bars so it
+    exits the way the backtest does.
+    """
+    side = str(side).upper()
+    out: dict[str, Any] = {}
+    if _through_stop(side, fill_price, stop):
+        out["exit_index"] = fill_index
+        out["exit_price"] = fill_price
+        out["outcome"] = OUTCOME_GAP_THROUGH_STOP
+        out["slippage_applied_once"] = True
+        return out
 
     exit_index, raw_exit, outcome = _walk_exit(
         candles, fill_index, side, stop, target, step=step
     )
-    row["exit_index"] = exit_index
-    row["outcome"] = outcome
+    out["exit_index"] = exit_index
+    out["outcome"] = outcome
     if outcome == "OPEN":
-        row["exit_price"] = None
-        return row
+        out["exit_price"] = None
+        return out
     if outcome == OUTCOME_GAP_EXIT:
         # The last bar that printed before the gap, and the first one after it.
-        row["gap_last_bar_time"] = _bar_time(candles[exit_index - 1])
-        row["gap_resume_time"] = _bar_time(candles[exit_index])
+        out["gap_last_bar_time"] = _bar_time(candles[exit_index - 1])
+        out["gap_resume_time"] = _bar_time(candles[exit_index])
         before, after = candle_time(candles[exit_index - 1]), candle_time(candles[exit_index])
         if step and before is not None and after is not None:
-            row["gap_missing_bars"] = max(
+            out["gap_missing_bars"] = max(
                 0, int(round((after - before).total_seconds() / step)) - 1
             )
     if outcome == OUTCOME_GAP_THROUGH_STOP and exit_index == fill_index:
-        row["exit_price"] = fill
-        row["slippage_applied_once"] = True
-        return row
-    row["exit_price"] = _adverse(raw_exit, side, is_entry=False, rate=exit_slippage_rate)
-    row["slippage_applied_once"] = False
-    return row
+        out["exit_price"] = fill_price
+        out["slippage_applied_once"] = True
+        return out
+    out["exit_price"] = _adverse(raw_exit, side, is_entry=False, rate=exit_slippage_rate)
+    out["slippage_applied_once"] = False
+    return out
 
 
 def _dollarize(

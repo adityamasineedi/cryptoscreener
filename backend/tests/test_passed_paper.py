@@ -10,6 +10,7 @@ from app.research.passed_cap_book import PASSED_SIDES, is_passed_side, passed_ri
 from app.services.paper_risk import PaperRiskPolicy
 from app.services.paper_trade import PaperTradeEngine
 from app.services.passed_paper_watcher import PassedPaperWatcher
+from passed_paper_bars import exit_passed_on_bar, next_bar
 
 
 def _eval(status: str = "SHORT_ENTRY_CANDIDATE") -> dict:
@@ -113,8 +114,14 @@ def test_passed_short_opens_at_plan_and_stops_out():
     assert pos.tp1_price == 96.0
     assert pos.signal_snippet["execution"] == "backtest_plan"
     assert pos.signal_snippet["source"] == "PASSED_CAP_BOOK"
-    closed = eng.tick({"ETHUSDT": 102.0})
+    assert pos.signal_snippet["execution_model"] == "CAUSAL_NEXT_OPEN"
+    # A live mark at the stop only marks the position: it exits on closed bars.
+    assert eng.tick({"ETHUSDT": 102.0}) == []
+    assert pos.unrealized_r == pytest.approx(-1.0)
+    closed = exit_passed_on_bar(eng, "ETHUSDT", 102.5, "2026-10-10T13:00:00+00:00")
     assert closed and closed[0].exit_reason == "STOP"
+    # The stop with the causal exit slippage (0.05%, against the short).
+    assert closed[0].exit_price == pytest.approx(102.0 * 1.0005)
 
 
 def test_unknown_version_is_not_opened():
@@ -215,6 +222,7 @@ def test_watcher_opens_only_the_matching_passed_side(monkeypatch):
         candles_15m=candles,
         market_direction="BEARISH",
         force=True,
+        next_bar=next_bar(candles[-1]["time"], 100.0),
     )
     sides = {(p.signal_snippet["strategy_id"], p.side) for p in opened}
     assert sides == {("COMBO_01", "SHORT")}
@@ -225,6 +233,7 @@ def test_watcher_opens_only_the_matching_passed_side(monkeypatch):
         candles_15m=candles,
         market_direction="BULLISH",
         force=True,
+        next_bar=next_bar(candles[-1]["time"], 50.0),
     )
     sides_long = {(p.signal_snippet["strategy_id"], p.side) for p in opened_long}
     assert sides_long == {("COMBO_03_TRANSITION_B", "LONG")}

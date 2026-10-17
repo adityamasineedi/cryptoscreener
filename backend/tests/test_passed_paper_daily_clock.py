@@ -99,6 +99,10 @@ def rig(monkeypatch):
 
     def run(symbol: str, tip: datetime, **kwargs) -> list[Any]:
         candles = _h1(tip)
+        # The bar after the tip opens at the plan entry (the causal fill bar).
+        kwargs.setdefault(
+            "next_bar", {"time": tip + timedelta(hours=1), "open": SHORT_PLAN["entry_price"]}
+        )
         return watcher.on_closed_1h(
             symbol,
             candles_1h=candles,

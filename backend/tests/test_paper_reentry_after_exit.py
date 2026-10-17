@@ -21,6 +21,7 @@ from app.services.paper_trade import (
     PaperTradeEngine,
     exit_bar_open,
 )
+from passed_paper_bars import exit_passed_on_bar
 
 T0 = datetime(2026, 10, 12, 10, tzinfo=timezone.utc)
 T1 = T0 + timedelta(hours=1)
@@ -127,7 +128,11 @@ def _open(
 
 def _exit_during(eng: PaperTradeEngine, path: str, when: datetime) -> PaperPosition:
     eng._now = lambda: when
-    closed = eng.tick({SYM: STOP_TICK[path]})
+    if path == "passed":
+        # The causal passed book exits on the closed bar that holds ``when``.
+        closed = exit_passed_on_bar(eng, SYM, STOP_TICK[path], when)
+    else:
+        closed = eng.tick({SYM: STOP_TICK[path]})
     assert len(closed) == 1 and closed[0].status == "CLOSED"
     return closed[0]
 
@@ -157,8 +162,9 @@ def test_exit_bar_is_refused_and_the_next_bar_opens(path):
     assert first is not None
     when = T1 + timedelta(minutes=25)
     closed = _exit_during(eng, path, when)
-    # The close stamp keeps its stored format.
-    assert closed.closed_at == when.isoformat()
+    # The close stamp keeps its stored format. The causal passed book stamps
+    # the exit bar's open, as the backtest's exit_time.
+    assert closed.closed_at == (T1 if path == "passed" else when).isoformat()
     assert eng._last_exit_bar_open[eng.book_key(SYM, STREAMS[path])] == T1
 
     assert _open(eng, path, T1) is None

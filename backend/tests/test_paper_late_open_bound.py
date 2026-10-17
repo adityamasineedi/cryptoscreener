@@ -217,6 +217,8 @@ def _passed(monkeypatch, *, raise_on_passes: tuple[int, ...] = ()):
             candles_15m=candles,
             market_direction="BEARISH",
             force=force,
+            # The causal fill bar: the bar after the tip, opening at the plan.
+            next_bar={"time": TIP_OPEN + timedelta(hours=1), "open": 100.0},
         )
 
     return eng, watcher, _run
@@ -232,8 +234,10 @@ def test_passed_tip_inside_the_bound_opens_as_today(monkeypatch):
     eng, watcher, run = _passed(monkeypatch)
     opened = run(600)
     assert [(p.signal_snippet["strategy_id"], p.side) for p in opened] == [(PASSED_SIDE, "SHORT")]
-    # Fill stays at the plan.
-    assert (opened[0].entry_price, opened[0].stop_price, opened[0].tp1_price) == (100.0, 102.0, 96.0)
+    # Fill at the next open (the plan entry here) with the causal 0.05% slip;
+    # stop and target stay at the plan.
+    assert opened[0].entry_price == pytest.approx(100.0 * (1 - 0.0005))
+    assert (opened[0].stop_price, opened[0].tp1_price) == (102.0, 96.0)
     assert opened[0].source_candle_ts == TIP_OPEN.isoformat()
     assert PASSED_BAR_KEY in watcher._processed
 

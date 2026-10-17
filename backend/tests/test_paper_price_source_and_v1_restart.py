@@ -15,9 +15,11 @@ import app.services.paper_trade as paper_mod
 from app.research.passed_cap_book import passed_stream
 from app.services.paper_risk import PaperRiskPolicy
 from app.services.paper_trade import PaperPosition, PaperTradeEngine
+from passed_paper_bars import exit_passed_on_bar
 
 BAR = "2026-10-12T10:00:00+00:00"
 NEXT_BAR = "2026-10-12T11:00:00+00:00"
+AFTER_EXIT_BAR = "2026-10-12T12:00:00+00:00"
 
 # Tick-aligned plans (BTC default tick 0.1, NEAR generic tick 0.01).
 V1_PLANS = {
@@ -362,7 +364,8 @@ def test_cap_book_key_is_unchanged_after_restart(monkeypatch, combo, side, symbo
     assert first is not None
     key = f"{symbol}|{BAR}|PASSED|{combo}|{side}|1h"
     assert eng._opened_keys == {key}
-    closed = eng.tick({symbol: plan["stop"]})
+    # Fills on NEXT_BAR and stops out on it (closed-bar exit, causal book).
+    closed = exit_passed_on_bar(eng, symbol, plan["stop"], NEXT_BAR)
     assert [p.exit_reason for p in closed] == ["STOP"]
 
     fresh = _restart(eng)
@@ -370,7 +373,9 @@ def test_cap_book_key_is_unchanged_after_restart(monkeypatch, combo, side, symbo
     assert fresh._opened_keys == {key}
     assert _open_passed(fresh, combo, side, symbol) is None
     assert fresh.positions()["open"] == []
-    assert _open_passed(fresh, combo, side, symbol, NEXT_BAR) is not None
+    # The exit bar itself is refused; the bar after it opens.
+    assert _open_passed(fresh, combo, side, symbol, NEXT_BAR) is None
+    assert _open_passed(fresh, combo, side, symbol, AFTER_EXIT_BAR) is not None
 
 
 def test_cap_book_short_key_literal_after_restart(monkeypatch):

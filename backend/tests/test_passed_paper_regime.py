@@ -101,13 +101,29 @@ class _Rig:
         self.opens: list[dict[str, Any]] = []
         self.plans = plans
 
+        self.last_plan: dict[str, Any] | None = None
+
         def _fake_eval(**kwargs):
             cid = kwargs["combination"].combination_id
             self.evaluated.append(cid)
             plan = plans(cid) if callable(plans) else plans.get(cid)
+            self.last_plan = dict(plan) if plan else None
             return dict(plan) if plan else {"status": "NO_SETUP"}
 
         monkeypatch.setattr(watcher_mod, "evaluate_combination_at_bar", _fake_eval)
+        real_fill = self.watcher._next_open_fill
+
+        def _fill_at_plan_open(sym, tip, direction, next_bar):
+            # The bar after the tip opens at the plan entry; the real fill
+            # step adds the causal entry slippage.
+            if next_bar is None and self.last_plan and self.last_plan.get("entry_price"):
+                next_bar = {
+                    "time": tip["time"] + timedelta(hours=1),
+                    "open": self.last_plan["entry_price"],
+                }
+            return real_fill(sym, tip, direction, next_bar)
+
+        monkeypatch.setattr(self.watcher, "_next_open_fill", _fill_at_plan_open)
         real_open = self.eng.open_passed_position
 
         def _spy_open(**kwargs):
@@ -446,7 +462,21 @@ def test_risk_and_plan_reach_the_engine_unchanged(rig, symbol, trend, cid, direc
     assert len(opened) == 1
     call = r.opens[0]
     assert call["risk_percent"] == passed_risk_percent(symbol, direction, trend)
-    assert call["eval_result"] == extra
+    # The plan reaches the engine unchanged except the entry, which is the
+    # causal fill: the next bar's open (here the plan entry) slipped 0.05%.
+    slip = 0.0005
+    fill = plan["entry_price"] * (1 - slip if direction == "SHORT" else 1 + slip)
+    tip = _h1()[-1]["time"]
+    assert call["eval_result"] == {
+        **extra,
+        "entry_price": pytest.approx(fill),
+        "signal_entry_price": plan["entry_price"],
+        "next_open": plan["entry_price"],
+        "fill_bar_time": (tip + timedelta(hours=1)).isoformat(),
+        "entry_type": "NEXT_OPEN",
+        "entry_slippage_rate": slip,
+        "exit_slippage_rate": slip,
+    }
     assert call["market_direction"] == trend
     assert (call["symbol"], call["combination_id"], call["timeframe"], call["direction"]) == (
         symbol,
@@ -457,7 +487,7 @@ def test_risk_and_plan_reach_the_engine_unchanged(rig, symbol, trend, cid, direc
     assert call["setup_bar_time_utc"] == _h1()[-1]["time"].isoformat()
     pos = opened[0]
     assert (pos.entry_price, pos.stop_price, pos.tp1_price) == (
-        plan["entry_price"],
+        pytest.approx(fill),
         plan["stop_price"],
         plan["tp1"],
     )

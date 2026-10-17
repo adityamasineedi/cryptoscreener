@@ -1203,6 +1203,7 @@ class CalculationOrchestrator:
         from app.services.paper_trade import (
             flush_paper_trade_persists,
             get_paper_trade_engine,
+            is_causal_passed,
         )
 
         paper = get_paper_trade_engine()
@@ -1213,6 +1214,13 @@ class CalculationOrchestrator:
                 prices: dict[str, float] = {}
                 ranges: dict[tuple[str, str], list[tuple[Any, float, float]]] = {}
                 fresh_opens: dict[tuple[str, str], list[str]] = {}
+                # Closed bars for the causal passed book (backtest exit rules).
+                causal_bars: dict[tuple[str, str], list[dict[str, Any]]] = {}
+                causal_keys = {
+                    paper.replay_key(p.symbol, getattr(p, "timeframe", None) or "1h")
+                    for p in list(paper._open.values())  # noqa: SLF001
+                    if is_causal_passed(p)
+                }
                 visited: set[tuple[str, str]] = set()
                 for pos in list(paper._open.values()):  # noqa: SLF001
                     sym = getattr(pos, "symbol", None)
@@ -1222,6 +1230,8 @@ class CalculationOrchestrator:
                         continue
                     visited.add(key)
                     closed_bars = self.ohlcv.get_closed(sym, tf)
+                    if key in causal_keys:
+                        causal_bars[key] = [candle.as_mapping() for candle in closed_bars]
                     seen = paper._replayed_bar_opens.setdefault(key, set())
                     if key not in self._paper_replay_seeded:
                         for candle in closed_bars:
@@ -1261,6 +1271,8 @@ class CalculationOrchestrator:
                     )
                     if px is not None and sym not in prices:
                         prices[sym] = px
+                if causal_bars:
+                    paper.resolve_passed_exits(causal_bars)
                 if ranges:
                     paper.replay_bar_ranges(ranges)
                     for key, opens in fresh_opens.items():
