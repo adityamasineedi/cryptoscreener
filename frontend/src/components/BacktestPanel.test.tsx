@@ -1874,6 +1874,41 @@ describe("BacktestPanel interaction paths", () => {
       const banner = within(container).getByTestId("backtest-run-mismatch");
       expect(banner.textContent).toMatch(/trade_no 1 is LONG in a SHORT run\./);
     });
+
+    it("a V2.1-A job posted LONG whose row reads BOTH passes the guards and is labelled LONG+SHORT", () => {
+      // Audit #16: the row labels the two-sided book; the job keeps the LONG request.
+      const base = v2Job("BOTH");
+      const job: BacktestJob = {
+        ...base,
+        job_id: "v21a-LONG",
+        direction: "LONG",
+        strategy_id: "COMBO_02_V2_1_A",
+        combo_version: "v2.1-a-choppy-wait",
+        rows: base.rows!.map((r) => ({ ...r, combination_id: "COMBO_02_V2_1_A", direction: "BOTH" })),
+      };
+      useBacktestJobStore.setState({
+        job,
+        request: {
+          symbols: ["BTCUSDT"],
+          timeframes: ["1h"],
+          direction: "LONG",
+          strategy_id: "COMBO_02_V2_1_A",
+          research_risk_override: true,
+        },
+        foreignJob: false,
+        ownJobId: "v21a-LONG",
+        active: false,
+        error: null,
+      });
+      const { container } = renderPanel();
+      const root = within(container);
+      expect(root.queryByTestId("backtest-run-mismatch")).toBeNull();
+      expect(root.getByTestId("backtest-trade-blotter")).toBeTruthy();
+      expect(root.getAllByText(/LONG\+SHORT \(native\)/).length).toBeGreaterThan(0);
+      expect(container.textContent).toMatch(/closed 2/);
+      expect(container.textContent).toMatch(/Trade blotter — BTCUSDT · 1h · LONG\+SHORT/);
+      expect(container.textContent).not.toMatch(/· BOTH/);
+    });
   });
 });
 

@@ -59,6 +59,18 @@ def v2_family_direction_filter(combination_id: str | None, direction: str | None
         return None
     return side if side in {"LONG", "SHORT"} else "LONG"
 
+
+def row_display_direction(combination_id: str | None, direction: str | None) -> str:
+    """Direction a result row reports for the book it holds. Label only.
+
+    V2.1-A walks both sides whatever the request says (the hedge book posts it as
+    LONG), so its row reads TWO_SIDED_DIRECTION. The job keeps the request direction.
+    """
+    combo = str(combination_id or "").upper().strip()
+    if combo in NATIVE_TWO_SIDED_COMBOS:
+        return TWO_SIDED_DIRECTION
+    return str(direction or "LONG")
+
 # Frozen COMBO_02 v1 production setup (docs/v1_freeze.md / v1_production.py).
 V1_SETUP_TIMEFRAME = "1h"
 V1_HTF_TIMEFRAMES = ("1h", "4h")

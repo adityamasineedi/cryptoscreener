@@ -106,6 +106,12 @@ describe("backtestTradeOverlay trade-audit fixes", () => {
     expect(iso(plan.markers[0].time)).toBe("2025-01-02T03:00:00.000Z");
   });
 
+  it("keys numbered causal rows by trade_no, one key per row (audit #20)", () => {
+    // Causal (DUAL) rows now carry trade_no 1..n and trade_id t1..tn in book order.
+    const rows = [1, 2, 3].map((n) => ({ ...causal, trade_no: n, trade_id: `t${n}` }));
+    expect(rows.map(tradeRowKey)).toEqual(["n1", "n2", "n3"]);
+  });
+
   it("B3 keeps the trade key on the signal time", () => {
     expect(tradeRowKey({ ...causal, trade_no: undefined })).toBe(
       tradeRowKey({ ...causal, trade_no: undefined, fill_time: "2025-01-02T05:00:00+00:00" }),

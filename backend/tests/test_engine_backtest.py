@@ -166,3 +166,112 @@ def test_registry_covers_the_ranked_engine_ids():
     ):
         assert "1h" in ENGINE_STRATEGIES[sid]["timeframes"]
         assert "LONG" in ENGINE_STRATEGIES[sid]["directions"]
+
+
+# ---------------------------------------------------------------- audit #19: OSE clock labels
+
+
+def _ose_candles(n: int = 120, price: float = 101.0) -> list[dict]:
+    from datetime import datetime, timedelta, timezone
+
+    t0 = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    return [
+        {"time": t0 + timedelta(hours=i), "open": price, "high": price + 0.2, "low": price - 0.2, "close": price, "volume": 1.0}
+        for i in range(n)
+    ]
+
+
+def _ose_event(break_index: int):
+    from app.research.ohlcv_structure_experiment.engine import BreakEvent
+
+    # LONG break of 100 with a far stop: neither stop nor 2R target trades, so a timeout.
+    return BreakEvent(
+        event_id="BTCUSDT:LONG:1:100", symbol="BTCUSDT", direction="LONG", call_type="bos_with_trend",
+        pivot_index=break_index - 6, pivot_at="bar", confirmed_index=break_index - 3, confirmed_at="bar",
+        break_index=break_index, break_at="bar", level=100.0, stop=90.0, atr=2.0,
+        confirmation_delay_bars=3, bars_from_confirmation_to_break=3,
+    )
+
+
+def _run_ose_cell(monkeypatch, strategy_id: str, break_index: int = 60) -> tuple[dict, list[dict]]:
+    import app.research.ohlcv_structure_experiment.engine as ose
+    from app.research.engine_backtest import run_engine_cell
+
+    candles = _ose_candles()
+    monkeypatch.setattr(ose, "breaks_for_variant", lambda c, symbol, variant: [_ose_event(break_index)])
+    out = run_engine_cell(
+        {
+            "strategy_id": strategy_id, "symbol": "BTCUSDT", "timeframe": "1h", "direction": "LONG",
+            "candles": candles, "index_start": 0, "risk_usd": 20.0, "taker_fee": 0.0004,
+            "maker_fee": 0.0002, "leverage": 2.0, "principal": 1000.0,
+        }
+    )
+    return out, candles
+
+
+@pytest.mark.parametrize(
+    "strategy_id, decision_index",
+    [
+        # A and D enter at the open after the break bar.
+        ("OSE_A_corrected_baseline", 60),
+        ("OSE_D_faster_confirmation", 60),
+        # B decides on the close after the break bar and enters one bar later.
+        ("OSE_B_acceptance", 61),
+    ],
+)
+def test_ose_signal_time_is_the_decision_bar_and_a_timeout_holds_hold_bars(
+    monkeypatch, strategy_id, decision_index
+):
+    from app.research.ohlcv_structure_experiment.config import HOLD_BARS
+
+    out, candles = _run_ose_cell(monkeypatch, strategy_id)
+    (trade,) = out["trades"]
+    entry_index = decision_index + 1
+    assert trade["outcome"] == "timeout"
+    assert trade["signal_time"] == candles[decision_index]["time"].isoformat()
+    # Entry and fill stay at the next bar's open.
+    assert trade["entry_index"] == entry_index
+    assert trade["entry_time"] == trade["fill_time"] == candles[entry_index]["time"].isoformat()
+    assert trade["exit_index"] == entry_index + HOLD_BARS - 1
+    assert trade["exit_time"] == candles[trade["exit_index"]]["time"].isoformat()
+    # The engine's count: entry bar through exit bar inclusive.
+    assert trade["holding_bars"] == HOLD_BARS == 20
+
+
+def test_ose_market_context_still_describes_the_same_decision_bar(monkeypatch):
+    import copy
+
+    from app.research.trade_context import attach_trade_context
+
+    out, candles = _run_ose_cell(monkeypatch, "OSE_A_corrected_baseline")
+    (trade,) = out["trades"]
+    assert trade["market_context"]["decision_bar"] == candles[60]["time"].isoformat()
+    # The old stamp (signal_time on the entry bar, read one bar back) gives the same context.
+    old = copy.deepcopy(trade)
+    old.pop("market_context")
+    old["signal_time"] = old["entry_time"]
+    attach_trade_context([old], candles, timeframe="1h", symbol="BTCUSDT", decision_offset=-1)
+    assert old["market_context"] == trade["market_context"]
+
+
+def test_ose_trade_prices_and_result_are_unchanged(monkeypatch):
+    import app.research.ohlcv_structure_experiment.engine as ose
+
+    out, candles = _run_ose_cell(monkeypatch, "OSE_A_corrected_baseline")
+    (trade,) = out["trades"]
+    (record,) = [
+        r for r in ose.run_variant(candles, [_ose_event(60)], "A_corrected_baseline") if r.status == "filled"
+    ]
+    assert trade["entry_price"] == record.entry_price
+    assert trade["exit_price"] == record.exit_price
+    assert trade["engine_net_r"] == record.net_r
+    expected = enrich_trade_execution(
+        {
+            "direction": "LONG", "entry_price": record.entry_price, "stop_price": record.stop_price,
+            "exit_price": record.exit_price, "outcome": record.outcome, "entry_type": "MARKET",
+        },
+        risk_usd=20.0, taker_fee=0.0004, maker_fee=0.0002, leverage=2.0, account_equity=1000.0,
+    )
+    for key in ("qty", "gross_pnl_usd", "fee_total_usd", "net_pnl_usd", "r_gross", "r_net"):
+        assert trade[key] == expected[key], key
+    assert (trade["trade_no"], trade["trade_id"]) == (1, "t1")

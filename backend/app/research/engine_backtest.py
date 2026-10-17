@@ -263,6 +263,10 @@ def _run_ose(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[list[dict
         if r.status != "filled" or r.exit_price is None or r.entry_price is None:
             continue
         entry_time = _iso(candles[r.entry_index]["time"])
+        # The decision bar is the closed bar that qualified the setup (the break bar
+        # for variants A and D); the fill is the next bar's open.
+        decision_index = r.qualified_index if r.qualified_index is not None else r.entry_index - 1
+        signal_time = _iso(candles[decision_index]["time"])
         closed.append(
             enrich_trade_execution(
                 {
@@ -272,12 +276,15 @@ def _run_ose(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[list[dict
                     "exit_price": r.exit_price,
                     "outcome": r.outcome,
                     "entry_type": "MARKET",
-                    "signal_time": entry_time,
+                    "signal_time": signal_time,
                     "entry_time": entry_time,
+                    "fill_time": entry_time,
                     "exit_time": _iso(candles[r.exit_index]["time"]),
                     "entry_index": r.entry_index,
                     "exit_index": r.exit_index,
-                    "holding_bars": r.exit_index - r.entry_index,
+                    # The engine's own count: entry bar through exit bar inclusive
+                    # (a HOLD_BARS timeout holds HOLD_BARS).
+                    "holding_bars": r.holding_bars,
                     "engine_net_r": r.net_r,
                     "event_id": r.event.event_id,
                     "target_price": r.target_price,
@@ -321,7 +328,7 @@ def run_engine_cell(data: Mapping[str, Any]) -> dict[str, Any]:
         t["trade_no"] = i
         if t.get("trade_id") is None:
             t["trade_id"] = f"t{i}"
-        for key in ("signal_time", "entry_time", "exit_time"):
+        for key in ("signal_time", "entry_time", "fill_time", "exit_time"):
             if key in t:
                 t[key] = _iso(t[key])
     try:
@@ -332,9 +339,9 @@ def run_engine_cell(data: Mapping[str, Any]) -> dict[str, Any]:
             list(data["candles"]),
             timeframe=str(data["timeframe"]),
             symbol=str(data["symbol"]),
-            # OSE and CANDLE12 V3 stamp the entry bar's open, so the bar before it
-            # (the closed signal bar) is the decision bar.
-            decision_offset=-1 if spec["family"] in ("ohlcv_structure_experiment", "candle12_v3") else 0,
+            # CANDLE12 V3 stamps the entry bar's open, so the bar before it (the closed
+            # signal bar) is the decision bar. OSE stamps signal_time on the decision bar.
+            decision_offset=-1 if spec["family"] == "candle12_v3" else 0,
         )
     except Exception:  # noqa: BLE001
         pass  # display-only labels never fail a backtest
