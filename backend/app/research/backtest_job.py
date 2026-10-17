@@ -46,6 +46,8 @@ from app.research.query_utils import normalize_research_symbol, normalize_resear
 
 JobStatus = Literal["idle", "running", "done", "error", "cancelled", "stalled"]
 
+VECTORBT_REPLAY = "VECTORBT_REPLAY"
+
 ALLOWED_TFS = frozenset({"15m", "1h", "4h", "5m", "1d"})
 
 
@@ -97,6 +99,9 @@ class BacktestJob:
     taker_fee_pct: float = 0.04
     maker_fee_pct: float = 0.02
     include_trades: bool = True
+    # Research-only: replay each row's trades through VectorBT and use its fills
+    # when parity passes (app.research.vectorbt_execution). Off by default.
+    vectorbt_execution: bool = False
     start_date: str | None = None
     end_date: str | None = None
     total_cells: int = 0
@@ -231,6 +236,7 @@ class BacktestJob:
             "taker_fee_pct": self.taker_fee_pct,
             "maker_fee_pct": self.maker_fee_pct,
             "include_trades": self.include_trades,
+            "vectorbt_execution": self.vectorbt_execution,
             "start_date": self.start_date,
             "end_date": self.end_date,
             "total_cells": self.total_cells,
@@ -265,7 +271,30 @@ class BacktestJob:
             },
             **identity,
         }
+        if self.vectorbt_execution:
+            out.update(self._vectorbt_summary())
         return out
+
+    def _vectorbt_summary(self) -> dict[str, Any]:
+        per_row: list[dict[str, Any]] = []
+        total = 0
+        for row in self.rows:
+            if not isinstance(row, dict) or "execution_engine" not in row:
+                continue
+            mism = int(row.get("vectorbt_mismatches") or 0)
+            total += mism
+            parity = row.get("vectorbt_parity") or {}
+            per_row.append(
+                {
+                    "symbol": row.get("symbol"),
+                    "timeframe": row.get("timeframe"),
+                    "execution_engine": row.get("execution_engine"),
+                    "vectorbt_mismatches": mism,
+                    "verdict": parity.get("verdict"),
+                    "first_mismatch_field": parity.get("first_mismatch_field"),
+                }
+            )
+        return {"vectorbt_mismatch_total": total, "vectorbt_rows": per_row}
 
 
 class BacktestJobService:
@@ -318,6 +347,7 @@ class BacktestJobService:
         include_trades: bool = True,
         start_date: str | None = None,
         end_date: str | None = None,
+        vectorbt_execution: bool = False,
     ) -> dict[str, Any]:
         syms = [normalize_research_symbol(s) for s in symbols if s and str(s).strip()]
         tfs = [
@@ -409,6 +439,7 @@ class BacktestJobService:
                 taker_fee_pct=taker,
                 maker_fee_pct=maker,
                 include_trades=bool(include_trades),
+                vectorbt_execution=bool(vectorbt_execution),
                 start_date=start_s,
                 end_date=end_s,
                 total_cells=len(syms) * len(tfs),
@@ -522,6 +553,60 @@ class BacktestJobService:
         except asyncio.CancelledError:
             return
 
+    async def _apply_vectorbt(
+        self,
+        job: BacktestJob,
+        rows: list[Any],
+        *,
+        strategy_id: str,
+        family: Literal["engine", "combo"],
+    ) -> list[Any]:
+        """VectorBT execution gate for one cell's rows, off the event loop.
+
+        Runs on the raw strategy rows (before config enrichment / slimming) so
+        the replay sees the engine's own trade dicts. The first vectorbt import
+        and numba JIT can take tens of seconds, so the job heartbeat is fed
+        while the worker thread runs. Never fails the job: any error leaves the
+        bar-loop row with an ERROR annotation.
+        """
+        from app.research.vectorbt_execution import apply_vectorbt_execution
+
+        adapter_kwargs = {"taker_fee": job.taker_fee_pct / 100.0} if family == "engine" else {}
+
+        def _one(row: Any) -> Any:
+            if not isinstance(row, dict):
+                return row
+            try:
+                out = apply_vectorbt_execution(
+                    row, strategy_id=strategy_id, family=family, adapter_kwargs=adapter_kwargs
+                )
+            except Exception as exc:  # noqa: BLE001
+                out = {
+                    **row,
+                    "execution_engine": "bar_loop",
+                    "vectorbt_parity": {
+                        "verdict": "ERROR",
+                        "reason": f"{type(exc).__name__}: {exc}",
+                    },
+                    "vectorbt_mismatches": 0,
+                }
+            if not job.include_trades:
+                out = {**out, "trades": []}
+            return out
+
+        def _all() -> list[Any]:
+            return [_one(r) for r in rows]
+
+        job.heartbeat(phase=VECTORBT_REPLAY)
+        task = asyncio.ensure_future(asyncio.to_thread(_all))
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=5.0)
+            if done:
+                break
+            job.heartbeat(phase=VECTORBT_REPLAY)
+        job.heartbeat(phase=VECTORBT_REPLAY)
+        return task.result()
+
     async def _run(self, job: BacktestJob) -> None:
         from app.research.service import get_bos_research_service
 
@@ -612,6 +697,9 @@ class BacktestJobService:
                 )
 
                 engine_id = engine_strategy_id(job.combination_id)
+                # The VectorBT replay needs the trades even when the caller did
+                # not ask for them; they are stripped again after the gate.
+                cell_trades = bool(job.include_trades or job.vectorbt_execution)
                 if engine_id is not None:
                     payload = await engine_strategy_matrix(
                         strategy_id=engine_id,
@@ -626,7 +714,7 @@ class BacktestJobService:
                         taker_fee=job.taker_fee_pct / 100.0,
                         maker_fee=job.maker_fee_pct / 100.0,
                         leverage=float(job.leverage),
-                        include_trades=job.include_trades,
+                        include_trades=cell_trades,
                         should_cancel=lambda: job._cancel,
                         progress_callback=_on_progress,
                     )
@@ -644,7 +732,7 @@ class BacktestJobService:
                         taker_fee=job.taker_fee_pct / 100.0,
                         maker_fee=job.maker_fee_pct / 100.0,
                         leverage=float(job.leverage),
-                        include_trades=job.include_trades,
+                        include_trades=cell_trades,
                         should_cancel=lambda: job._cancel,
                         progress_callback=_on_progress,
                         job_id=job.job_id,
@@ -695,7 +783,16 @@ class BacktestJobService:
                 if isinstance(timing, dict):
                     job.timing.update(timing)
 
-                for row in payload.get("rows") or []:
+                payload_rows = list(payload.get("rows") or [])
+                if job.vectorbt_execution:
+                    payload_rows = await self._apply_vectorbt(
+                        job,
+                        payload_rows,
+                        strategy_id=engine_id or job.combination_id,
+                        family="engine" if engine_id is not None else "combo",
+                    )
+
+                for row in payload_rows:
                     if resolved is not None:
                         enriched = enrich_row_with_config(
                             row,
@@ -726,7 +823,7 @@ class BacktestJobService:
                         )
                 job.done_cells = i + 1
                 job.bars_processed = _completed_bars(
-                    (payload.get("rows") or [{}])[0], job.bars_processed
+                    (payload_rows or [{}])[0], job.bars_processed
                 )
                 job.heartbeat(phase="CELL_DONE")
 

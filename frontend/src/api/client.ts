@@ -542,9 +542,25 @@ export type StrategyTradeRow = {
   } | null;
 };
 
+export type VectorbtParity = {
+  verdict?: "PASS" | "FAIL" | "UNSUPPORTED" | "UNAVAILABLE" | "UNMAPPED" | "ERROR" | string;
+  reason?: string | null;
+  mismatches?: number;
+  first_mismatch_field?: string | null;
+  first_mismatch_trade?: string | null;
+  bar_loop_trades?: number;
+  vectorbt_trades?: number;
+  error?: string | null;
+};
+
 export type StrategyMatrixRow = {
   /** Set on rows from a ranked strategy's own engine (CANDLE12, multi-cap, OSE). */
   engine_family?: string;
+  /** Present only when the run asked for VectorBT execution (research only). */
+  execution_engine?: "vectorbt" | "bar_loop";
+  vectorbt_parity?: VectorbtParity;
+  vectorbt_mismatches?: number;
+  vectorbt_unrecomputed_fields?: string[];
   engine_fill_model?: string;
   combination_id: string;
   name?: string;
@@ -1449,6 +1465,8 @@ export type BacktestJob = {
   taker_fee_pct?: number;
   maker_fee_pct?: number;
   include_trades?: boolean;
+  vectorbt_execution?: boolean;
+  vectorbt_mismatch_total?: number;
   start_date?: string | null;
   end_date?: string | null;
   total_cells?: number;
@@ -1776,6 +1794,8 @@ export async function startBacktestJob(body: {
   taker_fee_pct?: number;
   maker_fee_pct?: number;
   include_trades?: boolean;
+  /** Research only: replay trades through VectorBT; its fills are used only on parity PASS. */
+  vectorbt_execution?: boolean;
   start_date?: string;
   end_date?: string;
 }) {
