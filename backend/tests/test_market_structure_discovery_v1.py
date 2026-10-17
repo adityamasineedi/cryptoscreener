@@ -59,6 +59,15 @@ def test_future_bars_after_t_do_not_change_signal_at_t() -> None:
 
 @pytest.mark.anyio
 async def test_passing_result_cannot_set_production_approved(monkeypatch) -> None:
+    # Keep persistence in memory. An earlier test in a full run
+    # (test_combo02_v2_causal_execution's causal replay) connects the global
+    # db_manager and leaves it connected; without this the fake run below is
+    # sent to the real research_runs table (asyncpg rejects the ISO-string
+    # created_at, so it errors instead of writing) and the _MEMORY_* asserts
+    # never run.
+    from app.services.database import db_manager
+
+    monkeypatch.setattr(db_manager, "enabled", False)
     memory_clear()
     calls = {"backtest": 0, "walk_forward": 0}
 

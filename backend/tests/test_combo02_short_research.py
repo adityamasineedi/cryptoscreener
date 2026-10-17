@@ -340,7 +340,11 @@ def test_short_candidate_cannot_enter_v1_watcher():
     paper = PaperTradeEngine(enabled=True)
     watcher = V1PaperWatcher(paper_engine=paper, replay_mode=True, emit_alerts=False)
     # Non-v1 symbols / SHORT identity never open via is_v1_long_entry gate.
-    assert watcher.book_for("ADAUSDT") is None
+    # (ADAUSDT was the example until f34df75 gave it an extended 1h v1 book.)
+    from app.research.v1_production import V1_SYMBOLS
+
+    assert "WIFUSDT" not in V1_SYMBOLS
+    assert watcher.book_for("WIFUSDT") is None
 
 
 @pytest.mark.asyncio

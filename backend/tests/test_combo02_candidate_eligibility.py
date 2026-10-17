@@ -63,7 +63,11 @@ def test_selector_excludes_nonstandard():
     assert exclusion_reason("BTC-USDT") == "nonstandard_symbol"
     assert exclusion_reason("FOO$USDT") == "nonstandard_symbol"
     # pure alphanumeric bases are allowed by this gate
-    assert exclusion_reason("BNBUSDT") is None
+    # (BNBUSDT was the example until f34df75 put it in V1_SYMBOLS, which this
+    # selector reserves: see test_v1_universe_still_btc_eth_sol_only.)
+    assert "WIFUSDT" not in V1_SYMBOLS
+    assert exclusion_reason("WIFUSDT") is None
+    assert exclusion_reason("BNBUSDT") == "v1_universe_reserved"
 
 
 def test_selector_excludes_v1_by_default():
@@ -75,7 +79,7 @@ def test_selector_excludes_v1_by_default():
 def test_selector_allows_liquid_perp_when_active():
     assert (
         exclusion_reason(
-            "BNBUSDT",
+            "WIFUSDT",
             status="TRADING",
             contract_type="PERPETUAL",
             market_type="futures_perp",

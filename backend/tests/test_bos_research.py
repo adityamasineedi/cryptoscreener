@@ -79,8 +79,23 @@ class TestCombinationsDefined:
             "COMBO_06": "TREND_BOS_PULLBACK_SD",
             "COMBO_07": "TREND_BOS_IMPULSE_PULLBACK_RVOL_SD",
             "COMBO_08": "TREND_BOS_IMPULSE_PULLBACK_RVOL_SD_RR",
+            # Supply/demand structure research combos, added in bfa4324
+            # (2026-10-15); behaviour is covered by tests/test_sd_structure.py.
+            "COMBO_SD_A": "SD_CHOCH",
+            "COMBO_SD_B": "SD_CHOCH_BOS",
+            "COMBO_SD_C12": "SD_CHOCH_BOS_RVOL_1_2",
+            "COMBO_SD_C": "SD_CHOCH_BOS_RVOL_1_5",
+            "COMBO_SD_C20": "SD_CHOCH_BOS_RVOL_2_0",
+            "COMBO_SD_C_FRESH": "SD_CHOCH_BOS_RVOL_1_5_FRESH_ZONE",
+            "COMBO_SD_D": "SD_CHOCH_BOS_RETEST_RVOL_1_5",
+            "COMBO_SD_E": "SD_CHOCH_VOLUME_DIVERGENCE",
+            "COMBO_SD_F": "SD_BOS_VOLUME_EXPANSION",
+            "COMBO_SD_LIQ": "SD_EQ_SWEEP_CHOCH_BOS",
         }
         assert set(COMBINATIONS) == set(expected)
+        for cid in expected:
+            if cid.startswith("COMBO_SD_"):
+                assert COMBINATIONS[cid].description.startswith("RESEARCH")
         for cid, name in expected.items():
             assert COMBINATIONS[cid].name == name
             assert COMBINATIONS[cid].conditions
