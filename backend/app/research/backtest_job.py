@@ -64,6 +64,24 @@ def _settings_timeouts() -> tuple[float, float, float]:
         return 3600.0, 120.0, 60.0
 
 
+def _completed_bars(row: Any, fallback: int) -> int:
+    """Bars processed for a finished cell, on the same basis as ``total_bars``.
+
+    ``total_bars`` counts evaluated bars (warm-up excluded), so a finished cell
+    reports ``bars_evaluated`` — or ``bars_loaded - warmup_bars`` when only
+    those are present — instead of the raw loaded count.
+    """
+    if not isinstance(row, dict):
+        return int(fallback or 0)
+    evaluated = row.get("bars_evaluated")
+    if evaluated is not None:
+        return max(0, int(evaluated))
+    loaded = row.get("bars_loaded")
+    if loaded is not None:
+        return max(0, int(loaded) - int(row.get("warmup_bars") or 0))
+    return int(fallback or 0)
+
+
 @dataclass
 class BacktestJob:
     job_id: str
@@ -707,10 +725,8 @@ class BacktestJobService:
                             else row
                         )
                 job.done_cells = i + 1
-                job.bars_processed = int(
-                    (payload.get("rows") or [{}])[0].get("bars_loaded")
-                    or job.bars_processed
-                    or 0
+                job.bars_processed = _completed_bars(
+                    (payload.get("rows") or [{}])[0], job.bars_processed
                 )
                 job.heartbeat(phase="CELL_DONE")
 
