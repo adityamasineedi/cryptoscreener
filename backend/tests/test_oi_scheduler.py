@@ -79,26 +79,69 @@ async def test_oi_scheduler_batches_with_concurrency(settings: Settings, rest: M
 
 @pytest.mark.asyncio
 async def test_oi_scheduler_no_tight_sync_loop(settings: Settings, rest: MagicMock):
-    """Polling uses gather + queue, not blocking sequential for-loop."""
-    scheduler = OIScheduler(
-        settings, rest, max_concurrency=5, stagger_seconds=0.0, batch_size=3
-    )
-    scheduler.set_symbols(["AUSDT", "BUSDT", "CUSDT"])
-    call_times: list[float] = []
+    """Polling uses gather + queue, not a blocking sequential for-loop, and the
+    run loop waits between batches instead of spinning.
 
-    async def timed(symbol: str):
-        call_times.append(asyncio.get_event_loop().time())
+    The old version asserted the three calls *started* within 0.15 s. That never
+    held on its own: AdaptiveRateController starts at min_concurrency=1 (slow
+    start, since 898e6f3), so a cold scheduler's first batch is serial, and the
+    first OI write imports persistence/sqlalchemy on the event loop. The test
+    passed only when an earlier test had warmed those imports. Concurrency is
+    now measured as in-flight overlap, not wall-clock.
+    """
+    symbols = ["AUSDT", "BUSDT", "CUSDT"]
+    in_flight = 0
+    max_in_flight = 0
+
+    async def tracked(symbol: str):
+        nonlocal in_flight, max_in_flight
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
         await asyncio.sleep(0.02)
+        in_flight -= 1
         return {
             "openInterest": "1",
             "time": int(datetime.now(timezone.utc).timestamp() * 1000),
         }
 
-    rest.futures_open_interest = AsyncMock(side_effect=timed)
-    await scheduler._poll_batch()
-    assert len(call_times) == 3
-    span = max(call_times) - min(call_times)
-    assert span < 0.15
+    # Cold scheduler: slow start keeps the first batch at one request at a time.
+    cold = OIScheduler(settings, rest, max_concurrency=5, stagger_seconds=0.0, batch_size=3)
+    cold.set_symbols(symbols)
+    rest.futures_open_interest = AsyncMock(side_effect=tracked)
+    await cold._poll_batch()
+    assert rest.futures_open_interest.await_count == 3
+    assert max_in_flight == cold.adaptive.concurrency == 1
+
+    # Warmed controller: the batch runs concurrently (gather + queue).
+    max_in_flight = 0
+    warm = OIScheduler(settings, rest, max_concurrency=5, stagger_seconds=0.0, batch_size=3)
+    warm.set_symbols(symbols)
+    warm.adaptive.concurrency = 5
+    rest.futures_open_interest = AsyncMock(side_effect=tracked)
+    await warm._poll_batch()
+    assert rest.futures_open_interest.await_count == 3
+    assert max_in_flight == 3
+
+    # No tight loop: after a batch the run loop sleeps for the cycle interval
+    # (>= 12 s while uncovering, the poll interval once covered).
+    assert warm._cycle_sleep_seconds() >= 12.0
+    looped = OIScheduler(
+        settings,
+        rest,
+        max_concurrency=5,
+        stagger_seconds=0.0,
+        batch_size=3,
+        poll_interval_seconds=3600.0,
+    )
+    looped.set_symbols(symbols)
+    rest.futures_open_interest = AsyncMock(side_effect=tracked)
+    await looped.start()
+    try:
+        await asyncio.sleep(0.5)
+    finally:
+        await looped.stop()
+    assert looped._polls_completed == 1
+    assert rest.futures_open_interest.await_count == 3
 
 
 def test_oi_priority_visible_before_volume(settings: Settings, rest: MagicMock):
