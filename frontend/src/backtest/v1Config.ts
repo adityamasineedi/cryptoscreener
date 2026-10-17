@@ -127,7 +127,8 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
   },
   {
     id: "COMBO_02_V2",
-    label: "COMBO_02_V2 · 1h SHORT",
+    // The backend runs the COMBO_02_V2 family with the direction filter off.
+    label: "COMBO_02_V2 · 1h LONG+SHORT",
     status: "Research",
     combinationId: "COMBO_02_V2",
     comboVersion: "v2-combo02-adaptive-3-regime",
@@ -135,7 +136,7 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
   },
   {
     id: "COMBO_02_V2_1B",
-    label: "COMBO_02_V2_1B · 1h SHORT",
+    label: "COMBO_02_V2_1B · 1h LONG+SHORT",
     status: "Research",
     combinationId: "COMBO_02_V2_1B",
     comboVersion: "v2.1-b-choppy-15m",
@@ -292,9 +293,8 @@ export const LONG_STRATEGY_IDS: readonly BacktestStrategyId[] = [
   "COMBO_03_TRANSITION_B",
   "COMBO_02_V1",
   // Long sides on the Strategies ranked board (net positive, same engine).
+  // COMBO_02_V2 and COMBO_02_V2_1B run LONG and SHORT together: hedge book.
   "COMBO_01",
-  "COMBO_02_V2",
-  "COMBO_02_V2_1B",
   "CANDLE12_V2",
   "LARGE_CAP_SWEEP_CHOCH",
   "SMALL_CAP_VOLUME_BOS",
@@ -308,10 +308,11 @@ export const LONG_PASSED_IDS: readonly BacktestStrategyId[] = ["COMBO_03_TRANSIT
 
 export const LONG_RUN_STRATEGY_ID: BacktestStrategyId = "COMBO_03_TRANSITION_B";
 
-/** Passed shorts. V2.1-A is the hedge book because that run keeps both directions. */
+/**
+ * Passed shorts. The COMBO_02_V2 family (V2, V2_1B, V2.1-A) is the hedge book because
+ * the backend runs it with the direction filter off, so one run keeps both directions.
+ */
 export const SHORT_STRATEGY_IDS: readonly BacktestStrategyId[] = [
-  "COMBO_02_V2",
-  "COMBO_02_V2_1B",
   "COMBO_02",
   "COMBO_02_CLOSED_HTF",
   "COMBO_03_TRANSITION",
@@ -321,8 +322,6 @@ export const SHORT_STRATEGY_IDS: readonly BacktestStrategyId[] = [
 ] as const;
 
 export const SHORT_PASSED_IDS: readonly BacktestStrategyId[] = [
-  "COMBO_02_V2",
-  "COMBO_02_V2_1B",
   "COMBO_02",
   "COMBO_02_CLOSED_HTF",
   "COMBO_03_TRANSITION",
@@ -331,7 +330,15 @@ export const SHORT_PASSED_IDS: readonly BacktestStrategyId[] = [
   "COMBO_02_LOCAL",
 ] as const;
 
-export const HEDGE_STRATEGY_IDS: readonly BacktestStrategyId[] = ["COMBO_02_V2_1_A"] as const;
+/** Native LONG+SHORT runs. V2.1-A first: it is the hedge book's passed run. */
+export const HEDGE_STRATEGY_IDS: readonly BacktestStrategyId[] = [
+  "COMBO_02_V2_1_A",
+  "COMBO_02_V2",
+  "COMBO_02_V2_1B",
+] as const;
+
+/** Only V2.1-A passed as a two-sided run; V2 and V2_1B passed as one-direction slices. */
+export const HEDGE_PASSED_IDS: readonly BacktestStrategyId[] = ["COMBO_02_V2_1_A"] as const;
 
 export function strategyIdsForBook(book: TradeBook): readonly BacktestStrategyId[] {
   if (book === "long") return LONG_STRATEGY_IDS;
@@ -342,7 +349,7 @@ export function strategyIdsForBook(book: TradeBook): readonly BacktestStrategyId
 
 export function passedIdsForBook(book: TradeBook): readonly BacktestStrategyId[] {
   if (book === "long") return LONG_PASSED_IDS;
-  if (book === "hedge") return HEDGE_STRATEGY_IDS;
+  if (book === "hedge") return HEDGE_PASSED_IDS;
   if (book === "short") return SHORT_PASSED_IDS;
   return [];
 }

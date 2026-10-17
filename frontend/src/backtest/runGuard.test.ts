@@ -5,6 +5,7 @@ import {
   checkRunMatchesRequest,
   directionLabel,
   htfRequirementLabel,
+  isNativeTwoSidedJob,
   type RunRequest,
 } from "./runGuard";
 
@@ -158,6 +159,36 @@ describe("checkJobInternallyConsistent", () => {
     ).toEqual([]);
   });
 
+  it("does not apply the single-direction rule to a hedge-book (LONG) COMBO_02_V2 or V2_1B run", () => {
+    for (const id of ["COMBO_02_V2", "COMBO_02_V2_1B"]) {
+      expect(
+        checkJobInternallyConsistent({
+          status: "done",
+          direction: "LONG",
+          strategy_id: id,
+          production_comparable: false,
+          research_only: true,
+          rows: [{ ...row, trades: [trade, { ...trade, trade_no: 2, direction: "SHORT" }] }],
+        }),
+      ).toEqual([]);
+    }
+  });
+
+  it("keeps the single-direction rule for a SHORT COMBO_02_V2 or V2_1B request", () => {
+    for (const id of ["COMBO_02_V2", "COMBO_02_V2_1B"]) {
+      expect(
+        checkJobInternallyConsistent({
+          status: "done",
+          direction: "SHORT",
+          strategy_id: id,
+          production_comparable: false,
+          research_only: true,
+          rows: [{ ...row, direction: "SHORT", trades: [{ ...trade, trade_no: 3 }] }],
+        }),
+      ).toEqual(["BTCUSDT 1h: trade_no 3 is LONG in a SHORT run."]);
+    }
+  });
+
   it("flags a production comparable row inside a run that is not", () => {
     expect(
       checkJobInternallyConsistent({
@@ -172,12 +203,31 @@ describe("checkJobInternallyConsistent", () => {
   });
 });
 
+describe("isNativeTwoSidedJob", () => {
+  it("is true for V2.1-A and for the V2 family posted the hedge-book way", () => {
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2_1_A" })).toBe(true);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2", direction: "LONG" })).toBe(true);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2_1B", direction: "LONG" })).toBe(true);
+  });
+
+  it("is false for a SHORT V2 request, other strategies and a missing job", () => {
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2", direction: "SHORT" })).toBe(false);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02_V2" })).toBe(false);
+    expect(isNativeTwoSidedJob({ status: "done", strategy_id: "COMBO_02", direction: "LONG" })).toBe(false);
+    expect(isNativeTwoSidedJob(null)).toBe(false);
+  });
+});
+
 describe("job labels", () => {
   it("labels direction from the job", () => {
     expect(directionLabel({ status: "done", strategy_id: "COMBO_02_V2_1_A", direction: "LONG" })).toBe(
       "LONG+SHORT (native)",
     );
     expect(directionLabel({ status: "done", direction: "SHORT" })).toBe("SHORT");
+    expect(directionLabel({ status: "done", strategy_id: "COMBO_02_V2", direction: "LONG" })).toBe(
+      "LONG+SHORT (native)",
+    );
+    expect(directionLabel({ status: "done", strategy_id: "COMBO_02_V2", direction: "SHORT" })).toBe("SHORT");
   });
 
   it("labels the HTF requirement from the job", () => {

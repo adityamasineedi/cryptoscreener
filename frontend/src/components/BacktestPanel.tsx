@@ -22,6 +22,7 @@ import {
   checkRunMatchesRequest,
   directionLabel,
   htfRequirementLabel,
+  isNativeTwoSidedJob,
 } from "../backtest/runGuard";
 import {
   allFrozenV1Symbols,
@@ -87,6 +88,12 @@ const SYMBOL_GROUPS = [
 ] as const;
 const NOT_IN_CAP_BOOK = "not in the large-cap or mid-cap book";
 const TF_OPTIONS = ["15m", "1h", "4h"] as const;
+/** Coins each strategy book opens with. Switching books restores these. */
+const BOOK_DEFAULT_SYMBOLS: Record<"long" | "short" | "hedge", readonly string[]> = {
+  long: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+  short: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+  hedge: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+};
 
 /** COMBO_02 v1 production book labels (see docs/v1_production.md). */
 const V1_BOOK_TIER: Record<string, "core" | "secondary" | "research"> = {
@@ -221,6 +228,14 @@ function jobStrategyLabel(strategyId: string | undefined): string {
   return strategyId;
 }
 
+/** Notice for a native LONG+SHORT run (hedge book). */
+function twoSidedNotice(strategyId: string): string {
+  if (strategyId === "COMBO_02_V2_1_A") {
+    return "COMBO_02 V2.1-A research-only: CHOPPY → WAIT. Native LONG+SHORT. Does not replace COMBO_02 V2.";
+  }
+  return `Research only. ${strategyId} runs native LONG+SHORT (direction filter off). It does not open an offsetting pair.`;
+}
+
 function toggleInList<T extends string>(list: T[], value: T): T[] {
   return list.includes(value)
     ? list.filter((x) => x !== value)
@@ -239,7 +254,7 @@ function formatDuration(ms: number): string {
 
 export function BacktestPanel() {
   const [book, setBook] = useState<TradeBook>("short");
-  const [symbols, setSymbols] = useState<string[]>(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
+  const [symbols, setSymbols] = useState<string[]>(() => [...BOOK_DEFAULT_SYMBOLS.short]);
   const [customSymbols, setCustomSymbols] = useState("");
   const [coinFilterNotice, setCoinFilterNotice] = useState<string | null>(null);
   const [timeframes, setTimeframes] = useState<string[]>(["1h"]);
@@ -283,11 +298,14 @@ export function BacktestPanel() {
   const researchStrategies = bookStrategies.filter(
     (opt) => opt.status !== "Production candidate" && !passedIdSet.has(opt.id),
   );
+  // Native LONG+SHORT form: the hedge book (V2.1-A, V2, V2_1B) or V2.1-A itself.
   const isV21A = book === "hedge" || strategyId === "COMBO_02_V2_1_A";
   const isSd = strategyId === "COMBO_SD_STRUCTURE";
   const strategyMeta =
     BACKTEST_STRATEGY_OPTIONS.find((o) => o.id === strategyId) ??
     BACKTEST_STRATEGY_OPTIONS[0];
+  const twoSidedName =
+    strategyId === "COMBO_02_V2_1_A" ? "V2.1-A" : strategyMeta.combinationId;
   const isDirect = Boolean(strategyMeta.direct);
   const isEngine = Boolean(strategyMeta.engineTimeframes);
   const researchUi = isV21A || isSd || isDirect;
@@ -605,7 +623,11 @@ export function BacktestPanel() {
   // The result header describes the job that ran, not the form.
   const jobProductionComparable = job?.production_comparable === true;
   const jobIsSd = Boolean(job?.strategy_id?.startsWith("COMBO_SD_"));
-  const jobIsV21A = job?.strategy_id === "COMBO_02_V2_1_A";
+  const jobIsV21A = isNativeTwoSidedJob(job);
+  // Shown only when the job or one of its rows says the window is in-sample.
+  const jobInSample =
+    (job as { in_sample?: boolean } | null)?.in_sample === true ||
+    (job?.rows ?? []).some((r) => (r as { in_sample?: boolean }).in_sample === true);
   const jobPrincipalUsd = job?.principal_usd ?? principalUsd;
   const jobSymbols = job?.symbols ?? [];
   const outputRef = useRef<HTMLDivElement>(null);
@@ -706,9 +728,7 @@ export function BacktestPanel() {
           : "Research only. Zone, then CHoCH, then BOS, with the selected volume rule. Auto timeframe follows stored OHLCV for BTC, ETH, and SOL."
       );
     } else if (isV21A) {
-      setShortNotice(
-        "COMBO_02 V2.1-A research-only: CHOPPY → WAIT. Native LONG+SHORT. Does not replace COMBO_02 V2."
-      );
+      setShortNotice(twoSidedNotice(strategyId));
     } else if (isEngine) {
       setShortNotice(
         `Research only. Runs ${strategyMeta.combinationId} ${direction} on its own engine and fill model.`
@@ -848,8 +868,19 @@ export function BacktestPanel() {
   }
 
   function openTradeBook(next: TradeBook) {
+    const bookChanged = next !== book;
     setBook(next);
     if (next === "grid") return;
+    if (bookChanged) {
+      // A book never inherits the previous book's coins or engine timeframes.
+      setSymbols([...BOOK_DEFAULT_SYMBOLS[next]]);
+      setPreferredSymbol(null);
+      setCoinFilterNotice(null);
+      setTimeframes(["1h"]);
+      setAutoTimeframe(true);
+      setAutoTimeframeNote(null);
+      setSdVariant(SD_DEFAULT_VARIANT);
+    }
     setAutoPassed(true);
     if (next === "long") {
       setStrategyId(LONG_RUN_STRATEGY_ID);
@@ -893,9 +924,7 @@ export function BacktestPanel() {
     const id = next as BacktestStrategyId;
     setStrategyId(id);
     if (book === "hedge" || id === "COMBO_02_V2_1_A") {
-      setShortNotice(
-        "COMBO_02 V2.1-A research-only: CHOPPY → WAIT. Native LONG+SHORT. Does not replace COMBO_02 V2."
-      );
+      setShortNotice(twoSidedNotice(id));
       return;
     }
     if (id === "COMBO_SD_STRUCTURE") {
@@ -1137,7 +1166,7 @@ export function BacktestPanel() {
             Source:{" "}
             {isSd
               ? "SD_STRUCTURE_RESEARCH_BACKTEST"
-              : isV21A
+              : isV21A && !isDirect
                 ? "V21A_RESEARCH_BACKTEST"
                 : isDirect
                   ? "PASSED_CAP_BOOK"
@@ -1363,7 +1392,7 @@ export function BacktestPanel() {
             </div>
             {isV21A ? (
               <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
-                V2.1-A runs native LONG+SHORT (direction filter off). COMBO_04
+                {twoSidedName} runs native LONG+SHORT (direction filter off). COMBO_04
                 SHORT path is not used.
               </div>
             ) : (
@@ -1501,7 +1530,10 @@ export function BacktestPanel() {
               max={125}
               step={1}
               value={leverage}
-              onChange={(e) => setLeverage(Math.max(1, Number(e.target.value) || 2))}
+              onChange={(e) =>
+                // An empty field falls back to the 2x default; any typed value below 1 (0 included) is 1.
+                setLeverage(e.target.value === "" ? 2 : Math.max(1, Number(e.target.value) || 1))
+              }
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
             />
           </label>
@@ -1760,7 +1792,9 @@ export function BacktestPanel() {
               {isSd
                 ? "Auto timeframe on. Location uses a closed 1h or 4h zone when those candles are available."
                 : isV21A
-                ? "HTF: soft 4h policy + 15m confirmation (v2 playbooks; CHOPPY WAIT)"
+                ? strategyId === "COMBO_02_V2_1_A"
+                  ? "HTF: soft 4h policy + 15m confirmation (v2 playbooks; CHOPPY WAIT)"
+                  : "HTF: soft 4h policy + 15m confirmation (v2 playbooks)"
                 : isDirect
                 ? `Runs ${strategyMeta.combinationId} on the selected direction. COMBO_04_HTF is not used.`
                 : `HTF requirement: 1h + 4h ${
@@ -2255,15 +2289,17 @@ export function BacktestPanel() {
               Historical research only. Not a profitability claim. No paper or live
               trade created.
             </div>
-            <div
-              className="text-amber-100/90 term-md:col-span-2"
-              data-testid="backtest-in-sample-warning"
-            >
-              In-sample only: every figure is computed on the same history used to pick
-              the strategy and settings. There is no out-of-sample split and no
-              multiple-comparison adjustment, so a positive result is a hypothesis, not
-              evidence of an edge.
-            </div>
+            {jobInSample ? (
+              <div
+                className="text-amber-100/90 term-md:col-span-2"
+                data-testid="backtest-in-sample-warning"
+              >
+                In-sample only: every figure is computed on the same history used to pick
+                the strategy and settings. There is no out-of-sample split and no
+                multiple-comparison adjustment, so a positive result is a hypothesis, not
+                evidence of an edge.
+              </div>
+            ) : null}
             <div className="term-md:col-span-2 text-terminal-text">
               paper_trade_created ={" "}
               {String(job?.paper_trade_created ?? false)} · live_trade_created ={" "}
@@ -2607,7 +2643,14 @@ function SelectedDetail({
 
       {selectedTrade ? (
         <div className="mb-3">
-          <BacktestTradeChart trade={selectedTrade} />
+          <BacktestTradeChart
+            trade={{
+              ...selectedTrade,
+              // Some engines (OSE) do not stamp symbol/timeframe on each trade.
+              symbol: selectedTrade.symbol || row.symbol,
+              timeframe: selectedTrade.timeframe || row.timeframe,
+            }}
+          />
         </div>
       ) : null}
 
@@ -2829,6 +2872,18 @@ function TradeRow({
   );
 }
 
+/** TP1/TP2/TP3 (COMBO, CANDLE12, multi-cap) or `target` (OSE). */
+function isTargetOutcome(outcome: string | null | undefined): boolean {
+  const o = String(outcome || "").toUpperCase();
+  return o.startsWith("TP") || o === "TARGET";
+}
+
+/** SL (COMBO, CANDLE12, multi-cap) or `stop` (OSE). Timeouts are neither. */
+function isStopOutcome(outcome: string | null | undefined): boolean {
+  const o = String(outcome || "").toUpperCase();
+  return o.startsWith("SL") || o === "STOP" || o === "STOP_LOSS";
+}
+
 function RunLead({
   row,
   strategyLabel,
@@ -2853,8 +2908,8 @@ function RunLead({
       ? `${requestedBars.toLocaleString()} bars (${counted.toLocaleString()} ${countedLabel}, ${warmup}${range})`
       : `${(counted ?? requestedBars ?? 0).toLocaleString()} bars (${warmup}${range})`;
   const trades = row.trades || [];
-  const wins = trades.filter((trade) => String(trade.outcome || "").toUpperCase().startsWith("TP")).length;
-  const stops = trades.filter((trade) => String(trade.outcome || "").toUpperCase().startsWith("SL")).length;
+  const wins = trades.filter((trade) => isTargetOutcome(trade.outcome)).length;
+  const stops = trades.filter((trade) => isStopOutcome(trade.outcome)).length;
   const stamps = trades
     .flatMap((trade) => [trade.signal_time, trade.exit_time])
     .map((value) => (value ? Date.parse(value) : NaN))

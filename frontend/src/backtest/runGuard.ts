@@ -12,6 +12,21 @@ export type RunRequest = {
 const FROZEN_V1_STRATEGY = "COMBO_02_V1";
 /** Native LONG+SHORT: one run holds trades in both directions. */
 const NATIVE_TWO_SIDED_STRATEGY = "COMBO_02_V2_1_A";
+/**
+ * The rest of the backend COMBO_V2_FAMILY. The backend always runs these with the
+ * direction filter off, so their jobs hold LONG and SHORT trades. The hedge book posts
+ * them like V2.1-A, with direction LONG. A SHORT request for one of them is still a
+ * single-direction request and keeps the single-direction rule.
+ */
+const NATIVE_TWO_SIDED_FAMILY: ReadonlySet<string> = new Set(["COMBO_02_V2", "COMBO_02_V2_1B"]);
+
+/** True when the job is a native LONG+SHORT run, posted the way the hedge book posts it. */
+export function isNativeTwoSidedJob(job: BacktestJob | null | undefined): boolean {
+  const id = job?.strategy_id;
+  if (!id) return false;
+  if (id === NATIVE_TWO_SIDED_STRATEGY) return true;
+  return NATIVE_TWO_SIDED_FAMILY.has(id) && job?.direction === "LONG";
+}
 
 function sameSet(a: string[], b: string[]): boolean {
   const left = new Set(a.map((x) => x.toUpperCase()));
@@ -94,7 +109,7 @@ export function checkJobInternallyConsistent(
   }
 
   const rows = job.rows || [];
-  if (job.strategy_id !== NATIVE_TWO_SIDED_STRATEGY && job.direction) {
+  if (!isNativeTwoSidedJob(job) && job.direction) {
     for (const row of rows) {
       const cell = `${row.symbol} ${row.timeframe}`;
       if (row.direction && row.direction !== job.direction) {
@@ -125,12 +140,12 @@ export function checkJobInternallyConsistent(
 }
 
 export function directionLabel(job: BacktestJob | null | undefined): string {
-  if (job?.strategy_id === NATIVE_TWO_SIDED_STRATEGY) return "LONG+SHORT (native)";
+  if (isNativeTwoSidedJob(job)) return "LONG+SHORT (native)";
   return job?.direction || "—";
 }
 
 export function htfRequirementLabel(job: BacktestJob | null | undefined): string {
-  if (job?.strategy_id === NATIVE_TWO_SIDED_STRATEGY) {
+  if (isNativeTwoSidedJob(job)) {
     return "soft 4h + 15m confirm (v2 playbooks)";
   }
   if (job?.strategy_id === "CANDLE12_V3_EXEC_FIX") return "none (no HTF gate)";

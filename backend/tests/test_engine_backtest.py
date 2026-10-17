@@ -97,6 +97,64 @@ def test_engine_row_sums_the_enriched_trades():
     assert len(row["equity_curve_usd_net"]) == 2
 
 
+def test_engine_row_counts_ose_target_and_stop_outcomes():
+    # OSE outcomes are lower-case target / stop / timeout; timeout is neither a TP nor a stop.
+    trades = [
+        _trade(100.0, 98.0, 104.0, "target", "2026-03-02T00:00:00+00:00"),
+        _trade(100.0, 98.0, 98.0, "stop", "2026-03-03T00:00:00+00:00"),
+        _trade(100.0, 98.0, 98.0, "stop", "2026-03-04T00:00:00+00:00"),
+        _trade(100.0, 98.0, 100.5, "timeout", "2026-03-05T00:00:00+00:00"),
+    ]
+    row = build_engine_row(
+        {"trades": trades, "open_trades_at_end": 0, "execution_model": "x", "status": "OK"},
+        strategy_id="OSE_D_faster_confirmation",
+        direction="LONG",
+        symbol="BTCUSDT",
+        timeframe="1h",
+        risk_usd=20.0,
+        principal=1000.0,
+        leverage=2.0,
+        bars_loaded=1200,
+        warmup_bars=1000,
+        candle_source="postgresql_ohlcv",
+        period_start=None,
+        period_end=None,
+    )
+    assert row["sample_size"] == 4
+    assert row["tp1_hits"] == 1
+    assert row["sl_hits"] == 2
+    assert row["tp1_hit_rate"] == pytest.approx(0.25)
+    assert row["sl_rate"] == pytest.approx(0.5)
+    # The outcomes themselves are not renamed.
+    assert [t["outcome"] for t in row["trades"]] == ["target", "stop", "stop", "timeout"]
+
+
+def test_engine_row_tp_and_sl_counts_for_other_engines_are_unchanged():
+    trades = [
+        _trade(100.0, 98.0, 104.0, "TP1", "2026-03-02T00:00:00+00:00"),
+        _trade(100.0, 98.0, 106.0, "TP2", "2026-03-03T00:00:00+00:00"),
+        _trade(100.0, 98.0, 98.0, "SL", "2026-03-04T00:00:00+00:00"),
+        _trade(100.0, 98.0, 98.0, "STOP_LOSS", "2026-03-05T00:00:00+00:00"),
+    ]
+    row = build_engine_row(
+        {"trades": trades, "status": "OK"},
+        strategy_id="CANDLE12_V2",
+        direction="LONG",
+        symbol="BTCUSDT",
+        timeframe="1h",
+        risk_usd=20.0,
+        principal=1000.0,
+        leverage=2.0,
+        bars_loaded=1200,
+        warmup_bars=1000,
+        candle_source=None,
+        period_start=None,
+        period_end=None,
+    )
+    assert row["tp1_hits"] == 2
+    assert row["sl_hits"] == 2
+
+
 def test_registry_covers_the_ranked_engine_ids():
     for sid in (
         "CANDLE12_V2",
