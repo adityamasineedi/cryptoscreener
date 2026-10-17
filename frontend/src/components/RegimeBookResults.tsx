@@ -1,4 +1,5 @@
 import type { RegimeBacktestStatus } from "../api/client";
+import { SymbolAllowlistLines } from "./SymbolAllowlistLines";
 
 /** One line saying which passed sides the run had in scope. */
 export function regimeScopeText(job: RegimeBacktestStatus): string {
@@ -63,6 +64,7 @@ export function RegimeBookResults({ job }: { job: RegimeBacktestStatus | null })
           {job.sides_in_scope.map((row) => `${row.strategy_id} ${row.direction}`).join(", ")}
         </p>
       ) : null}
+      <SymbolAllowlistLines allowlist={job.symbol_allowlist} testId="regime-backtest-allowlist" />
       <p className="mt-1 font-mono text-[11px] text-terminal-muted" data-testid="regime-backtest-status">
         {job.status}
         {job.current ? ` · ${job.current}` : ""}

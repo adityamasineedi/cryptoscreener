@@ -349,4 +349,36 @@ describe("PassedRegimePanel", () => {
       cleanup();
     }
   });
+  it("lists the per-coin allowlist: allowed and blocked sides for each coin with an entry", async () => {
+    await renderWith(
+      response({
+        symbol_allowlist: {
+          version: 1,
+          source: "passed_symbol_allowlist.json",
+          symbols: {
+            BTCUSDT: {
+              allowed_sides: [{ strategy_id: "COMBO_01", timeframe: "1h", direction: "SHORT" }],
+              blocked_sides: [
+                { strategy_id: "COMBO_02", timeframe: "1h", direction: "SHORT" },
+                { strategy_id: "COMBO_03_TRANSITION_B", timeframe: "1h", direction: "LONG" },
+              ],
+              tested_window: { start: "2025-01-01", end: "2025-12-31" },
+              decided_at: "2026-10-17T00:00:00+00:00",
+            },
+          },
+        },
+      }),
+    );
+    const block = screen.getByTestId("passed-regime-allowlist-BTCUSDT");
+    expect(block.textContent).toContain("Allowed sides on BTC: COMBO_01 SHORT");
+    expect(block.textContent).toContain(
+      "Blocked on BTC (failed BTC test): COMBO_02 SHORT, COMBO_03_TRANSITION_B LONG",
+    );
+    expect(block.textContent).toContain("tested 2025-01-01 → 2025-12-31, decided 2026-10-17");
+  });
+
+  it("shows nothing for the allowlist when no coin has an entry", async () => {
+    await renderWith(response({ symbol_allowlist: { version: 1, source: "x", symbols: {} } }));
+    expect(screen.queryByTestId("passed-regime-allowlist")).toBeNull();
+  });
 });

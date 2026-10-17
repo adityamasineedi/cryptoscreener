@@ -12,6 +12,14 @@ Fill book and sides
     ``directions`` limits the run to the LONG or the SHORT rows of the passed
     book; the state reports which rows were in scope.
 
+Per-coin allowlist
+    ``apply_symbol_allowlist`` (default True) applies
+    ``passed_symbol_allowlist``: on a coin with an entry only the sides that
+    passed that coin's test open, as on paper. The allowlist is read once at
+    start and handed to every worker step, and ``symbol_allowlist`` in the
+    state names the per-coin filters the run applied. False runs every side
+    on every coin, for the per-coin pass/fail study.
+
 Window
     The book runs on 1h bars only. A request names a timeframe; anything but
     1h is rejected, never reinterpreted. Two modes, as on the screen:
@@ -105,6 +113,8 @@ def _idle_state() -> dict[str, Any]:
         "execution_model_version": None,
         "directions": [],
         "sides_in_scope": [],
+        "apply_symbol_allowlist": True,
+        "symbol_allowlist": None,
         "total_symbols": 0,
         "done_symbols": 0,
         "walks": 0,
@@ -163,6 +173,14 @@ def _scope_rows(directions: Any) -> list[dict[str, str]]:
     ]
 
 
+def _allowlist_view(allowlist: Any, symbols: list[str], scope: Any, applied: bool) -> dict[str, Any]:
+    """The per-coin filters a run applies: coins with an entry, sides in scope only."""
+    if not applied or allowlist is None:
+        return {"applied": False, "symbols": {}}
+    view = allowlist.describe(symbols, sides_in_scope(scope))
+    return {"applied": True, "symbols": view["symbols"]}
+
+
 def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, Any]:
     """Summary plus the latest closed trades. Drops the full signal list."""
     summary = dict(result.get("summary") or {})
@@ -195,6 +213,7 @@ def slim_result(result: dict[str, Any], *, trade_limit: int = 40) -> dict[str, A
         "execution_model_version": result.get("execution_model_version"),
         "directions": result.get("directions"),
         "sides_in_scope": result.get("sides_in_scope"),
+        "symbol_allowlist": result.get("symbol_allowlist"),
     }
 
 
@@ -393,8 +412,9 @@ def _execute(
 ) -> dict[str, Any]:
     """One CPU step. Same calls, in the same order, as ``run_regime_book``.
 
-    ``pnl_model`` and ``directions`` ride in the payload (defaults: the
-    next-open book, both directions). The ``finish`` step needs
+    ``pnl_model``, ``directions``, ``apply_symbol_allowlist`` and
+    ``symbol_allowlist`` ride in the payload (defaults: the next-open book,
+    both directions, the committed per-coin allowlist applied). The ``finish`` step needs
     ``candles_by_symbol`` (symbol -> the 1h series that symbol's walk used),
     as ``run_regime_book`` passes it, so the next-open fill can be priced.
     """
@@ -404,6 +424,7 @@ def _execute(
     clock = RegimeClock(payload["btc_daily"], SignalConfig())
     model = normalize_pnl_model(payload.get("pnl_model") or DEFAULT_PNL_MODEL)
     directions = normalize_directions(payload.get("directions"))
+    apply_allowlist = bool(payload.get("apply_symbol_allowlist", True))
     op = payload["op"]
     if op == "symbol":
         return run_symbol(
@@ -418,6 +439,9 @@ def _execute(
             progress=progress,
             pnl_model=model,
             directions=directions,
+            apply_symbol_allowlist=apply_allowlist,
+            # The allowlist the parent read at start (None: the committed file).
+            symbol_allowlist=payload.get("symbol_allowlist"),
         )
     if op == "finish":
         return build_result(
@@ -604,6 +628,8 @@ async def _run(job: dict[str, Any]) -> None:
                     "btc_daily": btc_daily,
                     "pnl_model": job["pnl_model"],
                     "directions": job["directions"],
+                    "apply_symbol_allowlist": job["apply_symbol_allowlist"],
+                    "symbol_allowlist": job.get("_symbol_allowlist"),
                 },
                 cancelled,
                 on_progress,
@@ -651,6 +677,8 @@ async def _run(job: dict[str, Any]) -> None:
         job["execution_model_version"] = slim["execution_model_version"]
         job["directions"] = slim["directions"]
         job["sides_in_scope"] = slim["sides_in_scope"]
+        if slim.get("symbol_allowlist") is not None:
+            job["symbol_allowlist"] = slim["symbol_allowlist"]
         _finish(job, "done")
     except Exception as exc:  # noqa: BLE001
         _finish(job, "error", error=f"{type(exc).__name__}: {exc}")
@@ -667,10 +695,12 @@ async def start(
     timeframe: Any = None,
     start_date: Any = None,
     end_date: Any = None,
+    apply_symbol_allowlist: bool = True,
 ) -> dict[str, Any]:
     """Start one regime-book run. A run already in progress is left alone.
 
     ``directions`` is None (every passed row), ``["LONG"]`` or ``["SHORT"]``.
+    ``apply_symbol_allowlist`` applies the per-coin allowlist (default True).
     """
     global _task, _state
     allowed = set(cap_symbols())
@@ -688,6 +718,15 @@ async def start(
         scope = normalize_directions(directions)
     except ValueError as exc:
         return {"status": "REJECTED", "error": str(exc)}
+    apply_allowlist = bool(apply_symbol_allowlist)
+    allowlist = None
+    if apply_allowlist:
+        from app.research.passed_symbol_allowlist import AllowlistError, get_allowlist
+
+        try:
+            allowlist = get_allowlist()
+        except AllowlistError as exc:
+            return {"status": "REJECTED", "error": f"Per-coin allowlist: {exc}"}
     async with _lock:
         if _task is not None and not _task.done():
             return {"status": "ALREADY_RUNNING", "job": status()}
@@ -716,6 +755,9 @@ async def start(
                 "pnl_model": DEFAULT_PNL_MODEL,
                 "directions": list(scope),
                 "sides_in_scope": _scope_rows(scope),
+                "apply_symbol_allowlist": apply_allowlist,
+                "symbol_allowlist": _allowlist_view(allowlist, chosen, scope, apply_allowlist),
+                "_symbol_allowlist": allowlist,
                 "total_symbols": len(chosen),
                 "started_at": datetime.now(timezone.utc).isoformat(),
                 "_t0": time.perf_counter(),

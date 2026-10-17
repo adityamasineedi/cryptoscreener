@@ -1147,8 +1147,10 @@ async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict
     Body: symbols, timeframe ("1h" only; ``timeframes`` must be ["1h"]),
     start_date/end_date (UTC days, end inclusive) or limit (1h bars), and
     ``directions`` (``["LONG"]``, ``["SHORT"]``, or absent for both), which
-    limits the passed rows in scope. Trades are priced on the next-open fill
-    book. Returns STARTED, ALREADY_RUNNING, or REJECTED with the reason.
+    limits the passed rows in scope, and ``apply_symbol_allowlist`` (default
+    true): false runs every passed side on every coin, ignoring the per-coin
+    allowlist. Trades are priced on the next-open fill book. Returns STARTED,
+    ALREADY_RUNNING, or REJECTED with the reason.
     """
     from app.research.regime_backtest_job import start
 
@@ -1170,6 +1172,17 @@ async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict
     directions = body.get("directions")
     if directions is None and body.get("direction"):
         directions = [body.get("direction")]
+    apply_allowlist = body.get("apply_symbol_allowlist", True)
+    if isinstance(apply_allowlist, str):
+        text = apply_allowlist.strip().lower()
+        if text not in {"true", "false", "1", "0", "yes", "no", ""}:
+            return {
+                "status": "REJECTED",
+                "error": f"apply_symbol_allowlist must be true or false, got {apply_allowlist!r}.",
+            }
+        apply_allowlist = text not in {"false", "0", "no"}
+    elif apply_allowlist is None:
+        apply_allowlist = True
     return await start(
         [str(s) for s in symbols],
         body.get("limit"),
@@ -1177,6 +1190,7 @@ async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict
         timeframe=timeframe,
         start_date=body.get("start_date"),
         end_date=body.get("end_date"),
+        apply_symbol_allowlist=bool(apply_allowlist),
     )
 
 

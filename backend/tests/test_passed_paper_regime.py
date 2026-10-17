@@ -518,6 +518,7 @@ STATUS_KEYS = {
     "book_open",
     "book_note",
     "symbols",
+    "symbol_allowlist",
     "symbol_risk",
 }
 
@@ -552,6 +553,8 @@ def test_regime_status_shape(rig, monkeypatch, trend, n_allowed):
     assert status["symbols"] == list(cap_symbols())
     assert status["symbol_risk"]["large_risk_percent"] == 0.02
     assert status["symbol_risk"]["mid_risk_percent"] == 0.01
+    # No per-coin entries (conftest): every coin runs every passed side.
+    assert status["symbol_allowlist"]["symbols"] == {}
     # Reading the status runs nothing.
     assert r.evaluated == []
     assert r.opens == []
@@ -581,6 +584,7 @@ def test_regime_status_after_a_bar(rig, monkeypatch):
         "trend": "BEARISH",
         "as_of_daily_bar": "2026-10-10T00:00:00+00:00",
         "sides_evaluated": 9,
+        "signals_not_allowed": 0,
     }
     # The status shows the regime that bar used, not a fresh read.
     assert status["regime_bar"] == _h1()[-1]["time"].isoformat()

@@ -17,6 +17,20 @@ def _echo_closed_path_a_eval(monkeypatch):
         lambda _symbol, payload: dict(payload or {}),
     )
 
+@pytest.fixture(autouse=True)
+def _empty_passed_symbol_allowlist():
+    """Tests run with no per-coin allowlist entries unless they set their own.
+
+    Keeps passed-book tests independent of the committed
+    passed_symbol_allowlist.json (its BTC/ETH entries are data, not test inputs).
+    """
+    from app.research import passed_symbol_allowlist as allowlist
+
+    allowlist.set_allowlist_for_tests(allowlist.SymbolAllowlist(entries={}, source="tests"))
+    yield
+    allowlist.set_allowlist_for_tests(None)
+
+
 @pytest.fixture
 def passed_book_open(monkeypatch):
     """Passed-regime book open, matching production (REGIME_BOOK_OPEN = True)."""

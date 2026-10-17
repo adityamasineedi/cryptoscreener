@@ -20,6 +20,13 @@ next bar's open with the causal entry slippage, and the paper engine walks
 the exit on closed bars with the same rules. A signal whose next bar is
 missing is not opened (``FILL_BAR_GAP``); one whose next bar has not arrived
 yet is retried.
+
+A coin with an entry in the per-coin allowlist
+(``app.research.passed_symbol_allowlist``) opens only the sides that passed
+that coin's test. A signal from any other passed side on that coin is
+recorded as not opened with reason ``symbol_side_not_allowed``, ahead of the
+open-position check, as the backtest regime book does. Coins with no entry
+run every passed side.
 """
 
 from __future__ import annotations
@@ -55,6 +62,11 @@ from app.research.passed_regime_router import (
     route_passed_book,
 )
 from app.research.passed_regime_backtest import RegimeClock
+from app.research.passed_symbol_allowlist import (
+    PAPER_SKIP_REASON as SYMBOL_SIDE_NOT_ALLOWED,
+    SymbolAllowlist,
+    get_allowlist,
+)
 from app.research.v1_production import normalize_symbol
 from app.signals._candle_utils import candle_time
 from app.signals.config import SignalConfig
@@ -113,10 +125,20 @@ class DailySnapshot:
 
 
 class PassedPaperWatcher:
-    def __init__(self, *, enabled: bool = True, paper_engine: Any | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        enabled: bool = True,
+        paper_engine: Any | None = None,
+        symbol_allowlist: SymbolAllowlist | None = None,
+    ) -> None:
         self.enabled = bool(enabled)
         self.symbols = cap_symbols()
         self.sides = PASSED_SIDES
+        # Loaded and validated once; a bad file fails here, not mid-tick.
+        self.symbol_allowlist = (
+            symbol_allowlist if symbol_allowlist is not None else get_allowlist()
+        )
         self._paper = paper_engine
         self._lock = threading.RLock()
         self._seeded: set[str] = set()
@@ -285,6 +307,9 @@ class PassedPaperWatcher:
                 "book_open": REGIME_BOOK_OPEN,
                 "book_note": "" if REGIME_BOOK_OPEN else REGIME_BOOK_CLOSED_NOTE,
                 "symbols": list(cap_symbols()),
+                # Per coin: sides that passed / failed that coin's test.
+                # Coins not listed run every passed side.
+                "symbol_allowlist": self.symbol_allowlist.describe(),
                 "symbol_risk": {
                     "large_symbols": list(LARGE),
                     "mid_symbols": list(MID),
@@ -452,6 +477,7 @@ class PassedPaperWatcher:
             "trend": trend,
             "as_of_daily_bar": as_of_daily,
             "sides_evaluated": 0,
+            "signals_not_allowed": 0,
         }
         if trend == "NEUTRAL":
             # No new signal. Open positions keep their own stops and targets.
@@ -468,8 +494,11 @@ class PassedPaperWatcher:
         blocked = False
         book_closed = False
         pending = False
+        not_allowed = False
         evaluated = 0
         idx = len(series_1h) - 1
+        # None: no entry for this coin, every passed side may open.
+        permitted = self.symbol_allowlist.allowed_sides_for(sym)
         for combination_id, timeframe, direction in sides:
             if timeframe != "1h":
                 continue
@@ -477,6 +506,7 @@ class PassedPaperWatcher:
             if combo is None:
                 continue
             evaluated += 1
+            side_permitted = permitted is None or (combination_id, timeframe, direction) in permitted
             try:
                 result = evaluate_combination_at_bar(
                     symbol=sym,
@@ -499,7 +529,8 @@ class PassedPaperWatcher:
                     direction=direction,
                     error=str(exc),
                 )
-                failed = True
+                # A side that cannot open on this coin does not hold the bar for a retry.
+                failed = failed or side_permitted
                 continue
             status = str((result or {}).get("status") or "")
             wanted = (
@@ -516,6 +547,14 @@ class PassedPaperWatcher:
                 "trend": trend,
                 "as_of_daily_bar": as_of_daily,
             }
+            if not side_permitted:
+                # Failed this coin's test: never opens here, whatever else holds.
+                not_allowed = True
+                bar_info["signals_not_allowed"] += 1
+                self._record_signal(
+                    **signal, outcome="not_opened", reason=SYMBOL_SIDE_NOT_ALLOWED
+                )
+                continue
             if late:
                 late_refused = True
                 self._record_signal(**signal, outcome="not_opened", reason="late_tip")
@@ -605,6 +644,8 @@ class PassedPaperWatcher:
             self.last_skip = f"{sym}:{REGIME_BOOK_CLOSED_REASON}"
         elif blocked and not opened:
             self.last_skip = f"{sym}:symbol_has_open_position"
+        elif not_allowed and not opened:
+            self.last_skip = f"{sym}:{SYMBOL_SIDE_NOT_ALLOWED}"
         elif not opened:
             self.last_skip = f"{sym}:no_passed_entry"
         bar_info["sides_evaluated"] = evaluated

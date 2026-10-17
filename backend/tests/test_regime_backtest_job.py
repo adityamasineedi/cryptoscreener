@@ -559,6 +559,7 @@ def test_route_passes_dates_and_rejects_mixed_timeframes(monkeypatch: pytest.Mon
         "timeframe": "1h",
         "start_date": "2025-01-01",
         "end_date": "2025-03-31",
+        "apply_symbol_allowlist": True,
     }
     mixed = client.post(
         "/api/research/regime-backtest/start", json={"symbols": [SYMBOL], "timeframes": ["1h", "4h"]}
