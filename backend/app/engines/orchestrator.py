@@ -1034,12 +1034,23 @@ class CalculationOrchestrator:
                 logger.warning("v1_paper_watcher_loop_failed", error=str(exc))
 
     async def _passed_paper_watcher_loop(self) -> None:
-        """Closed-1h scan for every strategy side that passed the cap book."""
+        """Closed-1h scan for every strategy side that passed the cap book.
+
+        Each tick evaluates every closed bar since the symbol's watermark,
+        oldest first, so a restart or a delayed tick does not skip a bar.
+        """
         from app.research.passed_cap_book import cap_symbols
         from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
-        from app.services.passed_paper_watcher import get_passed_paper_watcher
+        from app.services.passed_paper_watcher import (
+            DEFAULT_STATE_PATH,
+            get_passed_paper_watcher,
+        )
 
-        watcher = get_passed_paper_watcher(enabled=True, paper_engine=get_paper_trade_engine())
+        watcher = get_passed_paper_watcher(
+            enabled=True,
+            paper_engine=get_paper_trade_engine(),
+            state_path=DEFAULT_STATE_PATH,
+        )
         try:
             self.set_kline_focus(list(cap_symbols()))
         except Exception:  # noqa: BLE001
@@ -1055,7 +1066,7 @@ class CalculationOrchestrator:
                 daily = await asyncio.to_thread(watcher.read_daily_snapshot)
                 for sym in watcher.symbols:
                     try:
-                        await asyncio.to_thread(watcher.on_closed_1h, sym, daily=daily)
+                        await asyncio.to_thread(watcher.catch_up, sym, daily=daily)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "passed_paper_watcher_symbol_failed",

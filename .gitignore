@@ -24,6 +24,7 @@ frontend/tsconfig.tsbuildinfo
 data/postgres/
 data/redis/
 data/diagnostics/
+data/paper/
 .cache/
 backend/data/research_cache/
 backend/data/research_cache_benchmark/
