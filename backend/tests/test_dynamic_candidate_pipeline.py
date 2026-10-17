@@ -1184,30 +1184,48 @@ async def test_api_exposes_production_approved_false():
     assert view["telegram_eligible"] is False
 
 
+_FRONTEND_SRC = Path(__file__).resolve().parents[2] / "frontend" / "src"
+_DYNAMIC_CANDIDATE_UI_MARKERS = (
+    "fetchDynamicCandidate",
+    "DynamicCandidateRow",
+    "operator_paper_approval",
+    "production_approval",
+)
+
+
+def _dynamic_candidate_ui_sources() -> dict[str, str]:
+    """Non-test frontend components that render dynamic-candidate rows.
+
+    DynamicCandidatePipelinePanel.tsx was removed in 03c70c9 (2026-10-15,
+    "research and backtest UI updates"); no component renders these rows
+    today, only the API types in api/client.ts remain. Any component that
+    renders them again is held to the panel's wording rules.
+    """
+    out: dict[str, str] = {}
+    for path in sorted(_FRONTEND_SRC.rglob("*.tsx")):
+        if ".test." in path.name:
+            continue
+        src = path.read_text(encoding="utf-8")
+        if any(marker in src for marker in _DYNAMIC_CANDIDATE_UI_MARKERS):
+            out[path.relative_to(_FRONTEND_SRC).as_posix()] = src
+    return out
+
+
 @pytest.mark.asyncio
 async def test_ui_labels_never_bare_approved():
     import re
     from app.research.strategy_candidate_registry import serialize_candidate
-    from pathlib import Path
 
-    panel = (
-        Path(__file__).resolve().parents[2]
-        / "frontend"
-        / "src"
-        / "components"
-        / "DynamicCandidatePipelinePanel.tsx"
-    )
-    src = panel.read_text(encoding="utf-8")
-    # Forbid bare approved / not approved string literals used as UI copy.
-    assert re.search(r'["\']approved["\']', src, re.I) is None
-    assert re.search(r'["\']not approved["\']', src, re.I) is None
-    assert "Paper not approved" not in src
-    assert "Experimental paper approved" in src
-    assert "Not approved for paper" in src
-    assert "Not approved for production" in src
-    assert "Telegram disabled" in src
-    assert "Paper approved by" in src
-    assert "Source:" in src
+    ui_sources = _dynamic_candidate_ui_sources()
+    for name, src in ui_sources.items():
+        # Forbid bare approved / not approved string literals used as UI copy.
+        assert re.search(r'["\']approved["\']', src, re.I) is None, name
+        assert re.search(r'["\']not approved["\']', src, re.I) is None, name
+        assert "Paper not approved" not in src, name
+    if ui_sources:
+        combined = "\n".join(ui_sources.values())
+        assert "Not approved for production" in combined
+        assert "Telegram disabled" in combined
 
     await _seed_v2_paper_candidate("LABELUSDT")
     view = serialize_candidate(
@@ -1242,16 +1260,12 @@ async def test_detail_endpoint_fields_and_rule_conditions():
         Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "client.ts"
     ).read_text(encoding="utf-8")
     assert "fetchDynamicCandidateDetail" in client
-    panel = (
-        Path(__file__).resolve().parents[2]
-        / "frontend"
-        / "src"
-        / "components"
-        / "DynamicCandidatePipelinePanel.tsx"
-    ).read_text(encoding="utf-8")
-    assert "fetchDynamicCandidateDetail" in panel
-    assert "Backtest checks" in panel
-    assert "OOS checks" in panel
+    # The panel that called this route and showed "Backtest checks" /
+    # "OOS checks" was removed in 03c70c9 (see _dynamic_candidate_ui_sources).
+    for name, src in _dynamic_candidate_ui_sources().items():
+        if "fetchDynamicCandidateDetail" in src:
+            assert "Backtest checks" in src, name
+            assert "OOS checks" in src, name
 
 
 @pytest.mark.asyncio

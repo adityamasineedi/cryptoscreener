@@ -19,6 +19,16 @@ from app.services.screener_presentation import (
     classify_v1_status,
     enrich_screener_row_dict,
 )
+from app.research.v1_production import V1_SYMBOLS
+
+# NEARUSDT used to be the "non-v1" example, but f34df75 (2026-10-05, extended
+# 1h paper books) added it and 23 other majors to V1_SYMBOLS. Use a symbol that
+# is outside the watcher universe, and check that here so it cannot go stale
+# silently again.
+NON_V1_SYMBOL = "WIFUSDT"
+EXTENDED_V1_SYMBOL = "NEARUSDT"
+assert NON_V1_SYMBOL not in V1_SYMBOLS
+assert EXTENDED_V1_SYMBOL in V1_SYMBOLS
 
 
 def _fv(value: Any, status: str = "LIVE") -> dict[str, Any]:
@@ -33,7 +43,7 @@ def _fv(value: Any, status: str = "LIVE") -> dict[str, Any]:
 
 def test_non_v1_symbol_always_discovery_only():
     status = classify_v1_status(
-        symbol="NEARUSDT",
+        symbol=NON_V1_SYMBOL,
         snapshot={
             "eval": {
                 "status": "LONG_ENTRY_CANDIDATE",
@@ -58,7 +68,7 @@ def test_non_v1_symbol_always_discovery_only():
 def test_fifteen_m_bullish_row_never_becomes_v1_eligible():
     """A generic 15m row cannot be displayed as V1 ELIGIBLE from screen fields."""
     row = {
-        "symbol": "NEARUSDT",
+        "symbol": NON_V1_SYMBOL,
         "setup_trend": _fv("BULLISH"),
         "market_signal": _fv("BUY"),
         "setup_signal": _fv("WAITING"),
@@ -77,15 +87,18 @@ def test_fifteen_m_bullish_row_never_becomes_v1_eligible():
     assert enriched["v1_status"]["status"] == STATUS_DISCOVERY_ONLY
     assert enriched["local_trend"] == "BULLISH"
     assert enriched["screen_setup"] == "WAITING"
-    # Even if someone later mistags NEAR as v1 with empty snap → UNAVAILABLE, never ELIGIBLE
-    eth_like = enrich_screener_row_dict(
-        {**row, "symbol": "ETHUSDT"},
-        screen_timeframe="15m",
-        v1_snapshots={},
-        open_trades={},
-    )
-    assert eth_like["v1_status"]["status"] == STATUS_V1_DATA_UNAVAILABLE
-    assert eth_like["v1_status"]["status"] != STATUS_V1_ELIGIBLE
+    # A v1-universe symbol (frozen trio or extended books, e.g. NEAR since
+    # f34df75) with no watcher snapshot -> UNAVAILABLE, never ELIGIBLE.
+    for v1_sym in ("ETHUSDT", EXTENDED_V1_SYMBOL):
+        v1_like = enrich_screener_row_dict(
+            {**row, "symbol": v1_sym},
+            screen_timeframe="15m",
+            v1_snapshots={},
+            open_trades={},
+        )
+        assert v1_like["is_telegram_eligible"] is False
+        assert v1_like["v1_status"]["status"] == STATUS_V1_DATA_UNAVAILABLE
+        assert v1_like["v1_status"]["status"] != STATUS_V1_ELIGIBLE
 
 
 def test_v1_status_comes_from_watcher_snapshot_not_15m():
@@ -267,11 +280,17 @@ def test_enrich_payload_does_not_open_trades(monkeypatch):
     payload = {
         "rows": [
             {
-                "symbol": "NEARUSDT",
+                "symbol": NON_V1_SYMBOL,
                 "setup_trend": _fv("BULLISH"),
                 "setup_signal": _fv("CONFLICT"),
                 "setup_sl": _fv(1.0),
-            }
+            },
+            {
+                "symbol": EXTENDED_V1_SYMBOL,
+                "setup_trend": _fv("BULLISH"),
+                "setup_signal": _fv("ENTRY_READY"),
+                "setup_sl": _fv(1.0),
+            },
         ]
     }
     out = sp.enrich_screener_payload(payload, screen_timeframe="15m")
@@ -279,6 +298,9 @@ def test_enrich_payload_does_not_open_trades(monkeypatch):
     assert out["is_telegram_eligible"] is False
     assert out["rows"][0]["is_telegram_eligible"] is False
     assert out["rows"][0]["v1_status"]["status"] == STATUS_DISCOVERY_ONLY
+    # In-universe row with no watcher snapshot: still no open, not eligible.
+    assert out["rows"][1]["is_telegram_eligible"] is False
+    assert out["rows"][1]["v1_status"]["status"] == STATUS_V1_DATA_UNAVAILABLE
     assert out["screen_timeframe"] == "15m"
     assert out["screener_identity"]["title"] == "GENERAL MARKET SCREENER"
 
