@@ -1606,6 +1606,27 @@ export type PassedRegimeEvaluatedBar = {
   sides_evaluated: number;
 };
 
+/** One coin's per-coin allowlist: the passed sides that passed / failed that coin's test. */
+export type PassedSymbolAllowlistEntry = {
+  symbol?: string;
+  allowed_sides: PassedRegimeSide[];
+  blocked_sides: PassedRegimeSide[];
+  tested_window?: { start?: string | null; end?: string | null };
+  decided_at?: string | null;
+  pass_rule?: string | null;
+  pnl_model?: string | null;
+  results?: Array<Record<string, unknown>>;
+};
+
+/** Coins with an entry trade only their allowed sides; coins not listed run every passed side. */
+export type PassedSymbolAllowlist = {
+  version?: number;
+  source?: string;
+  /** Regime-book runs only: false when the run ignored the allowlist. */
+  applied?: boolean;
+  symbols: Record<string, PassedSymbolAllowlistEntry>;
+};
+
 export type PassedRegimeResponse = {
   enabled: boolean;
   trend: PassedRegimeTrend;
@@ -1638,6 +1659,8 @@ export type PassedRegimeResponse = {
     large_risk_percent: number;
     mid_risk_percent: number;
   };
+  /** Per-coin allowlist the watcher applies. */
+  symbol_allowlist?: PassedSymbolAllowlist;
   watcher_loop_enabled?: boolean;
   timestamp?: string;
 };
@@ -1712,6 +1735,10 @@ export type RegimeBacktestStatus = {
   /** Directions in scope for this run, e.g. ["LONG"]. */
   directions?: Array<"LONG" | "SHORT">;
   sides_in_scope?: Array<{ strategy_id: string; timeframe: string; direction: string }>;
+  /** False when the run ignored the per-coin allowlist (every side on every coin). */
+  apply_symbol_allowlist?: boolean;
+  /** Per-coin filters the run applied (coins with an entry; sides in scope only). */
+  symbol_allowlist?: PassedSymbolAllowlist | null;
   error?: string | null;
   skipped_symbols?: string[];
   summary?: {
@@ -1760,6 +1787,8 @@ export type RegimeBacktestStartBody = {
   end_date?: string;
   /** Passed rows in scope. The Long book sends ["LONG"], the Short book ["SHORT"]. */
   directions?: Array<"LONG" | "SHORT">;
+  /** Default true. False runs every passed side on every coin (per-coin pass/fail study). */
+  apply_symbol_allowlist?: boolean;
 };
 
 export type RegimeBacktestStartResponse = {

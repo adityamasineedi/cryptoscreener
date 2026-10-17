@@ -130,6 +130,9 @@ def test_returns_regime_status_keys(harness):
     status = harness.watcher.regime_status()
     assert body["allowed"] == status["allowed"]
     assert body["skipped"] == status["skipped"]
+    # Per-coin allowlist (empty in tests): same view as the watcher's.
+    assert body["symbol_allowlist"] == status["symbol_allowlist"]
+    assert set(body["symbol_allowlist"]) == {"version", "source", "symbols"}
     assert body["latest_signals"] == []
     assert body["last_evaluated_bar"] is None
     assert body["opened_count"] == 0

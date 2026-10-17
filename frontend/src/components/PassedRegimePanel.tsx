@@ -4,6 +4,7 @@ import {
   type PassedRegimeResponse,
   type PassedRegimeSide,
 } from "../api/client";
+import { SymbolAllowlistLines } from "./SymbolAllowlistLines";
 
 const POLL_MS = 5000;
 
@@ -162,6 +163,10 @@ export function PassedRegimePanel() {
               testId="passed-regime-skipped"
             />
           </div>
+          <SymbolAllowlistLines
+            allowlist={snapshot.symbol_allowlist}
+            testId="passed-regime-allowlist"
+          />
 
           <h3 className="mt-4 text-[11px] uppercase tracking-wide text-terminal-muted">
             Latest signals · {signals.length}

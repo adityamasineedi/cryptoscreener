@@ -23,6 +23,15 @@ Sides in scope (``directions``)
     ``("SHORT",)`` keeps only the rows of that direction; the BTC daily trend
     still decides, bar by bar, which of those rows may open.
 
+Per-coin allowlist (``apply_symbol_allowlist``)
+    With it on (the default) a coin with an entry in
+    ``passed_symbol_allowlist`` opens only the sides that passed that coin's
+    test, as the paper watcher does. A signal from another passed side on that
+    coin is listed, not taken, with skip_reason ``SYMBOL_SIDE_NOT_ALLOWED``
+    (checked before the open-position rule), and the side keeps walking the
+    bars that signal hid. Coins with no entry run every side in scope. Off,
+    every side in scope runs on every coin (for the per-coin pass/fail study).
+
 How signals are produced
     Every side the trend allows on at least one bar is walked once over the
     whole series by ``run_combination_backtest``, so a strategy that builds a
@@ -78,7 +87,8 @@ Result of ``run_regime_book`` / ``build_result``
                         strategy_id, symbol, timeframe, direction,
                         signal_time, bar_index, trend, as_of_daily_bar,
                         entry_price, stop_price, tp1, taken, skip_reason
-                        (None, POSITION_OPEN, or SAME_BAR_EARLIER_SIDE),
+                        (None, SYMBOL_SIDE_NOT_ALLOWED, POSITION_OPEN, or
+                        SAME_BAR_EARLIER_SIDE),
                         blocked_by ({strategy_id, direction, signal_time}),
                         rewalk_first_bar (True when the signal is on the
                         first bar of a walk over hidden bars; see the first
@@ -111,7 +121,12 @@ Result of ``run_regime_book`` / ``build_result``
                       bars_evaluated, period_start, period_end, walks,
                       signals, trades, bars_by_trend, short_history_bars,
                       short_history_until, gap_walks, exit_rewalks,
-                      signals_outside_trend, errors
+                      signals_outside_trend, errors, symbol_allowlist
+                      ({applied, filter: the coin's entry view or None})
+    symbol_allowlist  {applied, symbols: {symbol: {symbol, allowed_sides,
+                      blocked_sides, tested_window, decided_at, pass_rule,
+                      pnl_model, results}}}: the per-coin filters this run
+                      applied (coins with an entry only; sides in scope only)
 """
 
 from __future__ import annotations
@@ -132,6 +147,11 @@ from app.research.causal_execution import (
     execute_causal_trade,
 )
 from app.research.passed_cap_book import PASSED_SIDES, PRINCIPAL_USD, passed_risk_percent
+from app.research.passed_symbol_allowlist import (
+    BACKTEST_SKIP_REASON,
+    SymbolAllowlist,
+    get_allowlist,
+)
 from app.signals._candle_utils import candle_time
 
 RUN_TIMEFRAME = "1h"
@@ -145,6 +165,7 @@ LEVERAGE = 2.0
 
 SKIP_POSITION_OPEN = "POSITION_OPEN"
 SKIP_SAME_BAR = "SAME_BAR_EARLIER_SIDE"
+SKIP_SYMBOL_SIDE_NOT_ALLOWED = BACKTEST_SKIP_REASON
 
 # Bars added to a cut-off walk to find the trade's exit; doubles each try.
 EXIT_SPAN = 48
@@ -320,6 +341,28 @@ def sides_in_scope(directions: Any = None) -> tuple[tuple[str, str, str], ...]:
     return tuple(side for side in PASSED_SIDES if side[1] == RUN_TIMEFRAME and side[2] in scope)
 
 
+def symbol_filter(
+    symbol: str,
+    directions: Any = None,
+    *,
+    apply_symbol_allowlist: bool = True,
+    symbol_allowlist: SymbolAllowlist | None = None,
+) -> tuple[frozenset[tuple[str, str, str]] | None, dict[str, Any] | None]:
+    """The coin's permitted sides (None = every side in scope) and its JSON view.
+
+    The view lists the coin's allowed and blocked sides within the scope, and
+    the test that decided them. Both are None when the coin has no entry or
+    the filter is off.
+    """
+    if not apply_symbol_allowlist:
+        return None, None
+    allowlist = symbol_allowlist if symbol_allowlist is not None else get_allowlist()
+    entry = allowlist.entry(symbol)
+    if entry is None:
+        return None, None
+    return frozenset(entry.allowed), entry.describe(sides_in_scope(directions))
+
+
 def _causal_slippage() -> tuple[float, float]:
     """Entry and exit slippage of the causal model, as the screen's fee step reads them."""
     from app.research.config import ResearchConfig
@@ -341,6 +384,8 @@ def run_symbol(
     progress: Callable[[dict[str, Any]], None] | None = None,
     pnl_model: str = DEFAULT_PNL_MODEL,
     directions: Any = None,
+    apply_symbol_allowlist: bool = True,
+    symbol_allowlist: SymbolAllowlist | None = None,
 ) -> dict[str, Any]:
     """Pick the shared book's trades for one symbol. JSON-ready, no sizing.
 
@@ -352,10 +397,19 @@ def run_symbol(
     bar counts, trend counts, and period describe the evaluated bars only.
     ``pnl_model`` decides how long a taken trade holds the symbol (see the
     module docstring); ``directions`` limits the PASSED_SIDES rows in scope.
+    ``apply_symbol_allowlist`` applies the coin's per-coin allowlist
+    (``symbol_allowlist``, default the committed file); False runs every side
+    in scope, for the pass/fail study.
     """
     backtest = backtest_fn or _default_backtest()
     model = normalize_pnl_model(pnl_model)
     scope = sides_in_scope(directions)
+    permitted, filter_view = symbol_filter(
+        symbol,
+        directions,
+        apply_symbol_allowlist=apply_symbol_allowlist,
+        symbol_allowlist=symbol_allowlist,
+    )
     slip_in, slip_out = _causal_slippage() if model == CAUSAL_NEXT_OPEN else (0.0, 0.0)
     sym = str(symbol).upper()
     series = list(book.get("candles") or [])
@@ -540,6 +594,12 @@ def run_symbol(
                 "rewalk_first_bar": item["rewalk"] and item["anchor"] is not None and i == item["anchor"],
             }
             signals.append(signal)
+            if permitted is not None and side not in permitted:
+                # Failed this coin's test: never taken here, never holds the
+                # symbol. The side keeps watching the bars this signal hid.
+                signal["skip_reason"] = SKIP_SYMBOL_SIDE_NOT_ALLOWED
+                walk_hidden(item, i, open_here)
+                continue
             if holder is not None and i <= busy_until:
                 same_bar = int(holder["entry_index"]) == i
                 signal["skip_reason"] = SKIP_SAME_BAR if same_bar else SKIP_POSITION_OPEN
@@ -610,6 +670,7 @@ def run_symbol(
         "exit_rewalks": stats["exit_rewalks"],
         "signals_outside_trend": stats["outside_trend"],
         "errors": errors,
+        "symbol_allowlist": {"applied": bool(apply_symbol_allowlist), "filter": filter_view},
         "signals": signals,
         "trades": taken,
     }
@@ -893,6 +954,16 @@ def build_result(
         "regime_timeline": clock.timeline(min(starts) + BAR, max(ends) + BAR) if starts and ends else [],
     }
     slip_in, slip_out = _causal_slippage() if causal else (None, None)
+    views = [res.get("symbol_allowlist") or {} for res in symbol_results]
+    symbol_allowlist = {
+        # A run sets the flag once for every symbol.
+        "applied": all(view.get("applied", True) for view in views),
+        "symbols": {
+            str(res.get("symbol")): view["filter"]
+            for res, view in zip(symbol_results, views)
+            if view.get("filter")
+        },
+    }
     return {
         "status": "CANCELLED" if cancelled else "OK",
         "principal_usd": principal,
@@ -907,6 +978,7 @@ def build_result(
         "sides_in_scope": [
             {"strategy_id": cid, "timeframe": tf, "direction": side} for cid, tf, side in scope
         ],
+        "symbol_allowlist": symbol_allowlist,
         "equity_basis": EQUITY_BASIS,
         "limitations": ([CAUSAL_LIMITATION] if causal else []) + list(LIMITATIONS),
         "summary": summary,
@@ -932,6 +1004,7 @@ def build_result(
                     "short_history_bars",
                     "short_history_until",
                     "errors",
+                    "symbol_allowlist",
                 )
             }
             | {
@@ -961,6 +1034,8 @@ def run_regime_book(
     progress: Callable[[dict[str, Any]], None] | None = None,
     pnl_model: str = DEFAULT_PNL_MODEL,
     directions: Any = None,
+    apply_symbol_allowlist: bool = True,
+    symbol_allowlist: SymbolAllowlist | None = None,
 ) -> dict[str, Any]:
     """Run the regime book over loaded candles. See the module docstring.
 
@@ -971,9 +1046,14 @@ def run_regime_book(
     defaults to ``SignalConfig()``, which is what the paper watcher uses.
     ``pnl_model`` picks the fill book (default CAUSAL_NEXT_OPEN, as the
     Backtest screen); ``directions`` limits the PASSED_SIDES rows in scope.
+    ``apply_symbol_allowlist`` (default True) applies the per-coin allowlist
+    (``symbol_allowlist``, default the committed file).
     """
     model = normalize_pnl_model(pnl_model)
     scope_directions = normalize_directions(directions)
+    allowlist = None
+    if apply_symbol_allowlist:
+        allowlist = symbol_allowlist if symbol_allowlist is not None else get_allowlist()
     if regime_signal_config is None:
         from app.signals.config import SignalConfig
 
@@ -993,6 +1073,8 @@ def run_regime_book(
             progress=progress,
             pnl_model=model,
             directions=scope_directions,
+            apply_symbol_allowlist=apply_symbol_allowlist,
+            symbol_allowlist=allowlist,
         )
         results.append(result)
         if result["status"] == "CANCELLED":
