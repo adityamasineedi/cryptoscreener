@@ -106,6 +106,18 @@ def apply_causal_net_summary(row: dict[str, Any], *, risk_usd: float) -> None:
         row[key] = summary[key]
 
 
+def number_causal_trades(trades: list[dict[str, Any]]) -> None:
+    """Give the causal book's trades ``trade_no`` 1..n and ``trade_id`` t1..tn in book order.
+
+    Identity only, the same scheme ``enrich_trades`` uses for legacy rows. No other
+    field is touched; an id already on a trade is kept.
+    """
+    for n, trade in enumerate(trades, 1):
+        trade["trade_no"] = n
+        if trade.get("trade_id") is None:
+            trade["trade_id"] = f"t{n}"
+
+
 def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
     """Fee enrich + market-structure attach (same process or worker).
 
@@ -123,8 +135,11 @@ def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
     lev = float(data["leverage"])
     principal = float(data["principal"])
     include_trades = bool(data.get("include_trades", True))
-    direction_u = str(data.get("direction") or "LONG")
     combination_id = str(data["combination_id"])
+    from app.research.backtest_ui_config import row_display_direction
+
+    # The row labels the book it holds: V2.1-A reads BOTH even on a LONG request.
+    direction_u = row_display_direction(combination_id, data.get("direction"))
     combo_name = str(data.get("combination_name") or combination_id)
     load_meta = data.get("load_meta") or {}
     candles = list(data.get("candles") or [])
@@ -246,6 +261,7 @@ def build_matrix_row_postprocess(data: dict[str, Any]) -> dict[str, Any]:
             config=run_cfg,
             account_equity=principal,
         )
+        number_causal_trades(record["causal_trades"])
         row_payload["execution_comparison"] = record["reconciliation"]
         row_payload["causal_trades"] = record["causal_trades"]
         apply_causal_primary_display(

@@ -516,3 +516,57 @@ def test_causal_profit_factor_is_none_not_infinite_when_no_trade_loses():
 
     mixed = winners + [{"outcome": "SL", "r_multiple": -1.0}]
     assert causal_r_metrics(mixed)["profit_factor"] == 3.5
+
+
+# ---------------------------------------------------------------- audit #20: causal trade identity
+
+
+def test_causal_trades_get_trade_no_and_trade_id_in_book_order():
+    row = _causal_row()
+    causal = row["causal_trades"]
+    assert [t["trade_no"] for t in causal] == [1, 2, 3, 4]
+    assert [t["trade_id"] for t in causal] == ["t1", "t2", "t3", "t4"]
+    # Book order is the signal order the legacy rows are numbered in.
+    assert [t["signal_index"] for t in causal] == [2, 10, 14, 20]
+    assert row["trades"] == causal
+    # The legacy book keeps its own numbering from the fee step.
+    assert [t["trade_no"] for t in build_matrix_row_postprocess(_payload("COMBO_02"))["trades"]] == [1, 2, 3, 4]
+
+
+def test_causal_identity_is_stamped_without_the_blotter_too():
+    row = _causal_row(include_trades=False)
+    assert row["trades"] == []
+    assert [t["trade_id"] for t in row["causal_trades"]] == ["t1", "t2", "t3", "t4"]
+
+
+def test_causal_identity_changes_no_other_field():
+    from app.research.backtest_cpu_worker import number_causal_trades
+    from app.research.causal_execution import build_execution_run_record
+    from app.research.config import ResearchConfig
+
+    cfg = ResearchConfig()
+    cfg.execution_model = "DUAL_LEGACY_AND_CAUSAL"
+    cfg.risk_usd = RISK_USD
+    clear_isolated_execution_runs()
+    record = build_execution_run_record(
+        run_id="identity", symbol="BTCUSDT", timeframe="1h", candles=_candles(),
+        trades=_trades(), config=cfg, account_equity=1000.0,
+    )
+    before = copy.deepcopy(record["causal_trades"])
+    assert all(t.get("trade_id") is None and "trade_no" not in t for t in before)
+    number_causal_trades(record["causal_trades"])
+    for got, was in zip(record["causal_trades"], before):
+        assert {k: v for k, v in got.items() if k not in ("trade_id", "trade_no")} == {
+            k: v for k, v in was.items() if k != "trade_id"
+        }
+
+
+def test_causal_rows_have_unique_blotter_and_replay_keys():
+    from app.research.vectorbt_orders_combo import combo_replay_orders
+
+    row = _causal_row()
+    keys = [f"n{t['trade_no']}" for t in row["trades"]]  # frontend tradeRowKey
+    assert len(set(keys)) == len(keys)
+    orders = combo_replay_orders("COMBO_02_V2", row["trades"])
+    # Closed trades only, keyed by trade number at the causal fill bar.
+    assert [o.trade_key for o in orders] == ["1@3", "2@11", "3@15"]

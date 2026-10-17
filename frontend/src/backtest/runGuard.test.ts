@@ -161,6 +161,28 @@ describe("checkJobInternallyConsistent", () => {
     ).toEqual([]);
   });
 
+  it("accepts a V2.1-A LONG job whose row reads BOTH (the two-sided book), and the request still matches", () => {
+    const job = {
+      status: "done" as const,
+      direction: "LONG",
+      strategy_id: "COMBO_02_V2_1_A",
+      production_comparable: false,
+      research_only: true,
+      rows: [{ ...row, direction: "BOTH", trades: [trade, { ...trade, trade_no: 2, direction: "SHORT" }] }],
+    };
+    expect(checkJobInternallyConsistent(job)).toEqual([]);
+    expect(
+      checkRunMatchesRequest(job, {
+        symbols: ["BTCUSDT"],
+        timeframes: ["1h"],
+        direction: "LONG",
+        strategy_id: "COMBO_02_V2_1_A",
+        research_risk_override: true,
+      }),
+    ).toEqual([]);
+    expect(directionText(job.rows[0].direction)).toBe("LONG+SHORT");
+  });
+
   it("does not apply the single-direction rule to a hedge-book (BOTH) COMBO_02_V2 or V2_1B run", () => {
     for (const id of ["COMBO_02_V2", "COMBO_02_V2_1B"]) {
       expect(

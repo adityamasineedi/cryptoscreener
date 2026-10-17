@@ -154,6 +154,82 @@ def test_both_job_identity_and_row_echo_read_two_sided():
     assert sorted(t["direction"] for t in row["trades"]) == ["LONG", "SHORT"]
 
 
+# ---------------------------------------------------------------- audit #16: V2.1-A row label
+
+
+def _two_sided_trade(n: int, direction: str, combination_id: str) -> dict:
+    return {
+        "symbol": "BTCUSDT", "timeframe": "1h", "combination_id": combination_id, "direction": direction,
+        "entry_index": n, "signal_time": (T0 + timedelta(hours=n)).isoformat(), "entry_price": 100.0,
+        "stop_price": 98.0 if direction == "LONG" else 102.0, "tp1": 104.0 if direction == "LONG" else 96.0,
+        "exit_index": n + 1, "exit_time": (T0 + timedelta(hours=n + 1)).isoformat(),
+        "exit_price": 104.0 if direction == "LONG" else 102.0,
+        "outcome": "TP1" if direction == "LONG" else "SL", "r_multiple": 2.0 if direction == "LONG" else -1.0,
+    }
+
+
+def test_row_display_direction_reads_both_for_v21a_only():
+    from app.research.backtest_ui_config import row_display_direction
+
+    for combo in ("COMBO_02_V2_1_A", "COMBO_02_V2_1A", "combo_02_v2_1_a"):
+        for direction in ("LONG", "SHORT", None):
+            assert row_display_direction(combo, direction) == TWO_SIDED_DIRECTION
+    assert row_display_direction("COMBO_02_V2", "LONG") == "LONG"
+    assert row_display_direction("COMBO_02_V2", "BOTH") == "BOTH"
+    assert row_display_direction("COMBO_02", "SHORT") == "SHORT"
+    assert row_display_direction("COMBO_02", None) == "LONG"
+
+
+@pytest.mark.parametrize("combo", ["COMBO_02_V2_1_A", "COMBO_02_V2_1A"])
+def test_v21a_row_reads_both_sides_while_the_job_keeps_the_long_request(combo):
+    """The hedge book posts V2.1-A as LONG; the row labels the two-sided book it holds."""
+    from app.research.backtest_cpu_worker import build_matrix_row_postprocess
+    from app.research.backtest_ui_config import job_identity_payload
+
+    resolved = _validate(direction="LONG", combination_id="COMBO_02_V2_1_A", strategy_id="COMBO_02_V2_1_A")
+    assert job_identity_payload(resolved)["direction"] == "LONG"
+
+    trades = [_two_sided_trade(1, "LONG", combo), _two_sided_trade(5, "SHORT", combo)]
+    payload = {
+        "backtest_out": {"status": "OK", "trades": trades, "result": {}, "sample_size": 2},
+        "risk_usd": 20.0, "taker_fee": 0.0004, "maker_fee": 0.0002, "leverage": 2.0, "principal": 1000.0,
+        "include_trades": True, "direction": "LONG", "combination_id": combo,
+        "load_meta": {"symbol": "BTCUSDT", "timeframe": "1h"}, "candles": [], "analytics_on": False,
+    }
+    row = build_matrix_row_postprocess(payload)
+    assert row["direction"] == TWO_SIDED_DIRECTION
+    assert row["structure"] == "HL+LH (both sides)"
+    assert [t["direction"] for t in row["trades"]] == ["LONG", "SHORT"]
+    # Label only: the trades and totals are what the fee step gives for these trades.
+    expected = enrich_trades(
+        trades, risk_usd=20.0, taker_fee=0.0004, maker_fee=0.0002, leverage=2.0,
+        account_equity=1000.0, closed_only=True, running_equity=True,
+    )
+    for got, want in zip(row["trades"], expected):
+        for key in ("entry_price", "exit_price", "qty", "net_pnl_usd", "r_net", "trade_id", "trade_no"):
+            assert got[key] == want[key], key
+    assert row["pnl_usd_net"] == pytest.approx(sum(t["net_pnl_usd"] for t in expected))
+
+
+def test_single_direction_rows_keep_the_request_label():
+    from app.research.backtest_cpu_worker import build_matrix_row_postprocess
+
+    for combo, direction, structure in (
+        ("COMBO_02_V2", "SHORT", "LH (bearish LH+LL)"),
+        ("COMBO_02", "LONG", "HL (bullish HH+HL)"),
+    ):
+        row = build_matrix_row_postprocess(
+            {
+                "backtest_out": {"status": "OK", "trades": [], "result": {}, "sample_size": 0},
+                "risk_usd": 20.0, "taker_fee": 0.0004, "maker_fee": 0.0002, "leverage": 2.0,
+                "principal": 1000.0, "include_trades": True, "direction": direction,
+                "combination_id": combo, "load_meta": {"symbol": "BTCUSDT", "timeframe": "1h"},
+                "candles": [], "analytics_on": False,
+            }
+        )
+        assert (row["direction"], row["structure"]) == (direction, structure)
+
+
 def _flat_candles(n: int = 400) -> list[dict]:
     return [
         {"time": T0 + timedelta(hours=i), "open": 100.0, "high": 100.5, "low": 99.5, "close": 100.0, "volume": 1.0}

@@ -1304,6 +1304,7 @@ class BosResearchService:
                         timeframe=tf_u,
                     )
                     # Fall back to strategy row without analytics rather than empty.
+                    from app.research.backtest_ui_config import row_display_direction
                     from app.research.trade_fees import enrich_trades as _enrich
                     from app.research.trade_fees import (
                         summarize_net_trades as _summarize_net,
@@ -1328,7 +1329,7 @@ class BosResearchService:
                         "name": combo.name,
                         "symbol": load_meta["symbol"],
                         "timeframe": load_meta["timeframe"],
-                        "direction": direction_u,
+                        "direction": row_display_direction(combination_id, direction_u),
                         "sample_size": n,
                         "average_R": r.get("average_R"),
                         "average_R_net": net_summary["average_R_net"],
