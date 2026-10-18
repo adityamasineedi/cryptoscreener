@@ -192,6 +192,8 @@ class Settings(BaseSettings):
     paper_candle12_v2_telegram_enabled: bool = Field(
         default=False, alias="PAPER_CANDLE12_V2_TELEGRAM_ENABLED"
     )
+    # 4h book 16 BTCUSDT/ETHUSDT LONG, mirror of forward test BOOK16_4H_FWD-1. Virtual fills only.
+    paper_book16_4h_enabled: bool = Field(default=True, alias="PAPER_BOOK16_4H_ENABLED")
     # Explicit trading mode separation (V2.1-A LIVE is never auto-enabled)
     trading_mode: str = Field(default="PAPER", alias="TRADING_MODE")
 

@@ -546,6 +546,10 @@ class CalculationOrchestrator:
                     self._candle12_v2_paper_loop(), name="candle12_v2_paper_loop"
                 )
             )
+        if paper.writer_lock_held and bool(getattr(self.settings, "paper_book16_4h_enabled", False)):
+            self._tasks.append(
+                asyncio.create_task(self._book16_paper_loop(), name="book16_paper_loop")
+            )
         self._tasks.append(
             asyncio.create_task(self._kline_live_rebalance_loop(), name="kline_live_rebalance")
         )
@@ -1112,6 +1116,29 @@ class CalculationOrchestrator:
                     await send_signals((result or {}).get("alerts") or [])
             except Exception as exc:  # noqa: BLE001
                 logger.warning("candle12_v2_paper_loop_failed", error=str(exc))
+
+    async def _book16_paper_loop(self) -> None:
+        """Virtual 4h book 16 (BTC/ETH LONG). One pass when a new 4h bar has closed, retried every 2 min."""
+        from datetime import timedelta
+
+        from app.services import book16_paper
+
+        done_for = None
+        while self._running:
+            await asyncio.sleep(120.0)
+            if not bool(getattr(self.settings, "paper_book16_4h_enabled", False)):
+                continue
+            now = datetime.now(timezone.utc)
+            # Last closed 4h bar's close; a pass is due once per close (its bar must be in Postgres).
+            close = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=now.hour % 4)
+            if done_for == close:
+                continue
+            try:
+                result = await book16_paper.sync(now)
+                if result.get("status") in ("COLLECTING", "WAITING_FOR_FIRST_FORWARD_BAR"):
+                    done_for = close
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("book16_paper_loop_failed", error=str(exc))
 
     async def _v21a_paper_watcher_loop(self) -> None:
         """Periodic tip check for V2.1-A paper symbols + optional daily summary."""

@@ -1898,6 +1898,63 @@ export function fetchPassedRegime(signal?: AbortSignal) {
   return getJson<PassedRegimeResponse>("/api/paper/passed-regime", { signal });
 }
 
+/** One virtual trade of the 4h book 16 paper book (the screen ledger's trade fields). */
+export type Book16PaperTrade = {
+  trade_id: string;
+  symbol: string;
+  side: number;
+  signal_time: string;
+  entry_time: string;
+  entry_price: number;
+  exit_time?: string;
+  exit_price?: number;
+  exit_reason?: string;
+  qty: number;
+  notional: number;
+  stop_price: number;
+  risk_fraction: number;
+  price_pnl: number;
+  fees: number;
+  funding: number;
+  funding_coverage_status: string;
+  net_pnl?: number;
+  mark_price?: number;
+  unrealized_usd?: number;
+};
+
+export type Book16PaperBook = {
+  closed: Book16PaperTrade[];
+  pending_closed: Book16PaperTrade[];
+  open: Book16PaperTrade | null;
+  equity: number;
+  last_bar: string | null;
+  forward_bars: number;
+  skipped_lev_cap: number;
+};
+
+export type Book16PaperResponse = {
+  strategy_id: string;
+  mirrors: string;
+  symbols: string[];
+  timeframe: string;
+  mode: string;
+  live_orders: boolean;
+  start: string;
+  account_equity_start: number;
+  risk_fraction: number;
+  status: string;
+  error: string | null;
+  updated_utc: string | null;
+  books: Record<string, Book16PaperBook>;
+  loop_enabled?: boolean;
+  timestamp?: string;
+};
+
+/** Read-only: the 4h book 16 virtual paper ledger (mirror of forward test BOOK16_4H_FWD-1). */
+export function fetchBook16Paper(signal?: AbortSignal) {
+  return getJson<Book16PaperResponse>("/api/paper/book16", { signal });
+}
+
 export type RegimeBacktestPeriod = {
   period_start?: string | null;
   period_end?: string | null;

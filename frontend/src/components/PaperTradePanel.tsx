@@ -12,6 +12,7 @@ import {
   type PaperWatcherBookLive,
 } from "../api/client";
 import { PassedRegimePanel } from "./PassedRegimePanel";
+import { Book16PaperPanel } from "./Book16PaperPanel";
 import {
   CLOSED_LIMIT,
   closedTruncationNote,
@@ -304,6 +305,7 @@ export function PaperTradePanel() {
         status={status}
       />
       <PassedRegimePanel />
+      <Book16PaperPanel />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <Stat

@@ -19,6 +19,8 @@ vi.mock("../api/client", async (importOriginal) => {
     disablePaperTrade: vi.fn(),
     // Mounted PassedRegimePanel: never resolves, so it stays in its loading state.
     fetchPassedRegime: vi.fn(() => new Promise(() => {})),
+    // Mounted Book16PaperPanel: same, never resolves.
+    fetchBook16Paper: vi.fn(() => new Promise(() => {})),
   };
 });
 

@@ -3169,6 +3169,16 @@ async def paper_passed_regime() -> dict[str, Any]:
     return out
 
 
+@router.get("/paper/book16")
+async def paper_book16() -> dict[str, Any]:
+    """Read the 4h book 16 virtual paper ledger (mirror of BOOK16_4H_FWD-1). Changes nothing."""
+    from app.services import book16_paper
+
+    out = book16_paper.view()
+    out["loop_enabled"] = bool(getattr(get_settings(), "paper_book16_4h_enabled", False))
+    return out
+
+
 @router.get("/paper/opportunities")
 async def paper_opportunities(
     limit: int = Query(default=100, ge=1, le=300),
