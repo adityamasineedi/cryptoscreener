@@ -104,6 +104,9 @@ describe("GridTradingPanel", () => {
     const user = userEvent.setup();
     render(<GridTradingPanel />);
     expect(await screen.findByRole("button", { name: "Run backtest" })).toBeInTheDocument();
+    expect(await screen.findByTestId("grid-large-caps")).toBeInTheDocument();
+    expect(screen.getByText("Large caps")).toBeInTheDocument();
+    expect(await screen.findByText("BTC")).toBeInTheDocument();
     expect(screen.queryByLabelText("Range low")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Grid count")).not.toBeInTheDocument();
     expect(screen.getByText(/binance usdt-m futures/i)).toBeInTheDocument();

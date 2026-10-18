@@ -112,6 +112,7 @@ def score_series(
     if not spacing_ok:
         raw *= 0.25
     atr_pct = (atr_val / mid) if atr_val else None
+    last_close = closes[-1]
     return {
         "symbol": symbol,
         "timeframe": timeframe,
@@ -122,6 +123,8 @@ def score_series(
         "range_low": grid_low,
         "range_high": grid_high,
         "stop_price": stop if stop < grid_low else grid_low * 0.99,
+        "last_close": last_close,
+        "inside_grid": bool(grid_low <= last_close <= grid_high),
         "atr": atr_val,
         "atr_pct": atr_pct,
         "mid_crosses": crosses,

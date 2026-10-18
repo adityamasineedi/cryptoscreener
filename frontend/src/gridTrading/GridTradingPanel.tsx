@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BACKTEST_LARGE_SYMBOLS } from "../backtest/v1Config";
 import {
   fetchGridStatus,
   runGridBacktest,
@@ -145,6 +146,37 @@ export function GridTradingPanel({ embedded = false }: { embedded?: boolean }) {
   const [result, setResult] = useState<GridBacktest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [largeCaps, setLargeCaps] = useState<GridScanRow[]>([]);
+  const [largeCapNote, setLargeCapNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status?.enabled) return;
+    let alive = true;
+    setLargeCapNote("Loading large caps…");
+    runGridScan({
+      timeframe,
+      symbols: [...BACKTEST_LARGE_SYMBOLS],
+      limit: bars,
+      fee_bps: locked.fee_bps,
+      slippage_bps: locked.slippage_bps,
+      grid_count: locked.grid_count,
+    })
+      .then((body) => {
+        if (!alive) return;
+        const rows = [...(body.rows || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
+        setLargeCaps(rows);
+        const end = rows.find((row) => row.window_end)?.window_end;
+        setLargeCapNote(end ? `Latest bar ${stamp(end)} UTC` : null);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setLargeCaps([]);
+        setLargeCapNote(err instanceof Error ? err.message : "Large-cap scan failed");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [status?.enabled, timeframe, bars]);
 
   useEffect(() => {
     let alive = true;
@@ -326,6 +358,55 @@ export function GridTradingPanel({ embedded = false }: { embedded?: boolean }) {
         >
           {busy ? "Running…" : "Run backtest"}
         </button>
+      </div>
+
+      <div data-testid="grid-large-caps">
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-terminal-text">Large caps</h2>
+          <span className="font-mono text-[10px] text-terminal-muted">{largeCapNote || "—"}</span>
+        </div>
+        <div className="overflow-auto rounded border border-terminal-border/60">
+          <table className="w-full min-w-[720px] border-collapse text-left text-[11px]">
+            <thead className="bg-black/80 text-[10px] uppercase tracking-wide text-terminal-muted">
+              <tr>
+                <th className="px-2 py-2">Coin</th>
+                <th className="px-2 py-2">Score</th>
+                <th className="px-2 py-2">Last close</th>
+                <th className="px-2 py-2">Grid low</th>
+                <th className="px-2 py-2">Grid high</th>
+                <th className="px-2 py-2">Stop</th>
+                <th className="px-2 py-2">In range</th>
+              </tr>
+            </thead>
+            <tbody>
+              {largeCaps.length ? (
+                largeCaps.map((row) => (
+                  <tr
+                    key={row.symbol}
+                    className="cursor-pointer border-t border-terminal-border/70 hover:bg-white/[0.03]"
+                    onClick={() => setSymbol(row.symbol)}
+                  >
+                    <td className="px-2 py-1.5 font-mono">{row.symbol.replace("USDT", "")}</td>
+                    <td className="px-2 py-1.5 font-mono">{num(row.score)}</td>
+                    <td className="px-2 py-1.5 font-mono">{px(row.last_close)}</td>
+                    <td className="px-2 py-1.5 font-mono">{px(row.range_low)}</td>
+                    <td className="px-2 py-1.5 font-mono">{px(row.range_high)}</td>
+                    <td className="px-2 py-1.5 font-mono">{px(row.stop_price)}</td>
+                    <td className="px-2 py-1.5">
+                      {row.range_low == null ? row.reason || "—" : row.inside_grid ? "Yes" : "No"}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-3 py-4 text-center text-terminal-muted">
+                    {largeCapNote || "No large-cap scan yet"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {error ? (

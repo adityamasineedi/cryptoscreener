@@ -111,6 +111,8 @@ export type GridScanRow = {
   range_low?: number;
   range_high?: number;
   stop_price?: number;
+  last_close?: number | null;
+  inside_grid?: boolean;
   atr?: number | null;
   mid_crosses?: number;
   bars?: number;

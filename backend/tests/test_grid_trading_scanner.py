@@ -43,6 +43,8 @@ def test_oscillation_outranks_a_trend():
     )
     assert oscillating["market"] == "binance_usdt_m_futures"
     assert oscillating["score"] > trending["score"]
+    assert oscillating["last_close"] == wave[-1]
+    assert isinstance(oscillating["inside_grid"], bool)
     assert oscillating["mid_crosses"] > trending["mid_crosses"]
     ranked = rank_scores([trending, oscillating])
     assert ranked[0]["symbol"] == "WAV"
