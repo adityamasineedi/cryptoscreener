@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchResearchOhlcvCandles, type StrategyTradeRow } from "../api/client";
 import {
   favorableStopNote,
@@ -48,9 +48,12 @@ export function StopOutShortReplay({ trades, symbol, timeframe, periodEnd, holdo
       [trade.exit_time, trade.entry_price, trade.stop_price, trade.tp1].join("|"),
     )
     .join(";");
+  // Each job poll hands over new trade arrays; refetch only when the stop-outs change.
+  const tradesRef = useRef(trades);
+  tradesRef.current = trades;
 
   useEffect(() => {
-    const stopTrades = trades.filter(isLongStopOut);
+    const stopTrades = tradesRef.current.filter(isLongStopOut);
     const start = stopTrades[0]?.exit_time || stopTrades[0]?.signal_time || "";
     if (!stopTrades.length || !start) {
       setReplay(null);
@@ -91,7 +94,7 @@ export function StopOutShortReplay({ trades, symbol, timeframe, periodEnd, holdo
     return () => {
       alive = false;
     };
-  }, [symbol, timeframe, periodEnd, stopKey, trades, holdout]);
+  }, [symbol, timeframe, periodEnd, stopKey, holdout]);
 
   if (!stops.length) return null;
 

@@ -3,7 +3,7 @@
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { StrategyTradeRow } from "../api/client";
+import { fetchResearchOhlcvCandles, type StrategyTradeRow } from "../api/client";
 import { StopOutShortReplay } from "./StopOutShortReplay";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -46,5 +46,19 @@ describe("StopOutShortReplay", () => {
     await waitFor(() => expect(panel.textContent).toContain("Uncosted (v2)"));
     expect(panel.textContent).toContain("SL in 1 bar, −1R");
     expect(panel.textContent).toContain("Archived v1 replay (skipped the stop bar)");
+  });
+
+  it("does not refetch candles when a poll hands over the same trades in a new array", async () => {
+    vi.mocked(fetchResearchOhlcvCandles).mockClear();
+    const view = render(<StopOutShortReplay trades={[stop]} symbol="ETHUSDT" timeframe="1h" />);
+    await waitFor(() => expect(fetchResearchOhlcvCandles).toHaveBeenCalledTimes(1));
+    view.rerender(<StopOutShortReplay trades={[{ ...stop }]} symbol="ETHUSDT" timeframe="1h" />);
+    view.rerender(<StopOutShortReplay trades={[{ ...stop }]} symbol="ETHUSDT" timeframe="1h" />);
+    expect(fetchResearchOhlcvCandles).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <StopOutShortReplay trades={[{ ...stop, stop_price: 0.8 }]} symbol="ETHUSDT" timeframe="1h" />,
+    );
+    await waitFor(() => expect(fetchResearchOhlcvCandles).toHaveBeenCalledTimes(2));
   });
 });

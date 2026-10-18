@@ -839,7 +839,13 @@ async def run_engine_cell_isolated(
 
     The engines take no cancel hook, so a cancel stops the child process.
     """
-    from app.research.backtest_cpu_pool import _spawn_python_executable, _write_payload_blob
+    from app.research.backtest_cpu_pool import (
+        _child_stderr_file,
+        _read_child_stderr,
+        _spawn_python_executable,
+        _unlink_child_file,
+        _write_payload_blob,
+    )
 
     blob_path = await asyncio.to_thread(_write_payload_blob, payload)
 
@@ -850,13 +856,20 @@ async def run_engine_cell_isolated(
         backend = str(Path(__file__).resolve().parents[2])
         env = os.environ.copy()
         env["PYTHONPATH"] = backend + os.pathsep + env.get("PYTHONPATH", "")
-        proc = subprocess.Popen(
-            [exe, "-m", "app.research.engine_backtest", blob_path, result_path],
-            cwd=backend,
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
+        err_fd, stderr_path = _child_stderr_file("bt_engine_")
+        try:
+            proc = subprocess.Popen(
+                [exe, "-m", "app.research.engine_backtest", blob_path, result_path],
+                cwd=backend,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=err_fd,
+            )
+        except BaseException:
+            os.close(err_fd)
+            _unlink_child_file(stderr_path)
+            raise
+        os.close(err_fd)
         last_beat = 0.0
         try:
             while proc.poll() is None:
@@ -871,11 +884,11 @@ async def run_engine_cell_isolated(
                         pass
                     last_beat = time.perf_counter()
                 time.sleep(0.05)
-            stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
             result_file = Path(result_path)
             if result_file.exists() and result_file.stat().st_size > 0:
                 with result_file.open("rb") as handle:
                     return pickle.load(handle)
+            stderr = _read_child_stderr(stderr_path)
             raise OSError(0, f"Engine worker exited {proc.returncode} via {exe}. {stderr[-500:]}")
         finally:
             if proc.poll() is None:
@@ -885,6 +898,8 @@ async def run_engine_cell_isolated(
                     Path(p).unlink()
                 except OSError:
                     pass
+            # A just-killed child may still hold it briefly.
+            _unlink_child_file(stderr_path, retry_seconds=3.0)
 
     return await asyncio.to_thread(_run)
 

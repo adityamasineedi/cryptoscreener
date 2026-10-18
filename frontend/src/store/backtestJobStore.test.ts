@@ -34,6 +34,7 @@ describe("backtestJobStore polling", () => {
       ownJobId: null,
       error: null,
       busyJobId: null,
+      pollFailures: 0,
       active: false,
       starting: false,
       _gen: 0,
@@ -308,5 +309,34 @@ describe("backtestJobStore polling", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a running job says so after repeated failed status polls, and clears when contact is back", async () => {
+    useBacktestJobStore.setState({
+      active: true,
+      job: { status: "running", job_id: "j1", symbols: ["BTCUSDT"], timeframes: ["1h"], rows: [] },
+    });
+    fetchBacktestJobStatus.mockRejectedValue(new Error("API /x failed: 500 — boom"));
+    for (let i = 0; i < 7; i += 1) await useBacktestJobStore.getState().poll();
+    expect(useBacktestJobStore.getState().error).toBeNull();
+    await useBacktestJobStore.getState().poll();
+    expect(useBacktestJobStore.getState().error).toMatch(/Lost contact with the backtest API.*boom/);
+    expect(useBacktestJobStore.getState().job?.status).toBe("running");
+
+    fetchBacktestJobStatus.mockResolvedValue({ status: "running", job_id: "j1", rows: [] });
+    await useBacktestJobStore.getState().poll();
+    expect(useBacktestJobStore.getState().error).toBeNull();
+    expect(useBacktestJobStore.getState().pollFailures).toBe(0);
+  });
+
+  it("a timed-out start shows the job if the server started it anyway", async () => {
+    startBacktestJob.mockRejectedValue(new DOMException("signal timed out", "TimeoutError"));
+    fetchBacktestJobStatus.mockResolvedValue({ status: "running", job_id: "late", rows: [] });
+    await useBacktestJobStore.getState().start(SHORT_REQUEST);
+    const st = useBacktestJobStore.getState();
+    expect(st.job?.job_id).toBe("late");
+    expect(st.active).toBe(true);
+    expect(st.foreignJob).toBe(true);
+    expect(st.error).toMatch(/timed out, but the server is running job late/);
   });
 });

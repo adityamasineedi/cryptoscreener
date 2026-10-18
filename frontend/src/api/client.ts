@@ -8,6 +8,25 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+/** "API <path> failed: <status>", plus the server's own detail when the body has one. */
+async function apiError(path: string, res: Response): Promise<Error> {
+  let detail = "";
+  try {
+    const text = await res.text();
+    try {
+      const body = JSON.parse(text) as { detail?: unknown; error?: unknown; reason?: unknown };
+      const d = body.detail ?? body.error ?? body.reason;
+      detail = typeof d === "string" ? d : d != null ? JSON.stringify(d) : "";
+    } catch {
+      detail = text;
+    }
+  } catch {
+    /* no readable body */
+  }
+  detail = detail.trim().slice(0, 300);
+  return new Error(`API ${path} failed: ${res.status}${detail ? ` — ${detail}` : ""}`);
+}
+
 async function getJson<T>(
   path: string,
   opts?: { signal?: AbortSignal },
@@ -16,7 +35,7 @@ async function getJson<T>(
     signal: opts?.signal,
   });
   if (!res.ok) {
-    throw new Error(`API ${path} failed: ${res.status}`);
+    throw await apiError(path, res);
   }
   return res.json() as Promise<T>;
 }
@@ -2012,7 +2031,7 @@ export function startRegimeBacktest(body: RegimeBacktestStartBody) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }).then(async (res) => {
-    if (!res.ok) throw new Error(`API /api/research/regime-backtest/start failed: ${res.status}`);
+    if (!res.ok) throw await apiError("/api/research/regime-backtest/start", res);
     return res.json() as Promise<RegimeBacktestStartResponse>;
   });
 }
@@ -2023,7 +2042,7 @@ export function fetchRegimeBacktest() {
 
 export function cancelRegimeBacktest() {
   return fetch(`${API_BASE}/api/research/regime-backtest/cancel`, { method: "POST" }).then(async (res) => {
-    if (!res.ok) throw new Error(`API /api/research/regime-backtest/cancel failed: ${res.status}`);
+    if (!res.ok) throw await apiError("/api/research/regime-backtest/cancel", res);
     return res.json() as Promise<{ status: string; job?: RegimeBacktestStatus }>;
   });
 }
@@ -2062,9 +2081,7 @@ export async function startBacktestJob(body: {
     signal: backtestAbortSignal(30_000),
   });
   if (!res.ok) {
-    throw new Error(
-      `API /api/research/long-strategy/backtest/start failed: ${res.status}`
-    );
+    throw await apiError("/api/research/long-strategy/backtest/start", res);
   }
   return res.json() as Promise<{
     status: string;
@@ -2084,9 +2101,7 @@ export async function cancelBacktestJob() {
     signal: backtestAbortSignal(),
   });
   if (!res.ok) {
-    throw new Error(
-      `API /api/research/long-strategy/backtest/cancel failed: ${res.status}`
-    );
+    throw await apiError("/api/research/long-strategy/backtest/cancel", res);
   }
   return res.json() as Promise<{
     status: string;

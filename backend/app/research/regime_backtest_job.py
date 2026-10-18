@@ -491,7 +491,13 @@ def _cli(argv: list[str]) -> int:
 
 async def _run_child(payload: dict[str, Any], should_cancel: CancelFn, on_progress: ProgressFn) -> dict[str, Any]:
     """Run ``_execute(payload)`` in its own interpreter. A cancel kills it."""
-    from app.research.backtest_cpu_pool import _spawn_python_executable, _write_payload_blob
+    from app.research.backtest_cpu_pool import (
+        _child_stderr_file,
+        _read_child_stderr,
+        _spawn_python_executable,
+        _unlink_child_file,
+        _write_payload_blob,
+    )
 
     blob_path = await asyncio.to_thread(_write_payload_blob, payload)
 
@@ -504,13 +510,20 @@ async def _run_child(payload: dict[str, Any], should_cancel: CancelFn, on_progre
         backend = str(Path(__file__).resolve().parents[2])
         env = os.environ.copy()
         env["PYTHONPATH"] = backend + os.pathsep + env.get("PYTHONPATH", "")
-        proc = subprocess.Popen(
-            [exe, "-m", "app.research.regime_backtest_job", blob_path, result_path, progress_path],
-            cwd=backend,
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
+        err_fd, stderr_path = _child_stderr_file("regime_bt_")
+        try:
+            proc = subprocess.Popen(
+                [exe, "-m", "app.research.regime_backtest_job", blob_path, result_path, progress_path],
+                cwd=backend,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=err_fd,
+            )
+        except BaseException:
+            os.close(err_fd)
+            _unlink_child_file(stderr_path)
+            raise
+        os.close(err_fd)
         seen = 0.0
         try:
             while proc.poll() is None:
@@ -527,11 +540,11 @@ async def _run_child(payload: dict[str, Any], should_cancel: CancelFn, on_progre
                 except (OSError, ValueError):
                     pass
                 time.sleep(0.05)
-            stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
             result_file = Path(result_path)
             if result_file.exists() and result_file.stat().st_size > 0:
                 with result_file.open("rb") as handle:
                     return pickle.load(handle)
+            stderr = _read_child_stderr(stderr_path)
             raise OSError(0, f"Regime worker exited {proc.returncode} via {exe}. {stderr[-500:]}")
         finally:
             if proc.poll() is None:
@@ -541,6 +554,8 @@ async def _run_child(payload: dict[str, Any], should_cancel: CancelFn, on_progre
                     Path(path).unlink()
                 except OSError:
                     pass
+            # A just-killed child may still hold it briefly.
+            _unlink_child_file(stderr_path, retry_seconds=3.0)
 
     return await asyncio.to_thread(_run)
 

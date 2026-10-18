@@ -8,6 +8,10 @@ import {
 
 export type BacktestRunRequest = Parameters<typeof startBacktestJob>[0];
 
+/** Failed polls in a row (750 ms apart) before a running job reports lost contact. */
+export const POLL_FAILURE_NOTICE = 8;
+const LOST_CONTACT_PREFIX = "Lost contact with the backtest API";
+
 type BacktestStore = {
   job: BacktestJob | null;
   /** The request this screen sent for `job`. Null when the job was not started here. */
@@ -29,6 +33,8 @@ type BacktestStore = {
   poll: () => Promise<boolean>;
   /** Job a BUSY reply pointed at; its "already running" error clears once it finishes. */
   busyJobId: string | null;
+  /** Consecutive failed status polls; at POLL_FAILURE_NOTICE a running job says so. */
+  pollFailures: number;
   start: (body: BacktestRunRequest) => Promise<void>;
   cancel: () => Promise<void>;
 };
@@ -79,6 +85,7 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
   ownJobId: null,
   error: null,
   busyJobId: null,
+  pollFailures: 0,
   active: false,
   starting: false,
   _gen: 0,
@@ -96,6 +103,13 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
     const gen = get()._gen;
     try {
       const st = await fetchBacktestJobStatus();
+      // Contact is back: drop the lost-contact notice (the status below may set another error).
+      if (get().pollFailures || get().error?.startsWith(LOST_CONTACT_PREFIX)) {
+        set({
+          pollFailures: 0,
+          ...(get().error?.startsWith(LOST_CONTACT_PREFIX) ? { error: null } : {}),
+        });
+      }
       if (get().starting || get()._gen !== gen) return true;
 
       if (!st.status || st.status === "idle") {
@@ -150,8 +164,16 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
         set({ active: false });
       }
       return true;
-    } catch {
-      /* ignore transient poll errors */
+    } catch (e) {
+      // One failed poll is transient; a run of them while a job runs is a frozen screen.
+      const failures = get().pollFailures + 1;
+      set({ pollFailures: failures });
+      if (failures === POLL_FAILURE_NOTICE && get().job?.status === "running") {
+        const why = e instanceof Error ? e.message : "status request failed";
+        set({
+          error: `${LOST_CONTACT_PREFIX} (${why}). Still retrying; if the API restarted, this run is gone.`,
+        });
+      }
       return false;
     }
   },
@@ -211,8 +233,15 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
       }
     } catch (e) {
       if (get()._gen !== gen) return;
-      const raw = e instanceof Error ? e.message : "Failed to start backtest";
-      const msg = /signal timed out|timeouterror/i.test(raw)
+      // AbortSignal.timeout rejects with a DOMException, which is not an Error everywhere.
+      const errLike = e as { name?: unknown; message?: unknown } | null;
+      const raw =
+        typeof errLike?.message === "string" && errLike.message
+          ? errLike.message
+          : "Failed to start backtest";
+      const timedOut =
+        errLike?.name === "TimeoutError" || /signal timed out|timeouterror/i.test(raw);
+      const msg = timedOut
         ? "Backtest API did not respond in time. The server is busy or still reloading — retry in a moment."
         : /failed to fetch|networkerror|load failed/i.test(raw)
           ? "Backend unreachable (Failed to fetch). Restart API on :8000 and retry."
@@ -226,6 +255,22 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
         foreignJob: false,
         ownJobId: null,
       });
+      if (timedOut) {
+        // The server may have started the job after all: show it rather than lose it.
+        try {
+          const st = await fetchBacktestJobStatus();
+          if (get()._gen === gen && !get().starting && st.status === "running") {
+            set({
+              job: st,
+              active: true,
+              foreignJob: true,
+              error: `The start request timed out, but the server is running job ${st.job_id ?? "?"}. Its progress is shown here.`,
+            });
+          }
+        } catch {
+          /* still unreachable: the timeout message stands */
+        }
+      }
     }
   },
   cancel: async () => {

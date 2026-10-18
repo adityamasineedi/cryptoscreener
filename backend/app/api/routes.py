@@ -1948,8 +1948,26 @@ async def research_long_strategy_backtest(
             "telegram_sent": False,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    from app.research.engine_backtest import DAILY_TREND_HOLDOUT_CODE, is_daily_trend
+    from app.research.engine_backtest import (
+        DAILY_TREND_HOLDOUT_CODE,
+        engine_strategy_id,
+        is_daily_trend,
+    )
 
+    engine_id = engine_strategy_id(combination_id)
+    if engine_id is not None and not is_daily_trend(combination_id):
+        # The sync path walks COMBO strategies only; an engine id would come back empty as "OK".
+        return {
+            "status": "ERROR",
+            "error": f"{engine_id} runs on its own engine only through POST /research/long-strategy/backtest/start",
+            "error_code": "engine_sync_unsupported",
+            "reason": "engine_sync_unsupported",
+            "rows": [],
+            "paper_trade_created": False,
+            "live_trade_created": False,
+            "telegram_sent": False,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     if is_daily_trend(combination_id):
         # The sync path has no holdout guard (and no engine path): background job only.
         return {
@@ -2025,6 +2043,21 @@ async def research_long_strategy_backtest(
                 leverage=leverage,
                 include_trades=include_trades,
             )
+            cell_status = str(payload.get("status") or "OK").upper()
+            if cell_status != "OK":
+                # A failed cell is a failed request, never an empty "OK".
+                reason = payload.get("reason") or payload.get("error") or cell_status.lower()
+                return {
+                    "status": "NOT_FOUND" if cell_status == "NOT_FOUND" else "ERROR",
+                    "error": f"{sym} {tf}: {reason}",
+                    "error_code": cell_status.lower(),
+                    "reason": reason,
+                    "rows": rows,
+                    "paper_trade_created": False,
+                    "live_trade_created": False,
+                    "telegram_sent": False,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
             if playbook is None:
                 playbook = payload.get("playbook")
                 combination_name = payload.get("combination_name")

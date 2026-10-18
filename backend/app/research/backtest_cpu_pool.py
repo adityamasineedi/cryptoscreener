@@ -184,6 +184,33 @@ def _candles_plain(
     return [dict(r) for r in rows]
 
 
+def _child_stderr_file(prefix: str) -> tuple[int, str]:
+    """A temp file for a child's stderr. A pipe read only after exit can fill and block the child."""
+    return tempfile.mkstemp(prefix=prefix, suffix=".err")
+
+
+def _read_child_stderr(path: str) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _unlink_child_file(path: str, *, retry_seconds: float = 0.0) -> None:
+    """Delete ``path``; retry while a just-killed child still holds it open (Windows)."""
+    deadline = time.perf_counter() + retry_seconds
+    while True:
+        try:
+            Path(path).unlink()
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            if time.perf_counter() >= deadline:
+                return
+            time.sleep(0.05)
+
+
 def _write_payload_blob(payload: dict[str, Any]) -> str:
     fd, name = tempfile.mkstemp(prefix="bt_payload_", suffix=".pkl")
     os.close(fd)
@@ -265,13 +292,20 @@ async def run_combination_backtest_isolated(
                 progress_callback({"phase": "CONTEXT_BUILD"})
             except Exception:  # noqa: BLE001
                 pass
-        proc = subprocess.Popen(
-            [exe, "-m", "app.research.backtest_cpu_worker", blob_path, result_path],
-            cwd=backend,
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
+        err_fd, stderr_path = _child_stderr_file("bt_result_")
+        try:
+            proc = subprocess.Popen(
+                [exe, "-m", "app.research.backtest_cpu_worker", blob_path, result_path],
+                cwd=backend,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=err_fd,
+            )
+        except BaseException:
+            os.close(err_fd)
+            _unlink_child_file(stderr_path)
+            raise
+        os.close(err_fd)
         last_keep_alive = time.perf_counter()
         cancel_seen_at: float | None = None
         try:
@@ -312,11 +346,11 @@ async def run_combination_backtest_isolated(
                         pass
                     last_keep_alive = time.perf_counter()
                 time.sleep(0.05)
-            stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
             result_file = Path(result_path)
             if result_file.exists() and result_file.stat().st_size > 0:
                 with result_file.open("rb") as handle:
                     return pickle.load(handle)
+            stderr = _read_child_stderr(stderr_path)
             raise OSError(
                 0,
                 f"Backtest worker exited {proc.returncode} via {exe}. {stderr[-500:]}",
@@ -328,6 +362,8 @@ async def run_combination_backtest_isolated(
                 Path(result_path).unlink()
             except OSError:
                 pass
+            # A just-killed child may still hold it briefly.
+            _unlink_child_file(stderr_path, retry_seconds=3.0)
 
     if os.name == "nt":
         try:

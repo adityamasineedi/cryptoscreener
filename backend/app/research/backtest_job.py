@@ -133,6 +133,8 @@ class BacktestJob:
     elapsed_seconds: float | None = None
     _resolved: ResolvedBacktestConfig | None = field(default=None, repr=False)
     _t0: float = field(default=0.0, repr=False)
+    # Start of the running cell: the timeout is per cell, so a large matrix is not cut off.
+    _cell_t0: float = field(default=0.0, repr=False)
     _cancel: bool = field(default=False, repr=False)
     _hb_mono: float = field(default=0.0, repr=False)
     _cancel_event: Any = field(default=None, repr=False)
@@ -568,7 +570,8 @@ class BacktestJobService:
                 if job.status != "running":
                     return
                 now = time.perf_counter()
-                if job._t0 and job_timeout > 0 and (now - job._t0) > job_timeout:
+                cell_t0 = job._cell_t0 or job._t0
+                if cell_t0 and job_timeout > 0 and (now - cell_t0) > job_timeout:
                     job._cancel = True
                     if job._cancel_event is not None:
                         try:
@@ -576,7 +579,9 @@ class BacktestJobService:
                         except Exception:  # noqa: BLE001
                             pass
                     job.status = "error"
-                    job.error = f"Job exceeded timeout ({job_timeout:.0f}s)"
+                    job.error = (
+                        f"Cell {job.current or '?'} exceeded timeout ({job_timeout:.0f}s)"
+                    )
                     job.error_code = "job_timeout"
                     job.phase = JOB_FAILED
                     job.finished_at = datetime.now(timezone.utc).isoformat()
@@ -680,6 +685,7 @@ class BacktestJobService:
                 # Publish current cell before the long await so UI polls show
                 # which cell is running (pct stays at done/total until finish).
                 job.current = f"{sym} {tf}"
+                job._cell_t0 = time.perf_counter()
                 job.bars_processed = 0
                 job.total_bars = 0
                 job.trades_generated = 0

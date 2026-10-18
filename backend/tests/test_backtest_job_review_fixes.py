@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 
+from app.research import backtest_job as bj
+from app.research.backtest_cpu_pool import _child_stderr_file, _read_child_stderr, _unlink_child_file
 from app.research.backtest_job import BacktestJobService
 from app.research.engine_backtest import _gross_profit_factor
 
@@ -129,3 +131,98 @@ def test_engine_gross_profit_factor_uses_gross_pnl():
     assert _gross_profit_factor(trades) == 3.0
     assert _gross_profit_factor([{"gross_pnl_usd": 5.0}]) is None
     assert _gross_profit_factor([]) is None
+
+
+def test_timeout_is_per_cell_so_a_long_matrix_finishes(monkeypatch):
+    # 3 cells of 1.5 s each (4.5 s in all) against a 2.5 s limit.
+    monkeypatch.setattr(bj, "_settings_timeouts", lambda: (2.5, 120.0, 60.0))
+
+    async def cell(*, symbol, timeframe, progress_callback, **_kw):
+        for _ in range(15):
+            progress_callback({"phase": "ENGINE_WALK"})
+            await asyncio.sleep(0.1)
+        return {"status": "OK", "rows": [{"symbol": symbol, "timeframe": timeframe, "trades": []}]}
+
+    _patch_cell(monkeypatch, cell)
+    svc = BacktestJobService()
+
+    async def run() -> None:
+        await svc.start(**{**COMMON, "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]})
+        await asyncio.wait_for(svc._task, 15)  # noqa: SLF001
+
+    asyncio.run(run())
+    assert svc._job.status == "done", svc._job.error  # noqa: SLF001
+
+
+def test_a_single_cell_over_the_limit_still_times_out(monkeypatch):
+    monkeypatch.setattr(bj, "_settings_timeouts", lambda: (2.5, 120.0, 60.0))
+
+    async def cell(*, should_cancel, progress_callback, **_kw):
+        while not should_cancel():
+            progress_callback({"phase": "ENGINE_WALK"})
+            await asyncio.sleep(0.1)
+        return {"status": "CANCELLED", "rows": []}
+
+    _patch_cell(monkeypatch, cell)
+    svc = BacktestJobService()
+
+    async def run() -> None:
+        await svc.start(**{**COMMON, "symbols": ["BTCUSDT"]})
+        await asyncio.wait_for(svc._task, 15)  # noqa: SLF001
+
+    asyncio.run(run())
+    job = svc._job  # noqa: SLF001
+    assert job.status == "error"
+    assert job.error_code == "job_timeout"
+    assert "BTCUSDT 1h" in (job.error or "")
+
+
+def _sync_backtest(**kw):
+    from app.api.routes import research_long_strategy_backtest
+
+    args = dict(
+        symbols="BTCUSDT", timeframes="1h", direction="LONG", combination_id="COMBO_01",
+        limit=1200, risk_usd=20.0, principal_usd=1000.0, leverage=2.0, risk_mode=None,
+        research_risk_override=False, taker_fee_pct=0.04, maker_fee_pct=0.02,
+        include_trades=True, start_date=None, end_date=None,
+    )
+    args.update(kw)
+    return asyncio.run(research_long_strategy_backtest(**args))
+
+
+def test_sync_route_refuses_engine_strategies():
+    out = _sync_backtest(combination_id="CANDLE12_V2")
+    assert out["status"] == "ERROR"
+    assert out["error_code"] == "engine_sync_unsupported"
+
+
+def test_sync_route_reports_a_failed_cell(monkeypatch):
+    class _Svc:
+        async def strategy_matrix(self, **_kw):
+            return {"status": "NOT_FOUND", "reason": "Unknown combination", "rows": []}
+
+    monkeypatch.setattr("app.research.service.get_bos_research_service", lambda: _Svc())
+    out = _sync_backtest()
+    assert out["status"] == "NOT_FOUND"
+    assert "Unknown combination" in out["error"]
+
+
+def test_child_stderr_goes_to_a_file_that_is_read_and_removed():
+    import os
+    import subprocess
+    import sys
+
+    fd, path = _child_stderr_file("bt_test_")
+    try:
+        # More than a pipe buffer: with stderr=PIPE read after exit this would block.
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import sys; sys.stderr.write('x' * 300000); sys.stderr.write('END')"],
+            stdout=subprocess.DEVNULL,
+            stderr=fd,
+        )
+    finally:
+        os.close(fd)
+    assert proc.wait(timeout=20) == 0
+    assert _read_child_stderr(path).endswith("END")
+    _unlink_child_file(path, retry_seconds=3.0)
+    assert not os.path.exists(path)
