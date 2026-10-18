@@ -433,14 +433,11 @@ export function BacktestPanel() {
   const engineDirections = autoPassed ? undefined : strategyMeta.engineDirections;
   /** Coins the engine accepts (4h book 16: BTC and ETH). Undefined: any cap-book coin. */
   const engineSymbols = autoPassed ? undefined : strategyMeta.engineSymbols;
-  /** Timeframes the form offers: engine-only ones (1d) only to strategies that list them. */
+  /** Timeframes the form offers. An engine strategy only offers the bars it can run. */
   const offeredTfs: readonly string[] = useMemo(() => {
     const engineTfs = autoPassed ? undefined : strategyMeta.engineTimeframes;
-    // A holdout-guarded book runs on its own bar size only (1d, or 4h for book 16).
-    if (engineTfs && isHoldoutGuardedStrategy(strategyMeta.id)) return engineTfs;
-    const engineOnly = ENGINE_ONLY_TFS.filter((tf) => engineTfs?.includes(tf));
-    if (engineOnly.length && engineTfs?.every((tf) => ENGINE_ONLY_TFS.includes(tf))) return engineOnly;
-    return TF_OPTIONS.filter((tf) => !ENGINE_ONLY_TFS.includes(tf) || engineOnly.includes(tf));
+    if (engineTfs?.length) return engineTfs;
+    return TF_OPTIONS.filter((tf) => !ENGINE_ONLY_TFS.includes(tf));
   }, [autoPassed, strategyMeta]);
   const offeredTfsKey = offeredTfs.join(",");
   const researchUi = isV21A || isSd || isDirect;
@@ -1049,6 +1046,14 @@ export function BacktestPanel() {
         return;
       }
     }
+    // An engine rejects any other timeframe with engine_request_unsupported.
+    // Send only bars it lists; if the selection is stale, use its ranked setup.
+    const engineTfs = !autoPassed ? strategyMeta.engineTimeframes : undefined;
+    let runTimeframes = timeframes;
+    if (engineTfs?.length) {
+      const kept = timeframes.filter((tf) => engineTfs.includes(tf));
+      runTimeframes = kept.length ? kept : [engineTfs.includes("1h") ? "1h" : engineTfs[0]];
+    }
     if (regimeMode) {
       // The book walks 1h bars only. Another timeframe is refused, never reinterpreted.
       if (timeframes.length !== 1 || timeframes[0] !== "1h") {
@@ -1141,9 +1146,10 @@ export function BacktestPanel() {
       setShortNotice(null);
     }
     const researchBook = researchUi;
+    const setupTf = runTimeframes.includes(primaryTf) ? primaryTf : runTimeframes[0] || primaryTf;
     await startJob({
       symbols,
-      timeframes,
+      timeframes: runTimeframes,
       // Hedge book: V2.1-A is native LONG+SHORT and is posted LONG; V2 and V2_1B
       // walk one side for LONG/SHORT, so the hedge book asks for BOTH.
       direction: isV21A ? hedgeRequestDirection(strategyId) : frozenV1View ? "LONG" : direction,
@@ -1162,7 +1168,7 @@ export function BacktestPanel() {
         : isV21A || isDirect
           ? strategyMeta.comboVersion
           : "v1",
-      setup_timeframe: primaryTf,
+      setup_timeframe: setupTf,
       risk_mode:
         researchBook || researchRiskOverride
           ? "RESEARCH_OVERRIDE"
@@ -1195,6 +1201,7 @@ export function BacktestPanel() {
     isHoldoutGuarded,
     isMtfTrend,
     engineSymbols,
+    autoPassed,
     frozenV1View,
     book,
     researchUi,

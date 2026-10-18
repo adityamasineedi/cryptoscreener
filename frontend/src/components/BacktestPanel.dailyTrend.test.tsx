@@ -89,7 +89,7 @@ function isSelected(el: HTMLElement): boolean {
 
 /** Timeframe buttons on offer, in DOM order. */
 function offeredTimeframes(root: Root): string[] {
-  return ["15m", "1h", "4h", "1d"].filter((tf) => root.queryByTitle(new RegExp(`^${tf} —`)) !== null);
+  return ["5m", "15m", "1h", "4h", "1d"].filter((tf) => root.queryByTitle(new RegExp(`^${tf} —`)) !== null);
 }
 
 function selectedTimeframes(root: Root): string[] {
@@ -303,7 +303,7 @@ describe("daily trend books in the Backtest tab", () => {
     await user.selectOptions(strategySelect(root), "CANDLE12_V2");
 
     await waitFor(() => expect(selectedTimeframes(root)).toEqual(["1h"]));
-    expect(offeredTimeframes(root)).toEqual(["15m", "1h", "4h"]);
+    expect(offeredTimeframes(root)).toEqual(["5m", "15m", "1h"]);
     expect(root.queryByTestId("engine-directions")).toBeNull();
     expect(root.queryByTestId("daily-trend-holdout-banner")).toBeNull();
     expect(root.getByRole("button", { name: /^≈ 240 days at 1h/ })).toBeTruthy();

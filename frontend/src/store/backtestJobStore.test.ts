@@ -244,6 +244,22 @@ describe("backtestJobStore polling", () => {
     expect(useBacktestJobStore.getState().error).toMatch(/paused|ERROR|short/i);
   });
 
+  it("shows the server sentence for engine_request_unsupported, not the code", async () => {
+    startBacktestJob.mockResolvedValue({
+      status: "ERROR",
+      error_code: "engine_request_unsupported",
+      error: "DAILY_TREND_01_SMA200 supports timeframes 1d; got 1h",
+    });
+    await useBacktestJobStore.getState().start({
+      symbols: ["BTCUSDT"],
+      timeframes: ["1h"],
+      direction: "LONG",
+    });
+    expect(useBacktestJobStore.getState().error).toBe(
+      "DAILY_TREND_01_SMA200 supports timeframes 1d; got 1h",
+    );
+  });
+
   it("clears stuck running job when API reports idle", async () => {
     fetchBacktestJobStatus.mockResolvedValue({ status: "idle", rows: [] });
     useBacktestJobStore.setState({

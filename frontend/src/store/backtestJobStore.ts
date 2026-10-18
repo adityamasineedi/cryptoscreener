@@ -174,7 +174,7 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
       }
       if (res.status === "ERROR") {
         set({
-          error: res.error_code || res.error || "Failed to start backtest",
+          error: res.error || res.error_code || "Failed to start backtest",
           active: false,
           starting: false,
           // Clear optimistic running job so Run stays usable.
