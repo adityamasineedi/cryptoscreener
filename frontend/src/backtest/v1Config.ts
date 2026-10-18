@@ -227,7 +227,8 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
   engineTimeframes?: readonly string[];
   /**
    * Directions an engine strategy accepts, as backend ENGINE_STRATEGIES lists them.
-   * Omitted: the plain LONG / SHORT buttons (CANDLE12 and OSE engines run either side).
+   * One entry: a "runs X only" note, no buttons. Omitted: the plain LONG / SHORT
+   * buttons (CANDLE12 and OSE engines run either side).
    */
   engineDirections?: readonly EngineDirection[];
   /**
@@ -530,7 +531,7 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
     engineDirections: ["LONG", "SHORT", "BOTH"],
   },
   // 4h trend book (same holdout-guarded backend family): 4h bars, BTC/ETH only.
-  // LONG only, so engineDirections is omitted (the engine default; no direction buttons).
+  // LONG only: one listed direction shows a note, no direction buttons.
   {
     id: "MTF_4H_16_BREAKOUT252",
     label: "4h · 252-bar breakout (book 16, BTC/ETH)",
@@ -540,6 +541,7 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
     direct: true,
     engineTimeframes: ["4h"],
     engineSymbols: ["BTCUSDT", "ETHUSDT"],
+    engineDirections: ["LONG"],
   },
 ] as const;
 

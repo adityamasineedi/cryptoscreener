@@ -160,7 +160,7 @@ function resetStores() {
 }
 
 describe("4h book 16 config and helpers", () => {
-  it("one 4h option: LONG only (no engineDirections), BTC/ETH only, long book only", () => {
+  it("one 4h option: LONG only (engineDirections LONG), BTC/ETH only, long book only", () => {
     expect([...MTF_TREND_STRATEGY_IDS]).toEqual([MTF_ID]);
     const opt = BACKTEST_STRATEGY_OPTIONS.find((o) => o.id === MTF_ID);
     expect(opt?.label).toBe(MTF_LABEL);
@@ -168,7 +168,7 @@ describe("4h book 16 config and helpers", () => {
     expect(opt?.direct).toBe(true);
     expect(opt?.combinationId).toBe(MTF_ID);
     expect(opt?.engineTimeframes).toEqual(["4h"]);
-    expect(opt?.engineDirections).toBeUndefined();
+    expect(opt?.engineDirections).toEqual(["LONG"]);
     expect(opt?.engineSymbols).toEqual(["BTCUSDT", "ETHUSDT"]);
     expect(strategyIdsForBook("long")).toContain(MTF_ID);
     expect(strategyIdsForBook("short")).not.toContain(MTF_ID);
@@ -285,8 +285,10 @@ describe("4h book 16 in the Backtest tab", () => {
     expect(root.getByTestId("mtf-trend-holdout-banner").textContent).toBe(MTF_TREND_HOLDOUT_BANNER);
     expect(MTF_TREND_HOLDOUT_BANNER).toContain("4h bars come from Postgres (2021-10-19 onward)");
     expect(root.queryByTestId("daily-trend-holdout-banner")).toBeNull();
-    // LONG only: no direction buttons, direction chip LONG.
+    // LONG only: no direction buttons (not even a SHORT one), a LONG-only note, direction chip LONG.
     expect(root.queryByTestId("engine-directions")).toBeNull();
+    expect(root.queryByRole("button", { name: /^SHORT$/ })).toBeNull();
+    expect(root.getByTestId("engine-direction-only").textContent).toContain("runs LONG only");
     expect(root.getAllByText(/Direction:\s*LONG/).length).toBeGreaterThan(0);
     // The long book opens with BTC, ETH, SOL: SOL is dropped, with a note.
     expect(selectedCoins(root)).toEqual(["BTC", "ETH"]);

@@ -1991,6 +1991,13 @@ export function BacktestPanel() {
                 {twoSidedName} runs native LONG+SHORT (direction filter off). COMBO_04
                 SHORT path is not used.
               </div>
+            ) : engineDirections?.length === 1 ? (
+              <div
+                className="rounded border border-terminal-border bg-white/5 px-2 py-1.5 text-[11px] text-terminal-text"
+                data-testid="engine-direction-only"
+              >
+                {strategyMeta.combinationId} runs {engineDirections[0]} only.
+              </div>
             ) : engineDirections ? (
               <div className="flex flex-wrap gap-1" data-testid="engine-directions">
                 {engineDirections.map((d) => (

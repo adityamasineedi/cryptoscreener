@@ -243,14 +243,17 @@ describe("Backtest screen review fixes (2026-10-18)", () => {
     expect(riskPct).toBeCloseTo((50 / principal) * 100, 3);
   });
 
-  it("a LONG-only engine offers LONG only", async () => {
+  it("a LONG-only engine offers no SHORT button", async () => {
     const user = setupUser();
     const { container } = renderPanel();
     await user.click(within(container).getByRole("tab", { name: "Long trades" }));
     await user.selectOptions(strategySelect(container), "LARGE_CAP_SWEEP_CHOCH");
-    const dirs = within(within(container).getByTestId("engine-directions"));
-    expect(dirs.getByRole("button", { name: "Direction LONG" })).toBeTruthy();
-    expect(dirs.queryByRole("button", { name: "Direction SHORT" })).toBeNull();
+    const root = within(container);
+    expect(root.queryByRole("button", { name: /^SHORT$/ })).toBeNull();
+    expect(root.queryByRole("button", { name: "Direction SHORT" })).toBeNull();
+    expect(root.getByTestId("engine-direction-only").textContent).toContain(
+      "LARGE_CAP_SWEEP_CHOCH runs LONG only",
+    );
   });
 
   it("returning to Passed (auto) in the same book resets the timeframe to 1h", async () => {

@@ -139,12 +139,12 @@ describe("daily trend books in the Backtest tab", () => {
       expect(strategyIdsForBook("short")).toContain(id);
       expect(strategyIdsForBook("hedge")).not.toContain(id);
     }
-    // Existing engine strategies never list 1d. Only the LONG-only multicap engines
-    // list their directions (backend ENGINE_STRATEGIES "directions": ("LONG",)).
+    // Existing engine strategies never list 1d. Only the LONG-only engines (multicap,
+    // 4h book 16) list their directions (backend ENGINE_STRATEGIES "directions": ("LONG",)).
     for (const opt of BACKTEST_STRATEGY_OPTIONS) {
       if (DAILY_TREND_STRATEGY_IDS.includes(opt.id as (typeof DAILY_TREND_STRATEGY_IDS)[number])) continue;
       expect(opt.engineDirections, opt.id).toEqual(
-        opt.comboVersion === "engine-multicap" ? ["LONG"] : undefined,
+        opt.comboVersion === "engine-multicap" || opt.id === "MTF_4H_16_BREAKOUT252" ? ["LONG"] : undefined,
       );
       expect(opt.engineTimeframes ?? [], opt.id).not.toContain("1d");
     }
