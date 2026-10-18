@@ -538,6 +538,14 @@ class CalculationOrchestrator:
                     self._passed_paper_watcher_loop(), name="passed_paper_watcher_loop"
                 )
             )
+        if paper.writer_lock_held and bool(
+            getattr(self.settings, "paper_candle12_v2_btc_long_enabled", False)
+        ):
+            self._tasks.append(
+                asyncio.create_task(
+                    self._candle12_v2_paper_loop(), name="candle12_v2_paper_loop"
+                )
+            )
         self._tasks.append(
             asyncio.create_task(self._kline_live_rebalance_loop(), name="kline_live_rebalance")
         )
@@ -1076,6 +1084,34 @@ class CalculationOrchestrator:
                 await flush_paper_trade_persists(paper)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("passed_paper_watcher_loop_failed", error=str(exc))
+
+    async def _candle12_v2_paper_loop(self) -> None:
+        """Virtual CANDLE12_V2 BTCUSDT 1h LONG. One pass per new closed bar."""
+        from app.services.candle12_v2_paper import sync_candles
+        from app.services.ohlcv_store import ohlcv_store
+
+        last_tip = ""
+        while self._running:
+            await asyncio.sleep(60.0)
+            if not bool(getattr(self.settings, "paper_candle12_v2_btc_long_enabled", False)):
+                continue
+            try:
+                candles = ohlcv_store.get_candles_for_engine(
+                    "BTCUSDT", "1h", include_open=False
+                )
+                if not candles:
+                    continue
+                tip = str(candles[-1].get("time"))
+                if tip == last_tip:
+                    continue
+                result = await asyncio.to_thread(sync_candles, candles)
+                last_tip = tip
+                if bool(getattr(self.settings, "paper_candle12_v2_telegram_enabled", False)):
+                    from app.services.candle12_v2_paper import send_signals
+
+                    await send_signals((result or {}).get("alerts") or [])
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("candle12_v2_paper_loop_failed", error=str(exc))
 
     async def _v21a_paper_watcher_loop(self) -> None:
         """Periodic tip check for V2.1-A paper symbols + optional daily summary."""

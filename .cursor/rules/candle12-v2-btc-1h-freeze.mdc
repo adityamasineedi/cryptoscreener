@@ -13,6 +13,6 @@ Unless the user explicitly asks to change this book:
 - Keep the structural stop, nearest-target exit, and same-bar stop-wins rule.
 - Keep $20 risk on a $1,000 account, 2× leverage, $1,000 margin cap, 0.04% taker, 0.02% slippage.
 - Do not add the stop-out short to this book.
-- Do not call it production or paper.
+- Do not call it production or send live orders. Forward virtual paper for this BTC 1h long book is allowed.
 
 Other symbols and 5m / 15m are outside this freeze. A behavior change needs a new strategy id.

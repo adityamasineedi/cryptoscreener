@@ -1,6 +1,6 @@
 # CANDLE12_V2 freeze — BTCUSDT 1h LONG
 
-**Status:** Frozen research. Not production. Not paper.  
+**Status:** Frozen rules. Forward virtual paper is on for BTCUSDT 1h LONG only, from 2026-10-18. Not production. Not live orders.  
 **Frozen:** 2026-10-15  
 **Symbol:** BTCUSDT only  
 **Timeframe:** 1h  
@@ -42,7 +42,7 @@ A candle-close entry, filled at the next candle’s open on the same 92 signals,
 2. Do not add the stop-out short. On these stops it showed no edge (−7.6R at the mirrored target, −9R at 1R), and the on-screen replay starts one candle late.
 3. Do not scale risk with equity, change the $20 risk, the 2× leverage, the $1,000 margin cap, or the fee and slippage rates for this book.
 4. Do not retune stops, targets, or BOS rules to improve the +$598.
-5. Do not mark the book production-comparable or turn it on for paper.
+5. Do not mark the book production-comparable. Forward virtual paper uses these same rules and does not send exchange orders. The 48-bar time stop and the +1R breakeven guard are not part of this book.
 
 ## What is allowed
 

@@ -185,6 +185,13 @@ class Settings(BaseSettings):
     paper_passed_watcher_enabled: bool = Field(
         default=True, alias="PAPER_PASSED_WATCHER_ENABLED"
     )
+    # Frozen CANDLE12_V2 BTCUSDT 1h LONG. Virtual fills only. Not live orders.
+    paper_candle12_v2_btc_long_enabled: bool = Field(
+        default=False, alias="PAPER_CANDLE12_V2_BTC_LONG_ENABLED"
+    )
+    paper_candle12_v2_telegram_enabled: bool = Field(
+        default=False, alias="PAPER_CANDLE12_V2_TELEGRAM_ENABLED"
+    )
     # Explicit trading mode separation (V2.1-A LIVE is never auto-enabled)
     trading_mode: str = Field(default="PAPER", alias="TRADING_MODE")
 
