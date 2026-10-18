@@ -124,6 +124,8 @@ class BacktestJob:
     bars_processed: int = 0
     total_bars: int = 0
     trades_generated: int = 0
+    # Closed trades in finished cells; trades_generated is the running cell only.
+    trades_done: int = 0
     last_heartbeat: str | None = None
     rows_loaded: int = 0
     load_meta: dict[str, Any] = field(default_factory=dict)
@@ -247,7 +249,7 @@ class BacktestJob:
             "phase": self.phase,
             "bars_processed": self.bars_processed,
             "total_bars": self.total_bars,
-            "trades": self.trades_generated,
+            "trades": self.trades_done + self.trades_generated,
             "trades_generated": self.trades_generated,
             "last_heartbeat": self.last_heartbeat,
             "rows_loaded": self.rows_loaded,
@@ -667,9 +669,11 @@ class BacktestJobService:
             ]
             for i, (sym, tf) in enumerate(cells):
                 if job._cancel:
-                    job.status = "cancelled"
-                    job.phase = JOB_CANCELLED
-                    job.finished_at = datetime.now(timezone.utc).isoformat()
+                    # The watchdog may have stopped it as error/stalled: keep that reason.
+                    if job.status == "running":
+                        job.status = "cancelled"
+                        job.phase = JOB_CANCELLED
+                    job.finished_at = job.finished_at or datetime.now(timezone.utc).isoformat()
                     job.snapshot_elapsed()
                     job.current = ""
                     return
@@ -788,9 +792,11 @@ class BacktestJobService:
                         cancel_event=job._cancel_event,
                     )
                 if payload.get("status") == "CANCELLED":
-                    job.status = "cancelled"
-                    job.phase = JOB_CANCELLED
-                    job.finished_at = datetime.now(timezone.utc).isoformat()
+                    # The watchdog may have stopped it as error/stalled: keep that reason.
+                    if job.status == "running":
+                        job.status = "cancelled"
+                        job.phase = JOB_CANCELLED
+                    job.finished_at = job.finished_at or datetime.now(timezone.utc).isoformat()
                     job.snapshot_elapsed()
                     job.current = ""
                     return
@@ -870,6 +876,10 @@ class BacktestJobService:
                             else row
                         )
                 job.done_cells = i + 1
+                job.trades_done += sum(
+                    int(r.get("sample_size") or 0) for r in payload_rows if isinstance(r, dict)
+                )
+                job.trades_generated = 0
                 job.bars_processed = _completed_bars(
                     (payload_rows or [{}])[0], job.bars_processed
                 )
@@ -886,7 +896,7 @@ class BacktestJobService:
                     JOB_COMPLETED,
                     job_id=job.job_id,
                     elapsed_seconds=time.perf_counter() - job._t0,
-                    trades=job.trades_generated,
+                    trades=job.trades_done,
                 )
             job.current = ""
             job.finished_at = datetime.now(timezone.utc).isoformat()
@@ -901,7 +911,11 @@ class BacktestJobService:
             job.current = ""
             emit_phase(JOB_FAILED, job_id=job.job_id, reason=str(exc))
         finally:
-            if self._watchdog is not None and not self._watchdog.done():
+            if (
+                self._job is job
+                and self._watchdog is not None
+                and not self._watchdog.done()
+            ):
                 self._watchdog.cancel()
             # The run is over: drop the cancel flag file so jobs leave no temp files.
             if job._cancel_event is not None:

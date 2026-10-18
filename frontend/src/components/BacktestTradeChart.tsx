@@ -195,12 +195,17 @@ export function BacktestTradeChart({ trade, holdout = false }: Props) {
         });
 
         if (overlay.focusFrom != null && overlay.focusTo != null) {
+          // Pad by bars, so a 1d next-open trade still shows its signal bar.
           const padSec =
-            trade.timeframe === "15m"
-              ? 15 * 60 * 12
-              : trade.timeframe === "4h"
-                ? 4 * 3600 * 8
-                : 3600 * 16;
+            trade.timeframe === "5m"
+              ? 5 * 60 * 12
+              : trade.timeframe === "15m"
+                ? 15 * 60 * 12
+                : trade.timeframe === "4h"
+                  ? 4 * 3600 * 8
+                  : trade.timeframe === "1d"
+                    ? 86400 * 8
+                    : 3600 * 16;
           chart.timeScale().setVisibleRange({
             from: (overlay.focusFrom - padSec) as CandlestickData["time"],
             to: (overlay.focusTo + padSec) as CandlestickData["time"],

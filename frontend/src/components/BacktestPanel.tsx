@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -362,7 +362,6 @@ export function BacktestPanel() {
   const [autoTimeframe, setAutoTimeframe] = useState(true);
   const [autoTimeframeNote, setAutoTimeframeNote] = useState<string | null>(null);
   const handoffRevision = useBacktestHandoffStore((s) => s.revision);
-  const handoffSymbols = useBacktestHandoffStore((s) => s.symbols);
   const [autoPassed, setAutoPassed] = useState(true);
   /** True while the regime book is the screen's current run (its results replace the single-strategy output). */
   const [regimeActive, setRegimeActive] = useState(false);
@@ -383,6 +382,8 @@ export function BacktestPanel() {
   const [end, setEnd] = useState("");
   const [principalUsd, setPrincipalUsd] = useState(1000);
   const [riskPct, setRiskPct] = useState(2);
+  /** Risk $ as typed, while the field is being edited (it may be empty). */
+  const [riskUsdText, setRiskUsdText] = useState<string | null>(null);
   const [riskUsd, setRiskUsd] = useState(20);
   const [researchRiskOverride, setResearchRiskOverride] = useState(false);
   const [vectorbtExecution, setVectorbtExecution] = useState(false);
@@ -520,7 +521,10 @@ export function BacktestPanel() {
     Promise.resolve()
       .then(() => fetchRegimeBacktest())
       .then((st) => {
-        if (!alive || st?.status !== "running") return;
+        if (!alive || !st?.status) return;
+        const finished = st.status === "done" || st.status === "cancelled" || st.status === "error";
+        // A finished regime run is restored only when no single-strategy job holds the screen.
+        if (st.status !== "running" && !(finished && st.job_id && !useBacktestJobStore.getState().job)) return;
         setRegimeJob(st);
         setRegimeActive(true);
       })
@@ -699,8 +703,11 @@ export function BacktestPanel() {
   const effectiveStart = requestWindow.start;
   const effectiveEnd = requestWindow.end;
 
+  // Consume the screener handoff once: a remount must not re-apply old coins.
   useEffect(() => {
-    if (!handoffRevision || !handoffSymbols.length) return;
+    if (!handoffRevision) return;
+    const handoffSymbols = useBacktestHandoffStore.getState().consume();
+    if (!handoffSymbols.length) return;
     const { allowed, rejected } = filterBacktestCapSymbols(handoffSymbols);
     if (!allowed.length) {
       setCoinFilterNotice(
@@ -720,7 +727,7 @@ export function BacktestPanel() {
         rejected.length ? ` ${rejected.length} skipped: ${NOT_IN_CAP_BOOK}.` : ""
       } Setup timeframe follows stored OHLCV.`,
     );
-  }, [handoffRevision, handoffSymbols]);
+  }, [handoffRevision]);
 
   // Only engine-only timeframes (1d) on offer, or a holdout-guarded book's own bar size
   // (4h book 16): auto picks the first; coverage does not decide.
@@ -892,7 +899,8 @@ export function BacktestPanel() {
   const jobPrincipalUsd = job?.principal_usd ?? principalUsd;
   const jobSymbols = job?.symbols ?? [];
   const outputRef = useRef<HTMLDivElement>(null);
-  const prevJobStatus = useRef<string | null>(null);
+  // Starts at the current status, so opening the tab on a finished job does not scroll.
+  const prevJobStatus = useRef<string | null>(job?.status ?? null);
 
   useEffect(() => {
     const status = job?.status ?? null;
@@ -908,6 +916,10 @@ export function BacktestPanel() {
     const rows = shownResult?.rows ?? [];
     if (!rows.length) return;
     if (preferredSymbol) {
+      // A row click or Prev/Next already picked this coin's timeframe: keep it.
+      if (rows.some((r) => r.symbol === preferredSymbol && `${r.symbol}:${r.timeframe}` === selectedKey)) {
+        return;
+      }
       const chosen = rows.find((r) => r.symbol === preferredSymbol);
       if (chosen) {
         const key = `${chosen.symbol}:${chosen.timeframe}`;
@@ -1045,6 +1057,10 @@ export function BacktestPanel() {
         );
         return;
       }
+    }
+    if (periodMode === "dates" && effectiveStart && effectiveEnd && effectiveStart > effectiveEnd) {
+      setStoreError(`Start day ${effectiveStart} is after end day ${effectiveEnd}.`);
+      return;
     }
     // An engine rejects any other timeframe with engine_request_unsupported.
     // Send only bars it lists; if the selection is stale, use its ranked setup.
@@ -1662,7 +1678,7 @@ export function BacktestPanel() {
             Direction: {isV21A ? "LONG+SHORT (native)" : direction}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
-            Setup TF: {isSd || isHoldoutGuarded ? primaryTf : "1h"}
+            Setup TF: {primaryTf}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
             {isSd
@@ -2101,9 +2117,17 @@ export function BacktestPanel() {
               type="number"
               min={1}
               step={1}
-              value={riskUsd}
+              value={riskUsdText ?? riskUsd}
               disabled={lockV1Risk}
-              onChange={(e) => setRiskUsd(Number(e.target.value) || 20)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setRiskUsdText(raw);
+                const usd = Number(raw);
+                if (raw.trim() === "" || !Number.isFinite(usd) || usd < 1) return;
+                setRiskUsd(usd);
+                if (principalUsd > 0) setRiskPct(Number(((usd / principalUsd) * 100).toFixed(4)));
+              }}
+              onBlur={() => setRiskUsdText(null)}
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none disabled:opacity-50"
             />
           </label>
@@ -2778,7 +2802,7 @@ export function BacktestPanel() {
           </div>
           {selected ? (
             <SelectedDetail
-              key={`${selected.symbol}:${selected.timeframe}:${selected.direction}`}
+              key={`${job?.job_id ?? ""}:${selected.symbol}:${selected.timeframe}:${selected.direction}`}
               row={selected}
               principalUsd={jobPrincipalUsd}
               holdout={
@@ -3330,6 +3354,19 @@ function SelectedDetail({
   );
   const selectedTrade =
     trades.find((t) => tradeRowKey(t) === selectedTradeKey) || null;
+  // One object per selected trade, so a re-render does not refetch candles or reset zoom.
+  const chartTrade = useMemo(
+    () =>
+      selectedTrade
+        ? {
+            ...selectedTrade,
+            // Some engines (OSE) do not stamp symbol/timeframe on each trade.
+            symbol: selectedTrade.symbol || row.symbol,
+            timeframe: selectedTrade.timeframe || row.timeframe,
+          }
+        : null,
+    [selectedTrade, row.symbol, row.timeframe],
+  );
 
   // Realized equity after each trade's exit, accumulated in exit order so
   // overlapping trades are counted when they close. Rows stay in list order.
@@ -3376,11 +3413,18 @@ function SelectedDetail({
           values: row.equity_curve_r || [],
         };
   const blotterScrollRef = useRef<HTMLDivElement | null>(null);
+  const blotterHeadRef = useRef<HTMLTableSectionElement | null>(null);
+  const [blotterHeadHeight, setBlotterHeadHeight] = useState(0);
+  useLayoutEffect(() => {
+    setBlotterHeadHeight(blotterHeadRef.current?.offsetHeight ?? 0);
+  }, []);
+  // Rows with a separate fill bar or a book line are two lines tall, so heights are measured.
   const blotterVirtualizer = useVirtualizer({
     count: withEquity.length,
     getScrollElement: () => blotterScrollRef.current,
     estimateSize: () => 28,
     overscan: 16,
+    scrollMargin: blotterHeadHeight,
   });
   const chartRef = useRef<HTMLDivElement | null>(null);
   /** A loss-analysis entry selects its trade like a blotter click, so the chart overlays it. */
@@ -3492,17 +3536,9 @@ function SelectedDetail({
         </div>
       </div>
 
-      {selectedTrade ? (
+      {chartTrade ? (
         <div className="mb-3" ref={chartRef}>
-          <BacktestTradeChart
-            trade={{
-              ...selectedTrade,
-              // Some engines (OSE) do not stamp symbol/timeframe on each trade.
-              symbol: selectedTrade.symbol || row.symbol,
-              timeframe: selectedTrade.timeframe || row.timeframe,
-            }}
-            holdout={holdout}
-          />
+          <BacktestTradeChart trade={chartTrade} holdout={holdout} />
         </div>
       ) : null}
 
@@ -3512,7 +3548,10 @@ function SelectedDetail({
         data-testid="backtest-trade-blotter"
       >
         <table className="w-full min-w-[1640px] border-collapse text-left text-[11px]">
-          <thead className="sticky top-0 z-10 bg-black/80 text-[10px] uppercase tracking-wide text-terminal-muted">
+          <thead
+            ref={blotterHeadRef}
+            className="sticky top-0 z-10 bg-black/80 text-[10px] uppercase tracking-wide text-terminal-muted"
+          >
             <tr>
               <th className="px-2 py-2">#</th>
               <th
@@ -3564,7 +3603,15 @@ function SelectedDetail({
             ) : (
               <>
                 {blotterVirtualizer.getVirtualItems().length > 0 ? (
-                  <tr aria-hidden style={{ height: blotterVirtualizer.getVirtualItems()[0]?.start ?? 0 }}>
+                  <tr
+                    aria-hidden
+                    style={{
+                      height: Math.max(
+                        0,
+                        (blotterVirtualizer.getVirtualItems()[0]?.start ?? 0) - blotterHeadHeight,
+                      ),
+                    }}
+                  >
                     <td colSpan={20} />
                   </tr>
                 ) : null}
@@ -3580,6 +3627,8 @@ function SelectedDetail({
                       showFunding={showFunding}
                       selected={key === selectedTradeKey}
                       onSelect={() => setSelectedTradeKey(key)}
+                      index={vRow.index}
+                      measureRef={blotterVirtualizer.measureElement}
                     />
                   );
                 })}
@@ -3589,7 +3638,8 @@ function SelectedDetail({
                     style={{
                       height: Math.max(
                         0,
-                        blotterVirtualizer.getTotalSize() -
+                        blotterVirtualizer.getTotalSize() +
+                          blotterHeadHeight -
                           (blotterVirtualizer.getVirtualItems().at(-1)?.end ?? 0),
                       ),
                     }}
@@ -3688,6 +3738,8 @@ function TradeRow({
   showFunding = false,
   selected,
   onSelect,
+  index,
+  measureRef,
 }: {
   t: StrategyTradeRow;
   equityUsd: number;
@@ -3697,6 +3749,9 @@ function TradeRow({
   showFunding?: boolean;
   selected: boolean;
   onSelect: () => void;
+  /** Virtual row index and measuring ref, so two-line rows get their real height. */
+  index?: number;
+  measureRef?: (el: HTMLTableRowElement | null) => void;
 }) {
   const net = t.net_pnl_usd;
   const separateFill = hasSeparateFillBar(t);
@@ -3714,6 +3769,8 @@ function TradeRow({
     .join(" · ");
   return (
     <tr
+      ref={measureRef}
+      data-index={index}
       role="button"
       tabIndex={0}
       onClick={onSelect}

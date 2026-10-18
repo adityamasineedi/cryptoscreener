@@ -25,7 +25,10 @@ type BacktestStore = {
   _gen: number;
   setJob: (job: BacktestJob | null) => void;
   setError: (error: string | null) => void;
-  poll: () => Promise<void>;
+  /** Resolves true when the status request succeeded (the screen knows the server's job). */
+  poll: () => Promise<boolean>;
+  /** Job a BUSY reply pointed at; its "already running" error clears once it finishes. */
+  busyJobId: string | null;
   start: (body: BacktestRunRequest) => Promise<void>;
   cancel: () => Promise<void>;
 };
@@ -75,6 +78,7 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
   foreignJob: false,
   ownJobId: null,
   error: null,
+  busyJobId: null,
   active: false,
   starting: false,
   _gen: 0,
@@ -88,11 +92,11 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
     }),
   setError: (error) => set({ error }),
   poll: async () => {
-    if (get().starting) return;
+    if (get().starting) return false;
     const gen = get()._gen;
     try {
       const st = await fetchBacktestJobStatus();
-      if (get().starting || get()._gen !== gen) return;
+      if (get().starting || get()._gen !== gen) return true;
 
       if (!st.status || st.status === "idle") {
         // API restart / no job: clear optimistic "running" so the UI unlocks.
@@ -105,7 +109,7 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
             ownJobId: null,
           });
         }
-        return;
+        return true;
       }
 
       const cur = get().job;
@@ -114,7 +118,7 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
         st.status !== "running" &&
         (!st.job_id || !cur.job_id || st.job_id !== cur.job_id)
       ) {
-        return;
+        return true;
       }
 
       const terminal =
@@ -125,29 +129,37 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
         st.status === "idle";
       // Only the job this screen started keeps its request. A job restored
       // after a reload or started from another tab is foreign to the form.
-      const { ownJobId, request } = get();
+      const { ownJobId, request, busyJobId } = get();
       const owned = ownJobId != null && st.job_id === ownJobId && request != null;
+      // The "already running" error is about that job; once it ends the error is stale.
+      const busyOver = terminal && busyJobId != null && st.job_id === busyJobId;
       set({
         job: st,
         active: st.status === "running",
         ...(owned ? {} : { foreignJob: true, request: null, ownJobId: null }),
+        ...(busyOver ? { busyJobId: null } : {}),
         error:
           st.status === "error" || st.status === "stalled"
             ? st.error || (st.status === "stalled" ? "Backtest stalled (no heartbeat)" : "Backtest failed")
-            : get().error,
+            : busyOver
+              ? null
+              : get().error,
       });
       if (terminal && st.status !== "idle") {
         // Explicit stop — poller also gates on active/running.
         set({ active: false });
       }
+      return true;
     } catch {
       /* ignore transient poll errors */
+      return false;
     }
   },
   start: async (body) => {
     const gen = get()._gen + 1;
     set({
       error: null,
+      busyJobId: null,
       active: true,
       starting: true,
       _gen: gen,
@@ -162,6 +174,7 @@ export const useBacktestJobStore = create<BacktestStore>((set, get) => ({
       if (res.status === "BUSY") {
         set({
           error: res.error || "Another backtest is already running",
+          busyJobId: res.job?.job_id ?? null,
           job: res.job || get().job,
           active: res.job?.status === "running",
           starting: false,
@@ -239,23 +252,38 @@ export function startBacktestBackgroundPoller(): () => void {
   let timer: number | null = null;
   let stopped = false;
   let inFlight = false;
+  // Until one status request succeeds, a job running on the server may be unknown here.
+  let restored = false;
+  let ticks = 0;
+  const RESTORE_RETRY_TICKS = 7; // ~5 s at 750 ms
 
   const tick = async () => {
     if (stopped || inFlight) return;
+    ticks += 1;
     const { active, job, starting, poll } = useBacktestJobStore.getState();
+    const retryRestore = !restored && !job && ticks % RESTORE_RETRY_TICKS === 0;
     const shouldPoll =
-      !starting && (active || job?.status === "running");
+      !starting && (active || job?.status === "running" || retryRestore);
     if (!shouldPoll) return;
     inFlight = true;
     try {
-      await poll();
+      if (await poll()) restored = true;
     } finally {
       inFlight = false;
     }
   };
 
   // Initial restore (in case user refreshed mid-job)
-  void useBacktestJobStore.getState().poll();
+  inFlight = true;
+  void useBacktestJobStore
+    .getState()
+    .poll()
+    .then((ok) => {
+      if (ok) restored = true;
+    })
+    .finally(() => {
+      inFlight = false;
+    });
 
   timer = window.setInterval(() => {
     void tick();

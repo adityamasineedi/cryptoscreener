@@ -33,6 +33,7 @@ describe("backtestJobStore polling", () => {
       foreignJob: false,
       ownJobId: null,
       error: null,
+      busyJobId: null,
       active: false,
       starting: false,
       _gen: 0,
@@ -275,5 +276,37 @@ describe("backtestJobStore polling", () => {
     await useBacktestJobStore.getState().poll();
     expect(useBacktestJobStore.getState().job).toBeNull();
     expect(useBacktestJobStore.getState().active).toBe(false);
+  });
+  it("the BUSY error clears once the job it points at finishes", async () => {
+    startBacktestJob.mockResolvedValue({
+      status: "BUSY",
+      error: "Backtest already running (job_id=other)",
+      job: { status: "running", job_id: "other", rows: [] },
+    });
+    await useBacktestJobStore.getState().start(SHORT_REQUEST);
+    expect(useBacktestJobStore.getState().error).toMatch(/already running/);
+
+    fetchBacktestJobStatus.mockResolvedValue({ status: "done", job_id: "other", rows: [] });
+    await useBacktestJobStore.getState().poll();
+    expect(useBacktestJobStore.getState().error).toBeNull();
+    expect(useBacktestJobStore.getState().job?.status).toBe("done");
+  });
+
+  it("a failed first restore is retried, so a running job is still found after a reload", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchBacktestJobStatus.mockRejectedValueOnce(new Error("Failed to fetch"));
+      fetchBacktestJobStatus.mockResolvedValue({ status: "running", job_id: "j9", rows: [] });
+      const stop = startBacktestBackgroundPoller();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(useBacktestJobStore.getState().job).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(6000);
+      stop();
+      expect(useBacktestJobStore.getState().job?.job_id).toBe("j9");
+      expect(useBacktestJobStore.getState().active).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

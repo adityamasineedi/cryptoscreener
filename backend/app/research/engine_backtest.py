@@ -208,6 +208,13 @@ ENGINE_STRATEGIES: dict[str, dict[str, Any]] = {
 _BY_UPPER = {sid.upper(): sid for sid in ENGINE_STRATEGIES}
 
 
+def _gross_profit_factor(trades: Sequence[Mapping[str, Any]]) -> float | None:
+    gross = [float(t["gross_pnl_usd"]) for t in trades if t.get("gross_pnl_usd") is not None]
+    wins = sum(p for p in gross if p > 0)
+    losses = -sum(p for p in gross if p < 0)
+    return (wins / losses) if losses > 0 else None
+
+
 def engine_strategy_id(value: str | None) -> str | None:
     """Canonical id for a ranked engine strategy, or None for a COMBO id."""
     return _BY_UPPER.get(str(value or "").strip().upper())
@@ -752,7 +759,8 @@ def build_engine_row(
         "expectancy_R": net["average_R_net"],
         "tp1_hit_rate": (tp_hits / n) if n else None,
         "sl_rate": (sl_hits / n) if n else None,
-        "profit_factor": net["profit_factor_net"],
+        # Gross PF from each trade's gross $ (before fees), on the same basis as PF net.
+        "profit_factor": _gross_profit_factor(trades),
         "max_drawdown_R": dd_r if r_net else None,
         "tp1_hits": tp_hits,
         "sl_hits": sl_hits,
