@@ -422,6 +422,19 @@ class BacktestJobService:
             reason = engine_request_error(engine_id, str(direction or ""), tfs)
             if reason:
                 raise BacktestConfigError("engine_request_unsupported", reason)
+            from app.research.engine_backtest import (
+                DailyTrendHoldoutError,
+                daily_trend_dates,
+                is_daily_trend,
+            )
+
+            if is_daily_trend(engine_id):
+                # Holdout guard, before any candle load: end <= 2026-07-14 (inclusive
+                # UI date); a tail request becomes the `lim` days ending 2026-07-14.
+                try:
+                    start_s, end_s = daily_trend_dates(start_s, end_s, lim)
+                except DailyTrendHoldoutError as exc:
+                    raise BacktestConfigError(exc.code, str(exc)) from exc
             combination_id = strategy_id = engine_id
             # Never a v1 production profile: sizing is the request's own.
             risk_mode, research_risk_override = "RESEARCH_OVERRIDE", True

@@ -168,6 +168,41 @@ def test_registry_covers_the_ranked_engine_ids():
         assert "LONG" in ENGINE_STRATEGIES[sid]["directions"]
 
 
+def test_registry_pins_every_engine_id_and_family():
+    families = {sid: spec["family"] for sid, spec in ENGINE_STRATEGIES.items()}
+    assert families == {
+        "CANDLE12_V2": "candle12",
+        "CANDLE12_V3_EXEC_FIX": "candle12_v3",
+        "LARGE_CAP_SWEEP_CHOCH": "multicap",
+        "MID_CAP_FVG_DISCOUNT": "multicap",
+        "SMALL_CAP_VOLUME_BOS": "multicap",
+        "OSE_A_corrected_baseline": "ohlcv_structure_experiment",
+        "OSE_B_acceptance": "ohlcv_structure_experiment",
+        "OSE_C_retest": "ohlcv_structure_experiment",
+        "OSE_D_faster_confirmation": "ohlcv_structure_experiment",
+        "DAILY_TREND_01_SMA200": "daily_trend",
+        "DAILY_TREND_02_EMA200": "daily_trend",
+        "DAILY_TREND_03_SMA50": "daily_trend",
+        "DAILY_TREND_04_MA_SLOPE": "daily_trend",
+        "DAILY_TREND_05_GOLDEN_CROSS": "daily_trend",
+        "DAILY_TREND_06_WEINSTEIN": "daily_trend",
+        "DAILY_TREND_09_DONCHIAN20_WEINSTEIN": "daily_trend",
+        "DAILY_TREND_11_ADX_DMI": "daily_trend",
+        "DAILY_TREND_12_ICHIMOKU": "daily_trend",
+        "DAILY_TREND_14_ROC90": "daily_trend",
+        "DAILY_TREND_15_ROC30": "daily_trend",
+        "DAILY_TREND_19_COMBINED": "daily_trend",
+        "DAILY_TREND_ROTATION": "daily_trend",
+        "DAILY_TREND_STATIC12": "daily_trend",
+    }
+    # Only the daily trend books carry a BOTH row; nothing else changed direction.
+    both = {sid for sid, spec in ENGINE_STRATEGIES.items() if "BOTH" in spec["directions"]}
+    assert both == {sid for sid, fam in families.items() if fam == "daily_trend"}
+    assert engine_strategy_id("daily_trend_01_sma200") == "DAILY_TREND_01_SMA200"
+    assert "1d" in engine_request_error("DAILY_TREND_01_SMA200", "LONG", ["1h"])
+    assert engine_request_error("CANDLE12_V2", "BOTH", ["1h"]) == "CANDLE12_V2 runs LONG or SHORT only"
+
+
 # ---------------------------------------------------------------- audit #19: OSE clock labels
 
 

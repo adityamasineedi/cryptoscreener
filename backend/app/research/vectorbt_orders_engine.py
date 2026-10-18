@@ -20,7 +20,10 @@ Fields read per family (all from the trade dict):
 - ohlcv_structure_experiment (``engine_backtest._run_ose`` + ``trade_fees``):
   same keys as multicap; entry_price is the slipped next-bar open, exit_price
   the engine's exit fill.
-- trade_fees ``slippage_rate`` (all three families above): with 0 the prices
+- daily_trend (``engine_backtest._run_daily_trend`` + ``trade_fees``): same keys
+  as multicap (tp1 None); entry_price / exit_price are the books.simulate_path
+  fills (slippage already in them, ``slippage_rate`` 0), so both are fills.
+- trade_fees ``slippage_rate`` (all four families above): with 0 the prices
   above are the fills. With ``slippage_rate > 0`` ``enrich_trade_execution``
   slips both legs adversely (LONG entry x (1 + s), exit x (1 - s); SHORT entry
   x (1 - s), exit x (1 + s)) and prices fees *and* gross P&L on those fills
@@ -52,7 +55,7 @@ from typing import Any, Mapping, Sequence
 
 from app.research.vectorbt_replay import ReplayOrder
 
-TRADE_FEES_FAMILIES = ("multicap", "candle12", "ohlcv_structure_experiment")
+TRADE_FEES_FAMILIES = ("multicap", "candle12", "ohlcv_structure_experiment", "daily_trend")
 V3_FAMILY = "candle12_v3"
 
 

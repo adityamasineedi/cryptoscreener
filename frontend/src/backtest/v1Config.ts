@@ -89,7 +89,21 @@ export type BacktestStrategyId =
   | "SMALL_CAP_VOLUME_BOS"
   | "OSE_A_corrected_baseline"
   | "OSE_B_acceptance"
-  | "OSE_D_faster_confirmation";
+  | "OSE_D_faster_confirmation"
+  | "DAILY_TREND_01_SMA200"
+  | "DAILY_TREND_02_EMA200"
+  | "DAILY_TREND_03_SMA50"
+  | "DAILY_TREND_04_MA_SLOPE"
+  | "DAILY_TREND_05_GOLDEN_CROSS"
+  | "DAILY_TREND_06_WEINSTEIN"
+  | "DAILY_TREND_09_DONCHIAN20_WEINSTEIN"
+  | "DAILY_TREND_11_ADX_DMI"
+  | "DAILY_TREND_12_ICHIMOKU"
+  | "DAILY_TREND_14_ROC90"
+  | "DAILY_TREND_15_ROC30"
+  | "DAILY_TREND_19_COMBINED"
+  | "DAILY_TREND_ROTATION"
+  | "DAILY_TREND_STATIC12";
 
 /** Supply/demand structure variants. C is the starting hypothesis. */
 export const SD_VARIANT_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
@@ -107,6 +121,48 @@ export const SD_VARIANT_OPTIONS: ReadonlyArray<{ id: string; label: string }> = 
 
 export const SD_DEFAULT_VARIANT = "COMBO_SD_C";
 
+/** Direction an engine strategy can be asked for. BOTH = one walk with long and short. */
+export type EngineDirection = "LONG" | "SHORT" | "BOTH";
+
+/** Daily trend books (backend family "daily_trend"). Menu order. */
+export const DAILY_TREND_STRATEGY_IDS = [
+  "DAILY_TREND_01_SMA200",
+  "DAILY_TREND_02_EMA200",
+  "DAILY_TREND_03_SMA50",
+  "DAILY_TREND_04_MA_SLOPE",
+  "DAILY_TREND_05_GOLDEN_CROSS",
+  "DAILY_TREND_06_WEINSTEIN",
+  "DAILY_TREND_09_DONCHIAN20_WEINSTEIN",
+  "DAILY_TREND_11_ADX_DMI",
+  "DAILY_TREND_12_ICHIMOKU",
+  "DAILY_TREND_14_ROC90",
+  "DAILY_TREND_15_ROC30",
+  "DAILY_TREND_19_COMBINED",
+  "DAILY_TREND_ROTATION",
+  "DAILY_TREND_STATIC12",
+] as const satisfies readonly BacktestStrategyId[];
+
+export const DAILY_TREND_COMBO_VERSION = "engine-daily-trend";
+export const DAILY_TREND_OPTGROUP_LABEL = "Daily trend (research, in-sample)";
+
+/**
+ * Last UTC day a daily trend book may load (inclusive end_date). Bars from
+ * 2026-07-15 on are the sealed holdout and must never be requested.
+ */
+export const DAILY_TREND_LAST_DAY = "2026-07-14";
+
+export const DAILY_TREND_HOLDOUT_BANNER =
+  "Holdout sealed: data from 2026-07-15 is not loaded for daily trend books. Results 2022-10 → 2026-07-14 are in-sample (already read by the pre-registered screen) — for inspection, not confirmation. Funding not charged; fixed-$ risk sizing (the screen compounds 0.5%). Research only — not tradable.";
+
+export function isDailyTrendStrategy(id: string | null | undefined): boolean {
+  return (DAILY_TREND_STRATEGY_IDS as readonly string[]).includes(String(id ?? ""));
+}
+
+/** The later of a UTC day and the daily trend holdout cap is never sent: returns the earlier. */
+export function capDailyTrendDay(day: string): string {
+  return day > DAILY_TREND_LAST_DAY ? DAILY_TREND_LAST_DAY : day;
+}
+
 export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
   id: BacktestStrategyId;
   label: string;
@@ -117,6 +173,11 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
   direct?: boolean;
   /** Runs its own engine (not the COMBO walk). Setup timeframes it accepts. */
   engineTimeframes?: readonly string[];
+  /**
+   * Directions an engine strategy accepts. Omitted: the engine runs LONG only
+   * (every engine strategy before the daily trend books).
+   */
+  engineDirections?: readonly EngineDirection[];
 }> = [
   {
     id: "COMBO_02_V1",
@@ -268,6 +329,147 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
     direct: true,
     engineTimeframes: ["15m", "1h"],
   },
+  // Daily trend books (backend family "daily_trend"): 1d bars only, in-sample research.
+  {
+    id: "DAILY_TREND_01_SMA200",
+    label: "Daily · SMA200 (book 1)",
+    status: "Research",
+    combinationId: "DAILY_TREND_01_SMA200",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_02_EMA200",
+    label: "Daily · EMA200 (book 2)",
+    status: "Research",
+    combinationId: "DAILY_TREND_02_EMA200",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_03_SMA50",
+    label: "Daily · SMA50 (book 3)",
+    status: "Research",
+    combinationId: "DAILY_TREND_03_SMA50",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_04_MA_SLOPE",
+    label: "Daily · MA slope (book 4)",
+    status: "Research",
+    combinationId: "DAILY_TREND_04_MA_SLOPE",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_05_GOLDEN_CROSS",
+    label: "Daily · Golden/death cross (book 5)",
+    status: "Research",
+    combinationId: "DAILY_TREND_05_GOLDEN_CROSS",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_06_WEINSTEIN",
+    label: "Daily · Weinstein stage (book 6)",
+    status: "Research",
+    combinationId: "DAILY_TREND_06_WEINSTEIN",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_09_DONCHIAN20_WEINSTEIN",
+    label: "Daily · Donchian 20 + Weinstein (book 9)",
+    status: "Research",
+    combinationId: "DAILY_TREND_09_DONCHIAN20_WEINSTEIN",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_11_ADX_DMI",
+    label: "Daily · ADX/DMI 14 (book 11)",
+    status: "Research",
+    combinationId: "DAILY_TREND_11_ADX_DMI",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_12_ICHIMOKU",
+    label: "Daily · Ichimoku (book 12)",
+    status: "Research",
+    combinationId: "DAILY_TREND_12_ICHIMOKU",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_14_ROC90",
+    label: "Daily · ROC 90 (book 14)",
+    status: "Research",
+    combinationId: "DAILY_TREND_14_ROC90",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_15_ROC30",
+    label: "Daily · ROC 30 (book 15)",
+    status: "Research",
+    combinationId: "DAILY_TREND_15_ROC30",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_19_COMBINED",
+    label: "Daily · Combined 4+7 (book 19)",
+    status: "Research",
+    combinationId: "DAILY_TREND_19_COMBINED",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_ROTATION",
+    label: "Daily · Rotation top 3 of 12 (walk-forward)",
+    status: "Research",
+    combinationId: "DAILY_TREND_ROTATION",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
+  {
+    id: "DAILY_TREND_STATIC12",
+    label: "Daily · Static 12 (rotation benchmark)",
+    status: "Research",
+    combinationId: "DAILY_TREND_STATIC12",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["1d"],
+    engineDirections: ["LONG", "SHORT", "BOTH"],
+  },
 ] as const;
 
 /** Cap-book sides that passed. The backtest screen selects these on open. */
@@ -302,6 +504,7 @@ export const LONG_STRATEGY_IDS: readonly BacktestStrategyId[] = [
   "OSE_B_acceptance",
   "OSE_D_faster_confirmation",
   "COMBO_SD_STRUCTURE",
+  ...DAILY_TREND_STRATEGY_IDS,
 ] as const;
 
 export const LONG_PASSED_IDS: readonly BacktestStrategyId[] = ["COMBO_03_TRANSITION_B"] as const;
@@ -320,6 +523,7 @@ export const SHORT_STRATEGY_IDS: readonly BacktestStrategyId[] = [
   "COMBO_03_TRANSITION_B",
   "COMBO_01",
   "COMBO_02_LOCAL",
+  ...DAILY_TREND_STRATEGY_IDS,
 ] as const;
 
 export const SHORT_PASSED_IDS: readonly BacktestStrategyId[] = [
@@ -496,7 +700,7 @@ export const NEXT_OPEN_FILL_BOOK_NOTE =
 export function assessProductionComparable(input: {
   symbols: string[];
   timeframes: string[];
-  direction: "LONG" | "SHORT";
+  direction: "LONG" | "SHORT" | "BOTH";
   researchRiskOverride: boolean;
   leverage: number;
   takerFeePct: number;

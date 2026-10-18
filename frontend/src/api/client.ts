@@ -488,6 +488,10 @@ export function fetchBosStrategies(params?: {
 
 export type StrategyTradeRow = {
   trade_id?: string | number;
+  /** Daily trend family: the book (1-19) that produced this trade (rotation / static 12 sleeves). */
+  book?: number | null;
+  /** Daily trend family: "rotation" or "static12" when the trade belongs to a multi-book sleeve. */
+  sleeve?: string | null;
   trade_no?: number;
   symbol: string;
   timeframe: string;
@@ -2003,7 +2007,10 @@ export function cancelRegimeBacktest() {
 export async function startBacktestJob(body: {
   symbols: string[];
   timeframes: string[];
-  /** BOTH: two-sided request, COMBO_02_V2 family only (the hedge book's V2 / V2_1B). */
+  /**
+   * BOTH: two-sided request, COMBO_02_V2 family (the hedge book's V2 / V2_1B) and the
+   * daily trend books (full long+short book).
+   */
   direction?: "LONG" | "SHORT" | "BOTH";
   combination_id?: string;
   strategy_id?: string;
@@ -2021,6 +2028,7 @@ export async function startBacktestJob(body: {
   /** Research only: replay trades through VectorBT; its fills are used only on parity PASS. */
   vectorbt_execution?: boolean;
   start_date?: string;
+  /** Inclusive UTC day: the backend loads bars with timestamp < end_date + 1 day. */
   end_date?: string;
 }) {
   const res = await fetch(`${API_BASE}/api/research/long-strategy/backtest/start`, {

@@ -980,6 +980,13 @@ async def research_ohlcv_candles(
     # end_exclusive: one bar past padded exit so the exit candle is included
     range_start = start_dt - pad
     range_end_excl = end_dt + pad + timedelta(milliseconds=step_ms)
+    # 1d bars on the Backtest screen belong to the daily trend books, whose holdout from
+    # 2026-07-15 is sealed: never load a daily candle at or after it, even as chart padding.
+    from app.research.engine_backtest import DAILY_TREND_HOLDOUT_START
+
+    if tf == "1d":
+        range_end_excl = min(range_end_excl, DAILY_TREND_HOLDOUT_START)
+        range_start = min(range_start, range_end_excl)
 
     if db_manager.engine is None:
         return {
@@ -1929,6 +1936,24 @@ async def research_long_strategy_backtest(
         return {
             "status": "ERROR",
             "reason": "symbols and timeframes required",
+            "rows": [],
+            "paper_trade_created": False,
+            "live_trade_created": False,
+            "telegram_sent": False,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    from app.research.engine_backtest import DAILY_TREND_HOLDOUT_CODE, is_daily_trend
+
+    if is_daily_trend(combination_id):
+        # The sync path has no holdout guard (and no engine path): background job only.
+        return {
+            "status": "ERROR",
+            "error": (
+                "daily trend books run only through POST /research/long-strategy/backtest/start "
+                "(holdout from 2026-07-15 is sealed; end date must be <= 2026-07-14)"
+            ),
+            "error_code": DAILY_TREND_HOLDOUT_CODE,
+            "reason": DAILY_TREND_HOLDOUT_CODE,
             "rows": [],
             "paper_trade_created": False,
             "live_trade_created": False,

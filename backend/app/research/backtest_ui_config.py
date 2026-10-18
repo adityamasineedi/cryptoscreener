@@ -329,6 +329,15 @@ def validate_backtest_request(
             str(strategy_id or "").upper().strip(),
         }
         two_sided = bool(requested & set(COMBO_V2_FAMILY))
+        if not two_sided:
+            # Engine strategies that list BOTH (the daily trend books) keep both sides.
+            from app.research.engine_backtest import ENGINE_STRATEGIES, engine_strategy_id
+
+            two_sided = any(
+                (sid := engine_strategy_id(r)) is not None
+                and TWO_SIDED_DIRECTION in ENGINE_STRATEGIES[sid]["directions"]
+                for r in requested
+            )
     if two_sided:
         pass
     elif not direction_raw or direction_raw in {"ALL", "BOTH", "ANY", "AMBIGUOUS"}:

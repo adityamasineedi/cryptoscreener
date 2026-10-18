@@ -212,6 +212,10 @@ class ExitModel:
     close_slippage: float | None = None
     # Signal bar for CHASED_ENTRY when signal_time is the entry bar itself.
     signal_offset_same_bar: int = -1
+    # Indicator exits independent of the stop: the trade carries ``signal_exit_time``
+    # (the bar whose open the indicator exit fills at, after a gap-stop check) and
+    # ``window_end_time`` (the bar whose close ends the backtest window).
+    signal_exits: bool = False
 
 
 def _ose_constants() -> tuple[int, float]:
@@ -266,6 +270,22 @@ def exit_model_for(strategy_id: Any, row: Mapping[str, Any] | None = None) -> Ex
             close_slippage=slip,
             signal_offset_same_bar=-1,
         )
+    if family == "daily_trend":
+        # Daily trend books: fill at the open after the signal close; stop 2.5 x ATR from
+        # the fill, checked on the entry bar; a later bar opening beyond the stop exits at
+        # that open; the indicator exit fills at an open after the gap check and before
+        # the bar's stop check; an open position closes at the window's last close. Every
+        # exit is slipped by the trade's own rate (raw_exit_price vs exit_price).
+        return ExitModel(
+            family=family,
+            computable=True,
+            entry_bar_inclusive=True,
+            gap_stop_at_open=True,
+            level_slippage="trade",
+            close_slippage=None,
+            signal_offset_same_bar=-1,
+            signal_exits=True,
+        )
     if family == "candle12_v3":
         return ExitModel(
             family=family,
@@ -306,6 +326,8 @@ class _Frame:
     walk_start: int | None
     exit_idx: int | None
     signal_idx: int | None
+    signal_exit_idx: int | None
+    window_end_idx: int | None
     exit_slip: float
     is_stop: bool
     outcome: str
@@ -378,6 +400,8 @@ def _frame(trade: Mapping[str, Any], no: int, series: _Series, model: ExitModel)
         walk_start=walk_start,
         exit_idx=exit_idx,
         signal_idx=signal_idx,
+        signal_exit_idx=series.index_of(trade.get("signal_exit_time")) if model.signal_exits else None,
+        window_end_idx=series.index_of(trade.get("window_end_time")) if model.signal_exits else None,
         exit_slip=_trade_exit_slip(trade, sgn, model),
         is_stop=_outcome_is_stop(outcome),
         outcome=outcome,
@@ -399,7 +423,8 @@ def _walk(
 ) -> tuple[int, float, str] | None:
     """(exit_index, raw exit price, kind) or None while still open at ``last_index``.
 
-    kind: stop | gap_stop | target | close (hold limit reached, exit at that bar's close).
+    kind: stop | gap_stop | target | signal (indicator exit at the open) | close (hold
+    limit or window end reached, exit at that bar's close).
     """
     assert fr.walk_start is not None and fr.entry_idx is not None
     sgn = fr.sgn
@@ -411,6 +436,8 @@ def _walk(
         if model.gap_stop_at_open and i > fr.entry_idx:
             if (sgn > 0 and o <= stop) or (sgn < 0 and o >= stop):
                 return i, o, "gap_stop"
+        if model.signal_exits and fr.signal_exit_idx is not None and i == fr.signal_exit_idx:
+            return i, o, "signal"
         stop_hit = lo <= stop if sgn > 0 else h >= stop
         if stop_hit:  # same-bar stop and target -> stop
             return i, stop, "stop"
@@ -418,6 +445,8 @@ def _walk(
         if reached:
             return i, (min(reached) if sgn > 0 else max(reached)), "target"
         if hold_last is not None and i >= hold_last:
+            return i, c, "close"
+        if model.signal_exits and fr.window_end_idx is not None and i >= fr.window_end_idx:
             return i, c, "close"
     return None
 
@@ -1239,6 +1268,15 @@ def analyze_row(
 
 # --------------------------------------------------------------------------- job glue
 
+
+def _is_daily_trend(strategy_id: Any) -> bool:
+    try:
+        from app.research.engine_backtest import is_daily_trend
+
+        return is_daily_trend(str(strategy_id or ""))
+    except Exception:  # noqa: BLE001
+        return False
+
 CandleLoader = Callable[..., Awaitable[tuple[list[dict[str, Any]], int, dict[str, Any]]]]
 
 
@@ -1306,6 +1344,15 @@ async def loss_analysis_for_current_job(
     end = max(end_candidates)
     if last_exit is not None:
         end = max(end, last_exit + timedelta(seconds=bar_s * (hindsight + 1)))
+    sid = row.get("combination_id") or getattr(job, "combination_id", None)
+    if str(row.get("engine_family") or "") == "daily_trend" or _is_daily_trend(sid):
+        # Sealed holdout from 2026-07-15: hindsight past the exit stops at 2026-07-14.
+        from app.research.engine_backtest import DAILY_TREND_HOLDOUT_START
+
+        last_day = DAILY_TREND_HOLDOUT_START - timedelta(days=1)
+        end = min(end, last_day)
+        if start > last_day:
+            raise LossAnalysisUnavailable("daily trend books: holdout from 2026-07-15 is sealed.")
 
     if candle_loader is None:
         from app.research.service import _load_research_candles as candle_loader
@@ -1321,7 +1368,6 @@ async def loss_analysis_for_current_job(
     )
     if not candles:
         raise LossAnalysisUnavailable("No candles could be loaded for this cell.")
-    sid = row.get("combination_id") or getattr(job, "combination_id", None)
     out = await asyncio.to_thread(analyze_row, row, candles, hindsight_bars=hindsight, strategy_id=sid)
     out["job_id"] = getattr(job, "job_id", None)
     return out

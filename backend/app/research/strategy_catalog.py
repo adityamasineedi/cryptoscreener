@@ -851,4 +851,31 @@ def _backtest_menu_cards(combos: dict[str, Any]) -> list[dict[str, Any]]:
             "1h",
             f"Research only: small run, {_SMALL_RUN}: 31 trades, net −$107.56.",
         ),
+        *_daily_trend_cards(),
+    ]
+
+
+def _daily_trend_cards() -> list[dict[str, Any]]:
+    """One RESEARCH card per daily trend book on the Backtest menu (text only, no results)."""
+    from app.research.engine_backtest import DAILY_TREND_FAMILY, ENGINE_STRATEGIES
+
+    return [
+        _backtest_menu_card(
+            sid,
+            spec["name"],
+            "LONG / SHORT / BOTH",
+            "1d",
+            (f"Research only: pre-registered daily trend book {spec['book']} from the locked "
+             if isinstance(spec["book"], int) else
+             f"Research only: {spec['name']}, pre-registered walk-forward over the 12 books of the locked ")
+            + "daily direction screen (in-sample 2022-2026). The holdout from 2026-07-15 is "
+            "sealed: the Backtest tab rejects an end date after 2026-07-14. Fixed-$ risk, "
+            "no funding.",
+            do_not=[
+                "Do not promote to production / paper on this evidence",
+                "Do not run or read anything at or after 2026-07-15 (sealed holdout)",
+            ],
+        )
+        for sid, spec in ENGINE_STRATEGIES.items()
+        if spec["family"] == DAILY_TREND_FAMILY
     ]

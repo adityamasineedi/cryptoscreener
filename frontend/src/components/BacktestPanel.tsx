@@ -41,6 +41,12 @@ import {
   BACKTEST_STRATEGY_OPTIONS,
   backtestStrategyLabel,
   bookChipLabel,
+  capDailyTrendDay,
+  DAILY_TREND_HOLDOUT_BANNER,
+  DAILY_TREND_LAST_DAY,
+  DAILY_TREND_OPTGROUP_LABEL,
+  type EngineDirection,
+  isDailyTrendStrategy,
   HEDGE_STRATEGY_IDS,
   LONG_RUN_STRATEGY_ID,
   PASSED_RUN_STRATEGY_ID,
@@ -101,7 +107,9 @@ const SYMBOL_GROUPS = [
   { id: "mid", label: "Mid cap", symbols: BACKTEST_MID_SYMBOLS as readonly string[] },
 ] as const;
 const NOT_IN_CAP_BOOK = "not in the large-cap or mid-cap book";
-const TF_OPTIONS = ["15m", "1h", "4h"] as const;
+const TF_OPTIONS = ["15m", "1h", "4h", "1d"] as const;
+/** Offered only to strategies whose engineTimeframes include it (the daily trend books). */
+const ENGINE_ONLY_TFS: readonly string[] = ["1d"];
 /** Coins each strategy book opens with. Switching books restores these. */
 const BOOK_DEFAULT_SYMBOLS: Record<"long" | "short" | "hedge", readonly string[]> = {
   long: ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
@@ -152,6 +160,24 @@ const LOOKBACK_LIMITS = [
   // Max is resolved from DB coverage (maxLookbackBars); this is the unknown-size fallback.
   { id: "max", limit: FALLBACK_MAX_BARS },
 ] as const;
+
+/** Day-based presets at 1d (one bar per day). Max is resolved from DB coverage. */
+const DAILY_LOOKBACK_LIMITS = [
+  { id: "1y", limit: 365 },
+  { id: "2y", limit: 730 },
+  { id: "3y", limit: 1095 },
+  { id: "max", limit: FALLBACK_MAX_BARS },
+] as const;
+
+type LookbackId =
+  | (typeof LOOKBACK_LIMITS)[number]["id"]
+  | (typeof DAILY_LOOKBACK_LIMITS)[number]["id"];
+
+/** UTC calendar day shifted by whole days. */
+function shiftUtcDay(day: string, days: number): string {
+  const ms = Date.parse(`${day}T00:00:00Z`) + days * 24 * 60 * 60 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
 
 function pct(v: number | null | undefined): string {
   if (v == null || Number.isNaN(v)) return "—";
@@ -328,8 +354,13 @@ export function BacktestPanel() {
   const [regimeStarting, setRegimeStarting] = useState(false);
   const [strategyId, setStrategyId] = useState<BacktestStrategyId>(PASSED_RUN_STRATEGY_ID);
   const [sdVariant, setSdVariant] = useState(SD_DEFAULT_VARIANT);
-  const [direction, setDirection] = useState<"LONG" | "SHORT">("SHORT");
-  const [lookbackId, setLookbackId] = useState<(typeof LOOKBACK_LIMITS)[number]["id"]>("60d");
+  // BOTH only for an engine strategy whose engineDirections list it (daily trend books).
+  const [direction, setDirection] = useState<EngineDirection>("SHORT");
+  const [intradayLookbackId, setIntradayLookbackId] =
+    useState<(typeof LOOKBACK_LIMITS)[number]["id"]>("60d");
+  // Daily trend books keep their own day-based preset; the intraday one is untouched.
+  const [dailyLookbackId, setDailyLookbackId] =
+    useState<(typeof DAILY_LOOKBACK_LIMITS)[number]["id"]>("max");
   const [customLimit, setCustomLimit] = useState("");
   const [periodMode, setPeriodMode] = useState<PeriodMode>("lookback");
   const [start, setStart] = useState("");
@@ -360,8 +391,10 @@ export function BacktestPanel() {
     (opt) => opt.status !== "Production candidate" && passedIdSet.has(opt.id),
   );
   const researchStrategies = bookStrategies.filter(
-    (opt) => opt.status !== "Production candidate" && !passedIdSet.has(opt.id),
+    (opt) =>
+      opt.status !== "Production candidate" && !passedIdSet.has(opt.id) && !isDailyTrendStrategy(opt.id),
   );
+  const dailyTrendStrategies = bookStrategies.filter((opt) => isDailyTrendStrategy(opt.id));
   // Native LONG+SHORT form: the hedge book (V2.1-A, V2, V2_1B) or V2.1-A itself.
   const isV21A = book === "hedge" || strategyId === "COMBO_02_V2_1_A";
   const isSd = strategyId === "COMBO_SD_STRUCTURE";
@@ -372,6 +405,17 @@ export function BacktestPanel() {
     strategyId === "COMBO_02_V2_1_A" ? "V2.1-A" : strategyMeta.combinationId;
   const isDirect = Boolean(strategyMeta.direct);
   const isEngine = Boolean(strategyMeta.engineTimeframes);
+  /** A daily trend book picked on its own (not the passed/regime auto run). */
+  const isDailyTrend = !autoPassed && isDailyTrendStrategy(strategyId);
+  const engineDirections = autoPassed ? undefined : strategyMeta.engineDirections;
+  /** Timeframes the form offers: engine-only ones (1d) only to strategies that list them. */
+  const offeredTfs: readonly string[] = useMemo(() => {
+    const engineTfs = autoPassed ? undefined : strategyMeta.engineTimeframes;
+    const engineOnly = ENGINE_ONLY_TFS.filter((tf) => engineTfs?.includes(tf));
+    if (engineOnly.length && engineTfs?.every((tf) => ENGINE_ONLY_TFS.includes(tf))) return engineOnly;
+    return TF_OPTIONS.filter((tf) => !ENGINE_ONLY_TFS.includes(tf) || engineOnly.includes(tf));
+  }, [autoPassed, strategyMeta]);
+  const offeredTfsKey = offeredTfs.join(",");
   const researchUi = isV21A || isSd || isDirect;
   // Frozen COMBO_02 v1 is LONG only. Its SHORT used COMBO_04_HTF, which made zero trades.
   const frozenV1View = !researchUi;
@@ -380,6 +424,37 @@ export function BacktestPanel() {
   useEffect(() => {
     if (frozenV1View && direction === "SHORT") setDirection("LONG");
   }, [frozenV1View, direction]);
+
+  // BOTH is only for a strategy that lists it; anything else falls back to its book's side.
+  useEffect(() => {
+    if (direction === "BOTH" && !engineDirections?.includes("BOTH")) {
+      setDirection(book === "short" ? "SHORT" : "LONG");
+    }
+  }, [direction, engineDirections, book]);
+
+  // Keep the selected timeframes inside what the strategy offers (1d never leaks to
+  // an intraday strategy; a daily trend book runs 1d only).
+  useEffect(() => {
+    const offered = offeredTfsKey.split(",");
+    // An empty selection stays empty: Run reports it, as before.
+    if (timeframes.every((tf) => offered.includes(tf))) return;
+    const keep = timeframes.filter((tf) => offered.includes(tf));
+    setTimeframes(keep.length ? keep : [offered.includes("1h") ? "1h" : offered[0]]);
+  }, [offeredTfsKey, timeframes]);
+
+  const lookbackPresets: ReadonlyArray<{ id: LookbackId; limit: number }> = isDailyTrend
+    ? DAILY_LOOKBACK_LIMITS
+    : LOOKBACK_LIMITS;
+  const lookbackId: LookbackId = isDailyTrend ? dailyLookbackId : intradayLookbackId;
+  function setLookbackId(id: LookbackId) {
+    if (isDailyTrend) {
+      if (DAILY_LOOKBACK_LIMITS.some((l) => l.id === id)) {
+        setDailyLookbackId(id as (typeof DAILY_LOOKBACK_LIMITS)[number]["id"]);
+      }
+    } else if (LOOKBACK_LIMITS.some((l) => l.id === id)) {
+      setIntradayLookbackId(id as (typeof LOOKBACK_LIMITS)[number]["id"]);
+    }
+  }
 
   // Ranked board, read-only. Only used to offer the coins that passed.
   useEffect(() => {
@@ -502,8 +577,10 @@ export function BacktestPanel() {
       return Math.min(Math.floor(custom), API_BAR_CAP);
     }
     if (lookbackId === "max") return maxLookback.bars;
-    return LOOKBACK_LIMITS.find((l) => l.id === lookbackId)?.limit ?? 5760;
-  }, [customLimit, lookbackId, periodMode, start, end, maxLookback]);
+    return (
+      lookbackPresets.find((l) => l.id === lookbackId)?.limit ?? (isDailyTrend ? maxLookback.bars : 5760)
+    );
+  }, [customLimit, lookbackId, periodMode, start, end, maxLookback, lookbackPresets, isDailyTrend]);
 
   const approxDays = useMemo(
     () => barsToApproxDays(limit, primaryTf),
@@ -568,8 +645,30 @@ export function BacktestPanel() {
     }
   }, [lockV1Risk, symbols, principalUsd]);
 
-  const effectiveStart = periodMode === "dates" ? start || undefined : undefined;
-  const effectiveEnd = periodMode === "dates" ? end || undefined : undefined;
+  /**
+   * Dates the run sends. end_date is an inclusive UTC day (backend resolve_date_bounds:
+   * end_exclusive = end_date + 1 day), so "2026-07-14" means the last bar is 2026-07-14.
+   * A daily trend book never asks for a later day: calendar mode caps the end at
+   * DAILY_TREND_LAST_DAY, and DB-tail mode ends there too (the tail is counted back from
+   * it as a start day; Max sends no start, i.e. all stored bars through the cap).
+   */
+  const requestWindow = useMemo((): { start?: string; end?: string } => {
+    if (!isDailyTrend) {
+      return periodMode === "dates"
+        ? { start: start || undefined, end: end || undefined }
+        : { start: undefined, end: undefined };
+    }
+    if (periodMode === "dates") {
+      return { start: start || undefined, end: capDailyTrendDay(end || DAILY_TREND_LAST_DAY) };
+    }
+    const toMax = !customLimit && lookbackId === "max";
+    return {
+      start: toMax ? undefined : shiftUtcDay(DAILY_TREND_LAST_DAY, -(Math.max(1, limit) - 1)),
+      end: DAILY_TREND_LAST_DAY,
+    };
+  }, [isDailyTrend, periodMode, start, end, customLimit, lookbackId, limit]);
+  const effectiveStart = requestWindow.start;
+  const effectiveEnd = requestWindow.end;
 
   useEffect(() => {
     if (!handoffRevision || !handoffSymbols.length) return;
@@ -594,10 +693,18 @@ export function BacktestPanel() {
     );
   }, [handoffRevision, handoffSymbols]);
 
+  // Only engine-only timeframes (1d) on offer: auto picks the first; coverage does not decide.
+  const engineOnlyTfOffer = offeredTfs.every((tf) => ENGINE_ONLY_TFS.includes(tf));
   useEffect(() => {
     if (!autoTimeframe || !symbols.length) return;
+    if (engineOnlyTfOffer) {
+      const tf = offeredTfsKey.split(",")[0];
+      setTimeframes((prev) => (prev.length === 1 && prev[0] === tf ? prev : [tf]));
+      setAutoTimeframeNote(`Auto timeframe ${tf}: this strategy runs on ${tf} bars only.`);
+      return;
+    }
     let alive = true;
-    fetchResearchOhlcvRange({ symbols, timeframes: ["15m", "1h", "4h"] })
+    fetchResearchOhlcvRange({ symbols, timeframes: ["15m", "1h", "4h", "1d"] })
       .then((r) => {
         if (!alive) return;
         const tf = pickAutoSetupTimeframe(r.rows || [], symbols);
@@ -618,7 +725,7 @@ export function BacktestPanel() {
     return () => {
       alive = false;
     };
-  }, [autoTimeframe, symbols]);
+  }, [autoTimeframe, symbols, engineOnlyTfOffer, offeredTfsKey]);
 
   useEffect(() => {
     let alive = true;
@@ -880,6 +987,19 @@ export function BacktestPanel() {
       setStoreError("Custom dates mode needs a start and/or end day (UTC)");
       return;
     }
+    if (isDailyTrend) {
+      // Holdout: never request a bar after DAILY_TREND_LAST_DAY (the backend also refuses).
+      if (!effectiveEnd || effectiveEnd > DAILY_TREND_LAST_DAY) {
+        setStoreError(`Daily trend books end on ${DAILY_TREND_LAST_DAY}; the holdout after it is sealed.`);
+        return;
+      }
+      if (effectiveStart && effectiveStart > effectiveEnd) {
+        setStoreError(
+          `Start day ${effectiveStart} is after ${effectiveEnd}. Daily trend books load data through ${DAILY_TREND_LAST_DAY} only.`,
+        );
+        return;
+      }
+    }
     if (regimeMode) {
       // The book walks 1h bars only. Another timeframe is refused, never reinterpreted.
       if (timeframes.length !== 1 || timeframes[0] !== "1h") {
@@ -960,7 +1080,9 @@ export function BacktestPanel() {
       setShortNotice(twoSidedNotice(strategyId));
     } else if (isEngine) {
       setShortNotice(
-        `Research only. Runs ${strategyMeta.combinationId} ${direction} on its own engine and fill model.`
+        `Research only. Runs ${strategyMeta.combinationId} ${direction} on its own engine and fill model.${
+          isDailyTrend ? ` In-sample window, last bar ${effectiveEnd}.` : ""
+        }`
       );
     } else if (isDirect) {
       setShortNotice(
@@ -1020,6 +1142,10 @@ export function BacktestPanel() {
     isV21A,
     isSd,
     isDirect,
+    isEngine,
+    isDailyTrend,
+    frozenV1View,
+    book,
     researchUi,
     sdVariant,
     primaryTf,
@@ -1038,6 +1164,16 @@ export function BacktestPanel() {
     startJob,
     setStoreError,
   ]);
+
+  // A daily trend book's "last 365 days" ends at the holdout cap, not today.
+  const last365 = isDailyTrend
+    ? { start: shiftUtcDay(DAILY_TREND_LAST_DAY, -365), end: DAILY_TREND_LAST_DAY }
+    : lastNDaysUtc(365);
+  const yearPresets = YEAR_PRESETS.map((y) =>
+    isDailyTrend
+      ? { ...y, end: capDailyTrendDay(y.end || DAILY_TREND_LAST_DAY) }
+      : { ...y },
+  );
 
   const rows = shownResult?.rows ?? [];
   const selected = rows.find(
@@ -1232,17 +1368,23 @@ export function BacktestPanel() {
       setShortNotice(null);
       return;
     }
-    const engineTfs = BACKTEST_STRATEGY_OPTIONS.find((o) => o.id === id)?.engineTimeframes;
+    const engineOpt = BACKTEST_STRATEGY_OPTIONS.find((o) => o.id === id);
+    const engineTfs = engineOpt?.engineTimeframes;
     if (engineTfs) {
-      // These engines only take their own setup timeframes; 1h is the ranked one.
+      // These engines only take their own setup timeframes; 1h is the ranked one
+      // (a daily trend book takes 1d only).
       setAutoTimeframe(false);
       setTimeframes((prev) => {
         const keep = prev.filter((tf) => engineTfs.includes(tf));
-        return keep.length ? keep : ["1h"];
+        return keep.length ? keep : [engineTfs.includes("1h") ? "1h" : engineTfs[0]];
       });
-      setDirection("LONG");
+      // Engines without engineDirections run LONG only. Others open on the book's side.
+      const dirs = engineOpt?.engineDirections;
+      const bookSide: EngineDirection = book === "short" ? "SHORT" : "LONG";
+      const nextDir: EngineDirection = !dirs ? "LONG" : dirs.includes(bookSide) ? bookSide : dirs[0];
+      setDirection(nextDir);
       setShortNotice(
-        `Research only. Runs ${id} LONG on its own engine and fill model. Timeframes: ${engineTfs.join(", ")}.`
+        `Research only. Runs ${id} ${nextDir} on its own engine and fill model. Timeframes: ${engineTfs.join(", ")}.`
       );
       return;
     }
@@ -1329,6 +1471,15 @@ export function BacktestPanel() {
                   {researchStrategies.map((opt) => (
                     <option key={opt.id} value={opt.id}>
                       {bookChipLabel(opt.id, book)}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {dailyTrendStrategies.length ? (
+                <optgroup label={DAILY_TREND_OPTGROUP_LABEL}>
+                  {dailyTrendStrategies.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
                     </option>
                   ))}
                 </optgroup>
@@ -1431,7 +1582,7 @@ export function BacktestPanel() {
             Direction: {isV21A ? "LONG+SHORT (native)" : direction}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
-            Setup TF: {isSd ? primaryTf : "1h"}
+            Setup TF: {isSd || isDailyTrend ? primaryTf : "1h"}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
             {isSd
@@ -1459,6 +1610,16 @@ export function BacktestPanel() {
             </span>
           ) : null}
         </div>
+
+        {isDailyTrend ? (
+          <div
+            className="mb-3 rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100"
+            data-testid="daily-trend-holdout-banner"
+            role="note"
+          >
+            {DAILY_TREND_HOLDOUT_BANNER}
+          </div>
+        ) : null}
 
         {comparability.productionComparable ? (
           <div className="mb-3 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-100">
@@ -1636,7 +1797,7 @@ export function BacktestPanel() {
               Timeframes
             </div>
             <div className="flex flex-wrap gap-1">
-              {TF_OPTIONS.map((tf) => {
+              {offeredTfs.map((tf) => {
                 const on = timeframes.includes(tf);
                 const role = timeframeRoleLabel(tf);
                 return (
@@ -1693,6 +1854,35 @@ export function BacktestPanel() {
               <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
                 {twoSidedName} runs native LONG+SHORT (direction filter off). COMBO_04
                 SHORT path is not used.
+              </div>
+            ) : engineDirections ? (
+              <div className="flex flex-wrap gap-1" data-testid="engine-directions">
+                {engineDirections.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-label={`Direction ${d}`}
+                    aria-pressed={direction === d}
+                    title={
+                      d === "BOTH"
+                        ? `Full book: ${strategyMeta.combinationId} long and short in one walk`
+                        : `${strategyMeta.combinationId} ${d} only`
+                    }
+                    onClick={() => {
+                      setDirection(d);
+                      setShortNotice(
+                        `Research only. Runs ${strategyMeta.combinationId} ${d} on its own engine and fill model.`
+                      );
+                    }}
+                    className={`rounded border px-2 py-1 font-mono text-xs ${
+                      direction === d
+                        ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
+                        : "border-terminal-border text-terminal-muted"
+                    }`}
+                  >
+                    {d === "BOTH" ? "BOTH (long+short)" : d}
+                  </button>
+                ))}
               </div>
             ) : (
               <div className="flex flex-wrap gap-1">
@@ -1924,20 +2114,20 @@ export function BacktestPanel() {
             <button
               type="button"
               onClick={() => {
-                const range = lastNDaysUtc(365);
+                const range = last365;
                 setPeriodMode("dates");
                 setStart(range.start);
                 setEnd(range.end);
               }}
               className={`rounded border px-2 py-1 text-xs ${
                 periodMode === "dates" &&
-                start === lastNDaysUtc(365).start &&
-                end === lastNDaysUtc(365).end
+                start === last365.start &&
+                end === last365.end
                   ? "border-terminal-accent bg-terminal-accent/15 text-terminal-accent"
                   : "border-terminal-border text-terminal-muted"
               }`}
             >
-              Last 365 days
+              {isDailyTrend ? `Last 365 days to ${DAILY_TREND_LAST_DAY}` : "Last 365 days"}
             </button>
           </div>
           <div className="mb-2 flex flex-wrap gap-1">
@@ -1973,11 +2163,15 @@ export function BacktestPanel() {
                 <div>Does not represent a calendar-year filter</div>
               </div>
               <div className="flex flex-wrap gap-1">
-                {LOOKBACK_LIMITS.map((l) => {
+                {lookbackPresets.map((l) => {
                   const bars = l.id === "max" ? maxLookback.bars : l.limit;
                   const days = barsToApproxDays(bars, primaryTf);
                   const label =
-                    l.id !== "max"
+                    isDailyTrend
+                      ? l.id === "max"
+                        ? `Max (all stored bars → ${DAILY_TREND_LAST_DAY})`
+                        : `${l.id} → ${DAILY_TREND_LAST_DAY}`
+                      : l.id !== "max"
                       ? lookbackLabelForTf(l.limit, primaryTf)
                       : maxLookback.source === "api-cap"
                         ? `Max (${bars.toLocaleString()} bars · API cap, DB has ${(maxLookback.dbBars ?? 0).toLocaleString()})`
@@ -2036,10 +2230,11 @@ export function BacktestPanel() {
                 <div>Uses only candles inside the requested UTC range</div>
               </div>
               <div className="mb-2 flex flex-wrap gap-1">
-                {YEAR_PRESETS.map((y) => (
+                {yearPresets.map((y) => (
                   <button
                     key={y.id}
                     type="button"
+                    title={isDailyTrend ? `${y.start} → ${y.end} (daily trend cap ${DAILY_TREND_LAST_DAY})` : undefined}
                     onClick={() => {
                       setStart(y.start);
                       setEnd(y.end);
@@ -2059,7 +2254,9 @@ export function BacktestPanel() {
                   <span className="mb-1 block text-terminal-muted">Start day (UTC)</span>
                   <input
                     type="date"
+                    aria-label="Start day (UTC)"
                     value={start}
+                    max={isDailyTrend ? DAILY_TREND_LAST_DAY : undefined}
                     onChange={(e) => setStart(e.target.value)}
                     className="rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
                   />
@@ -2068,8 +2265,12 @@ export function BacktestPanel() {
                   <span className="mb-1 block text-terminal-muted">End day (UTC, inclusive)</span>
                   <input
                     type="date"
+                    aria-label="End day (UTC, inclusive)"
                     value={end}
-                    onChange={(e) => setEnd(e.target.value)}
+                    max={isDailyTrend ? DAILY_TREND_LAST_DAY : undefined}
+                    onChange={(e) =>
+                      setEnd(isDailyTrend && e.target.value ? capDailyTrendDay(e.target.value) : e.target.value)
+                    }
                     className="rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
                   />
                 </label>
@@ -2158,7 +2359,9 @@ export function BacktestPanel() {
               Bars/date range:{" "}
               {periodMode === "dates"
                 ? `Calendar ${effectiveStart || "…"} → ${effectiveEnd || "…"}`
-                : `DB-tail ${limit.toLocaleString()} bars ≈ ${approxDays ?? "—"} days at ${primaryTf}`}
+                : isDailyTrend
+                  ? `Daily ${effectiveStart ?? "first stored bar"} → ${effectiveEnd} (tail ends at the holdout cap)`
+                  : `DB-tail ${limit.toLocaleString()} bars ≈ ${approxDays ?? "—"} days at ${primaryTf}`}
             </div>
             <div>
               Production comparable:{" "}
@@ -3385,7 +3588,14 @@ function TradeRow({
         ) : null}
       </td>
       <td className="px-2 py-1.5 font-mono whitespace-nowrap">{fmtTime(t.exit_time)}</td>
-      <td className="px-2 py-1.5 font-mono">{t.direction}</td>
+      <td className="px-2 py-1.5 font-mono" data-testid="trade-side">
+        {t.direction}
+        {t.sleeve && t.book != null ? (
+          <div className="text-[9px] text-terminal-muted" data-testid="trade-sleeve-book">
+            Book {t.book}
+          </div>
+        ) : null}
+      </td>
       <td className="px-2 py-1.5 font-mono">{px(t.entry_price)}</td>
       <td className="px-2 py-1.5 font-mono">{px(t.exit_price)}</td>
       <td className="px-2 py-1.5 font-mono text-terminal-muted">{px(t.stop_price)}</td>

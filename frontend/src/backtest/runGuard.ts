@@ -121,7 +121,8 @@ export function checkJobInternallyConsistent(
   }
 
   const rows = job.rows || [];
-  if (!isNativeTwoSidedJob(job) && job.direction) {
+  // A BOTH run (V2/V2_1B two-sided, or a daily trend full book) holds both sides by request.
+  if (!isNativeTwoSidedJob(job) && job.direction && job.direction !== TWO_SIDED_DIRECTION) {
     for (const row of rows) {
       const cell = `${row.symbol} ${row.timeframe}`;
       if (row.direction && row.direction !== job.direction) {
@@ -153,6 +154,7 @@ export function checkJobInternallyConsistent(
 
 export function directionLabel(job: BacktestJob | null | undefined): string {
   if (isNativeTwoSidedJob(job)) return "LONG+SHORT (native)";
+  if (job?.direction === TWO_SIDED_DIRECTION) return "LONG+SHORT (BOTH)";
   return job?.direction || "—";
 }
 
@@ -161,6 +163,7 @@ export function htfRequirementLabel(job: BacktestJob | null | undefined): string
     return "soft 4h + 15m confirm (v2 playbooks)";
   }
   if (job?.strategy_id === "CANDLE12_V3_EXEC_FIX") return "none (no HTF gate)";
+  if (job?.strategy_id?.startsWith("DAILY_TREND_")) return "none (daily trend rule on 1d bars)";
   return job?.direction === "SHORT"
     ? "1h + 4h bearish alignment"
     : "1h + 4h bullish alignment";

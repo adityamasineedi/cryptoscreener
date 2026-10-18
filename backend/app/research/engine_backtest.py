@@ -55,6 +55,44 @@ _EXEC_OSE = (
     "with slippage; gap-through-stop exits at open; same-bar -> stop; one position per "
     "symbol; taker both sides"
 )
+_EXEC_DAILY_TREND = (
+    "Pre-registered daily trend book {book} (research only, in-sample 2022-2026): signal on "
+    "closed daily bar, fill next open; stop 2.5xATR(14) from the fill; gap through stop fills "
+    "at open; stop before indicator exits; one position; no same-bar reversal; open position "
+    "closed at the last bar; adverse slippage 0.05% BTC/ETH, 0.15% others; taker both sides; "
+    "fixed-$ risk sizing (screen compounds 0.5%); NO funding (funding_rates has no rows before "
+    "2026-10)"
+)
+
+# Daily trend books (app.research.daily_trend.books.TAB_BOOKS): id, book, warm-up bars.
+# Names repeat books.BOOK_NAMES so importing this module does not import pandas.
+# Warm-up bars: >= 400 so the recursive ATR(14)/ADX(14) used by every book settles and book 19's
+# realized-vol rule (20 + 365 bars) is known; EMA200 needs ~1000 bars for its seed to fade.
+# Postgres 1d starts 2022-10, so early windows get whatever history exists.
+_DAILY_TREND_BOOKS: tuple[tuple[str, int, int, str], ...] = (
+    ("DAILY_TREND_01_SMA200", 1, 400, "SMA200"),
+    ("DAILY_TREND_02_EMA200", 2, 1000, "EMA200"),
+    ("DAILY_TREND_03_SMA50", 3, 400, "SMA50"),
+    ("DAILY_TREND_04_MA_SLOPE", 4, 400, "MA slope"),
+    ("DAILY_TREND_05_GOLDEN_CROSS", 5, 400, "Golden/death cross"),
+    ("DAILY_TREND_06_WEINSTEIN", 6, 400, "Weinstein"),
+    ("DAILY_TREND_09_DONCHIAN20_WEINSTEIN", 9, 400, "Donchian 20 gated by Weinstein"),
+    ("DAILY_TREND_11_ADX_DMI", 11, 400, "ADX/DMI 14"),
+    ("DAILY_TREND_12_ICHIMOKU", 12, 400, "Ichimoku 9/26/52"),
+    ("DAILY_TREND_14_ROC90", 14, 400, "ROC 90"),
+    ("DAILY_TREND_15_ROC30", 15, 400, "ROC 30"),
+    ("DAILY_TREND_19_COMBINED", 19, 400, "Combined (4 side, 7 trigger)"),
+)
+DAILY_TREND_FAMILY = "daily_trend"
+# The pre-registered screen's holdout: no bar at or after this instant may be loaded.
+DAILY_TREND_HOLDOUT_START = datetime(2026, 7, 15, tzinfo=timezone.utc)
+DAILY_TREND_LAST_END_DATE = "2026-07-14"  # inclusive UI end date (end_exclusive 2026-07-15)
+DAILY_TREND_HOLDOUT_CODE = "daily_trend_holdout_sealed"
+DAILY_TREND_HOLDOUT_MESSAGE = (
+    "daily trend books: holdout from 2026-07-15 is sealed; end date must be <= 2026-07-14"
+)
+_DAILY_TREND_SLIP_LOW = {"BTCUSDT": 0.0005, "ETHUSDT": 0.0005}
+_DAILY_TREND_SLIP_OTHER = 0.0015
 
 # Warm-up bars are the ones the ranking run asked for, per engine.
 ENGINE_STRATEGIES: dict[str, dict[str, Any]] = {
@@ -97,6 +135,42 @@ ENGINE_STRATEGIES: dict[str, dict[str, Any]] = {
         }
         for variant in _OSE_VARIANTS
     },
+    **{
+        sid: {
+            "family": DAILY_TREND_FAMILY,
+            "name": f"Daily trend {book:02d} {label}",
+            "book": book,
+            # The book always walks long+short (the screen's path); the row keeps a side.
+            "directions": ("LONG", "SHORT", "BOTH"),
+            "timeframes": ("1d",),
+            "warmup_bars": warmup,
+            "execution_model": _EXEC_DAILY_TREND.format(book=book),
+        }
+        for sid, book, warmup, label in _DAILY_TREND_BOOKS
+    },
+    **{
+        sid: {
+            "family": DAILY_TREND_FAMILY,
+            "name": name,
+            "book": book,
+            "directions": ("LONG", "SHORT", "BOTH"),
+            "timeframes": ("1d",),
+            # books' warm-up (EMA200 1000) plus the 6-month score lookback
+            "warmup_bars": 1200,
+            "execution_model": model,
+        }
+        for sid, book, name, model in (
+            ("DAILY_TREND_ROTATION", "rotation", "Daily trend rotation (top 3 of 12, 6m, monthly)",
+             "Walk-forward rotation, pre-registered in docs/daily_trend_rotation_prereg.md (sha256 24da2ebd...): "
+             "on each month start, score the 12 books by trailing 6-month net R of shadow trades that exited "
+             "before that day; trade the top 3 with a positive score at 1/3 risk each for entries that month; "
+             "flat if none. Book execution as the daily trend books. Overlapping sleeves on one coin are allowed. "
+             "Research only, in-sample diagnostic; no funding."),
+            ("DAILY_TREND_STATIC12", "static12", "Daily trend static 12 (benchmark, 1/12 risk each)",
+             "Benchmark for the rotation: all 12 books' shadow trades at 1/12 risk each, no selection. Book "
+             "execution as the daily trend books. Research only, in-sample diagnostic; no funding."),
+        )
+    },
 }
 _BY_UPPER = {sid.upper(): sid for sid in ENGINE_STRATEGIES}
 
@@ -104,6 +178,50 @@ _BY_UPPER = {sid.upper(): sid for sid in ENGINE_STRATEGIES}
 def engine_strategy_id(value: str | None) -> str | None:
     """Canonical id for a ranked engine strategy, or None for a COMBO id."""
     return _BY_UPPER.get(str(value or "").strip().upper())
+
+
+def is_daily_trend(strategy_id: str | None) -> bool:
+    sid = engine_strategy_id(strategy_id)
+    return sid is not None and ENGINE_STRATEGIES[sid]["family"] == DAILY_TREND_FAMILY
+
+
+class DailyTrendHoldoutError(ValueError):
+    """A daily trend request would read the sealed holdout (2026-07-15 onward)."""
+
+    code = DAILY_TREND_HOLDOUT_CODE
+
+
+def daily_trend_dates(
+    start_date: str | None, end_date: str | None, limit: int
+) -> tuple[str | None, str]:
+    """(start_date, end_date) for a daily trend load that never reaches the holdout.
+
+    Dates are UI calendar days; end_date is inclusive (the loader reads up to
+    end_date + 1 day exclusive). An end after 2026-07-14 is rejected. Without an
+    end the window ends 2026-07-14; without any date (tail mode) it is the
+    ``limit`` days ending 2026-07-14, so the tail loader is never used.
+    """
+    from datetime import timedelta
+
+    from app.research.query_utils import parse_utc_calendar_day
+
+    last = parse_utc_calendar_day(DAILY_TREND_LAST_END_DATE)
+    try:
+        start_day = parse_utc_calendar_day(start_date)
+        end_day = parse_utc_calendar_day(end_date)
+    except ValueError as exc:
+        raise DailyTrendHoldoutError(f"daily trend books: unreadable date ({exc})") from exc
+    if end_day is not None and end_day > last:
+        raise DailyTrendHoldoutError(DAILY_TREND_HOLDOUT_MESSAGE)
+    if start_day is not None and start_day > last:
+        raise DailyTrendHoldoutError(
+            DAILY_TREND_HOLDOUT_MESSAGE + f"; start date {start_day.isoformat()} is inside it"
+        )
+    if end_day is None:
+        end_day = last
+        if start_day is None:
+            start_day = last + timedelta(days=1) - timedelta(days=max(1, int(limit)))
+    return (start_day.isoformat() if start_day else None), end_day.isoformat()
 
 
 def engine_request_error(strategy_id: str, direction: str, timeframes: Sequence[str]) -> str | None:
@@ -297,11 +415,154 @@ def _run_ose(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[list[dict
     return closed, opened
 
 
+_DAILY_TREND_SIDES = {"LONG": (1,), "SHORT": (-1,), "BOTH": (1, -1)}
+_DAILY_TREND_OUTCOME = {
+    "stop": "SL",
+    "stop_gap": "SL",
+    "signal": "SIGNAL_EXIT",
+    "window_end": "WINDOW_END",
+}
+
+
+def _run_daily_trend(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+    """Daily trend book: the locked books.simulate_path walk, sized by trade_fees.
+
+    simulate_path's entry_price / exit_price already include the adverse slippage,
+    so they go to enrich_trade_execution as the fills (slippage_rate 0, as for
+    CANDLE12 / OSE): qty = risk $ / |fill - stop| = risk $ / 2.5 ATR, the screen's
+    sizing distance. raw_* keep the unslipped open / stop / close.
+    """
+    from datetime import timedelta
+
+    import numpy as np
+    import pandas as pd
+
+    from app.research.daily_trend.books import RISK, build_books, simulate_path
+    from app.research.daily_trend.rotation import rotation_items, static_items
+    from app.research.query_utils import candle_timestamp
+    from app.research.trade_fees import enrich_trade_execution
+
+    sid = str(data["strategy_id"])
+    _b = ENGINE_STRATEGIES[sid]["book"]
+    book = _b if isinstance(_b, str) else int(_b)
+    direction = str(data["direction"]).upper()
+    if direction not in _DAILY_TREND_SIDES:
+        raise ValueError(f"{sid}: direction {direction!r} (LONG, SHORT or BOTH)")
+    symbol = str(data["symbol"]).upper()
+    candles = list(data["candles"])
+    times: list[datetime] = []
+    for c in candles:
+        ts = candle_timestamp(c)
+        if ts is None:
+            raise ValueError(f"{sid}: candle without a time")
+        if ts >= DAILY_TREND_HOLDOUT_START:
+            raise RuntimeError(
+                f"{sid}: candle {ts.isoformat()} is inside the sealed holdout (from 2026-07-15); "
+                "nothing at or after 2026-07-15 may be loaded"
+            )
+        times.append(ts)
+    now = data.get("now_utc") or datetime.now(timezone.utc)
+    if times and times[-1] + timedelta(days=1) > now:
+        times.pop()  # still-forming daily bar
+        candles = candles[: len(times)]
+    if any(b <= a for a, b in zip(times, times[1:])):
+        raise ValueError(f"{sid}: candle times are not strictly increasing")
+    # The screen ran on gap-free UTC days; rolling lookbacks count bars, so a missing day would
+    # silently change every indicator. Refuse the cell instead.
+    gaps = [(a, b) for a, b in zip(times, times[1:]) if b - a != timedelta(days=1)]
+    if gaps:
+        a, b = gaps[0]
+        raise ValueError(
+            f"{sid}: missing daily bars ({len(gaps)} gap(s); first between {a.date()} and {b.date()})"
+        )
+    i_start = int(data.get("index_start") or 0)
+    i_end = len(times) - 1
+    if i_end < 1 or i_start > i_end:
+        return [], 0
+
+    idx = pd.DatetimeIndex(times).tz_convert("UTC").as_unit("ns")
+    d = pd.DataFrame(
+        {k: np.asarray([float(c[k]) for c in candles], dtype=float) for k in ("open", "high", "low", "close")},
+        index=idx,
+    )
+    slip = _DAILY_TREND_SLIP_LOW.get(symbol, _DAILY_TREND_SLIP_OTHER)
+    books = build_books(d)
+    if book == "rotation":
+        items, _sched = rotation_items(d, slip, float(sizing["taker_fee"]), i_start, i_end, books)
+    elif book == "static12":
+        items = static_items(d, slip, i_start, i_end, books)
+    else:
+        items = [(book, p, 1.0) for p in simulate_path(d, book, i_start, i_end, slip, books)]
+    o, c_ = d["open"].to_numpy(), d["close"].to_numpy()
+    keep = _DAILY_TREND_SIDES[direction]
+
+    def _signal_exit_index(b: int, side: int, entry_index: int) -> int | None:
+        # The indicator exit does not depend on the stop: first close t >= entry with
+        # state != side fills at open t + 1 (none at i_end, where window_end closes).
+        state = books[b]["state"]
+        for t in range(entry_index, i_end):
+            if state[t] != side:
+                return t + 1
+        return None
+
+    out: list[dict[str, Any]] = []
+    for b, p, scale in items:
+        risk_known = books[b].get("risk_rule_known")
+        side = int(p["side"])
+        if side not in keep:
+            continue
+        reason = str(p["exit_reason"])
+        ei, xi, si = int(p["entry_index"]), int(p["exit_index"]), int(p["signal_index"])
+        raw_exit = (
+            float(p["stop_price"])
+            if reason == "stop"
+            else float(c_[xi]) if reason == "window_end" else float(o[xi])
+        )
+        sx = _signal_exit_index(b, side, ei)
+        risk_frac = float(p["risk_frac"])
+        trade = enrich_trade_execution(
+            {
+                "direction": "LONG" if side == 1 else "SHORT",
+                "entry_price": float(p["entry_price"]),
+                "stop_price": float(p["stop_price"]),
+                "exit_price": float(p["exit_price"]),
+                "raw_entry_price": float(o[ei]),
+                "raw_exit_price": raw_exit,
+                "outcome": _DAILY_TREND_OUTCOME[reason],
+                "exit_reason": reason,
+                "entry_type": "MARKET",
+                "signal_time": times[si],
+                "entry_time": times[ei],
+                "fill_time": times[ei],
+                "exit_time": times[xi],
+                "signal_index": si,
+                "entry_index": ei,
+                "exit_index": xi,
+                # Entry bar through exit bar inclusive (the OSE convention).
+                "holding_bars": xi - ei + 1,
+                "book": b,
+                "sleeve": book if book in ("rotation", "static12") else None,
+                "risk_scale": scale,
+                "atr": float(p["atr"]),
+                "risk_frac": risk_frac,
+                "risk_rule_known": (bool(risk_known[si]) if risk_known is not None else None),
+                "slippage_in_fills": slip,
+                "signal_exit_time": _iso(times[sx]) if sx is not None else None,
+                "window_end_time": _iso(times[i_end]),
+                "tp1": None,
+            },
+            **{**sizing, "risk_usd": float(sizing["risk_usd"]) * risk_frac / RISK * scale},
+        )
+        out.append(trade)
+    return out, 0
+
+
 _RUNNERS: dict[str, Callable[[Mapping[str, Any], dict[str, Any]], tuple[list[dict[str, Any]], int]]] = {
     "multicap": _run_multicap,
     "candle12": _run_candle12,
     "candle12_v3": _run_candle12_v3,
     "ohlcv_structure_experiment": _run_ose,
+    DAILY_TREND_FAMILY: _run_daily_trend,
 }
 
 
@@ -548,6 +809,10 @@ async def engine_strategy_matrix(
 
     spec = ENGINE_STRATEGIES[strategy_id]
     direction_u = direction.upper().strip()
+    if spec["family"] == DAILY_TREND_FAMILY:
+        # Second line of the holdout guard (BacktestJobService.start is the first):
+        # always a bounded range ending 2026-07-14, never the tail loader.
+        start_date, end_date = daily_trend_dates(start_date, end_date, limit)
     t0 = time.perf_counter()
     candles, eval_start, load_meta = await _load_research_candles(
         symbol,
