@@ -226,8 +226,8 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
   /** Runs its own engine (not the COMBO walk). Setup timeframes it accepts. */
   engineTimeframes?: readonly string[];
   /**
-   * Directions an engine strategy accepts. Omitted: the engine runs LONG only
-   * (every engine strategy before the daily trend books).
+   * Directions an engine strategy accepts, as backend ENGINE_STRATEGIES lists them.
+   * Omitted: the plain LONG / SHORT buttons (CANDLE12 and OSE engines run either side).
    */
   engineDirections?: readonly EngineDirection[];
   /**
@@ -349,6 +349,7 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
     comboVersion: "engine-multicap",
     direct: true,
     engineTimeframes: ["5m", "15m", "1h"],
+    engineDirections: ["LONG"],
   },
   {
     id: "SMALL_CAP_VOLUME_BOS",
@@ -358,6 +359,7 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
     comboVersion: "engine-multicap",
     direct: true,
     engineTimeframes: ["5m", "15m", "1h"],
+    engineDirections: ["LONG"],
   },
   {
     id: "OSE_A_corrected_baseline",

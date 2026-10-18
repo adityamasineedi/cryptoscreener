@@ -930,6 +930,10 @@ async def engine_strategy_matrix(
         use_research_cache=False,
         tail_warmup=True,
     )
+    if spec["family"] == DAILY_TREND_FAMILY and start_date is None:
+        # "Max" (no start day) loads from the first stored bar, so nothing precedes
+        # it: the first warm-up bars settle the indicators instead of being traded.
+        eval_start = max(int(eval_start or 0), min(int(spec["warmup_bars"]), len(candles)))
     if progress_callback is not None:
         progress_callback({"phase": "RAW_ROWS_LOADED", "rows_loaded": len(candles)})
     sym_u = str(load_meta.get("symbol") or symbol)

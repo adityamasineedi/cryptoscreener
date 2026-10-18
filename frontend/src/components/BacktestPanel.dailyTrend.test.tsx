@@ -139,10 +139,13 @@ describe("daily trend books in the Backtest tab", () => {
       expect(strategyIdsForBook("short")).toContain(id);
       expect(strategyIdsForBook("hedge")).not.toContain(id);
     }
-    // Existing engine strategies keep the LONG-only default and never list 1d.
+    // Existing engine strategies never list 1d. Only the LONG-only multicap engines
+    // list their directions (backend ENGINE_STRATEGIES "directions": ("LONG",)).
     for (const opt of BACKTEST_STRATEGY_OPTIONS) {
       if (DAILY_TREND_STRATEGY_IDS.includes(opt.id as (typeof DAILY_TREND_STRATEGY_IDS)[number])) continue;
-      expect(opt.engineDirections, opt.id).toBeUndefined();
+      expect(opt.engineDirections, opt.id).toEqual(
+        opt.comboVersion === "engine-multicap" ? ["LONG"] : undefined,
+      );
       expect(opt.engineTimeframes ?? [], opt.id).not.toContain("1d");
     }
   });

@@ -115,6 +115,8 @@ const SYMBOL_GROUPS = [
   { id: "mid", label: "Mid cap", symbols: BACKTEST_MID_SYMBOLS as readonly string[] },
 ] as const;
 const NOT_IN_CAP_BOOK = "not in the large-cap or mid-cap book";
+/** Consecutive failed regime status polls (1 s apart) before the screen says so. */
+const REGIME_POLL_FAILURE_NOTICE = 5;
 const TF_OPTIONS = ["15m", "1h", "4h", "1d"] as const;
 /** Offered only to strategies whose engineTimeframes include it (the daily trend books). */
 const ENGINE_ONLY_TFS: readonly string[] = ["1d"];
@@ -367,6 +369,8 @@ export function BacktestPanel() {
   const [regimeActive, setRegimeActive] = useState(false);
   const [regimeJob, setRegimeJob] = useState<RegimeBacktestStatus | null>(null);
   const [regimeStarting, setRegimeStarting] = useState(false);
+  /** Set while regime status polls keep failing, so a frozen % is explained. */
+  const [regimePollError, setRegimePollError] = useState<string | null>(null);
   const [strategyId, setStrategyId] = useState<BacktestStrategyId>(PASSED_RUN_STRATEGY_ID);
   const [sdVariant, setSdVariant] = useState(SD_DEFAULT_VARIANT);
   // BOTH only for an engine strategy whose engineDirections list it (daily trend books).
@@ -450,10 +454,16 @@ export function BacktestPanel() {
     if (frozenV1View && direction === "SHORT") setDirection("LONG");
   }, [frozenV1View, direction]);
 
-  // BOTH is only for a strategy that lists it; anything else falls back to its book's side.
+  // A strategy that lists its directions runs only those (BOTH only where listed);
+  // anything else falls back to its book's side.
   useEffect(() => {
-    if (direction === "BOTH" && !engineDirections?.includes("BOTH")) {
-      setDirection(book === "short" ? "SHORT" : "LONG");
+    const bookSide: EngineDirection = book === "short" ? "SHORT" : "LONG";
+    if (engineDirections) {
+      if (!engineDirections.includes(direction)) {
+        setDirection(engineDirections.includes(bookSide) ? bookSide : engineDirections[0]);
+      }
+    } else if (direction === "BOTH") {
+      setDirection(bookSide);
     }
   }, [direction, engineDirections, book]);
 
@@ -539,12 +549,22 @@ export function BacktestPanel() {
   useEffect(() => {
     if (!regimePolling) return;
     let alive = true;
+    let failures = 0;
     const poll = async () => {
       try {
         const next = await fetchRegimeBacktest();
-        if (alive && next?.status) setRegimeJob(next);
-      } catch {
-        /* transient poll errors are ignored */
+        if (!alive) return;
+        if (failures >= REGIME_POLL_FAILURE_NOTICE) setRegimePollError(null);
+        failures = 0;
+        if (next?.status) setRegimeJob(next);
+      } catch (err) {
+        // One failed poll is transient; a run of them means the API is gone.
+        failures += 1;
+        if (alive && failures === REGIME_POLL_FAILURE_NOTICE) {
+          setRegimePollError(
+            `Lost contact with the regime-book run (${err instanceof Error ? err.message : "status request failed"}). Still retrying; if the API restarted, the run is gone.`,
+          );
+        }
       }
     };
     const id = window.setInterval(() => void poll(), 1000);
@@ -1082,6 +1102,7 @@ export function BacktestPanel() {
       // The previous single-strategy output is not this run's result: drop it.
       setJob(null);
       setStoreError(null);
+      setRegimePollError(null);
       setRegimeActive(true);
       // Each book runs only its own side of the passed book.
       const side: "LONG" | "SHORT" = book === "long" ? "LONG" : "SHORT";
@@ -1371,10 +1392,13 @@ export function BacktestPanel() {
       setSymbols([...BOOK_DEFAULT_SYMBOLS[next]]);
       setPreferredSymbol(null);
       setCoinFilterNotice(null);
+      setSdVariant(SD_DEFAULT_VARIANT);
+    }
+    if (bookChanged || !autoPassed) {
+      // Nor does the passed run inherit a picked strategy's timeframes (the regime run is 1h).
       setTimeframes(["1h"]);
       setAutoTimeframe(true);
       setAutoTimeframeNote(null);
-      setSdVariant(SD_DEFAULT_VARIANT);
     }
     setAutoPassed(true);
     if (next === "long") {
@@ -1452,7 +1476,7 @@ export function BacktestPanel() {
         const keep = prev.filter((tf) => engineTfs.includes(tf));
         return keep.length ? keep : [engineTfs.includes("1h") ? "1h" : engineTfs[0]];
       });
-      // Engines without engineDirections run LONG only. Others open on the book's side.
+      // Engines without engineDirections open LONG. Others open on the book's side when listed.
       const dirs = engineOpt?.engineDirections;
       const bookSide: EngineDirection = book === "short" ? "SHORT" : "LONG";
       const nextDir: EngineDirection = !dirs ? "LONG" : dirs.includes(bookSide) ? bookSide : dirs[0];
@@ -2668,6 +2692,16 @@ export function BacktestPanel() {
       {error ? (
         <div className="mb-3 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error}
+        </div>
+      ) : null}
+
+      {regimeActive && regimePollError ? (
+        <div
+          className="mb-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+          role="alert"
+          data-testid="regime-poll-error"
+        >
+          {regimePollError}
         </div>
       ) : null}
 

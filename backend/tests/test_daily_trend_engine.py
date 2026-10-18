@@ -462,3 +462,32 @@ def test_chart_candles_for_1d_never_reach_the_holdout():
         asyncio.run(routes.research_ohlcv_candles(symbol="BTCUSDT", timeframe="1h", start="2026-07-10",
                                                   end="2026-07-14", pad_bars=64))
     assert captured["end_exclusive"] > datetime(2026, 7, 15, tzinfo=timezone.utc)  # intraday unchanged
+
+
+def test_max_mode_keeps_the_books_warm_up_out_of_the_evaluated_window():
+    """'Max' (no start day) loads from the first stored bar; its warm-up is not traded."""
+    range_mock = AsyncMock(return_value=_candles(_short_frame()))
+    with (
+        patch("app.services.database.db_manager", _fake_db()),
+        patch("app.research.postgres_ohlcv.load_ohlcv_series_range", new=range_mock),
+        patch.object(eb, "run_engine_cell_isolated", new=_in_process),
+    ):
+        out = asyncio.run(
+            eb.engine_strategy_matrix(
+                strategy_id="DAILY_TREND_06_WEINSTEIN", symbol="BTCUSDT", timeframe="1d",
+                direction="BOTH", limit=5000, risk_usd=20.0, principal_usd=1000.0,
+                start_date=None, end_date="2026-07-14", taker_fee=0.0004, maker_fee=0.0002,
+                leverage=2.0,
+            )
+        )
+    assert out["status"] == "OK"
+    (row,) = out["rows"]
+    assert row["bars_loaded"] == 700
+    assert row["warmup_bars"] == 400
+    assert row["bars_evaluated"] == 300
+    first_eval = _candles(_short_frame())[400]["time"]
+    assert row["period_start"] == eb._iso(first_eval)
+    assert row["trades"]
+    # A signal on the last warm-up bar fills at the first evaluated bar's open, as in dates mode.
+    for t in row["trades"]:
+        assert (t.get("fill_time") or t["entry_time"]) >= row["period_start"]
