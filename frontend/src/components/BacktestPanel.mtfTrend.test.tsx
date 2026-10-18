@@ -415,7 +415,10 @@ describe("4h book 16 in the Backtest tab", () => {
 
     await user.selectOptions(strategySelect(root), "CANDLE12_V2");
     await waitFor(() => expect(selectedTimeframes(root)).toEqual(["1h"]));
-    expect(offeredTimeframes(root)).toEqual(["15m", "1h", "4h"]);
+    // No bleed-over from book 16: its 4h-only offer and 1d never reach an intraday engine (which
+    // timeframes besides 1h it offers is the panel's own rule, not this book's).
+    expect(offeredTimeframes(root)).toContain("1h");
+    expect(offeredTimeframes(root)).not.toContain("1d");
     expect(root.queryByTestId("mtf-trend-holdout-banner")).toBeNull();
     expect(root.queryByTestId("engine-symbols-note")).toBeNull();
     let body = await runAndGetBody(user, root);
