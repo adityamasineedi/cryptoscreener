@@ -91,3 +91,7 @@
 /backend/app/signals/bos_engine.py -text
 # compiled caches under the package are never text
 /backend/app/research/candle12_v3_paper/**/*.pyc binary
+
+# Daily trend research: hash-pinned files (screen run 2 script sha256 a90b046b; rotation pre-registration sha256 24da2ebd).
+/backend/scripts/daily_direction_shortlist_prereg.py text eol=lf
+/docs/daily_trend_rotation_prereg.md text eol=lf
