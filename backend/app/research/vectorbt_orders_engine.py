@@ -23,6 +23,8 @@ Fields read per family (all from the trade dict):
 - daily_trend (``engine_backtest._run_daily_trend`` + ``trade_fees``): same keys
   as multicap (tp1 None); entry_price / exit_price are the books.simulate_path
   fills (slippage already in them, ``slippage_rate`` 0), so both are fills.
+  The 4h trend book also charges funding into r_net; VectorBT has no funding,
+  so it reproduces ``r_net_before_funding`` (the trade_fees value) instead.
 - trade_fees ``slippage_rate`` (all four families above): with 0 the prices
   above are the fills. With ``slippage_rate > 0`` ``enrich_trade_execution``
   slips both legs adversely (LONG entry x (1 + s), exit x (1 - s); SHORT entry
@@ -146,7 +148,7 @@ def _common(trade: Mapping[str, Any], pos: int) -> dict[str, Any]:
         "stop": _opt_num(trade, "stop_price"),
         "target": _opt_num(trade, "tp1"),
         "outcome": _outcome(trade, key),
-        "net_r": _opt_num(trade, "r_net"),
+        "net_r": _opt_num(trade, "r_net_before_funding" if "r_net_before_funding" in trade else "r_net"),
     }
 
 

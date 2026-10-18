@@ -28,13 +28,15 @@ const OVERLAY_TIME_ZONE: ChartTimeZone = "UTC";
 
 type Props = {
   trade: StrategyTradeRow;
+  /** Holdout-guarded strategy (daily / 4h trend books): candles stop before 2026-07-15. */
+  holdout?: boolean;
 };
 
 /**
  * Price chart for one selected backtest blotter trade.
  * Loads Postgres OHLCV around entry→exit and overlays entry/exit/SL/TP.
  */
-export function BacktestTradeChart({ trade }: Props) {
+export function BacktestTradeChart({ trade, holdout = false }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -118,6 +120,7 @@ export function BacktestTradeChart({ trade }: Props) {
           start,
           end: trade.exit_time || start,
           pad_bars: 64,
+          holdout,
         });
         if (!alive) return;
 
@@ -219,7 +222,7 @@ export function BacktestTradeChart({ trade }: Props) {
     return () => {
       alive = false;
     };
-  }, [trade]);
+  }, [trade, holdout]);
 
   const title = `#${trade.trade_no ?? "—"} · ${trade.symbol} ${trade.timeframe} · ${trade.direction}`;
 

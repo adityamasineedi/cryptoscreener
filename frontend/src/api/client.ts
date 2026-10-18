@@ -486,6 +486,9 @@ export function fetchBosStrategies(params?: {
   );
 }
 
+/** How completely funding settlements cover a trade (or, on a row, the worst over its trades). */
+export type FundingCoverageStatus = "COMPLETE" | "PARTIAL" | "UNRESOLVED" | "MISSING";
+
 export type StrategyTradeRow = {
   trade_id?: string | number;
   /** Daily trend family: the book (1-19) that produced this trade (rotation / static 12 sleeves). */
@@ -528,6 +531,18 @@ export type StrategyTradeRow = {
   net_pnl_usd?: number | null;
   r_gross?: number | null;
   r_net?: number | null;
+  /**
+   * 4h book 16 (MTF_4H_16_BREAKOUT252): funding charged on the trade, signed $
+   * (negative = paid). net_pnl_usd and r_net include it.
+   */
+  funding_usd?: number | null;
+  funding_settlements?: number | null;
+  funding_coverage_status?: FundingCoverageStatus | null;
+  funding_unknown_schedule_checks?: number | null;
+  funding_missing_records?: number | null;
+  /** Net $ and R before funding (fees and slippage only). */
+  net_pnl_before_funding_usd?: number | null;
+  r_net_before_funding?: number | null;
   mae_r?: number | null;
   mfe_r?: number | null;
   account_equity?: number | null;
@@ -598,6 +613,12 @@ export type StrategyMatrixRow = {
   win_rate_net?: number | null;
   max_drawdown_usd_net?: number | null;
   equity_curve_usd_net?: number[];
+  /** 4h book 16: total funding over the row's trades, signed $ (negative = paid). */
+  funding_total_usd?: number | null;
+  /** 4h book 16: worst funding coverage over the row's trades. */
+  funding_coverage_status?: FundingCoverageStatus | null;
+  /** Backend wording for what the row's net PnL includes. */
+  pnl_label?: string | null;
   r_definition?: string | null;
   warmup_bars?: number | null;
   bars_evaluated?: number | null;
@@ -849,6 +870,8 @@ export function fetchResearchOhlcvCandles(params: {
   start: string;
   end?: string | null;
   pad_bars?: number;
+  /** Holdout-guarded strategy: the server caps the window before 2026-07-15 at any timeframe. */
+  holdout?: boolean;
 }) {
   const q = new URLSearchParams({
     symbol: params.symbol,
@@ -857,6 +880,7 @@ export function fetchResearchOhlcvCandles(params: {
   });
   if (params.end) q.set("end", params.end);
   if (params.pad_bars != null) q.set("pad_bars", String(params.pad_bars));
+  if (params.holdout) q.set("holdout", "true");
   return getJson<{
     status: string;
     reason?: string;

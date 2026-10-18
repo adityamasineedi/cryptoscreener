@@ -94,6 +94,24 @@ DAILY_TREND_HOLDOUT_MESSAGE = (
 _DAILY_TREND_SLIP_LOW = {"BTCUSDT": 0.0005, "ETHUSDT": 0.0005}
 _DAILY_TREND_SLIP_OTHER = 0.0015
 
+# 4h book 16 from the pre-registered 4h/1h screen (v2 dual-source run, 2026-10-18): the only
+# COMPLETE + SCREEN_HIT evaluations were book 16 on BTCUSDT and ETHUSDT. Same family as the daily
+# books (same rule code in bar counts, same sealed holdout and guards), but 4h bars, those two coins,
+# LONG only, and funding charged from the bundled settlements (app.research.daily_trend.funding).
+# Warm-up 1000 bars (~167 days): book 16's 252-bar high and SMA200 are exact windows; ATR(14) settles.
+_EXEC_TREND_4H = (
+    "Pre-registered 4h/1h screen book {book} (research only, in-sample 2022-2026; COMPLETE + "
+    "SCREEN_HIT on BTCUSDT and ETHUSDT only): signal on closed 4h bar, fill next open; stop "
+    "2.5xATR(14) from the fill; gap through stop fills at open; stop before indicator exits; one "
+    "position; open position closed at the last bar; adverse slippage 0.05%; taker both sides; "
+    "fixed-$ risk sizing (screen compounds 0.5%); funding charged from bundled Binance settlements "
+    "through 2026-07-14 (July 2026 fapi rows have no documented schedule: funding UNRESOLVED)"
+)
+_TREND_4H_BOOKS: tuple[tuple[str, int, int, str], ...] = (
+    ("MTF_4H_16_BREAKOUT252", 16, 1000, "252-bar closing-high breakout"),
+)
+_TREND_4H_SYMBOLS = ("BTCUSDT", "ETHUSDT")
+
 # Warm-up bars are the ones the ranking run asked for, per engine.
 ENGINE_STRATEGIES: dict[str, dict[str, Any]] = {
     "CANDLE12_V2": {
@@ -171,6 +189,21 @@ ENGINE_STRATEGIES: dict[str, dict[str, Any]] = {
              "execution as the daily trend books. Research only, in-sample diagnostic; no funding."),
         )
     },
+    **{
+        sid: {
+            "family": DAILY_TREND_FAMILY,
+            "name": f"4h trend {book} {label}",
+            "book": book,
+            "directions": ("LONG",),
+            "timeframes": ("4h",),
+            "symbols": _TREND_4H_SYMBOLS,
+            "bar_hours": 4,
+            "funding": True,
+            "warmup_bars": warmup,
+            "execution_model": _EXEC_TREND_4H.format(book=book),
+        }
+        for sid, book, warmup, label in _TREND_4H_BOOKS
+    },
 }
 _BY_UPPER = {sid.upper(): sid for sid in ENGINE_STRATEGIES}
 
@@ -192,43 +225,51 @@ class DailyTrendHoldoutError(ValueError):
 
 
 def daily_trend_dates(
-    start_date: str | None, end_date: str | None, limit: int
+    start_date: str | None, end_date: str | None, limit: int, *, bar_hours: int = 24
 ) -> tuple[str | None, str]:
     """(start_date, end_date) for a daily trend load that never reaches the holdout.
 
     Dates are UI calendar days; end_date is inclusive (the loader reads up to
     end_date + 1 day exclusive). An end after 2026-07-14 is rejected. Without an
-    end the window ends 2026-07-14; without any date (tail mode) it is the
-    ``limit`` days ending 2026-07-14, so the tail loader is never used.
+    end the window ends 2026-07-14; without any date (tail mode) it is the days
+    holding ``limit`` bars of ``bar_hours`` ending 2026-07-14, so the tail loader
+    is never used.
     """
     from datetime import timedelta
 
     from app.research.query_utils import parse_utc_calendar_day
 
+    label = "daily trend books" if bar_hours == 24 else f"{bar_hours}h trend book"
+    message = DAILY_TREND_HOLDOUT_MESSAGE.replace("daily trend books", label)
     last = parse_utc_calendar_day(DAILY_TREND_LAST_END_DATE)
     try:
         start_day = parse_utc_calendar_day(start_date)
         end_day = parse_utc_calendar_day(end_date)
     except ValueError as exc:
-        raise DailyTrendHoldoutError(f"daily trend books: unreadable date ({exc})") from exc
+        raise DailyTrendHoldoutError(f"{label}: unreadable date ({exc})") from exc
     if end_day is not None and end_day > last:
-        raise DailyTrendHoldoutError(DAILY_TREND_HOLDOUT_MESSAGE)
+        raise DailyTrendHoldoutError(message)
     if start_day is not None and start_day > last:
-        raise DailyTrendHoldoutError(
-            DAILY_TREND_HOLDOUT_MESSAGE + f"; start date {start_day.isoformat()} is inside it"
-        )
+        raise DailyTrendHoldoutError(message + f"; start date {start_day.isoformat()} is inside it")
     if end_day is None:
         end_day = last
         if start_day is None:
-            start_day = last + timedelta(days=1) - timedelta(days=max(1, int(limit)))
+            days = -(-max(1, int(limit)) * int(bar_hours) // 24)
+            start_day = last + timedelta(days=1) - timedelta(days=days)
     return (start_day.isoformat() if start_day else None), end_day.isoformat()
 
 
-def engine_request_error(strategy_id: str, direction: str, timeframes: Sequence[str]) -> str | None:
+def engine_request_error(
+    strategy_id: str, direction: str, timeframes: Sequence[str], symbols: Sequence[str] = ()
+) -> str | None:
     """Why this engine cannot run the request, or None when it can."""
     spec = ENGINE_STRATEGIES[strategy_id]
     if direction.upper() not in spec["directions"]:
         return f"{strategy_id} runs {' or '.join(spec['directions'])} only"
+    allowed = spec.get("symbols")
+    off = [s for s in symbols if allowed is not None and str(s).upper() not in allowed]
+    if off:
+        return f"{strategy_id} runs {', '.join(allowed)} only; got {', '.join(off)}"
     bad = [tf for tf in timeframes if tf not in spec["timeframes"]]
     if bad:
         return (
@@ -431,6 +472,10 @@ def _run_daily_trend(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[l
     so they go to enrich_trade_execution as the fills (slippage_rate 0, as for
     CANDLE12 / OSE): qty = risk $ / |fill - stop| = risk $ / 2.5 ATR, the screen's
     sizing distance. raw_* keep the unslipped open / stop / close.
+
+    The 4h trend book walks the same code on 4h bars (rules count bars) and adds
+    funding per trade (daily_trend.funding): net_pnl / net_pnl_usd / r_net include
+    it; *_before_funding keep the trade_fees values (VectorBT replays those).
     """
     from datetime import timedelta
 
@@ -443,12 +488,16 @@ def _run_daily_trend(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[l
     from app.research.trade_fees import enrich_trade_execution
 
     sid = str(data["strategy_id"])
-    _b = ENGINE_STRATEGIES[sid]["book"]
+    spec = ENGINE_STRATEGIES[sid]
+    _b = spec["book"]
     book = _b if isinstance(_b, str) else int(_b)
     direction = str(data["direction"]).upper()
-    if direction not in _DAILY_TREND_SIDES:
-        raise ValueError(f"{sid}: direction {direction!r} (LONG, SHORT or BOTH)")
+    if direction not in _DAILY_TREND_SIDES or direction not in spec["directions"]:
+        raise ValueError(f"{sid}: direction {direction!r} ({', '.join(spec['directions'])})")
     symbol = str(data["symbol"]).upper()
+    if spec.get("symbols") is not None and symbol not in spec["symbols"]:
+        raise ValueError(f"{sid}: runs {', '.join(spec['symbols'])} only; got {symbol}")
+    bar = timedelta(hours=int(spec.get("bar_hours", 24)))
     candles = list(data["candles"])
     times: list[datetime] = []
     for c in candles:
@@ -462,19 +511,20 @@ def _run_daily_trend(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[l
             )
         times.append(ts)
     now = data.get("now_utc") or datetime.now(timezone.utc)
-    if times and times[-1] + timedelta(days=1) > now:
-        times.pop()  # still-forming daily bar
+    if times and times[-1] + bar > now:
+        times.pop()  # still-forming bar
         candles = candles[: len(times)]
     if any(b <= a for a, b in zip(times, times[1:])):
         raise ValueError(f"{sid}: candle times are not strictly increasing")
-    # The screen ran on gap-free UTC days; rolling lookbacks count bars, so a missing day would
+    # The screen ran on gap-free UTC bars; rolling lookbacks count bars, so a missing bar would
     # silently change every indicator. Refuse the cell instead.
-    gaps = [(a, b) for a, b in zip(times, times[1:]) if b - a != timedelta(days=1)]
+    gaps = [(a, b) for a, b in zip(times, times[1:]) if b - a != bar]
     if gaps:
         a, b = gaps[0]
-        raise ValueError(
-            f"{sid}: missing daily bars ({len(gaps)} gap(s); first between {a.date()} and {b.date()})"
-        )
+        what = "daily" if bar == timedelta(days=1) else f"{bar.total_seconds() / 3600:g}h"
+        first = (f"{a.date()} and {b.date()}" if bar == timedelta(days=1)
+                 else f"{a.isoformat()} and {b.isoformat()}")
+        raise ValueError(f"{sid}: missing {what} bars ({len(gaps)} gap(s); first between {first})")
     i_start = int(data.get("index_start") or 0)
     i_end = len(times) - 1
     if i_end < 1 or i_start > i_end:
@@ -487,6 +537,13 @@ def _run_daily_trend(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[l
     )
     slip = _DAILY_TREND_SLIP_LOW.get(symbol, _DAILY_TREND_SLIP_OTHER)
     books = build_books(d)
+    fs = None
+    if spec.get("funding"):
+        from app.research.daily_trend.funding import FundingSchedule, bundled_funding
+
+        fs = FundingSchedule(bundled_funding(symbol), idx, d["open"].to_numpy())
+        t_ns = idx.asi8
+        bar_ns = int(bar.total_seconds() * 1e9)
     if book == "rotation":
         items, _sched = rotation_items(d, slip, float(sizing["taker_fee"]), i_start, i_end, books)
     elif book == "static12":
@@ -553,6 +610,23 @@ def _run_daily_trend(data: Mapping[str, Any], sizing: dict[str, Any]) -> tuple[l
             },
             **{**sizing, "risk_usd": float(sizing["risk_usd"]) * risk_frac / RISK * scale},
         )
+        if fs is not None:
+            # The screen's ledger bounds: through the exit open (stop_gap / signal, and the
+            # open of an intrabar stop bar) or through the last bar's close (window_end).
+            bound = t_ns[xi] + bar_ns if reason == "window_end" else t_ns[xi]
+            stop_bar = (int(t_ns[xi]), int(t_ns[xi]) + bar_ns) if reason == "stop" else None
+            f = fs.trade(side, float(trade["qty"]), int(t_ns[ei]), int(bound), stop_bar)
+            risk = float(trade["risk_usd"])
+            net = float(trade["net_pnl_usd"]) + f["funding_usd"]
+            trade = {
+                **trade,
+                **f,
+                "net_pnl_before_funding_usd": trade["net_pnl_usd"],
+                "r_net_before_funding": trade["r_net"],
+                "net_pnl": net,
+                "net_pnl_usd": net,
+                "r_net": (net / risk) if risk > 0 else trade["r_net"],
+            }
         out.append(trade)
     return out, 0
 
@@ -704,6 +778,28 @@ def build_engine_row(
         "engine_family": ENGINE_STRATEGIES[strategy_id]["family"],
         "engine_fill_model": out.get("execution_model"),
         "market_structure": {"analytics_enabled": False},
+        **_funding_row_fields(strategy_id, trades),
+    }
+
+
+FUNDING_PNL_LABEL_COMPLETE = "After fees, slippage and funding."
+FUNDING_PNL_LABEL_INCOMPLETE = "After fees, slippage and included funding; funding incomplete/unresolved."
+
+
+def _funding_row_fields(strategy_id: str, trades: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Row funding total, worst coverage and PnL label for strategies that charge funding."""
+    if not ENGINE_STRATEGIES[strategy_id].get("funding"):
+        return {}
+    from app.research.daily_trend.funding import worst_coverage
+
+    status = worst_coverage([dict(t) for t in trades])
+    return {
+        "funding_total_usd": sum(float(t.get("funding_usd") or 0.0) for t in trades),
+        "funding_coverage_status": status,
+        # No trades: nothing was charged and nothing is missing.
+        "pnl_label": (
+            FUNDING_PNL_LABEL_COMPLETE if status in (None, "COMPLETE") else FUNDING_PNL_LABEL_INCOMPLETE
+        ),
     }
 
 
@@ -812,7 +908,9 @@ async def engine_strategy_matrix(
     if spec["family"] == DAILY_TREND_FAMILY:
         # Second line of the holdout guard (BacktestJobService.start is the first):
         # always a bounded range ending 2026-07-14, never the tail loader.
-        start_date, end_date = daily_trend_dates(start_date, end_date, limit)
+        start_date, end_date = daily_trend_dates(
+            start_date, end_date, limit, bar_hours=int(spec.get("bar_hours", 24))
+        )
     t0 = time.perf_counter()
     candles, eval_start, load_meta = await _load_research_candles(
         symbol,

@@ -26,8 +26,9 @@ from app.research.engine_backtest import (
     run_engine_cell,
 )
 
+# The 1d books (the family also holds the 4h trend book, which has bar_hours; see test_trend4h_engine).
 DAILY_IDS = [sid for sid, s in ENGINE_STRATEGIES.items()
-             if s["family"] == "daily_trend" and isinstance(s["book"], int)]
+             if s["family"] == "daily_trend" and isinstance(s["book"], int) and "bar_hours" not in s]
 I_START = 400
 
 

@@ -95,3 +95,8 @@
 # Daily trend research: hash-pinned files (screen run 2 script sha256 a90b046b; rotation pre-registration sha256 24da2ebd).
 /backend/scripts/daily_direction_shortlist_prereg.py text eol=lf
 /docs/daily_trend_rotation_prereg.md text eol=lf
+
+# 4h trend book: hash-pinned files (4h/1h screen runner sha256 263ecc52; funding bundle sha256 3ccc74cd).
+# The runner was executed with CRLF line endings, so it is stored byte for byte (-text).
+/backend/scripts/daily_direction_shortlist_mtf_prereg.py -text
+/backend/app/research/daily_trend/funding_btc_eth_to_2026-07-14.csv text eol=lf

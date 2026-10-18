@@ -15,6 +15,8 @@ type Props = {
   symbol: string;
   timeframe: string;
   periodEnd?: string | null;
+  /** Holdout-guarded strategy (daily / 4h trend books): candles stop before 2026-07-15. */
+  holdout?: boolean;
 };
 
 function formatStopTime(value: string): string {
@@ -34,7 +36,7 @@ function formatEntry(value: number): string {
   return value.toFixed(digits);
 }
 
-export function StopOutShortReplay({ trades, symbol, timeframe, periodEnd }: Props) {
+export function StopOutShortReplay({ trades, symbol, timeframe, periodEnd, holdout = false }: Props) {
   const stops = trades.filter(isLongStopOut);
   const [replay, setReplay] = useState<ReplayResult | null>(null);
   const [archived, setArchived] = useState<ReplayResult | null>(null);
@@ -67,6 +69,7 @@ export function StopOutShortReplay({ trades, symbol, timeframe, periodEnd }: Pro
           start,
           end,
           pad_bars: 8,
+          holdout,
         });
         if (!alive) return;
         if (data.status !== "OK" || !data.candles.length) {
@@ -88,7 +91,7 @@ export function StopOutShortReplay({ trades, symbol, timeframe, periodEnd }: Pro
     return () => {
       alive = false;
     };
-  }, [symbol, timeframe, periodEnd, stopKey, trades]);
+  }, [symbol, timeframe, periodEnd, stopKey, trades, holdout]);
 
   if (!stops.length) return null;
 

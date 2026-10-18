@@ -164,6 +164,8 @@ export function htfRequirementLabel(job: BacktestJob | null | undefined): string
   }
   if (job?.strategy_id === "CANDLE12_V3_EXEC_FIX") return "none (no HTF gate)";
   if (job?.strategy_id?.startsWith("DAILY_TREND_")) return "none (daily trend rule on 1d bars)";
+  // Same holdout-guarded family, but not DAILY_TREND_-prefixed.
+  if (job?.strategy_id === "MTF_4H_16_BREAKOUT252") return "none (book 16 rule on 4h bars)";
   return job?.direction === "SHORT"
     ? "1h + 4h bearish alignment"
     : "1h + 4h bullish alignment";

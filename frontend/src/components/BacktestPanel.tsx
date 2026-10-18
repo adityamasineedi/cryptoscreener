@@ -14,6 +14,7 @@ import {
   type StrategyMatrixResponse,
   type StrategyMatrixRow,
   type LossAnalysisTrade,
+  type FundingCoverageStatus,
   type StrategyTradeRow,
 } from "../api/client";
 import { pickAutoSetupTimeframe } from "../backtest/autoTimeframe";
@@ -46,7 +47,14 @@ import {
   DAILY_TREND_LAST_DAY,
   DAILY_TREND_OPTGROUP_LABEL,
   type EngineDirection,
+  fundingPnlLabel,
+  holdoutBarsPerDay,
+  holdoutTailStartDay,
   isDailyTrendStrategy,
+  isHoldoutGuardedStrategy,
+  isMtfTrendStrategy,
+  MTF_TREND_HOLDOUT_BANNER,
+  MTF_TREND_OPTGROUP_LABEL,
   HEDGE_STRATEGY_IDS,
   LONG_RUN_STRATEGY_ID,
   PASSED_RUN_STRATEGY_ID,
@@ -168,6 +176,14 @@ const DAILY_LOOKBACK_LIMITS = [
   { id: "3y", limit: 1095 },
   { id: "max", limit: FALLBACK_MAX_BARS },
 ] as const;
+
+/** The same day-based presets for a 4h trend book, in 4h bars (6 per day: 1y = 2190). */
+const MTF_LOOKBACK_LIMITS = [
+  { id: "1y", limit: 2190 },
+  { id: "2y", limit: 4380 },
+  { id: "3y", limit: 6570 },
+  { id: "max", limit: FALLBACK_MAX_BARS },
+] as const satisfies ReadonlyArray<{ id: (typeof DAILY_LOOKBACK_LIMITS)[number]["id"]; limit: number }>;
 
 type LookbackId =
   | (typeof LOOKBACK_LIMITS)[number]["id"]
@@ -358,7 +374,7 @@ export function BacktestPanel() {
   const [direction, setDirection] = useState<EngineDirection>("SHORT");
   const [intradayLookbackId, setIntradayLookbackId] =
     useState<(typeof LOOKBACK_LIMITS)[number]["id"]>("60d");
-  // Daily trend books keep their own day-based preset; the intraday one is untouched.
+  // Daily and 4h trend books keep their own day-based preset; the intraday one is untouched.
   const [dailyLookbackId, setDailyLookbackId] =
     useState<(typeof DAILY_LOOKBACK_LIMITS)[number]["id"]>("max");
   const [customLimit, setCustomLimit] = useState("");
@@ -392,9 +408,10 @@ export function BacktestPanel() {
   );
   const researchStrategies = bookStrategies.filter(
     (opt) =>
-      opt.status !== "Production candidate" && !passedIdSet.has(opt.id) && !isDailyTrendStrategy(opt.id),
+      opt.status !== "Production candidate" && !passedIdSet.has(opt.id) && !isHoldoutGuardedStrategy(opt.id),
   );
   const dailyTrendStrategies = bookStrategies.filter((opt) => isDailyTrendStrategy(opt.id));
+  const mtfTrendStrategies = bookStrategies.filter((opt) => isMtfTrendStrategy(opt.id));
   // Native LONG+SHORT form: the hedge book (V2.1-A, V2, V2_1B) or V2.1-A itself.
   const isV21A = book === "hedge" || strategyId === "COMBO_02_V2_1_A";
   const isSd = strategyId === "COMBO_SD_STRUCTURE";
@@ -407,10 +424,20 @@ export function BacktestPanel() {
   const isEngine = Boolean(strategyMeta.engineTimeframes);
   /** A daily trend book picked on its own (not the passed/regime auto run). */
   const isDailyTrend = !autoPassed && isDailyTrendStrategy(strategyId);
+  /** A 4h trend book (book 16) picked on its own. */
+  const isMtfTrend = !autoPassed && isMtfTrendStrategy(strategyId);
+  /** Daily or 4h trend book: every request ends on the holdout cap (2026-07-14). */
+  const isHoldoutGuarded = isDailyTrend || isMtfTrend;
+  /** Bars per UTC day at the guarded book's bar size (1d = 1, 4h = 6). */
+  const holdoutBarsPerDayValue = holdoutBarsPerDay(strategyId);
   const engineDirections = autoPassed ? undefined : strategyMeta.engineDirections;
+  /** Coins the engine accepts (4h book 16: BTC and ETH). Undefined: any cap-book coin. */
+  const engineSymbols = autoPassed ? undefined : strategyMeta.engineSymbols;
   /** Timeframes the form offers: engine-only ones (1d) only to strategies that list them. */
   const offeredTfs: readonly string[] = useMemo(() => {
     const engineTfs = autoPassed ? undefined : strategyMeta.engineTimeframes;
+    // A holdout-guarded book runs on its own bar size only (1d, or 4h for book 16).
+    if (engineTfs && isHoldoutGuardedStrategy(strategyMeta.id)) return engineTfs;
     const engineOnly = ENGINE_ONLY_TFS.filter((tf) => engineTfs?.includes(tf));
     if (engineOnly.length && engineTfs?.every((tf) => ENGINE_ONLY_TFS.includes(tf))) return engineOnly;
     return TF_OPTIONS.filter((tf) => !ENGINE_ONLY_TFS.includes(tf) || engineOnly.includes(tf));
@@ -442,12 +469,15 @@ export function BacktestPanel() {
     setTimeframes(keep.length ? keep : [offered.includes("1h") ? "1h" : offered[0]]);
   }, [offeredTfsKey, timeframes]);
 
-  const lookbackPresets: ReadonlyArray<{ id: LookbackId; limit: number }> = isDailyTrend
-    ? DAILY_LOOKBACK_LIMITS
-    : LOOKBACK_LIMITS;
-  const lookbackId: LookbackId = isDailyTrend ? dailyLookbackId : intradayLookbackId;
+  const lookbackPresets: ReadonlyArray<{ id: LookbackId; limit: number }> = isMtfTrend
+    ? MTF_LOOKBACK_LIMITS
+    : isDailyTrend
+      ? DAILY_LOOKBACK_LIMITS
+      : LOOKBACK_LIMITS;
+  // The 4h book shares the daily preset (same day-based ids; its bar counts differ).
+  const lookbackId: LookbackId = isHoldoutGuarded ? dailyLookbackId : intradayLookbackId;
   function setLookbackId(id: LookbackId) {
-    if (isDailyTrend) {
+    if (isHoldoutGuarded) {
       if (DAILY_LOOKBACK_LIMITS.some((l) => l.id === id)) {
         setDailyLookbackId(id as (typeof DAILY_LOOKBACK_LIMITS)[number]["id"]);
       }
@@ -578,9 +608,9 @@ export function BacktestPanel() {
     }
     if (lookbackId === "max") return maxLookback.bars;
     return (
-      lookbackPresets.find((l) => l.id === lookbackId)?.limit ?? (isDailyTrend ? maxLookback.bars : 5760)
+      lookbackPresets.find((l) => l.id === lookbackId)?.limit ?? (isHoldoutGuarded ? maxLookback.bars : 5760)
     );
-  }, [customLimit, lookbackId, periodMode, start, end, maxLookback, lookbackPresets, isDailyTrend]);
+  }, [customLimit, lookbackId, periodMode, start, end, maxLookback, lookbackPresets, isHoldoutGuarded]);
 
   const approxDays = useMemo(
     () => barsToApproxDays(limit, primaryTf),
@@ -651,9 +681,11 @@ export function BacktestPanel() {
    * A daily trend book never asks for a later day: calendar mode caps the end at
    * DAILY_TREND_LAST_DAY, and DB-tail mode ends there too (the tail is counted back from
    * it as a start day; Max sends no start, i.e. all stored bars through the cap).
+   * The 4h book 16 does the same with 6 bars per day: N bars start ceil(N / 6) - 1 days
+   * before the cap.
    */
   const requestWindow = useMemo((): { start?: string; end?: string } => {
-    if (!isDailyTrend) {
+    if (!isHoldoutGuarded) {
       return periodMode === "dates"
         ? { start: start || undefined, end: end || undefined }
         : { start: undefined, end: undefined };
@@ -663,10 +695,10 @@ export function BacktestPanel() {
     }
     const toMax = !customLimit && lookbackId === "max";
     return {
-      start: toMax ? undefined : shiftUtcDay(DAILY_TREND_LAST_DAY, -(Math.max(1, limit) - 1)),
+      start: toMax ? undefined : holdoutTailStartDay(limit, holdoutBarsPerDayValue),
       end: DAILY_TREND_LAST_DAY,
     };
-  }, [isDailyTrend, periodMode, start, end, customLimit, lookbackId, limit]);
+  }, [isHoldoutGuarded, holdoutBarsPerDayValue, periodMode, start, end, customLimit, lookbackId, limit]);
   const effectiveStart = requestWindow.start;
   const effectiveEnd = requestWindow.end;
 
@@ -693,8 +725,9 @@ export function BacktestPanel() {
     );
   }, [handoffRevision, handoffSymbols]);
 
-  // Only engine-only timeframes (1d) on offer: auto picks the first; coverage does not decide.
-  const engineOnlyTfOffer = offeredTfs.every((tf) => ENGINE_ONLY_TFS.includes(tf));
+  // Only engine-only timeframes (1d) on offer, or a holdout-guarded book's own bar size
+  // (4h book 16): auto picks the first; coverage does not decide.
+  const engineOnlyTfOffer = isHoldoutGuarded || offeredTfs.every((tf) => ENGINE_ONLY_TFS.includes(tf));
   useEffect(() => {
     if (!autoTimeframe || !symbols.length) return;
     if (engineOnlyTfOffer) {
@@ -987,15 +1020,31 @@ export function BacktestPanel() {
       setStoreError("Custom dates mode needs a start and/or end day (UTC)");
       return;
     }
-    if (isDailyTrend) {
+    if (engineSymbols) {
+      // The engine refuses other coins (engine_request_unsupported); say so before the request.
+      const refused = symbols.filter((s) => !engineSymbols.includes(s));
+      if (refused.length) {
+        setStoreError(
+          `${strategyMeta.combinationId} runs on ${engineSymbols.join(" and ")} only. Remove ${refused.join(", ")} to run it.`,
+        );
+        return;
+      }
+    }
+    if (isHoldoutGuarded) {
       // Holdout: never request a bar after DAILY_TREND_LAST_DAY (the backend also refuses).
       if (!effectiveEnd || effectiveEnd > DAILY_TREND_LAST_DAY) {
-        setStoreError(`Daily trend books end on ${DAILY_TREND_LAST_DAY}; the holdout after it is sealed.`);
+        setStoreError(
+          isMtfTrend
+            ? `4h book 16 ends on ${DAILY_TREND_LAST_DAY}; the holdout after it is sealed.`
+            : `Daily trend books end on ${DAILY_TREND_LAST_DAY}; the holdout after it is sealed.`,
+        );
         return;
       }
       if (effectiveStart && effectiveStart > effectiveEnd) {
         setStoreError(
-          `Start day ${effectiveStart} is after ${effectiveEnd}. Daily trend books load data through ${DAILY_TREND_LAST_DAY} only.`,
+          isMtfTrend
+            ? `Start day ${effectiveStart} is after ${effectiveEnd}. 4h book 16 loads data through ${DAILY_TREND_LAST_DAY} only.`
+            : `Start day ${effectiveStart} is after ${effectiveEnd}. Daily trend books load data through ${DAILY_TREND_LAST_DAY} only.`,
         );
         return;
       }
@@ -1081,7 +1130,7 @@ export function BacktestPanel() {
     } else if (isEngine) {
       setShortNotice(
         `Research only. Runs ${strategyMeta.combinationId} ${direction} on its own engine and fill model.${
-          isDailyTrend ? ` In-sample window, last bar ${effectiveEnd}.` : ""
+          isHoldoutGuarded ? ` In-sample window, last bar ${effectiveEnd}.` : ""
         }`
       );
     } else if (isDirect) {
@@ -1143,7 +1192,9 @@ export function BacktestPanel() {
     isSd,
     isDirect,
     isEngine,
-    isDailyTrend,
+    isHoldoutGuarded,
+    isMtfTrend,
+    engineSymbols,
     frozenV1View,
     book,
     researchUi,
@@ -1165,12 +1216,12 @@ export function BacktestPanel() {
     setStoreError,
   ]);
 
-  // A daily trend book's "last 365 days" ends at the holdout cap, not today.
-  const last365 = isDailyTrend
+  // A daily or 4h trend book's "last 365 days" ends at the holdout cap, not today.
+  const last365 = isHoldoutGuarded
     ? { start: shiftUtcDay(DAILY_TREND_LAST_DAY, -365), end: DAILY_TREND_LAST_DAY }
     : lastNDaysUtc(365);
   const yearPresets = YEAR_PRESETS.map((y) =>
-    isDailyTrend
+    isHoldoutGuarded
       ? { ...y, end: capDailyTrendDay(y.end || DAILY_TREND_LAST_DAY) }
       : { ...y },
   );
@@ -1383,6 +1434,19 @@ export function BacktestPanel() {
       const bookSide: EngineDirection = book === "short" ? "SHORT" : "LONG";
       const nextDir: EngineDirection = !dirs ? "LONG" : dirs.includes(bookSide) ? bookSide : dirs[0];
       setDirection(nextDir);
+      const onlySymbols = engineOpt?.engineSymbols;
+      if (onlySymbols) {
+        // Keep the coins the engine accepts; none left opens it on all of them.
+        const keep = symbols.filter((s) => onlySymbols.includes(s));
+        const dropped = symbols.filter((s) => !onlySymbols.includes(s));
+        setSymbols(keep.length ? keep : [...onlySymbols]);
+        setPreferredSymbol(null);
+        setCoinFilterNotice(
+          dropped.length
+            ? `${dropped.join(", ")} removed: ${id} runs on ${onlySymbols.join(" and ")} only.`
+            : null,
+        );
+      }
       setShortNotice(
         `Research only. Runs ${id} ${nextDir} on its own engine and fill model. Timeframes: ${engineTfs.join(", ")}.`
       );
@@ -1478,6 +1542,15 @@ export function BacktestPanel() {
               {dailyTrendStrategies.length ? (
                 <optgroup label={DAILY_TREND_OPTGROUP_LABEL}>
                   {dailyTrendStrategies.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {mtfTrendStrategies.length ? (
+                <optgroup label={MTF_TREND_OPTGROUP_LABEL}>
+                  {mtfTrendStrategies.map((opt) => (
                     <option key={opt.id} value={opt.id}>
                       {opt.label}
                     </option>
@@ -1582,7 +1655,7 @@ export function BacktestPanel() {
             Direction: {isV21A ? "LONG+SHORT (native)" : direction}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
-            Setup TF: {isSd || isDailyTrend ? primaryTf : "1h"}
+            Setup TF: {isSd || isHoldoutGuarded ? primaryTf : "1h"}
           </span>
           <span className="rounded border border-terminal-border bg-white/5 px-2 py-0.5 text-[10px] text-terminal-text">
             {isSd
@@ -1618,6 +1691,16 @@ export function BacktestPanel() {
             role="note"
           >
             {DAILY_TREND_HOLDOUT_BANNER}
+          </div>
+        ) : null}
+
+        {isMtfTrend ? (
+          <div
+            className="mb-3 rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-100"
+            data-testid="mtf-trend-holdout-banner"
+            role="note"
+          >
+            {MTF_TREND_HOLDOUT_BANNER}
           </div>
         ) : null}
 
@@ -1731,6 +1814,12 @@ export function BacktestPanel() {
             <div className="mb-1 mt-2 text-[10px] text-terminal-muted">
               Not in this run. Click a coin to add it.{" "}
               <span data-testid="coin-rule">Large cap and mid cap coins only (cap book).</span>
+              {engineSymbols ? (
+                <span className="text-amber-200" data-testid="engine-symbols-note">
+                  {" "}
+                  {strategyMeta.combinationId} runs on {engineSymbols.join(" and ")} only; Run refuses other coins.
+                </span>
+              ) : null}
             </div>
             <div className="flex flex-col gap-1" data-testid="available-coins">
               {SYMBOL_GROUPS.map((group) => {
@@ -2127,7 +2216,7 @@ export function BacktestPanel() {
                   : "border-terminal-border text-terminal-muted"
               }`}
             >
-              {isDailyTrend ? `Last 365 days to ${DAILY_TREND_LAST_DAY}` : "Last 365 days"}
+              {isHoldoutGuarded ? `Last 365 days to ${DAILY_TREND_LAST_DAY}` : "Last 365 days"}
             </button>
           </div>
           <div className="mb-2 flex flex-wrap gap-1">
@@ -2167,7 +2256,7 @@ export function BacktestPanel() {
                   const bars = l.id === "max" ? maxLookback.bars : l.limit;
                   const days = barsToApproxDays(bars, primaryTf);
                   const label =
-                    isDailyTrend
+                    isHoldoutGuarded
                       ? l.id === "max"
                         ? `Max (all stored bars → ${DAILY_TREND_LAST_DAY})`
                         : `${l.id} → ${DAILY_TREND_LAST_DAY}`
@@ -2234,7 +2323,13 @@ export function BacktestPanel() {
                   <button
                     key={y.id}
                     type="button"
-                    title={isDailyTrend ? `${y.start} → ${y.end} (daily trend cap ${DAILY_TREND_LAST_DAY})` : undefined}
+                    title={
+                      isDailyTrend
+                        ? `${y.start} → ${y.end} (daily trend cap ${DAILY_TREND_LAST_DAY})`
+                        : isMtfTrend
+                          ? `${y.start} → ${y.end} (holdout cap ${DAILY_TREND_LAST_DAY})`
+                          : undefined
+                    }
                     onClick={() => {
                       setStart(y.start);
                       setEnd(y.end);
@@ -2256,7 +2351,7 @@ export function BacktestPanel() {
                     type="date"
                     aria-label="Start day (UTC)"
                     value={start}
-                    max={isDailyTrend ? DAILY_TREND_LAST_DAY : undefined}
+                    max={isHoldoutGuarded ? DAILY_TREND_LAST_DAY : undefined}
                     onChange={(e) => setStart(e.target.value)}
                     className="rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
                   />
@@ -2267,9 +2362,9 @@ export function BacktestPanel() {
                     type="date"
                     aria-label="End day (UTC, inclusive)"
                     value={end}
-                    max={isDailyTrend ? DAILY_TREND_LAST_DAY : undefined}
+                    max={isHoldoutGuarded ? DAILY_TREND_LAST_DAY : undefined}
                     onChange={(e) =>
-                      setEnd(isDailyTrend && e.target.value ? capDailyTrendDay(e.target.value) : e.target.value)
+                      setEnd(isHoldoutGuarded && e.target.value ? capDailyTrendDay(e.target.value) : e.target.value)
                     }
                     className="rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
                   />
@@ -2361,7 +2456,9 @@ export function BacktestPanel() {
                 ? `Calendar ${effectiveStart || "…"} → ${effectiveEnd || "…"}`
                 : isDailyTrend
                   ? `Daily ${effectiveStart ?? "first stored bar"} → ${effectiveEnd} (tail ends at the holdout cap)`
-                  : `DB-tail ${limit.toLocaleString()} bars ≈ ${approxDays ?? "—"} days at ${primaryTf}`}
+                  : isMtfTrend
+                    ? `4h ${limit.toLocaleString()} bars · ${effectiveStart ?? "first stored bar"} → ${effectiveEnd} (tail ends at the holdout cap)`
+                    : `DB-tail ${limit.toLocaleString()} bars ≈ ${approxDays ?? "—"} days at ${primaryTf}`}
             </div>
             <div>
               Production comparable:{" "}
@@ -2677,6 +2774,11 @@ export function BacktestPanel() {
               key={`${selected.symbol}:${selected.timeframe}:${selected.direction}`}
               row={selected}
               principalUsd={jobPrincipalUsd}
+              holdout={
+                isHoldoutGuardedStrategy(job?.strategy_id) ||
+                isHoldoutGuardedStrategy(selected.strategy_id) ||
+                isHoldoutGuardedStrategy(selected.combination_id)
+              }
               lossAnalysis={
                 lossAnalysisJobId
                   ? {
@@ -3205,10 +3307,13 @@ function findLossTradeIndex(trades: StrategyTradeRow[], loss: LossAnalysisTrade)
 function SelectedDetail({
   row,
   principalUsd,
+  holdout = false,
   lossAnalysis = null,
 }: {
   row: StrategyMatrixRow;
   principalUsd: number;
+  /** Holdout-guarded job (daily / 4h trend books): chart candles stop before 2026-07-15. */
+  holdout?: boolean;
   /** Set only for a finished single-strategy job this form owns. */
   lossAnalysis?: { jobId: string; open: boolean; onOpenChange: (open: boolean) => void } | null;
 }) {
@@ -3246,6 +3351,15 @@ function SelectedDetail({
       : null;
   const avgRUsdGross = row.average_R_usd_basis_gross ?? usdBasisAvg((t) => t.gross_pnl_usd);
   const avgRUsdNet = row.average_R_usd_basis_net ?? usdBasisAvg((t) => t.net_pnl_usd);
+  // Funding (4h book 16): net $ and R include it. Shown only when the row or a trade carries it.
+  const showFunding =
+    row.funding_total_usd != null ||
+    row.funding_coverage_status != null ||
+    trades.some((t) => t.funding_usd != null);
+  const fundingTotalUsd =
+    row.funding_total_usd ??
+    (showFunding ? trades.reduce((sum, t) => sum + Number(t.funding_usd || 0), 0) : null);
+  const fundingCoverage = row.funding_coverage_status ?? worstFundingCoverage(trades);
   const equityCurve = row.equity_curve_usd_net?.length
     ? { label: "Equity curve ($ net, equity_curve_usd_net)", values: row.equity_curve_usd_net }
     : row.pnl_model === "CAUSAL_NEXT_OPEN" && trades.length
@@ -3297,6 +3411,19 @@ function SelectedDetail({
           · fees {row.fees_usd == null ? "—" : money(-row.fees_usd).replace("+", "-")}
         </span>
       </div>
+      {showFunding ? (
+        <div
+          className={`mb-2 rounded border px-2 py-1 font-mono text-[11px] ${
+            fundingCoverage === "COMPLETE"
+              ? "border-terminal-border/60 text-terminal-muted"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-100"
+          }`}
+          data-testid="funding-summary"
+        >
+          Funding {money(fundingTotalUsd)} · coverage {fundingCoverage ?? "UNKNOWN"} ·{" "}
+          <span data-testid="funding-pnl-label">{fundingPnlLabel(fundingCoverage)}</span>
+        </div>
+      ) : null}
       {row.pnl_model === "CAUSAL_NEXT_OPEN" && trades[0] ? (
         <p className="mb-2 font-mono text-[11px] text-terminal-text" data-testid="causal-trade-detail">
           Trade {String(trades[0].trade_id ?? trades[0].trade_no ?? 1)} {trades[0].direction} entry{" "}
@@ -3367,6 +3494,7 @@ function SelectedDetail({
               symbol: selectedTrade.symbol || row.symbol,
               timeframe: selectedTrade.timeframe || row.timeframe,
             }}
+            holdout={holdout}
           />
         </div>
       ) : null}
@@ -3404,6 +3532,14 @@ function SelectedDetail({
               <th className="px-2 py-2">Margin</th>
               <th className="px-2 py-2">Type</th>
               <th className="px-2 py-2">Fees</th>
+              {showFunding ? (
+                <th
+                  className="px-2 py-2"
+                  title="Funding settled while the trade was open (negative = paid). Net includes it."
+                >
+                  Funding
+                </th>
+              ) : null}
               <th className="px-2 py-2">Gross</th>
               <th className="px-2 py-2">Net</th>
               <th className="px-2 py-2">R net</th>
@@ -3434,6 +3570,7 @@ function SelectedDetail({
                       t={t}
                       equityUsd={equity}
                       rowRiskUsd={rowRiskUsd}
+                      showFunding={showFunding}
                       selected={key === selectedTradeKey}
                       onSelect={() => setSelectedTradeKey(key)}
                     />
@@ -3479,6 +3616,7 @@ function SelectedDetail({
         symbol={row.symbol}
         timeframe={row.timeframe}
         periodEnd={row.period_end}
+        holdout={holdout}
       />
 
       <LazyResearchMount panelId="market-structure" label="Market Structure & Regime">
@@ -3525,10 +3663,22 @@ function MarketContextCell({ context }: { context: StrategyTradeRow["market_cont
   );
 }
 
+/** Worst funding coverage over the trades that report one (MISSING worst, COMPLETE best). */
+function worstFundingCoverage(trades: StrategyTradeRow[]): FundingCoverageStatus | null {
+  const order: FundingCoverageStatus[] = ["COMPLETE", "PARTIAL", "UNRESOLVED", "MISSING"];
+  let worst = -1;
+  for (const t of trades) {
+    const rank = t.funding_coverage_status ? order.indexOf(t.funding_coverage_status) : -1;
+    if (rank > worst) worst = rank;
+  }
+  return worst >= 0 ? order[worst] : null;
+}
+
 function TradeRow({
   t,
   equityUsd,
   rowRiskUsd,
+  showFunding = false,
   selected,
   onSelect,
 }: {
@@ -3536,6 +3686,8 @@ function TradeRow({
   equityUsd: number;
   /** The cell's configured 1R in $, for the $ basis R column. */
   rowRiskUsd: number;
+  /** Adds the Funding column (4h book 16 rows). */
+  showFunding?: boolean;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -3615,6 +3767,38 @@ function TradeRow({
       <td className="px-2 py-1.5 font-mono text-terminal-muted">
         {t.fee_total_usd == null ? "—" : money(-t.fee_total_usd).replace("+", "-")}
       </td>
+      {showFunding ? (
+        <td
+          className={`px-2 py-1.5 font-mono ${
+            t.funding_usd == null
+              ? "text-terminal-muted"
+              : t.funding_usd >= 0
+                ? "text-emerald-400/80"
+                : "text-red-400/80"
+          }`}
+          title={
+            [
+              t.funding_settlements != null ? `${t.funding_settlements} settlements` : null,
+              t.funding_coverage_status ? `coverage ${t.funding_coverage_status}` : null,
+              t.funding_missing_records ? `${t.funding_missing_records} missing records` : null,
+              t.funding_unknown_schedule_checks
+                ? `${t.funding_unknown_schedule_checks} unknown schedule checks`
+                : null,
+              t.net_pnl_before_funding_usd != null
+                ? `net before funding ${money(t.net_pnl_before_funding_usd)}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
+          data-testid="trade-funding"
+        >
+          {money(t.funding_usd)}
+          {t.funding_coverage_status && t.funding_coverage_status !== "COMPLETE" ? (
+            <div className="text-[9px] text-amber-200">{t.funding_coverage_status}</div>
+          ) : null}
+        </td>
+      ) : null}
       <td
         className={`px-2 py-1.5 font-mono ${
           (t.gross_pnl_usd ?? 0) >= 0 ? "text-emerald-400/80" : "text-red-400/80"

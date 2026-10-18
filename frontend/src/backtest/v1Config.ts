@@ -103,7 +103,8 @@ export type BacktestStrategyId =
   | "DAILY_TREND_15_ROC30"
   | "DAILY_TREND_19_COMBINED"
   | "DAILY_TREND_ROTATION"
-  | "DAILY_TREND_STATIC12";
+  | "DAILY_TREND_STATIC12"
+  | "MTF_4H_16_BREAKOUT252";
 
 /** Supply/demand structure variants. C is the starting hypothesis. */
 export const SD_VARIANT_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
@@ -163,6 +164,57 @@ export function capDailyTrendDay(day: string): string {
   return day > DAILY_TREND_LAST_DAY ? DAILY_TREND_LAST_DAY : day;
 }
 
+/**
+ * 4h trend books: same holdout-guarded backend family ("daily_trend") as the daily
+ * books, but on 4h bars. Book 16 is the only one: a COMPLETE + SCREEN_HIT in the
+ * pre-registered 4h/1h screen on BTCUSDT and ETHUSDT.
+ */
+export const MTF_TREND_STRATEGY_IDS = ["MTF_4H_16_BREAKOUT252"] as const satisfies readonly BacktestStrategyId[];
+
+export const MTF_TREND_OPTGROUP_LABEL = "4h trend (research, in-sample)";
+
+/** Same sealed holdout as the daily books: the last UTC day a 4h book may load. */
+export const MTF_TREND_LAST_DAY = DAILY_TREND_LAST_DAY;
+
+export const MTF_TREND_HOLDOUT_BANNER =
+  "Holdout sealed: data from 2026-07-15 is not loaded. 4h book 16 (252-bar closing-high breakout, long only) was a COMPLETE + SCREEN_HIT in the pre-registered 4h/1h screen on BTCUSDT and ETHUSDT only (29 and 21 trades over 2022 → 2026-07-14; fold 2022 lost on both). Results here are in-sample — for inspection, not confirmation. Funding is charged from bundled Binance settlements through 2026-07-14; trades held into July 2026 show funding UNRESOLVED. Fixed-$ risk sizing (the screen compounds 0.5%). 4h bars come from Postgres (2021-10-19 onward), not the screen's archive files. Research only — not tradable.";
+
+/** Row PnL label when every trade's funding is resolved (same wording as the backend pnl_label). */
+export const FUNDING_COMPLETE_PNL_LABEL = "After fees, slippage and funding.";
+/** Row PnL label when any trade's funding is PARTIAL, UNRESOLVED or MISSING. */
+export const FUNDING_INCOMPLETE_PNL_LABEL =
+  "After fees, slippage and included funding; funding incomplete/unresolved.";
+
+/** PnL label for a row's funding coverage: complete only when the status is COMPLETE. */
+export function fundingPnlLabel(status: string | null | undefined): string {
+  return status === "COMPLETE" ? FUNDING_COMPLETE_PNL_LABEL : FUNDING_INCOMPLETE_PNL_LABEL;
+}
+
+export function isMtfTrendStrategy(id: string | null | undefined): boolean {
+  return (MTF_TREND_STRATEGY_IDS as readonly string[]).includes(String(id ?? ""));
+}
+
+/** Daily or 4h trend book: no run request or chart candle load may reach 2026-07-15. */
+export function isHoldoutGuardedStrategy(id: string | null | undefined): boolean {
+  return isDailyTrendStrategy(id) || isMtfTrendStrategy(id);
+}
+
+/** Bars per UTC day at a holdout-guarded strategy's bar size (1d = 1, 4h = 6). */
+export function holdoutBarsPerDay(id: string | null | undefined): number {
+  return isMtfTrendStrategy(id) ? 6 : 1;
+}
+
+/**
+ * First UTC day of a DB-tail window of `bars` bars that ends on the holdout cap
+ * (inclusive). A tail covers ceil(bars / barsPerDay) days, so 365 daily bars and
+ * 2190 4h bars both start 2025-07-15.
+ */
+export function holdoutTailStartDay(bars: number, barsPerDay: number): string {
+  const days = Math.ceil(Math.max(1, bars) / Math.max(1, barsPerDay));
+  const ms = Date.parse(`${DAILY_TREND_LAST_DAY}T00:00:00Z`) - (days - 1) * 24 * 60 * 60 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
 export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
   id: BacktestStrategyId;
   label: string;
@@ -178,6 +230,11 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
    * (every engine strategy before the daily trend books).
    */
   engineDirections?: readonly EngineDirection[];
+  /**
+   * Symbols an engine strategy accepts (the backend refuses others with
+   * engine_request_unsupported). Omitted: any cap-book coin.
+   */
+  engineSymbols?: readonly string[];
 }> = [
   {
     id: "COMBO_02_V1",
@@ -470,6 +527,18 @@ export const BACKTEST_STRATEGY_OPTIONS: ReadonlyArray<{
     engineTimeframes: ["1d"],
     engineDirections: ["LONG", "SHORT", "BOTH"],
   },
+  // 4h trend book (same holdout-guarded backend family): 4h bars, BTC/ETH only.
+  // LONG only, so engineDirections is omitted (the engine default; no direction buttons).
+  {
+    id: "MTF_4H_16_BREAKOUT252",
+    label: "4h · 252-bar breakout (book 16, BTC/ETH)",
+    status: "Research",
+    combinationId: "MTF_4H_16_BREAKOUT252",
+    comboVersion: DAILY_TREND_COMBO_VERSION,
+    direct: true,
+    engineTimeframes: ["4h"],
+    engineSymbols: ["BTCUSDT", "ETHUSDT"],
+  },
 ] as const;
 
 /** Cap-book sides that passed. The backtest screen selects these on open. */
@@ -505,6 +574,8 @@ export const LONG_STRATEGY_IDS: readonly BacktestStrategyId[] = [
   "OSE_D_faster_confirmation",
   "COMBO_SD_STRUCTURE",
   ...DAILY_TREND_STRATEGY_IDS,
+  // Long only: not in the short book.
+  ...MTF_TREND_STRATEGY_IDS,
 ] as const;
 
 export const LONG_PASSED_IDS: readonly BacktestStrategyId[] = ["COMBO_03_TRANSITION_B"] as const;

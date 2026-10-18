@@ -863,11 +863,19 @@ def _daily_trend_cards() -> list[dict[str, Any]]:
         _backtest_menu_card(
             sid,
             spec["name"],
-            "LONG / SHORT / BOTH",
-            "1d",
-            (f"Research only: pre-registered daily trend book {spec['book']} from the locked "
-             if isinstance(spec["book"], int) else
-             f"Research only: {spec['name']}, pre-registered walk-forward over the 12 books of the locked ")
+            " / ".join(spec["directions"]),
+            ", ".join(spec["timeframes"]),
+            (
+                f"Research only: book {spec['book']} of the pre-registered 4h/1h direction screen, "
+                f"COMPLETE + SCREEN_HIT on {' and '.join(spec['symbols'])} only (in-sample 2022-2026; "
+                "29 and 21 trades; the 2022 fold lost on both). The holdout from 2026-07-15 is "
+                "sealed: the Backtest tab rejects an end date after 2026-07-14. Fixed-$ risk; "
+                "funding from bundled settlements (July 2026 unresolved)."
+            )
+            if spec.get("bar_hours")
+            else (f"Research only: pre-registered daily trend book {spec['book']} from the locked "
+                  if isinstance(spec["book"], int) else
+                  f"Research only: {spec['name']}, pre-registered walk-forward over the 12 books of the locked ")
             + "daily direction screen (in-sample 2022-2026). The holdout from 2026-07-15 is "
             "sealed: the Backtest tab rejects an end date after 2026-07-14. Fixed-$ risk, "
             "no funding.",

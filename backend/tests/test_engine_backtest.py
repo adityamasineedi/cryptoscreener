@@ -194,10 +194,13 @@ def test_registry_pins_every_engine_id_and_family():
         "DAILY_TREND_19_COMBINED": "daily_trend",
         "DAILY_TREND_ROTATION": "daily_trend",
         "DAILY_TREND_STATIC12": "daily_trend",
+        "MTF_4H_16_BREAKOUT252": "daily_trend",
     }
-    # Only the daily trend books carry a BOTH row; nothing else changed direction.
+    # Only the daily trend books carry a BOTH row (the 4h trend book is LONG only); nothing else
+    # changed direction.
     both = {sid for sid, spec in ENGINE_STRATEGIES.items() if "BOTH" in spec["directions"]}
-    assert both == {sid for sid, fam in families.items() if fam == "daily_trend"}
+    assert both == {sid for sid, fam in families.items() if fam == "daily_trend"} - {"MTF_4H_16_BREAKOUT252"}
+    assert ENGINE_STRATEGIES["MTF_4H_16_BREAKOUT252"]["directions"] == ("LONG",)
     assert engine_strategy_id("daily_trend_01_sma200") == "DAILY_TREND_01_SMA200"
     assert "1d" in engine_request_error("DAILY_TREND_01_SMA200", "LONG", ["1h"])
     assert engine_request_error("CANDLE12_V2", "BOTH", ["1h"]) == "CANDLE12_V2 runs LONG or SHORT only"

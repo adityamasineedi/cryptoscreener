@@ -943,6 +943,10 @@ async def research_ohlcv_candles(
         default=None, description="Window end (ISO or YYYY-MM-DD); defaults to start"
     ),
     pad_bars: int = Query(default=64, ge=0, le=500),
+    holdout: bool = Query(
+        default=False,
+        description="Holdout-guarded strategy (trend screen books): no candle at or after 2026-07-15",
+    ),
 ) -> dict[str, Any]:
     """Load Postgres OHLCV around a blotter trade window for backtest chart overlay.
 
@@ -982,9 +986,11 @@ async def research_ohlcv_candles(
     range_end_excl = end_dt + pad + timedelta(milliseconds=step_ms)
     # 1d bars on the Backtest screen belong to the daily trend books, whose holdout from
     # 2026-07-15 is sealed: never load a daily candle at or after it, even as chart padding.
+    # The 4h trend book's charts ask for the same cap with holdout=true (`is True`: a direct
+    # call without the argument gets the Query default object, which is truthy).
     from app.research.engine_backtest import DAILY_TREND_HOLDOUT_START
 
-    if tf == "1d":
+    if tf == "1d" or holdout is True:
         range_end_excl = min(range_end_excl, DAILY_TREND_HOLDOUT_START)
         range_start = min(range_start, range_end_excl)
 

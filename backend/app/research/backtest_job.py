@@ -419,10 +419,11 @@ class BacktestJobService:
 
         engine_id = engine_strategy_id(combination_id) or engine_strategy_id(strategy_id)
         if engine_id is not None:
-            reason = engine_request_error(engine_id, str(direction or ""), tfs)
+            reason = engine_request_error(engine_id, str(direction or ""), tfs, syms)
             if reason:
                 raise BacktestConfigError("engine_request_unsupported", reason)
             from app.research.engine_backtest import (
+                ENGINE_STRATEGIES,
                 DailyTrendHoldoutError,
                 daily_trend_dates,
                 is_daily_trend,
@@ -430,9 +431,14 @@ class BacktestJobService:
 
             if is_daily_trend(engine_id):
                 # Holdout guard, before any candle load: end <= 2026-07-14 (inclusive
-                # UI date); a tail request becomes the `lim` days ending 2026-07-14.
+                # UI date); a tail request becomes the days of `lim` bars ending 2026-07-14.
                 try:
-                    start_s, end_s = daily_trend_dates(start_s, end_s, lim)
+                    start_s, end_s = daily_trend_dates(
+                        start_s,
+                        end_s,
+                        lim,
+                        bar_hours=int(ENGINE_STRATEGIES[engine_id].get("bar_hours", 24)),
+                    )
                 except DailyTrendHoldoutError as exc:
                     raise BacktestConfigError(exc.code, str(exc)) from exc
             combination_id = strategy_id = engine_id
