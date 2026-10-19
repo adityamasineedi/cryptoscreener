@@ -927,3 +927,90 @@ async def test_startup_offer_dedupes_queued_and_running():
     svc._state(svc._key("BTCUSDT", "1h")).touch(JobStatus.RUNNING)
     n3 = await svc._offer("BTCUSDT", "1h", priority=1, reason="seed", score=10)
     assert n3 == 0
+
+
+def _hour_candle(sym: str, t: datetime) -> Candle:
+    return Candle(
+        symbol=sym,
+        timeframe="1h",
+        open_time=t,
+        close_time=t + timedelta(hours=1),
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        is_closed=True,
+        timestamp=t,
+        source="test",
+    )
+
+
+async def _gap_service(hours: list[datetime]):
+    """1h store holding ``hours``; REST serves any requested hour range."""
+    settings = Settings(USE_REAL_DATA=True)
+    ohlcv = OHLCVStore()
+    await ohlcv.ingest_history([_hour_candle("DOGEUSDT", t) for t in hours])
+    calls: list[dict] = []
+
+    async def _klines(_sym, _interval, **kwargs):
+        calls.append(kwargs)
+        out = []
+        t = datetime.fromtimestamp(kwargs["start_time"] / 1000, tz=timezone.utc)
+        end = datetime.fromtimestamp(kwargs["end_time"] / 1000, tz=timezone.utc)
+        while t <= end:
+            out.append(_kline_row(t, t + timedelta(hours=1) - timedelta(milliseconds=1)))
+            t += timedelta(hours=1)
+        return out
+
+    rest = MagicMock()
+    rest.futures_klines = _klines
+    return ProgressiveBackfillService(settings, rest, MarketDataStore(), ohlcv), ohlcv, calls
+
+
+@pytest.mark.asyncio
+async def test_repair_recent_gaps_fills_a_hole_behind_the_tip():
+    """A hole left behind a newer bar is filled; the tail fetch never reaches it."""
+    base = datetime(2026, 10, 18, 0, 0, tzinfo=timezone.utc)
+    hole = [base + timedelta(hours=h) for h in range(19, 24)]
+    hours = [base + timedelta(hours=h) for h in range(40) if base + timedelta(hours=h) not in hole]
+    svc, ohlcv, calls = await _gap_service(hours)
+
+    written = await svc.repair_recent_gaps("DOGEUSDT", "1h", bars=250)
+
+    assert written == 5
+    assert len(calls) == 1
+    assert calls[0]["start_time"] == int(hole[0].timestamp() * 1000)
+    assert calls[0]["end_time"] == int(hole[-1].timestamp() * 1000)
+    assert ohlcv.find_gaps("DOGEUSDT", "1h") == []
+    # Nothing left to repair: no further REST call.
+    svc.gap_repair_min_seconds = 0.0
+    assert await svc.repair_recent_gaps("DOGEUSDT", "1h", bars=250) == 0
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_repair_recent_gaps_ignores_holes_outside_the_window():
+    base = datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc)
+    hours = [base + timedelta(hours=h) for h in range(300) if h != 10]
+    svc, _ohlcv, calls = await _gap_service(hours)
+
+    assert await svc.repair_recent_gaps("DOGEUSDT", "1h", bars=250) == 0
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_repair_recent_gaps_throttles_a_hole_rest_cannot_fill():
+    base = datetime(2026, 10, 18, 0, 0, tzinfo=timezone.utc)
+    hours = [base + timedelta(hours=h) for h in range(30) if h != 20]
+    svc, ohlcv, calls = await _gap_service(hours)
+
+    async def _empty(_sym, _interval, **kwargs):
+        calls.append(kwargs)
+        return []
+
+    svc.rest.futures_klines = _empty
+    assert await svc.repair_recent_gaps("DOGEUSDT", "1h", bars=250) == 0
+    assert await svc.repair_recent_gaps("DOGEUSDT", "1h", bars=250) == 0
+    assert len(calls) == 1
+    assert len(ohlcv.find_gaps("DOGEUSDT", "1h")) == 1

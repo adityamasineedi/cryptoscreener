@@ -963,6 +963,9 @@ class CalculationOrchestrator:
         from app.services.ohlcv_store import ohlcv_store
 
         targets = (("1h", 250), ("4h", 80), ("15m", 100))
+        # Bars the watchers read: the series integrity gate checks the last
+        # 250 1h and 200 4h bars, and refuses every bar while a hole sits there.
+        gap_windows = (("1h", 250), ("4h", 200), ("15m", 100))
         if not hasattr(self, "_paper_history_ready"):
             self._paper_history_ready = set()
         for raw in symbols:
@@ -988,6 +991,8 @@ class CalculationOrchestrator:
                         await self.backfill.ensure_series_fresh(
                             sym, tf, limit=80, force_tip=True
                         )
+                    for tf, window in gap_windows:
+                        await self.backfill.repair_recent_gaps(sym, tf, bars=window)
                     continue
                 for tf, need in targets:
                     if counts[tf] < need:

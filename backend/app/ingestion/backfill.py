@@ -174,6 +174,9 @@ class ProgressiveBackfillService:
         # (symbol, tf) -> monotonic time of last force_tip REST pull
         self._last_tip_fetch: dict[tuple[str, str], float] = {}
         self.tip_refresh_min_seconds = 5.0
+        # (symbol, tf) -> monotonic time of last recent-gap REST pull
+        self._last_gap_repair: dict[tuple[str, str], float] = {}
+        self.gap_repair_min_seconds = 300.0
         # Trailing-stale cooldown + metrics (presentation/scheduling only)
         self._stale_cooldown_until: dict[tuple[str, str], float] = {}
         self.stale_cooldown_seconds = STALE_COOLDOWN_SECONDS
@@ -1005,6 +1008,69 @@ class ProgressiveBackfillService:
             st.touch(JobStatus.PENDING)
         self._progress_dirty = True
         return written
+
+    async def repair_recent_gaps(self, symbol: str, timeframe: str, *, bars: int) -> int:
+        """REST-fill holes inside the newest ``bars`` closed bars. Returns bars added.
+
+        The tail fetch only reaches forward from the tip, so a hole left behind
+        a newer bar (e.g. the websocket delivered a bar before REST caught up
+        after a sleep) stays until the deferred gap queue gets to it. Paper
+        watchers refuse every bar whose window spans a hole, so they call this
+        each tick. A hole the exchange cannot fill is retried at most every
+        ``gap_repair_min_seconds``.
+        """
+        sym = symbol.upper()
+        tf = normalize_timeframe(timeframe)
+        step = TIMEFRAME_MS.get(tf)
+        closed = self.ohlcv.get_closed(sym, tf)
+        if not step or len(closed) < 2 or bars < 2:
+            return 0
+        floor = closed[-1].open_time.timestamp() * 1000 - step * (bars - 1)
+        gaps = [
+            g
+            for g in self.ohlcv.find_gaps(sym, tf)
+            if g.expected_open_time.timestamp() * 1000 >= floor
+        ]
+        if not gaps:
+            return 0
+        key = (sym, tf)
+        now_m = time.monotonic()
+        if now_m - self._last_gap_repair.get(key, float("-inf")) < self.gap_repair_min_seconds:
+            return 0
+        self._last_gap_repair[key] = now_m
+        self._requests += 1
+        if self.in_startup_window():
+            self._startup_rest_times.append(now_m)
+        else:
+            self._steady_rest_times.append(now_m)
+        start_ms = int(gaps[0].expected_open_time.timestamp() * 1000)
+        end_ms = int(gaps[-1].expected_open_time.timestamp() * 1000)
+        raw = await self.rest.futures_klines(
+            sym,
+            BINANCE_INTERVAL.get(tf, tf),
+            start_time=start_ms,
+            end_time=end_ms,
+            limit=min(1500, (end_ms - start_ms) // step + 1),
+        )
+        known = {c.open_time for c in closed}
+        fill = []
+        for row in raw:
+            c = normalize_rest_kline(sym, tf, row)
+            if c is not None and c.is_closed and c.open_time not in known:
+                fill.append(c)
+        if fill:
+            await self.ohlcv.ingest_history(fill)
+            self._candles_written += len(fill)
+        logger.info(
+            "rest_recent_gap_repair",
+            symbol=sym,
+            timeframe=tf,
+            missing=len(gaps),
+            written=len(fill),
+            first=gaps[0].expected_open_time.isoformat(),
+            last=gaps[-1].expected_open_time.isoformat(),
+        )
+        return len(fill)
 
     async def ensure_setup_mtf_fresh(
         self,
