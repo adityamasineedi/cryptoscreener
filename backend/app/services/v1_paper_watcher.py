@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import structlog
 
@@ -308,10 +308,13 @@ class V1PaperWatcher:
         paper_engine: Any | None = None,
         signal_config: SignalConfig | None = None,
         research_config: ResearchConfig | None = None,
+        symbols: Iterable[str] | None = None,
     ) -> None:
         self.enabled = bool(enabled)
         self.timeframe = normalize_timeframe(timeframe) or DEFAULT_SETUP_TF
         self.secondary_enabled = bool(secondary_enabled)
+        # None or empty: every enabled book. Otherwise only these coins.
+        self.symbols = frozenset(normalize_symbol(s) for s in (symbols or ()) if str(s).strip())
         self.replay_mode = bool(replay_mode)
         self.emit_alerts = bool(emit_alerts)
         self._paper = paper_engine
@@ -345,10 +348,13 @@ class V1PaperWatcher:
 
     @property
     def books(self) -> list[V1Book]:
-        return enabled_v1_books(
+        books = enabled_v1_books(
             secondary_enabled=self.secondary_enabled,
             timeframes={self.timeframe},
         )
+        if self.symbols:
+            books = [book for book in books if book.symbol in self.symbols]
+        return books
 
     def book_for(self, symbol: str) -> V1Book | None:
         sym = normalize_symbol(symbol)
@@ -1241,6 +1247,7 @@ class V1PaperWatcher:
                 "timeframe": self.timeframe,
                 "replay_mode": self.replay_mode,
                 "secondary_enabled": self.secondary_enabled,
+                "symbols_filter": sorted(self.symbols),
                 "books": [
                     {
                         "symbol": b.symbol,

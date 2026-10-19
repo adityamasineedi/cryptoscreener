@@ -373,6 +373,11 @@ class CalculationOrchestrator:
                 ),
                 emit_alerts=True,
                 paper_engine=paper,
+                symbols=[
+                    s
+                    for s in str(getattr(self.settings, "paper_v1_watcher_symbols", "") or "").split(",")
+                    if s.strip()
+                ],
             )
             # Keep v1 books on live kline WS + tip REST forever.
             try:

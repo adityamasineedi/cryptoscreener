@@ -403,3 +403,14 @@ def test_recreated_watcher_loads_skips_from_process_memory():
 
     reset_v1_paper_watcher_for_tests()
     assert _rows(V1PaperWatcher(emit_alerts=False))["BTCUSDT"]["last_skip"] is None
+
+
+def test_symbol_filter_limits_the_books() -> None:
+    from app.services.v1_paper_watcher import V1PaperWatcher
+
+    every = {b.symbol for b in V1PaperWatcher(enabled=True).books}
+    assert len(every) > 3
+    three = V1PaperWatcher(enabled=True, symbols=["btcusdt", "ETHUSDT", " SOLUSDT "])
+    assert {b.symbol for b in three.books} == {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+    assert three.book_for("XRPUSDT") is None
+    assert V1PaperWatcher(enabled=True, symbols=[]).books == V1PaperWatcher(enabled=True).books

@@ -154,6 +154,9 @@ class Settings(BaseSettings):
     paper_v1_watcher_enabled: bool = Field(
         default=True, alias="PAPER_V1_WATCHER_ENABLED"
     )
+    # Comma-separated coins the v1 watcher may trade (e.g. BTCUSDT,ETHUSDT,SOLUSDT).
+    # Empty keeps every enabled 1h book.
+    paper_v1_watcher_symbols: str = Field(default="", alias="PAPER_V1_WATCHER_SYMBOLS")
     # When True, blocks legacy 15m Path A opens so only the watcher fills COMBO_02 v1.
     # Keep False to run v1 watcher + RESEARCH_15M as separate labeled paper streams.
     paper_v1_watcher_owns_entries: bool = Field(
