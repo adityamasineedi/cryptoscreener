@@ -5,11 +5,22 @@ The signal, stop, target, and shared long/short lock come from
 Shorts stay inside the engine so they can still block a long, and they
 are not paper positions. No exchange order is sent. The COMBO paper
 ledger is not used.
+
+Each trade is booked once under its key ``(strategy_id, symbol, side,
+signal-bar close)``. The signal bar is Candle 1, so its close is the engine's
+``signal_time`` (Candle 2's open). The engine's ``entry_index`` is a position
+in the rolling candle window it was given and moves every hour, so it is never
+used as an identity.
+
+State version 1 keyed trades by ``entry_index`` and booked the same trade again
+on every new bar. Loading a version 1 file marks every record in it INVALID
+(kept under ``invalid``) and restarts the book from the bar it is loaded on.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -32,6 +43,9 @@ LEVERAGE = 2.0
 TAKER_FEE = 0.0004
 MAKER_FEE = 0.0002
 
+STATE_VERSION = 2
+INVALID_REASON = "v1 state keyed trades by rolling window index and double-booked them"
+
 STATE_PATH = (
     Path(__file__).resolve().parents[2] / "data" / "candle12_v2_paper" / "btcusdt_long.json"
 )
@@ -44,12 +58,34 @@ def _iso(value: Any) -> str:
     return str(value or "")
 
 
-def _after(left: str, right: str) -> bool:
-    return _iso(left) > _iso(right)
+def _utc(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        ts = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+
+def _after(left: Any, right: Any) -> bool:
+    a, b = _utc(left), _utc(right)
+    if a is None:
+        return False
+    return b is None or a > b
+
+
+def trade_key(trade: Mapping[str, Any]) -> str | None:
+    """(strategy_id, symbol, side, signal-bar close) as one string. None without a time."""
+    ts = _utc(trade.get("signal_time"))
+    if ts is None:
+        return None
+    return f"{STRATEGY_ID}|{SYMBOL}|{DIRECTION}|{ts.astimezone(timezone.utc).isoformat()}"
 
 
 def fresh_state(watermark: str) -> dict[str, Any]:
     return {
+        "version": STATE_VERSION,
         "strategy_id": STRATEGY_ID,
         "symbol": SYMBOL,
         "timeframe": TIMEFRAME,
@@ -61,10 +97,26 @@ def fresh_state(watermark: str) -> dict[str, Any]:
         "leverage": LEVERAGE,
         "taker_fee": TAKER_FEE,
         "watermark": watermark,
-        "seen_entry_index": [],
+        "booked_keys": [],
         "open": None,
         "closed": [],
+        "invalid": [],
     }
+
+
+def migrate_state(state: dict[str, Any], *, last_bar_time: str, now: str | None = None) -> dict[str, Any]:
+    """Version 1 -> 2: every old record becomes INVALID and the book restarts at ``last_bar_time``."""
+    if int(state.get("version") or 1) >= STATE_VERSION:
+        return state
+    at = now or datetime.now(timezone.utc).isoformat()
+    invalid = []
+    for row in list(state.get("closed") or []) + ([state["open"]] if state.get("open") else []):
+        invalid.append({**row, "status": "INVALID", "invalid_reason": INVALID_REASON, "invalidated_at": at})
+    out = fresh_state(last_bar_time)
+    out["invalid"] = invalid
+    out["migrated_from"] = {"version": 1, "watermark": state.get("watermark"), "at": at}
+    logger.warning("candle12_v2_state_migrated", invalid=len(invalid), restart=last_bar_time)
+    return out
 
 
 def _dollars(trade: Mapping[str, Any], v2: Candle12V2Config) -> dict[str, Any]:
@@ -92,6 +144,7 @@ def _dollars(trade: Mapping[str, Any], v2: Candle12V2Config) -> dict[str, Any]:
         account_equity=EQUITY,
     )
     return {
+        "key": trade_key(trade),
         "strategy_id": STRATEGY_ID,
         "symbol": SYMBOL,
         "timeframe": TIMEFRAME,
@@ -121,12 +174,17 @@ def paper_step(
     last_bar_time: str,
     v2: Candle12V2Config | None = None,
 ) -> dict[str, Any]:
-    """Apply one engine read. Historical closes before the watermark are not booked."""
+    """Apply one engine read. Historical closes before the watermark are not booked.
+
+    A trade is booked once per key; reading the same bars again, a shifted
+    window, or a restart books nothing new. The open trade closes when the
+    engine reports the same key closed.
+    """
     cfg = v2 or Candle12V2Config()
     longs = [
         t
         for t in trades
-        if str(t.get("direction") or "").upper() == DIRECTION and t.get("entry_index") is not None
+        if str(t.get("direction") or "").upper() == DIRECTION and trade_key(t) is not None
     ]
     alerts: list[dict[str, Any]] = []
     if state is None:
@@ -135,35 +193,41 @@ def paper_step(
         if opens:
             current = opens[-1]
             booked["open"] = _dollars(current, cfg)
-            booked["seen_entry_index"].append(int(current["entry_index"]))
+            booked["booked_keys"].append(trade_key(current))
             alerts.append({"kind": "entry", "row": booked["open"]})
         booked["_alerts"] = alerts
         return booked
 
-    seen = {int(i) for i in state.get("seen_entry_index") or []}
-    watermark = str(state.get("watermark") or "")
+    state = migrate_state(state, last_bar_time=last_bar_time)
+    keys = set(state.get("booked_keys") or [])
+    watermark = state.get("watermark")
     for trade in longs:
-        idx = int(trade["entry_index"])
+        key = trade_key(trade)
         outcome = str(trade.get("outcome") or "")
-        if idx in seen:
-            open_row = state.get("open") or {}
-            if int(open_row.get("entry_index") or -1) == idx and outcome not in ("", "OPEN"):
+        open_row = state.get("open") or {}
+        if open_row.get("key") == key:
+            if outcome not in ("", "OPEN"):
                 closed = _dollars(trade, cfg)
                 state["closed"].append(closed)
                 state["open"] = None
                 alerts.append({"kind": "exit", "row": closed})
             continue
-        seen.add(idx)
-        if not _after(trade.get("signal_time"), watermark):
+        if key in keys or not _after(trade.get("signal_time"), watermark):
             continue
         row = _dollars(trade, cfg)
         if outcome in ("", "OPEN"):
+            if state.get("open"):
+                # The engine allows one trade at a time; a second open means the
+                # stored one left the window unresolved. Keep the first booking.
+                logger.warning("candle12_v2_second_open_ignored", key=key, held=open_row.get("key"))
+                continue
             state["open"] = row
             alerts.append({"kind": "entry", "row": row})
         else:
             state["closed"].append(row)
             alerts.append({"kind": "exit", "row": row})
-    state["seen_entry_index"] = sorted(seen)
+        keys.add(key)
+    state["booked_keys"] = sorted(keys)
     state["live_orders"] = False
     state["_alerts"] = alerts
     return state
@@ -238,7 +302,9 @@ def load_state(path: Path | None = None) -> dict[str, Any] | None:
 def save_state(state: dict[str, Any], path: Path | None = None) -> None:
     file = path or STATE_PATH
     file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(json.dumps(state, indent=1, default=str), encoding="utf-8")
+    tmp = file.with_name(file.name + ".tmp")
+    tmp.write_text(json.dumps(state, indent=1, default=str), encoding="utf-8")
+    os.replace(tmp, file)
 
 
 def sync_candles(

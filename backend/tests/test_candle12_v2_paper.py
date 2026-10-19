@@ -104,3 +104,82 @@ def test_state_file_stays_virtual(tmp_path: Path):
     assert out["status"] == "WAITING_FOR_BARS"
     assert out["live_orders"] is False
     assert not path.exists()
+
+
+# --- idempotency: one booking per (strategy, symbol, side, signal-bar close) -----------------
+
+from app.services.candle12_v2_paper import load_state, migrate_state, save_state, trade_key  # noqa: E402
+
+WHEN = "2026-10-20T05:00:00+00:00"
+
+
+def _started() -> dict:
+    return paper_step(None, [], last_bar_time="2026-10-20T00:00:00+00:00")
+
+
+def test_same_closed_bar_processed_twice_books_one_trade():
+    # The second read is the same closed bar seen through a window that has
+    # moved by one (entry_index 400 -> 399), as the rolling store does hourly.
+    state = paper_step(_started(), [_trade(400, "TP1", WHEN)], last_bar_time="2026-10-20T09:00:00+00:00")
+    state = paper_step(state, [_trade(399, "TP1", WHEN)], last_bar_time="2026-10-20T09:00:00+00:00")
+    assert len(state["closed"]) == 1
+    assert state["_alerts"] == []
+    assert state["closed"][0]["key"] == f"CANDLE12_V2|BTCUSDT|LONG|{WHEN}"
+
+
+def test_rolling_window_over_many_hours_books_one_trade():
+    state = _started()
+    exits = 0
+    for shift in range(300):
+        state = paper_step(state, [_trade(450 - shift, "TP1", WHEN)], last_bar_time=WHEN)
+        exits += sum(1 for a in state["_alerts"] if a["kind"] == "exit")
+    assert len(state["closed"]) == 1 and exits == 1
+
+
+def test_open_then_closed_under_a_shifted_index_clears_the_open():
+    state = paper_step(_started(), [_trade(400, "OPEN", WHEN)], last_bar_time=WHEN)
+    state = paper_step(state, [_trade(399, "OPEN", WHEN)], last_bar_time="2026-10-20T06:00:00+00:00")
+    assert [a["kind"] for a in state["_alerts"]] == []
+    state = paper_step(state, [_trade(398, "SL", WHEN)], last_bar_time="2026-10-20T07:00:00+00:00")
+    assert state["open"] is None
+    assert len(state["closed"]) == 1
+    assert [a["kind"] for a in state["_alerts"]] == ["exit"]
+
+
+def test_new_trade_on_a_previously_used_index_is_still_booked():
+    state = paper_step(_started(), [_trade(400, "SL", WHEN)], last_bar_time=WHEN)
+    later = "2026-10-20T08:00:00+00:00"
+    state = paper_step(state, [_trade(400, "SL", later)], last_bar_time=later)
+    assert [r["entry_time"] for r in state["closed"]] == [WHEN, later]
+
+
+def test_restart_reload_with_a_different_window_base_books_nothing_new(tmp_path: Path):
+    path = tmp_path / "book.json"
+    state = paper_step(_started(), [_trade(400, "TP1", WHEN)], last_bar_time=WHEN)
+    state.pop("_alerts")
+    save_state(state, path)
+    state = paper_step(load_state(path), [_trade(393, "TP1", WHEN)], last_bar_time=WHEN)
+    assert len(state["closed"]) == 1 and state["_alerts"] == []
+
+
+def test_v1_state_is_marked_invalid_and_restarts_at_the_load_bar():
+    old = {
+        "watermark": "2026-10-17T18:00:00+00:00",
+        "seen_entry_index": [143, 144],
+        "open": {"entry_index": 7, "entry_time": "2026-10-18T01:00:00+00:00"},
+        "closed": [{"entry_index": 5, "net_pnl_usd": 40.0}, {"entry_index": 6, "net_pnl_usd": 40.0}],
+    }
+    state = migrate_state(old, last_bar_time="2026-10-20T00:00:00+00:00", now="2026-10-20T00:30:00+00:00")
+    assert state["version"] == 2 and state["closed"] == [] and state["open"] is None
+    assert [r["status"] for r in state["invalid"]] == ["INVALID"] * 3
+    assert state["watermark"] == "2026-10-20T00:00:00+00:00"
+    assert "seen_entry_index" not in state
+    # A trade from before the restart is not booked again.
+    state = paper_step(state, [_trade(5, "SL", "2026-10-18T01:00:00+00:00")], last_bar_time=WHEN)
+    assert state["closed"] == []
+
+
+def test_trade_key_is_utc_time_not_string_form():
+    a = trade_key({"signal_time": "2026-10-20T05:00:00Z"})
+    b = trade_key({"signal_time": "2026-10-20T10:30:00+05:30"})
+    assert a == b == f"CANDLE12_V2|BTCUSDT|LONG|{WHEN}"
