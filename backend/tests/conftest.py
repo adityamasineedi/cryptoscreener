@@ -50,3 +50,20 @@ def passed_book_closed(monkeypatch):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _decision_journal_switch():
+    """Behavior-identity check for the decision journal (owner ruling D19).
+
+    Off by default. With DECISION_JOURNAL_TEST_PATH set, every test runs with the journal on, writing
+    to that file; the suite must pass exactly as it does with the journal off.
+    """
+    import os
+
+    from app.services import decision_journal
+
+    path = os.environ.get("DECISION_JOURNAL_TEST_PATH")
+    decision_journal.configure(path or None)
+    yield
+    decision_journal.configure(None)

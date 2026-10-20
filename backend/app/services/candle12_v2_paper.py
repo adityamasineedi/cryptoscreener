@@ -28,6 +28,7 @@ from typing import Any, Mapping, Sequence
 import httpx
 
 from app.core.logging import get_logger
+from app.services import decision_journal
 from app.research.candle12_v2 import Candle12V2Config, _exit_fill, run_candle12_v2
 from app.research.trade_fees import enrich_trade_execution
 
@@ -220,6 +221,7 @@ def paper_step(
                 # The engine allows one trade at a time; a second open means the
                 # stored one left the window unresolved. Keep the first booking.
                 logger.warning("candle12_v2_second_open_ignored", key=key, held=open_row.get("key"))
+                decision_journal.write("CANDLE12_V2", "skip", reason="second_open_ignored", key=key, held=open_row.get("key"))
                 continue
             state["open"] = row
             alerts.append({"kind": "entry", "row": row})
@@ -331,6 +333,12 @@ def sync_candles(
     )
     state = paper_step(load_state(path), result.get("trades") or [], last_bar_time=last, v2=v2)
     alerts = list(state.pop("_alerts", []))
+    decision_journal.write("CANDLE12_V2", "tip_evaluated", bar=last, trades_in_window=len(result.get("trades") or []))
+    for alert in alerts:
+        row = alert.get("row") if isinstance(alert.get("row"), Mapping) else {}
+        decision_journal.write("CANDLE12_V2", str(alert.get("kind") or "alert"), key=row.get("key"),
+                               entry_time=row.get("entry_time"), entry_price=row.get("entry_price"),
+                               stop_price=row.get("stop_price"), exit_time=row.get("exit_time"), outcome=row.get("outcome"))
     save_state(state, path)
     return {
         "status": "OK",

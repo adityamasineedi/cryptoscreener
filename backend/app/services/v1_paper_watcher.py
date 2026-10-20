@@ -14,6 +14,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import structlog
 
+from app.services import decision_journal
 from app.research.bos_combinations import get_combination
 from app.research.combination_backtest import (
     _bos_break_levels,
@@ -377,6 +378,8 @@ class V1PaperWatcher:
         sym = normalize_symbol(symbol)
         entry = {"reason": reason, "bar": bar}
         kind = reason.split(":", 1)[1] if ":" in reason else reason
+        if not self.replay_mode:
+            decision_journal.write("COMBO_02_V1", "skip", symbol=sym, reason=kind, bar=bar, detail=detail)
         with self._lock:
             self._last_skip = reason
             self._skip_by_symbol[sym] = entry
@@ -921,6 +924,13 @@ class V1PaperWatcher:
                 book.symbol, f"{book.symbol}:paper_open_skipped", tip_iso, detail=detail
             )
         else:
+            if not self.replay_mode:
+                decision_journal.write(
+                    "COMBO_02_V1", "opened", symbol=book.symbol, bar=tip_iso,
+                    entry_price=getattr(pos, "entry_price", None), stop_price=getattr(pos, "stop_price", None),
+                    quantity=getattr(pos, "quantity", None), risk_usd=getattr(pos, "risk_usd", None),
+                    entry_type=result.get("entry_type") if isinstance(result, dict) else None,
+                )
             # An earlier bar's skip no longer describes this book.
             self._clear_skip(book.symbol)
             with self._lock:

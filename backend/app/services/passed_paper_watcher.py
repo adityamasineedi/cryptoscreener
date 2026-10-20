@@ -48,6 +48,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from app.services import decision_journal
 from app.config import ROOT
 from app.core.logging import get_logger
 from app.research.bos_combinations import get_combination
@@ -339,6 +340,7 @@ class PassedPaperWatcher:
         row["recorded_at"] = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._signals.appendleft(row)
+        decision_journal.write("PASSED_BOOK", "signal", **row)
         return row
 
     def _record_missed(self, signal: Mapping[str, Any], lag: float | None) -> None:
@@ -405,6 +407,8 @@ class PassedPaperWatcher:
                 "bar": bar_iso,
                 "lag_seconds": round(lag, 1) if lag is not None else None,
             }
+        decision_journal.write("PASSED_BOOK", "bar_evaluated", symbol=sym, bar=bar_iso,
+                               lag_seconds=round(lag, 1) if lag is not None else None)
 
     # --- watermark state ---------------------------------------------------------
 

@@ -516,6 +516,11 @@ class CalculationOrchestrator:
         )
         # Paper loops run only in the process that holds the writer lock.
         if paper.writer_lock_held:
+            # Every paper decision is journaled by this process only (owner ruling D19).
+            from app.config import ROOT
+            from app.services import decision_journal
+
+            decision_journal.configure(ROOT / "data" / "paper" / "decision_journal.jsonl")
             self._tasks.append(
                 asyncio.create_task(self._paper_trade_loop(), name="paper_trade_loop")
             )
