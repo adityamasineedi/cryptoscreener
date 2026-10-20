@@ -109,3 +109,16 @@ def test_rebuild_keeps_a_stop_whose_reset_is_still_ahead(tmp_path) -> None:
     eng._rebuild_halts_locked(rows, -60.0)
     assert eng._symbol_consecutive_losses["NEARUSDT"] == 3
     assert "symbol:NEARUSDT" in eng.halt_state()
+
+
+def test_stop_counters_start_is_the_later_of_the_ruling_date_and_the_first_run(tmp_path) -> None:
+    from app.services.paper_trade import STOP_COUNTERS_EARLIEST, stop_counters_start
+
+    f = tmp_path / "start.json"
+    early = STOP_COUNTERS_EARLIEST - timedelta(hours=3)
+    assert stop_counters_start(f, now=early) == STOP_COUNTERS_EARLIEST  # merged before 00:00
+    late = STOP_COUNTERS_EARLIEST + timedelta(hours=5)
+    assert stop_counters_start(f, now=late) == STOP_COUNTERS_EARLIEST  # a restart keeps the first run
+    g = tmp_path / "late.json"
+    assert stop_counters_start(g, now=late) == late  # merged after 00:00: the merge time
+    assert stop_counters_start(g, now=late + timedelta(days=2)) == late

@@ -2764,6 +2764,29 @@ def _f(raw: Any) -> float | None:
 _engine: PaperTradeEngine | None = None
 
 
+STOP_COUNTERS_EARLIEST = datetime(2026, 10, 21, tzinfo=timezone.utc)
+
+
+def stop_counters_start(path: Any, *, now: datetime | None = None) -> datetime:
+    """The later of 2026-10-21 00:00 UTC and the first time this code ran (recorded in ``path``)."""
+    from pathlib import Path
+
+    target = Path(path)
+    first: datetime | None = None
+    try:
+        first = _parse_utc(json.loads(target.read_text(encoding="utf-8")).get("first_run_utc"))
+    except (OSError, ValueError, AttributeError):
+        first = None
+    if first is None:
+        first = now or datetime.now(timezone.utc)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps({"first_run_utc": first.isoformat(), "ruling": "owner D27/D34"}), encoding="utf-8")
+        except OSError as exc:
+            logger.warning("paper_stop_counters_start_write_failed", error=str(exc))
+    return max(STOP_COUNTERS_EARLIEST, first)
+
+
 def get_paper_trade_engine(
     *,
     starting_equity: float = 1000.0,
@@ -2818,8 +2841,10 @@ def get_paper_trade_engine(
 
         # Every safety-stop trip and reset is journaled here (owner ruling 2026-10-20, D4).
         _engine.halt_journal_path = ROOT / "data" / "paper" / "halt_journal.jsonl"
-        # Per-book stop counters start fresh here (owner ruling 2026-10-20, D27).
-        _engine.stop_counters_start = datetime(2026, 10, 21, tzinfo=timezone.utc)
+        # Per-book stop counters start fresh at 2026-10-21 00:00 UTC, or when this code first
+        # ran in live if that is later (owner rulings D27, D34). The first-run time is kept in a
+        # file, so a restart never resets the counters.
+        _engine.stop_counters_start = stop_counters_start(ROOT / "data" / "paper" / "stop_counters_start.json")
     else:
         if entry_mode:
             mode = str(entry_mode).strip().lower()
