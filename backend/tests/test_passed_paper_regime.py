@@ -186,7 +186,7 @@ def test_bearish_evaluates_the_nine_short_rows_and_opens_no_long(rig):
     assert r.run("BTCUSDT", "BEARISH") == []
     print("BEARISH evaluated:", r.evaluated)
     shorts = [cid for cid, _tf, direction in PASSED_SIDES if direction == "SHORT"]
-    assert len(shorts) == 9
+    assert len(shorts) == 7
     assert r.evaluated == shorts
     # COMBO_03_TRANSITION_B ran once, for its SHORT row. Its LONG row did not run.
     assert r.evaluated.count("COMBO_03_TRANSITION_B") == 1
@@ -527,7 +527,7 @@ STATUS_KEYS = {
 }
 
 
-@pytest.mark.parametrize("trend,n_allowed", [("BULLISH", 1), ("BEARISH", 9), ("NEUTRAL", 0)])
+@pytest.mark.parametrize("trend,n_allowed", [("BULLISH", 1), ("BEARISH", 7), ("NEUTRAL", 0)])
 def test_regime_status_shape(rig, monkeypatch, trend, n_allowed):
     r = rig(lambda _cid: SHORT_PLAN)
     _set_daily(monkeypatch, r.watcher, trend, bars=77)
@@ -587,7 +587,7 @@ def test_regime_status_after_a_bar(rig, monkeypatch):
         "bar": _h1()[-1]["time"].isoformat(),
         "trend": "BEARISH",
         "as_of_daily_bar": "2026-10-10T00:00:00+00:00",
-        "sides_evaluated": 9,
+        "sides_evaluated": 7,
         "signals_not_allowed": 0,
     }
     # The status shows the regime that bar used, not a fresh read.

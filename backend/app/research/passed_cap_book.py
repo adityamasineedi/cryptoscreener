@@ -39,10 +39,11 @@ MID = (
 )
 
 # combination_id, timeframe, direction
+# COMBO_02_V2_1B and COMBO_02_V2_1_A SHORT were disarmed on 2026-10-20 by the owner
+# (research audit ruling D3, PROPOSED_LIVE_CHANGES P5): their selection backtest read
+# the 4h bar the setup hour sits in before it closed.
 PASSED_SIDES: tuple[tuple[str, str, str], ...] = (
     ("COMBO_02_V2", "1h", "SHORT"),
-    ("COMBO_02_V2_1B", "1h", "SHORT"),
-    ("COMBO_02_V2_1_A", "1h", "SHORT"),
     ("COMBO_02", "1h", "SHORT"),
     ("COMBO_02_CLOSED_HTF", "1h", "SHORT"),
     ("COMBO_03_TRANSITION", "1h", "SHORT"),

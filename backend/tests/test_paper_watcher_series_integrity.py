@@ -205,7 +205,7 @@ def test_passed_contiguous_closed_series_reaches_evaluation_and_opens(passed, h1
     assert f"{SYMBOL}|{tip_iso}" in passed.watcher._processed
     # Every 1h side the BEARISH trend allows was evaluated on the series that passed the gate.
     allowed = passed_mod.allowed_passed_sides("BEARISH")
-    assert len(passed.evals) == sum(1 for _c, tf, _d in allowed if tf == "1h") == 9
+    assert len(passed.evals) == sum(1 for _c, tf, _d in allowed if tf == "1h") == 7
     assert all(call["candles_1h"] == h1 and call["candles_4h"] == h4 for call in passed.evals)
 
 

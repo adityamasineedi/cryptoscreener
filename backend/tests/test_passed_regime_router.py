@@ -20,8 +20,6 @@ from app.research.passed_regime_router import (
 EXPECTED_LONG = (("COMBO_03_TRANSITION_B", "1h", "LONG"),)
 EXPECTED_SHORT = (
     ("COMBO_02_V2", "1h", "SHORT"),
-    ("COMBO_02_V2_1B", "1h", "SHORT"),
-    ("COMBO_02_V2_1_A", "1h", "SHORT"),
     ("COMBO_02", "1h", "SHORT"),
     ("COMBO_02_CLOSED_HTF", "1h", "SHORT"),
     ("COMBO_03_TRANSITION", "1h", "SHORT"),

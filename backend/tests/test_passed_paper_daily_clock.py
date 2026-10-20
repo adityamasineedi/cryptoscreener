@@ -155,7 +155,7 @@ def test_thrown_daily_read_leaves_the_bar_for_the_next_call(rig, monkeypatch):
     )
     opened = run("BTCUSDT", tip, force=False)
     assert watcher.last_evaluated_bar["trend"] == "BEARISH"
-    assert len(evaluated) == 9
+    assert len(evaluated) == 7
     assert [p.side for p in opened] == ["SHORT"]
     assert _bar_key("BTCUSDT", tip) in watcher._processed
     assert watcher.regime_status()["daily_read_ok"] is True

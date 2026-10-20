@@ -742,7 +742,8 @@ def test_causal_book_needs_the_candles() -> None:
 
 
 def test_long_scope_runs_only_long_rows(monkeypatch: pytest.MonkeyPatch) -> None:
-    flip = (START + timedelta(days=2)).date()
+    # BULLISH from day 1, so every side's signal bar (60 + 2 * its PASSED_SIDES index) reads BULLISH.
+    flip = (START + timedelta(days=1)).date()
     _plan_trend(monkeypatch, lambda day: "BULLISH" if day >= flip else "BEARISH")
     result, fake = _run(_one_signal_per_side(LARGE_SYMBOL), directions=["LONG"])
     longs = [side for side in PASSED_SIDES if side[2] == "LONG"]
