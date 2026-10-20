@@ -55,12 +55,12 @@ def test_per_coin_stop_pauses_that_coin_for_24_hours(tmp_path) -> None:
 
 def test_peak_drawdown_rebases_to_current_equity_at_midnight(tmp_path) -> None:
     eng, clock = _engine(tmp_path, T0)
-    eng.realized_pnl = -120.0  # 12% below the 1,000 peak
-    eng._note_close_for_halts(symbol="BTCUSDT", r_multiple=-1.0)
+    # A loss that leaves the book 12% below its 1,000 peak (each book has its own curve, D27).
+    eng._note_close_for_halts(symbol="BTCUSDT", r_multiple=-1.0, pnl_usd=-120.0)
     assert "peak_drawdown" in eng.halt_state()
     clock["now"] = T0.replace(hour=0, minute=0) + timedelta(days=1)
     kw = eng._halt_kwargs("BTCUSDT")
-    assert kw["peak_equity"] == eng.equity
+    assert kw["peak_equity"] == kw["drawdown_equity"] == 880.0
     assert "peak_drawdown" not in eng.halt_state()
 
 

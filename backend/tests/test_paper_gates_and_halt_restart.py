@@ -143,6 +143,7 @@ def _closed_row(
     closed_at: datetime,
     symbol: str = "ETHUSDT",
     status: str = "CLOSED",
+    book: str = "PASSED",
 ) -> dict:
     return {
         "id": f"closed-{i}",
@@ -162,8 +163,30 @@ def _closed_row(
         "r_multiple": r,
         "source_candle_ts": (closed_at - timedelta(hours=1)).isoformat(),
         "timeframe": "1h",
-        "signal_snippet": {"strategy_id": "COMBO_02_V1", "source": "V1_PAPER_WATCHER"},
+        # Each row feeds its own book's stop counters (owner ruling D27).
+        "signal_snippet": _SNIPPETS[book],
     }
+
+
+_SNIPPETS = {
+    "PASSED": {"strategy_id": "COMBO_03_TRANSITION_B", "source": "PASSED_CAP_BOOK",
+               "stream": "PASSED|COMBO_03_TRANSITION_B|LONG"},
+    "LEGACY": {"strategy_id": "RESEARCH_15M", "source": "LEGACY_SETUP_SIGNAL"},
+    "V1": {"strategy_id": "COMBO_02_V1", "source": "V1_PAPER_WATCHER"},
+}
+
+
+def _book(eng: PaperTradeEngine, name: str = "PASSED"):
+    """One book's stop counters (owner ruling D27)."""
+    return eng._stops(name)
+
+
+def _legacy_gate(eng: PaperTradeEngine):
+    """The entry gate a LEGACY-book open would meet (no open position, no other book)."""
+    from app.services.paper_risk import evaluate_paper_entry_risk
+
+    return evaluate_paper_entry_risk(SYM, policy=eng.risk_policy, open_count=0, open_risk_usd=0.0,
+                                     equity=eng.equity, **eng._halt_kwargs(SYM, book="LEGACY"))
 
 
 def _ledger_rows(eng: PaperTradeEngine) -> list[dict]:
@@ -275,18 +298,22 @@ def test_drawdown_halt_survives_a_restart_from_the_ledger():
     fresh._now = eng._now  # restart inside the stop's reset window
     fresh.hydrate_from_rows(_ledger_rows(eng))
 
-    assert fresh.peak_equity == pytest.approx(1000.0)
+    assert _book(fresh).peak_equity == pytest.approx(1000.0)
     assert fresh.equity == pytest.approx(eng.equity)
     next_bar = _bar(2 * losers + 5)
-    for opener in OPENERS:
-        assert _open(fresh, opener, next_bar) is None
-        assert fresh._last_skip_reason.startswith(f"{SYM}:peak_drawdown_halt_pct=")
+    assert _open(fresh, "passed", next_bar) is None
+    assert fresh._last_skip_reason.startswith(f"{SYM}:peak_drawdown_halt_pct=")
     assert fresh.status()["open_count"] == 0
-    # At the next 00:00 UTC the stop clears and the peak re-bases to equity.
+    # The passed book's losses do not halt another book (owner ruling D27).
+    other = _engine(policy)
+    other._now = eng._now
+    other.hydrate_from_rows(_ledger_rows(eng))
+    assert _open(other, "v21a", next_bar) is not None
+    # At the next 00:00 UTC the stop clears and the peak re-bases to the book's equity.
     midnight = eng._now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     _at(fresh, midnight)
     assert _open(fresh, "passed", next_bar) is not None
-    assert fresh.peak_equity == pytest.approx(eng.equity)
+    assert _book(fresh).peak_equity == pytest.approx(_book(fresh).equity)
 
 
 def test_reset_still_clears_a_rebuilt_drawdown_halt():
@@ -321,7 +348,7 @@ def test_peak_is_rebuilt_from_the_running_equity_not_the_final_value():
     eng.hydrate_from_rows(list(reversed(rows)))
 
     assert eng.equity == pytest.approx(1050.0)
-    assert eng.peak_equity == pytest.approx(1200.0)
+    assert _book(eng).peak_equity == pytest.approx(1200.0)
     assert _open(eng, "passed", _bar(0)) is None
     assert eng._last_skip_reason == f"{SYM}:peak_drawdown_halt_pct=0.1250"
 
@@ -330,30 +357,31 @@ def test_truncated_window_starts_the_equity_walk_at_the_full_ledger_level():
     # Full ledger: +300 (outside the window), then +100, then -200 (in the window).
     # Equity before the window is 1300, peak 1400, equity now 1200: 14.29% down.
     window = [
-        _closed_row(2, r=1.0, pnl=100.0, closed_at=OLD_DAY + timedelta(hours=1)),
-        _closed_row(3, r=-2.0, pnl=-200.0, closed_at=OLD_DAY + timedelta(hours=2)),
+        _closed_row(2, r=1.0, pnl=100.0, closed_at=OLD_DAY + timedelta(hours=1), book="LEGACY"),
+        _closed_row(3, r=-2.0, pnl=-200.0, closed_at=OLD_DAY + timedelta(hours=2), book="LEGACY"),
     ]
     eng = _at(_engine(_policy(peak_drawdown_halt_pct=0.10)), BEFORE_RESET)
 
+    # PnL before the window cannot be split by book; it goes to the LEGACY catch-all (D27).
     eng.hydrate_from_rows(window, closed_pnl_total=200.0)
 
     assert eng.equity == pytest.approx(1200.0)
     assert eng.peak_equity == pytest.approx(1400.0)
-    assert _open(eng, "passed", _bar(0)) is None
-    assert eng._last_skip_reason.startswith(f"{SYM}:peak_drawdown_halt_pct=0.1429")
+    gate = _legacy_gate(eng)
+    assert not gate.ok and gate.reason.startswith("peak_drawdown_halt_pct=0.1429")
 
 
 def test_truncated_window_never_puts_the_peak_below_starting_equity():
     # 300 was lost before the window. The window only holds a small win.
-    window = [_closed_row(9, r=0.5, pnl=10.0, closed_at=OLD_DAY)]
+    window = [_closed_row(9, r=0.5, pnl=10.0, closed_at=OLD_DAY, book="LEGACY")]
     eng = _at(_engine(_policy(peak_drawdown_halt_pct=0.10)), BEFORE_RESET)
 
     eng.hydrate_from_rows(window, closed_pnl_total=-290.0)
 
     assert eng.equity == pytest.approx(710.0)
     assert eng.peak_equity == pytest.approx(1000.0)
-    assert _open(eng, "passed", _bar(0)) is None
-    assert eng._last_skip_reason == f"{SYM}:peak_drawdown_halt_pct=0.2900"
+    gate = _legacy_gate(eng)
+    assert not gate.ok and gate.reason == "peak_drawdown_halt_pct=0.2900"
 
 
 def test_loss_streak_survives_a_restart_and_a_later_win_ends_it():
@@ -364,20 +392,20 @@ def test_loss_streak_survives_a_restart_and_a_later_win_ends_it():
     halted = _at(_engine(_policy(consecutive_loss_halt=3)), BEFORE_RESET)
     halted.hydrate_from_rows(list(reversed(losses)))
 
-    assert halted._consecutive_losses == 3
+    assert _book(halted).consecutive_losses == 3
     assert _open(halted, "passed", _bar(0)) is None
     assert halted._last_skip_reason == f"{SYM}:consecutive_loss_halt=3"
 
     # The streak clears at the next 00:00 UTC even without a win.
     late = _at(_engine(_policy(consecutive_loss_halt=3)), AFTER_BOOK_RESET)
     late.hydrate_from_rows(list(reversed(losses)))
-    assert late._consecutive_losses == 0
+    assert _book(late).consecutive_losses == 0
 
     win = _closed_row(7, r=2.0, pnl=10.0, closed_at=OLD_DAY + timedelta(hours=7))
     cleared = _at(_engine(_policy(consecutive_loss_halt=3)), BEFORE_RESET)
     cleared.hydrate_from_rows([win, *reversed(losses)])
 
-    assert cleared._consecutive_losses == 0
+    assert _book(cleared).consecutive_losses == 0
     assert _open(cleared, "passed", _bar(0)) is not None
 
 
@@ -394,8 +422,8 @@ def test_symbol_loss_streak_survives_a_restart_for_that_symbol_only():
 
     eng.hydrate_from_rows(rows)
 
-    assert eng._consecutive_losses == 0
-    assert eng._symbol_consecutive_losses == {SYM: 3, "ETHUSDT": 0}
+    assert _book(eng).consecutive_losses == 0
+    assert _book(eng).symbol_consecutive_losses == {SYM: 3, "ETHUSDT": 0}
     assert _open(eng, "passed", _bar(0)) is None
     assert eng._last_skip_reason == f"{SYM}:symbol_consecutive_loss_halt=3"
 
@@ -416,8 +444,8 @@ def test_daily_loss_halt_survives_a_restart_on_the_same_utc_day():
 
     eng.hydrate_from_rows(today)
 
-    assert eng._day_key == now.strftime("%Y-%m-%d")
-    assert eng._day_pnl_r == pytest.approx(-3.6)
+    assert _book(eng).day_key == now.strftime("%Y-%m-%d")
+    assert _book(eng).day_pnl_r == pytest.approx(-3.6)
     assert _open(eng, "passed", _bar(0)) is None
     assert eng._last_skip_reason == f"{SYM}:daily_loss_halt_r=-3.60"
 
@@ -446,8 +474,8 @@ def test_strategy_drawdown_survives_a_restart():
 
     eng.hydrate_from_rows(list(reversed(rows)))
 
-    assert eng._strategy_peak_r == pytest.approx(4.0)
-    assert eng._strategy_equity_r == pytest.approx(-3.0)
+    assert _book(eng).strategy_peak_r == pytest.approx(4.0)
+    assert _book(eng).strategy_equity_r == pytest.approx(-3.0)
     assert _open(eng, "passed", _bar(0)) is None
     assert eng._last_skip_reason == f"{SYM}:strategy_drawdown_halt_r=-7.00"
 
@@ -486,10 +514,11 @@ def test_rebuilt_trackers_match_the_engine_that_made_the_ledger():
     fresh = _engine(policy)
     fresh.hydrate_from_rows(_ledger_rows(eng))
 
-    assert fresh.peak_equity == pytest.approx(eng.peak_equity)
-    assert fresh._consecutive_losses == eng._consecutive_losses == 2
-    assert fresh._symbol_consecutive_losses == eng._symbol_consecutive_losses
-    assert fresh._strategy_equity_r == pytest.approx(eng._strategy_equity_r)
-    assert fresh._strategy_peak_r == pytest.approx(eng._strategy_peak_r)
-    if fresh._day_key == eng._day_key:
-        assert fresh._day_pnl_r == pytest.approx(eng._day_pnl_r)
+    a, b = _book(fresh), _book(eng)
+    assert a.peak_equity == pytest.approx(b.peak_equity)
+    assert a.consecutive_losses == b.consecutive_losses == 2
+    assert a.symbol_consecutive_losses == b.symbol_consecutive_losses
+    assert a.strategy_equity_r == pytest.approx(b.strategy_equity_r)
+    assert a.strategy_peak_r == pytest.approx(b.strategy_peak_r)
+    if a.day_key == b.day_key:
+        assert a.day_pnl_r == pytest.approx(b.day_pnl_r)

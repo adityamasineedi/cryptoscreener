@@ -258,6 +258,7 @@ def evaluate_paper_entry_risk(
     symbol_consecutive_losses: int | None = None,
     peak_equity: float | None = None,
     strategy_drawdown_r: float | None = None,
+    drawdown_equity: float | None = None,
 ) -> RiskGateResult:
     """Return whether a new paper long may open under the risk policy.
 
@@ -301,7 +302,9 @@ def evaluate_paper_entry_risk(
     ):
         return _fail(f"symbol_consecutive_loss_halt={symbol_consecutive_losses}")
     if peak_equity is not None and float(peak_equity) > 0:
-        dd_pct = (float(peak_equity) - float(equity)) / float(peak_equity)
+        # The book's own equity curve when the engine gives one (per-book stops, owner ruling D27).
+        dd_equity = float(equity) if drawdown_equity is None else float(drawdown_equity)
+        dd_pct = (float(peak_equity) - dd_equity) / float(peak_equity)
         if dd_pct >= float(policy.peak_drawdown_halt_pct) - 1e-12:
             return _fail(f"peak_drawdown_halt_pct={dd_pct:.4f}")
     if strategy_drawdown_r is not None and strategy_drawdown_r <= -abs(

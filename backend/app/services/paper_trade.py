@@ -59,6 +59,35 @@ STREAM_V1 = "V1"
 STREAM_V2 = "V2"
 STREAM_V21A = "V21A"
 
+# Stop-counter books (owner ruling 2026-10-20, D27): each live book keeps its own counters.
+STOP_BOOK_PASSED = "PASSED"
+STOP_BOOK_LEGACY = STREAM_LEGACY
+
+
+@dataclass
+class StopCounters:
+    """One book's latching-stop counters, fed only by that book's closed trades."""
+
+    starting_equity: float
+    pnl: float = 0.0
+    peak_equity: float = 0.0
+    day_key: str | None = None
+    day_pnl_r: float = 0.0
+    consecutive_losses: int = 0
+    symbol_consecutive_losses: dict[str, int] = field(default_factory=dict)
+    strategy_equity_r: float = 0.0
+    strategy_peak_r: float = 0.0
+    trips: dict[str, datetime] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.peak_equity:
+            self.peak_equity = float(self.starting_equity)
+
+    @property
+    def equity(self) -> float:
+        """The book's own equity curve: starting equity plus its own realized PnL."""
+        return float(self.starting_equity) + float(self.pnl)
+
 
 def canonical_source_candle(value: Any) -> str:
     """UTC second timestamp. Equal strings are the same closed bar."""
@@ -239,18 +268,15 @@ class PaperTradeEngine:
         # timeframe. The orchestrator seeds this on the first poll so stored
         # history is not a new wick.
         self._replayed_bar_opens: dict[tuple[str, str], set[str]] = {}
-        # Runtime halt trackers (paper opens only)
-        self.peak_equity = float(starting_equity)
-        self._day_key: str | None = None
-        self._day_pnl_r: float = 0.0
-        self._consecutive_losses: int = 0
-        self._symbol_consecutive_losses: dict[str, int] = {}
-        self._strategy_equity_r: float = 0.0
-        self._strategy_peak_r: float = 0.0
-        # Latching stops with a time reset (owner ruling 2026-10-20, research audit P4/D4):
-        # halt key -> when it tripped. Book-level stops clear at the next 00:00 UTC; the
-        # per-coin stop ("symbol:<SYM>") pauses that coin for 24 h. None = no journal file.
-        self._halt_trips: dict[str, datetime] = {}
+        # Runtime halt trackers (paper opens only), one set per live book (owner ruling
+        # 2026-10-20, D27): the passed book, COMBO_02 v1, V2.1-A, V2 and the legacy stream each
+        # keep their own counters, fed only by their own closed trades. Latching stops reset by
+        # time as before (D4): book-level stops at the next 00:00 UTC, the per-coin stop
+        # ("symbol:<SYM>") after 24 h. The engine attributes below are views of the LEGACY set.
+        self._stop_books: dict[str, StopCounters] = {}
+        # Closes before this instant feed no counter (None = every close). The live engine
+        # starts all counters fresh at 2026-10-21 00:00 UTC (get_paper_trade_engine).
+        self.stop_counters_start: datetime | None = None
         self.halt_journal_path: Any | None = None
         # Keyed by (SYMBOL, STREAM) so LEGACY + V1 + V2 can coexist on one symbol.
         self._open: dict[tuple[str, str], PaperPosition] = {}
@@ -298,27 +324,59 @@ class PaperTradeEngine:
         self._last_skip_reason = f"{sym}:reentry_not_after_exit_bar"
         return True
 
-    def _halt_kwargs(self, symbol: str | None = None) -> dict[str, Any]:
-        """Snapshot for evaluate_paper_entry_risk kill switches."""
-        eq = float(self.equity)
-        if eq > self.peak_equity:
-            self.peak_equity = eq
+    # --- per-book stop counters (owner ruling D27) ----------------------------------
+
+    def _stops(self, book: str = STOP_BOOK_LEGACY) -> "StopCounters":
+        key = str(book or STOP_BOOK_LEGACY).upper()
+        if key not in self._stop_books:
+            self._stop_books[key] = StopCounters(float(self.starting_equity))
+        return self._stop_books[key]
+
+    @staticmethod
+    def stop_book_of(pos: "PaperPosition | dict[str, Any]") -> str:
+        """The book whose stop counters a paper row feeds: PASSED, V1, V21A, V2 or LEGACY."""
+        stream = PaperTradeEngine.stream_of(pos)
+        return STOP_BOOK_PASSED if str(stream).upper().startswith("PASSED") else str(stream).upper()
+
+    def _counts_for_stops(self, closed_at: Any) -> bool:
+        if self.stop_counters_start is None:
+            return True
+        stamped = _parse_utc(closed_at) if closed_at is not None else self._now()
+        return stamped is not None and stamped >= self.stop_counters_start
+
+    # The engine-level names stay as views of the LEGACY set (single-book callers and tests).
+    peak_equity = property(lambda self: self._stops().peak_equity,
+                           lambda self, v: setattr(self._stops(), "peak_equity", float(v)))
+    _day_key = property(lambda self: self._stops().day_key, lambda self, v: setattr(self._stops(), "day_key", v))
+    _day_pnl_r = property(lambda self: self._stops().day_pnl_r, lambda self, v: setattr(self._stops(), "day_pnl_r", float(v)))
+    _consecutive_losses = property(lambda self: self._stops().consecutive_losses,
+                                   lambda self, v: setattr(self._stops(), "consecutive_losses", int(v)))
+    _symbol_consecutive_losses = property(lambda self: self._stops().symbol_consecutive_losses,
+                                          lambda self, v: setattr(self._stops(), "symbol_consecutive_losses", dict(v)))
+    _strategy_equity_r = property(lambda self: self._stops().strategy_equity_r,
+                                  lambda self, v: setattr(self._stops(), "strategy_equity_r", float(v)))
+    _strategy_peak_r = property(lambda self: self._stops().strategy_peak_r,
+                                lambda self, v: setattr(self._stops(), "strategy_peak_r", float(v)))
+
+    def _halt_kwargs(self, symbol: str | None = None, book: str = STOP_BOOK_LEGACY) -> dict[str, Any]:
+        """Snapshot of one book's counters for evaluate_paper_entry_risk kill switches."""
+        b = self._stops(book)
+        eq = b.equity
+        if eq > b.peak_equity:
+            b.peak_equity = eq
         self._apply_halt_resets(self._now())
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        if self._day_key != today:
-            self._day_key = today
-            self._day_pnl_r = 0.0
-        strat_dd = self._strategy_equity_r - self._strategy_peak_r
+        if b.day_key != today:
+            b.day_key = today
+            b.day_pnl_r = 0.0
+        strat_dd = b.strategy_equity_r - b.strategy_peak_r
         sym = str(symbol or "").upper()
         return {
-            "day_pnl_r": float(self._day_pnl_r),
-            "consecutive_losses": int(self._consecutive_losses),
-            "symbol_consecutive_losses": int(
-                self._symbol_consecutive_losses.get(sym, 0)
-            )
-            if sym
-            else None,
-            "peak_equity": float(self.peak_equity),
+            "day_pnl_r": float(b.day_pnl_r),
+            "consecutive_losses": int(b.consecutive_losses),
+            "symbol_consecutive_losses": int(b.symbol_consecutive_losses.get(sym, 0)) if sym else None,
+            "peak_equity": float(b.peak_equity),
+            "drawdown_equity": float(eq),
             "strategy_drawdown_r": float(strat_dd),
         }
 
@@ -328,6 +386,8 @@ class PaperTradeEngine:
         symbol: str,
         r_multiple: float | None,
         closed_at: Any = None,
+        pnl_usd: float | None = None,
+        book: str = STOP_BOOK_LEGACY,
     ) -> None:
         """Update daily / streak / DD trackers after a closed paper trade.
 
@@ -336,47 +396,50 @@ class PaperTradeEngine:
         at an earlier exit bar (the causal passed book) on another date does
         not count toward today.
         """
+        if not self._counts_for_stops(closed_at):
+            self._apply_halt_resets(self._now())
+            return
+        b = self._stops(book)
         r = float(r_multiple or 0.0)
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        if self._day_key != today:
-            self._day_key = today
-            self._day_pnl_r = 0.0
+        if b.day_key != today:
+            b.day_key = today
+            b.day_pnl_r = 0.0
         stamped = _parse_utc(closed_at) if closed_at is not None else None
         if stamped is None or stamped.strftime("%Y-%m-%d") == today:
-            self._day_pnl_r += r
-        self._strategy_equity_r += r
-        if self._strategy_equity_r > self._strategy_peak_r:
-            self._strategy_peak_r = self._strategy_equity_r
-        eq = float(self.equity)
-        if eq > self.peak_equity:
-            self.peak_equity = eq
+            b.day_pnl_r += r
+        b.strategy_equity_r += r
+        if b.strategy_equity_r > b.strategy_peak_r:
+            b.strategy_peak_r = b.strategy_equity_r
+        b.pnl += float(pnl_usd or 0.0)
+        eq = b.equity
+        if eq > b.peak_equity:
+            b.peak_equity = eq
         sym = str(symbol or "").upper()
         if r < 0:
-            self._consecutive_losses += 1
-            self._symbol_consecutive_losses[sym] = (
-                int(self._symbol_consecutive_losses.get(sym, 0)) + 1
-            )
+            b.consecutive_losses += 1
+            b.symbol_consecutive_losses[sym] = int(b.symbol_consecutive_losses.get(sym, 0)) + 1
         else:
-            self._consecutive_losses = 0
-            self._symbol_consecutive_losses[sym] = 0
+            b.consecutive_losses = 0
+            b.symbol_consecutive_losses[sym] = 0
         self._apply_halt_resets(self._now())
 
     # --- latching stops with a time reset -------------------------------------
 
-    def _halt_breaches(self, equity: float) -> dict[str, float]:
-        """Latching stops whose threshold is met now: halt key -> current value."""
+    def _halt_breaches(self, b: "StopCounters", equity: float) -> dict[str, float]:
+        """One book's latching stops whose threshold is met now: halt key -> current value."""
         pol = self.risk_policy
         out: dict[str, float] = {}
-        if self._consecutive_losses >= int(pol.consecutive_loss_halt):
-            out["consecutive_losses"] = float(self._consecutive_losses)
-        if self.peak_equity > 0:
-            dd = (float(self.peak_equity) - float(equity)) / float(self.peak_equity)
+        if b.consecutive_losses >= int(pol.consecutive_loss_halt):
+            out["consecutive_losses"] = float(b.consecutive_losses)
+        if b.peak_equity > 0:
+            dd = (float(b.peak_equity) - float(equity)) / float(b.peak_equity)
             if dd >= float(pol.peak_drawdown_halt_pct) - 1e-12:
                 out["peak_drawdown"] = dd
-        strat_dd = self._strategy_equity_r - self._strategy_peak_r
+        strat_dd = b.strategy_equity_r - b.strategy_peak_r
         if strat_dd <= -abs(float(pol.strategy_drawdown_halt_r)):
             out["strategy_drawdown"] = strat_dd
-        for sym, n in self._symbol_consecutive_losses.items():
+        for sym, n in b.symbol_consecutive_losses.items():
             if n >= int(pol.consecutive_loss_symbol_halt):
                 out[f"symbol:{sym}"] = float(n)
         return out
@@ -387,29 +450,38 @@ class PaperTradeEngine:
             return tripped + timedelta(hours=24)
         return tripped.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
-    def _apply_halt_resets(self, now: datetime, *, journal: bool = True, equity: float | None = None) -> None:
-        """Clear stops whose reset time has come, then record stops that have just tripped."""
-        eq = float(self.equity) if equity is None else float(equity)
-        for key, tripped in list(self._halt_trips.items()):
-            due = self._halt_reset_due(key, tripped)
-            if now < due:
-                continue
-            if key == "consecutive_losses":
-                self._consecutive_losses = 0
-            elif key == "peak_drawdown":
-                self.peak_equity = eq
-            elif key == "strategy_drawdown":
-                self._strategy_peak_r = self._strategy_equity_r
-            elif key.startswith("symbol:"):
-                self._symbol_consecutive_losses[key.split(":", 1)[1]] = 0
-            del self._halt_trips[key]
-            if journal:
-                self._journal_halt("RESET", key, at=now, tripped_at=tripped, due=due)
-        for key, value in self._halt_breaches(eq).items():
-            if key not in self._halt_trips:
-                self._halt_trips[key] = now
+    def _apply_halt_resets(self, now: datetime, *, journal: bool = True, equity: float | None = None,
+                           books: Any = None) -> None:
+        """Per book: clear stops whose reset time has come, then record stops that have just tripped."""
+        for name in list(books if books is not None else self._stop_books):
+            b = self._stops(name)
+            eq = b.equity if equity is None else float(equity)
+            for key, tripped in list(b.trips.items()):
+                due = self._halt_reset_due(key, tripped)
+                if now < due:
+                    continue
+                if key == "consecutive_losses":
+                    b.consecutive_losses = 0
+                elif key == "peak_drawdown":
+                    b.peak_equity = eq
+                elif key == "strategy_drawdown":
+                    b.strategy_peak_r = b.strategy_equity_r
+                elif key.startswith("symbol:"):
+                    b.symbol_consecutive_losses[key.split(":", 1)[1]] = 0
+                del b.trips[key]
                 if journal:
-                    self._journal_halt("TRIP", key, at=now, value=value, resets_at=self._halt_reset_due(key, now))
+                    self._journal_halt("RESET", self._halt_label(name, key), at=now, tripped_at=tripped, due=due, book=name)
+            for key, value in self._halt_breaches(b, eq).items():
+                if key not in b.trips:
+                    b.trips[key] = now
+                    if journal:
+                        self._journal_halt("TRIP", self._halt_label(name, key), at=now, value=value,
+                                           resets_at=self._halt_reset_due(key, now), book=name)
+
+    @staticmethod
+    def _halt_label(book: str, key: str) -> str:
+        """Halt name shown and journaled: the LEGACY book keeps the plain D4 names."""
+        return key if book == STOP_BOOK_LEGACY else f"{book}:{key}"
 
     def _journal_halt(self, event: str, key: str, *, at: datetime, **fields: Any) -> None:
         row: dict[str, Any] = {"ts": at.isoformat(), "event": event, "halt": key}
@@ -431,8 +503,10 @@ class PaperTradeEngine:
         """Active latching stops with their trip and reset times. Reads only."""
         with self._lock:
             return {
-                key: {"tripped_at": t.isoformat(), "resets_at": self._halt_reset_due(key, t).isoformat()}
-                for key, t in sorted(self._halt_trips.items())
+                self._halt_label(name, key): {"tripped_at": t.isoformat(),
+                                              "resets_at": self._halt_reset_due(key, t).isoformat()}
+                for name, b in sorted(self._stop_books.items())
+                for key, t in sorted(b.trips.items())
             }
 
     @staticmethod
@@ -541,13 +615,7 @@ class PaperTradeEngine:
             self._opened_keys.clear()
             self.realized_pnl = 0.0
             # Fresh account: clear kill-switch trackers so a reset is not still halted.
-            self.peak_equity = float(self.starting_equity)
-            self._day_key = None
-            self._day_pnl_r = 0.0
-            self._consecutive_losses = 0
-            self._symbol_consecutive_losses.clear()
-            self._strategy_equity_r = 0.0
-            self._strategy_peak_r = 0.0
+            self._stop_books.clear()
             self._pending_persist.clear()
             self._last_skip_reason = None
             self._last_path_a_diagnostics = None
@@ -763,67 +831,47 @@ class PaperTradeEngine:
                 p.id,
             ),
         )
-        window_pnl = sum(float(p.pnl_usd or 0.0) for p in ordered)
-        before_window = (
-            float(closed_pnl_total) - window_pnl if closed_pnl_total is not None else 0.0
-        )
-        eq = self.starting_equity + before_window
-        # The account started at starting_equity, so the peak is never below it.
-        peak = max(self.starting_equity, eq)
+        counted = [p for p in ordered if self._counts_for_stops(p.closed_at)]
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        day_r = 0.0
-        strat_r = 0.0
-        strat_peak = 0.0
-        streak = 0
-        sym_streak: dict[str, int] = {}
-        # Replay the time-reset rule over the ledger (no journal lines): a stop trips at the
-        # close that met its threshold (its exit stamp) and clears at its reset time.
-        self._halt_trips = {}
-        for pos in ordered:
+        self._stop_books = {}
+        # PnL closed before the hydrate window cannot be split by book. Only when every close
+        # counts (no fresh start) does it go to the LEGACY set, as the single tracker did before.
+        if self.stop_counters_start is None and closed_pnl_total is not None:
+            window_pnl = sum(float(p.pnl_usd or 0.0) for p in ordered)
+            legacy = self._stops(STOP_BOOK_LEGACY)
+            legacy.pnl = float(closed_pnl_total) - window_pnl
+            legacy.peak_equity = max(float(self.starting_equity), legacy.equity)
+        # Replay the time-reset rule over each book's own closes (no journal lines): a stop
+        # trips at the close that met its threshold (its exit stamp) and clears at its reset time.
+        for pos in counted:
+            name = self.stop_book_of(pos)
+            b = self._stops(name)
             r = float(pos.r_multiple or 0.0)
             closed_dt = _parse_utc(pos.closed_at)
             at = closed_dt or floor
             # Resets due before this close apply first.
-            peak, streak, sym_streak, strat_peak = self._walk_halts(at, eq, peak, streak, sym_streak, strat_r, strat_peak)
+            self._apply_halt_resets(at, journal=False, books=[name])
             # Daily halt counts closes on the current UTC date only.
             if closed_dt is not None and closed_dt.strftime("%Y-%m-%d") == today:
-                day_r += r
-            strat_r += r
-            if strat_r > strat_peak:
-                strat_peak = strat_r
-            eq += float(pos.pnl_usd or 0.0)
-            if eq > peak:
-                peak = eq
+                b.day_pnl_r += r
+            b.strategy_equity_r += r
+            if b.strategy_equity_r > b.strategy_peak_r:
+                b.strategy_peak_r = b.strategy_equity_r
+            b.pnl += float(pos.pnl_usd or 0.0)
+            if b.equity > b.peak_equity:
+                b.peak_equity = b.equity
             sym = str(pos.symbol or "").upper()
             if r < 0:
-                streak += 1
-                sym_streak[sym] = int(sym_streak.get(sym, 0)) + 1
+                b.consecutive_losses += 1
+                b.symbol_consecutive_losses[sym] = int(b.symbol_consecutive_losses.get(sym, 0)) + 1
             else:
-                streak = 0
-                sym_streak[sym] = 0
-            peak, streak, sym_streak, strat_peak = self._walk_halts(at, eq, peak, streak, sym_streak, strat_r, strat_peak)
-        self.peak_equity = max(float(peak), float(self.equity))
-        self._day_key = today
-        self._day_pnl_r = day_r
-        self._consecutive_losses = streak
-        self._symbol_consecutive_losses = sym_streak
-        self._strategy_equity_r = strat_r
-        self._strategy_peak_r = strat_peak
+                b.consecutive_losses = 0
+                b.symbol_consecutive_losses[sym] = 0
+            self._apply_halt_resets(at, journal=False, books=[name])
+        for b in self._stop_books.values():
+            b.day_key = today
         # Stops whose reset time passed while the backend was down clear now.
         self._apply_halt_resets(self._now(), journal=False)
-
-    def _walk_halts(
-        self, at: datetime, eq: float, peak: float, streak: int, sym_streak: dict[str, int],
-        strat_r: float, strat_peak: float,
-    ) -> tuple[float, int, dict[str, int], float]:
-        """One step of the time-reset rule during a ledger walk (equity is the walk's own)."""
-        self.peak_equity = float(peak)
-        self._consecutive_losses = int(streak)
-        self._symbol_consecutive_losses = dict(sym_streak)
-        self._strategy_equity_r = float(strat_r)
-        self._strategy_peak_r = float(strat_peak)
-        self._apply_halt_resets(at, journal=False, equity=eq)
-        return self.peak_equity, self._consecutive_losses, dict(self._symbol_consecutive_losses), self._strategy_peak_r
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -1073,7 +1121,7 @@ class PaperTradeEngine:
             open_count=open_count,
             open_risk_usd=open_risk,
             equity=self.equity,
-            **self._halt_kwargs(sym),
+            **self._halt_kwargs(sym, book=STOP_BOOK_LEGACY),
         )
         if not gate.ok:
             self._last_skip_reason = f"{sym}:{gate.reason}"
@@ -1151,7 +1199,7 @@ class PaperTradeEngine:
             open_risk_usd=open_risk,
             equity=self.equity,
             planned_risk_usd=risk_usd,
-            **self._halt_kwargs(sym),
+            **self._halt_kwargs(sym, book=STOP_BOOK_LEGACY),
         )
         if not gate2.ok:
             self._last_skip_reason = f"{sym}:{gate2.reason}"
@@ -1347,7 +1395,7 @@ class PaperTradeEngine:
                 open_count=open_count,
                 open_risk_usd=open_risk,
                 equity=self.equity,
-                **self._halt_kwargs(sym),
+                **self._halt_kwargs(sym, book=STREAM_V1),
             )
             if not gate.ok:
                 self._last_skip_reason = f"{sym}:{gate.reason}"
@@ -1391,7 +1439,7 @@ class PaperTradeEngine:
                 open_risk_usd=open_risk,
                 equity=self.equity,
                 planned_risk_usd=risk_usd,
-                **self._halt_kwargs(sym),
+                **self._halt_kwargs(sym, book=STREAM_V1),
             )
             if not gate2.ok:
                 self._last_skip_reason = f"{sym}:{gate2.reason}"
@@ -1571,7 +1619,7 @@ class PaperTradeEngine:
                 open_count=open_count,
                 open_risk_usd=open_risk,
                 equity=self.equity,
-                **self._halt_kwargs(sym),
+                **self._halt_kwargs(sym, book=self.stop_book_of({"signal_snippet": signal_snippet or {}})),
             )
             if not gate.ok:
                 self._last_skip_reason = f"{sym}:{gate.reason}"
@@ -1606,7 +1654,7 @@ class PaperTradeEngine:
                 open_risk_usd=open_risk,
                 equity=self.equity,
                 planned_risk_usd=risk_usd,
-                **self._halt_kwargs(sym),
+                **self._halt_kwargs(sym, book=self.stop_book_of({"signal_snippet": signal_snippet or {}})),
             )
             if not gate2.ok:
                 self._last_skip_reason = f"{sym}:{gate2.reason}"
@@ -1803,7 +1851,7 @@ class PaperTradeEngine:
                 open_count=open_count,
                 open_risk_usd=open_risk,
                 equity=self.equity,
-                **self._halt_kwargs(sym),
+                **self._halt_kwargs(sym, book=STREAM_V21A),
             )
             if not gate.ok:
                 self._last_skip_reason = f"{sym}:{gate.reason}"
@@ -1847,7 +1895,7 @@ class PaperTradeEngine:
                 open_risk_usd=open_risk,
                 equity=self.equity,
                 planned_risk_usd=risk_usd,
-                **self._halt_kwargs(sym),
+                **self._halt_kwargs(sym, book=STREAM_V21A),
             )
             if not gate2.ok:
                 self._last_skip_reason = f"{sym}:{gate2.reason}"
@@ -2021,7 +2069,7 @@ class PaperTradeEngine:
             open_count=open_count,
             open_risk_usd=open_risk,
             equity=self.equity,
-            **self._halt_kwargs(sym),
+            **self._halt_kwargs(sym, book=STOP_BOOK_PASSED),
         )
         if not gate.ok:
             self._last_skip_reason = f"{sym}:{gate.reason}"
@@ -2078,7 +2126,7 @@ class PaperTradeEngine:
             open_risk_usd=open_risk,
             equity=self.equity,
             planned_risk_usd=risk_usd,
-            **self._halt_kwargs(sym),
+            **self._halt_kwargs(sym, book=STOP_BOOK_PASSED),
         )
         if not gate2.ok:
             self._last_skip_reason = f"{sym}:{gate2.reason}"
@@ -2567,7 +2615,8 @@ class PaperTradeEngine:
         self.realized_pnl += pnl
         self._pnl_since_reconcile += pnl
         self._note_close_for_halts(
-            symbol=pos.symbol, r_multiple=r_mult, closed_at=pos.closed_at if closed_at else None
+            symbol=pos.symbol, r_multiple=r_mult, closed_at=pos.closed_at if closed_at else None,
+            pnl_usd=pnl, book=self.stop_book_of(pos),
         )
         self._closed.insert(0, pos)
         self._trim_closed()
@@ -2769,6 +2818,8 @@ def get_paper_trade_engine(
 
         # Every safety-stop trip and reset is journaled here (owner ruling 2026-10-20, D4).
         _engine.halt_journal_path = ROOT / "data" / "paper" / "halt_journal.jsonl"
+        # Per-book stop counters start fresh here (owner ruling 2026-10-20, D27).
+        _engine.stop_counters_start = datetime(2026, 10, 21, tzinfo=timezone.utc)
     else:
         if entry_mode:
             mode = str(entry_mode).strip().lower()
