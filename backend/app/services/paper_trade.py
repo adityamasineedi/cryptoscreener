@@ -10,6 +10,7 @@ must not be labeled or claimed as COMBO_02 v1.
 
 from __future__ import annotations
 
+import json
 import threading
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -246,6 +247,11 @@ class PaperTradeEngine:
         self._symbol_consecutive_losses: dict[str, int] = {}
         self._strategy_equity_r: float = 0.0
         self._strategy_peak_r: float = 0.0
+        # Latching stops with a time reset (owner ruling 2026-10-20, research audit P4/D4):
+        # halt key -> when it tripped. Book-level stops clear at the next 00:00 UTC; the
+        # per-coin stop ("symbol:<SYM>") pauses that coin for 24 h. None = no journal file.
+        self._halt_trips: dict[str, datetime] = {}
+        self.halt_journal_path: Any | None = None
         # Keyed by (SYMBOL, STREAM) so LEGACY + V1 + V2 can coexist on one symbol.
         self._open: dict[tuple[str, str], PaperPosition] = {}
         self._closed: list[PaperPosition] = []
@@ -297,6 +303,7 @@ class PaperTradeEngine:
         eq = float(self.equity)
         if eq > self.peak_equity:
             self.peak_equity = eq
+        self._apply_halt_resets(self._now())
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if self._day_key != today:
             self._day_key = today
@@ -352,6 +359,81 @@ class PaperTradeEngine:
         else:
             self._consecutive_losses = 0
             self._symbol_consecutive_losses[sym] = 0
+        self._apply_halt_resets(self._now())
+
+    # --- latching stops with a time reset -------------------------------------
+
+    def _halt_breaches(self, equity: float) -> dict[str, float]:
+        """Latching stops whose threshold is met now: halt key -> current value."""
+        pol = self.risk_policy
+        out: dict[str, float] = {}
+        if self._consecutive_losses >= int(pol.consecutive_loss_halt):
+            out["consecutive_losses"] = float(self._consecutive_losses)
+        if self.peak_equity > 0:
+            dd = (float(self.peak_equity) - float(equity)) / float(self.peak_equity)
+            if dd >= float(pol.peak_drawdown_halt_pct) - 1e-12:
+                out["peak_drawdown"] = dd
+        strat_dd = self._strategy_equity_r - self._strategy_peak_r
+        if strat_dd <= -abs(float(pol.strategy_drawdown_halt_r)):
+            out["strategy_drawdown"] = strat_dd
+        for sym, n in self._symbol_consecutive_losses.items():
+            if n >= int(pol.consecutive_loss_symbol_halt):
+                out[f"symbol:{sym}"] = float(n)
+        return out
+
+    @staticmethod
+    def _halt_reset_due(key: str, tripped: datetime) -> datetime:
+        if key.startswith("symbol:"):
+            return tripped + timedelta(hours=24)
+        return tripped.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+
+    def _apply_halt_resets(self, now: datetime, *, journal: bool = True, equity: float | None = None) -> None:
+        """Clear stops whose reset time has come, then record stops that have just tripped."""
+        eq = float(self.equity) if equity is None else float(equity)
+        for key, tripped in list(self._halt_trips.items()):
+            due = self._halt_reset_due(key, tripped)
+            if now < due:
+                continue
+            if key == "consecutive_losses":
+                self._consecutive_losses = 0
+            elif key == "peak_drawdown":
+                self.peak_equity = eq
+            elif key == "strategy_drawdown":
+                self._strategy_peak_r = self._strategy_equity_r
+            elif key.startswith("symbol:"):
+                self._symbol_consecutive_losses[key.split(":", 1)[1]] = 0
+            del self._halt_trips[key]
+            if journal:
+                self._journal_halt("RESET", key, at=now, tripped_at=tripped, due=due)
+        for key, value in self._halt_breaches(eq).items():
+            if key not in self._halt_trips:
+                self._halt_trips[key] = now
+                if journal:
+                    self._journal_halt("TRIP", key, at=now, value=value, resets_at=self._halt_reset_due(key, now))
+
+    def _journal_halt(self, event: str, key: str, *, at: datetime, **fields: Any) -> None:
+        row: dict[str, Any] = {"ts": at.isoformat(), "event": event, "halt": key}
+        row.update({k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in fields.items()})
+        logger.warning("paper_halt_" + event.lower(), **{k: v for k, v in row.items() if k != "event"})
+        if self.halt_journal_path is None:
+            return
+        try:
+            from pathlib import Path
+
+            target = Path(self.halt_journal_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(row, default=str) + "\n")
+        except OSError as exc:
+            logger.warning("paper_halt_journal_write_failed", error=str(exc))
+
+    def halt_state(self) -> dict[str, Any]:
+        """Active latching stops with their trip and reset times. Reads only."""
+        with self._lock:
+            return {
+                key: {"tripped_at": t.isoformat(), "resets_at": self._halt_reset_due(key, t).isoformat()}
+                for key, t in sorted(self._halt_trips.items())
+            }
 
     @staticmethod
     def stream_of(pos: PaperPosition | dict[str, Any]) -> str:
@@ -694,9 +776,15 @@ class PaperTradeEngine:
         strat_peak = 0.0
         streak = 0
         sym_streak: dict[str, int] = {}
+        # Replay the time-reset rule over the ledger (no journal lines): a stop trips at the
+        # close that met its threshold (its exit stamp) and clears at its reset time.
+        self._halt_trips = {}
         for pos in ordered:
             r = float(pos.r_multiple or 0.0)
             closed_dt = _parse_utc(pos.closed_at)
+            at = closed_dt or floor
+            # Resets due before this close apply first.
+            peak, streak, sym_streak, strat_peak = self._walk_halts(at, eq, peak, streak, sym_streak, strat_r, strat_peak)
             # Daily halt counts closes on the current UTC date only.
             if closed_dt is not None and closed_dt.strftime("%Y-%m-%d") == today:
                 day_r += r
@@ -713,6 +801,7 @@ class PaperTradeEngine:
             else:
                 streak = 0
                 sym_streak[sym] = 0
+            peak, streak, sym_streak, strat_peak = self._walk_halts(at, eq, peak, streak, sym_streak, strat_r, strat_peak)
         self.peak_equity = max(float(peak), float(self.equity))
         self._day_key = today
         self._day_pnl_r = day_r
@@ -720,6 +809,21 @@ class PaperTradeEngine:
         self._symbol_consecutive_losses = sym_streak
         self._strategy_equity_r = strat_r
         self._strategy_peak_r = strat_peak
+        # Stops whose reset time passed while the backend was down clear now.
+        self._apply_halt_resets(self._now(), journal=False)
+
+    def _walk_halts(
+        self, at: datetime, eq: float, peak: float, streak: int, sym_streak: dict[str, int],
+        strat_r: float, strat_peak: float,
+    ) -> tuple[float, int, dict[str, int], float]:
+        """One step of the time-reset rule during a ledger walk (equity is the walk's own)."""
+        self.peak_equity = float(peak)
+        self._consecutive_losses = int(streak)
+        self._symbol_consecutive_losses = dict(sym_streak)
+        self._strategy_equity_r = float(strat_r)
+        self._strategy_peak_r = float(strat_peak)
+        self._apply_halt_resets(at, journal=False, equity=eq)
+        return self.peak_equity, self._consecutive_losses, dict(self._symbol_consecutive_losses), self._strategy_peak_r
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -2661,6 +2765,10 @@ def get_paper_trade_engine(
             v1_universe_only=use_universe,
             v1_secondary_enabled=use_secondary,
         )
+        from app.config import ROOT
+
+        # Every safety-stop trip and reset is journaled here (owner ruling 2026-10-20, D4).
+        _engine.halt_journal_path = ROOT / "data" / "paper" / "halt_journal.jsonl"
     else:
         if entry_mode:
             mode = str(entry_mode).strip().lower()

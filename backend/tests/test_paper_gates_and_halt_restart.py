@@ -172,6 +172,15 @@ def _ledger_rows(eng: PaperTradeEngine) -> list[dict]:
 
 
 OLD_DAY = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+# Inside every reset window opened by rows on OLD_DAY (book stops clear at the next
+# 00:00 UTC, the per-coin stop after 24 h; owner ruling 2026-10-20, D4).
+BEFORE_RESET = OLD_DAY + timedelta(hours=10)
+AFTER_BOOK_RESET = OLD_DAY.replace(hour=0) + timedelta(days=1)
+
+
+def _at(eng: PaperTradeEngine, when: datetime) -> PaperTradeEngine:
+    eng._now = lambda: when
+    return eng
 
 
 # --- A. the gate runs in every opener ----------------------------------------
@@ -263,6 +272,7 @@ def test_drawdown_halt_survives_a_restart_from_the_ledger():
     assert eng.equity <= 900.0
 
     fresh = _engine(policy)
+    fresh._now = eng._now  # restart inside the stop's reset window
     fresh.hydrate_from_rows(_ledger_rows(eng))
 
     assert fresh.peak_equity == pytest.approx(1000.0)
@@ -272,6 +282,11 @@ def test_drawdown_halt_survives_a_restart_from_the_ledger():
         assert _open(fresh, opener, next_bar) is None
         assert fresh._last_skip_reason.startswith(f"{SYM}:peak_drawdown_halt_pct=")
     assert fresh.status()["open_count"] == 0
+    # At the next 00:00 UTC the stop clears and the peak re-bases to equity.
+    midnight = eng._now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    _at(fresh, midnight)
+    assert _open(fresh, "passed", next_bar) is not None
+    assert fresh.peak_equity == pytest.approx(eng.equity)
 
 
 def test_reset_still_clears_a_rebuilt_drawdown_halt():
@@ -279,6 +294,7 @@ def test_reset_still_clears_a_rebuilt_drawdown_halt():
     eng = _engine(policy)
     losers = _lose_until_halted(eng)
     fresh = _engine(policy)
+    fresh._now = eng._now
     fresh.hydrate_from_rows(_ledger_rows(eng))
     assert _open(fresh, "passed", _bar(2 * losers + 5)) is None
 
@@ -299,7 +315,7 @@ def test_peak_is_rebuilt_from_the_running_equity_not_the_final_value():
         _closed_row(1, r=2.0, pnl=200.0, closed_at=OLD_DAY),
         _closed_row(2, r=-1.5, pnl=-150.0, closed_at=OLD_DAY + timedelta(hours=2)),
     ]
-    eng = _engine(_policy(peak_drawdown_halt_pct=0.10))
+    eng = _at(_engine(_policy(peak_drawdown_halt_pct=0.10)), BEFORE_RESET)
 
     # Newest first, as the ledger query returns them.
     eng.hydrate_from_rows(list(reversed(rows)))
@@ -317,7 +333,7 @@ def test_truncated_window_starts_the_equity_walk_at_the_full_ledger_level():
         _closed_row(2, r=1.0, pnl=100.0, closed_at=OLD_DAY + timedelta(hours=1)),
         _closed_row(3, r=-2.0, pnl=-200.0, closed_at=OLD_DAY + timedelta(hours=2)),
     ]
-    eng = _engine(_policy(peak_drawdown_halt_pct=0.10))
+    eng = _at(_engine(_policy(peak_drawdown_halt_pct=0.10)), BEFORE_RESET)
 
     eng.hydrate_from_rows(window, closed_pnl_total=200.0)
 
@@ -330,7 +346,7 @@ def test_truncated_window_starts_the_equity_walk_at_the_full_ledger_level():
 def test_truncated_window_never_puts_the_peak_below_starting_equity():
     # 300 was lost before the window. The window only holds a small win.
     window = [_closed_row(9, r=0.5, pnl=10.0, closed_at=OLD_DAY)]
-    eng = _engine(_policy(peak_drawdown_halt_pct=0.10))
+    eng = _at(_engine(_policy(peak_drawdown_halt_pct=0.10)), BEFORE_RESET)
 
     eng.hydrate_from_rows(window, closed_pnl_total=-290.0)
 
@@ -345,15 +361,20 @@ def test_loss_streak_survives_a_restart_and_a_later_win_ends_it():
         _closed_row(i, r=-1.0, pnl=-5.0, closed_at=OLD_DAY + timedelta(hours=i))
         for i in range(3)
     ]
-    halted = _engine(_policy(consecutive_loss_halt=3))
+    halted = _at(_engine(_policy(consecutive_loss_halt=3)), BEFORE_RESET)
     halted.hydrate_from_rows(list(reversed(losses)))
 
     assert halted._consecutive_losses == 3
     assert _open(halted, "passed", _bar(0)) is None
     assert halted._last_skip_reason == f"{SYM}:consecutive_loss_halt=3"
 
+    # The streak clears at the next 00:00 UTC even without a win.
+    late = _at(_engine(_policy(consecutive_loss_halt=3)), AFTER_BOOK_RESET)
+    late.hydrate_from_rows(list(reversed(losses)))
+    assert late._consecutive_losses == 0
+
     win = _closed_row(7, r=2.0, pnl=10.0, closed_at=OLD_DAY + timedelta(hours=7))
-    cleared = _engine(_policy(consecutive_loss_halt=3))
+    cleared = _at(_engine(_policy(consecutive_loss_halt=3)), BEFORE_RESET)
     cleared.hydrate_from_rows([win, *reversed(losses)])
 
     assert cleared._consecutive_losses == 0
@@ -369,7 +390,7 @@ def test_symbol_loss_streak_survives_a_restart_for_that_symbol_only():
     ]
     # A win on another symbol ends the book streak but not BTC's own.
     rows.append(_closed_row(8, r=1.0, pnl=5.0, closed_at=OLD_DAY + timedelta(hours=8)))
-    eng = _engine(_policy(consecutive_loss_symbol_halt=3))
+    eng = _at(_engine(_policy(consecutive_loss_symbol_halt=3)), BEFORE_RESET)
 
     eng.hydrate_from_rows(rows)
 
@@ -377,6 +398,10 @@ def test_symbol_loss_streak_survives_a_restart_for_that_symbol_only():
     assert eng._symbol_consecutive_losses == {SYM: 3, "ETHUSDT": 0}
     assert _open(eng, "passed", _bar(0)) is None
     assert eng._last_skip_reason == f"{SYM}:symbol_consecutive_loss_halt=3"
+
+    # The coin is paused for 24 h from the losing close that tripped it (OLD_DAY + 2 h).
+    _at(eng, OLD_DAY + timedelta(hours=2 + 24))
+    assert _open(eng, "passed", _bar(0)) is not None
 
 
 def test_daily_loss_halt_survives_a_restart_on_the_same_utc_day():
@@ -417,7 +442,7 @@ def test_strategy_drawdown_survives_a_restart():
         _closed_row(i, r=-1.0, pnl=-1.0, closed_at=OLD_DAY + timedelta(hours=i))
         for i in range(1, 8)
     ]
-    eng = _engine(_policy(strategy_drawdown_halt_r=6.0))
+    eng = _at(_engine(_policy(strategy_drawdown_halt_r=6.0)), BEFORE_RESET)
 
     eng.hydrate_from_rows(list(reversed(rows)))
 
