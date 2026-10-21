@@ -300,6 +300,9 @@ class PaperTradeEngine:
         self.ledger_ready: bool = True
         # False when another backend process holds the paper writer lock.
         self.writer_lock_held: bool = True
+        # Account kill switches (owner ruling D128d). None unless KILL_SWITCHES_ENABLED is on; with None no
+        # opener calls into app.services.kill_switch, so decisions are those of the code without it.
+        self.kill_switch: Any | None = None
 
     def _writes_blocked(self, sym: str) -> bool:
         """True (with the skip reason set) while this process must not open paper trades."""
@@ -310,6 +313,17 @@ class PaperTradeEngine:
             self._last_skip_reason = f"{sym}:ledger_not_ready"
             return True
         return False
+
+    def _kill_switch_blocks(self, sym: str, *, risk_usd: float, notional_usd: float) -> bool:
+        """True (skip reason set) when an enabled kill switch refuses this entry (D128d). False when none is set."""
+        ks = self.kill_switch
+        if ks is None:
+            return False
+        reason = ks.check_entry(self, sym, risk_usd=float(risk_usd or 0.0), notional_usd=float(notional_usd or 0.0))
+        if not reason:
+            return False
+        self._last_skip_reason = f"{sym}:{reason}"
+        return True
 
     def _reentry_blocked_locked(
         self, sym: str, key: tuple[str, str], setup_bar_time_utc: Any
@@ -1211,6 +1225,8 @@ class PaperTradeEngine:
                 group=gate2.group,
             )
             return None
+        if self._kill_switch_blocks(sym, risk_usd=risk_usd, notional_usd=abs(float(entry_price)) * qty):
+            return None
 
         trend_1h = _tf_trend_label(payload, "1h")
         trend_4h = _tf_trend_label(payload, "4h")
@@ -1444,6 +1460,8 @@ class PaperTradeEngine:
             if not gate2.ok:
                 self._last_skip_reason = f"{sym}:{gate2.reason}"
                 return None
+            if self._kill_switch_blocks(sym, risk_usd=risk_usd, notional_usd=abs(float(entry_price)) * qty):
+                return None
 
         with self._lock:
             if v1_key in self._open:
@@ -1658,6 +1676,8 @@ class PaperTradeEngine:
             )
             if not gate2.ok:
                 self._last_skip_reason = f"{sym}:{gate2.reason}"
+                return None
+            if self._kill_switch_blocks(sym, risk_usd=risk_usd, notional_usd=abs(float(entry_price)) * qty):
                 return None
 
         # Preserve BACKTEST_ENTRY / LIVE_SIGNAL_PRICE / PAPER_ENTRY distinctly.
@@ -1900,6 +1920,8 @@ class PaperTradeEngine:
             if not gate2.ok:
                 self._last_skip_reason = f"{sym}:{gate2.reason}"
                 return None
+            if self._kill_switch_blocks(sym, risk_usd=risk_usd, notional_usd=abs(float(entry_price)) * qty):
+                return None
 
         snip.update(
             {
@@ -2130,6 +2152,8 @@ class PaperTradeEngine:
         )
         if not gate2.ok:
             self._last_skip_reason = f"{sym}:{gate2.reason}"
+            return None
+        if self._kill_switch_blocks(sym, risk_usd=risk_usd, notional_usd=abs(float(entry_price)) * qty):
             return None
 
         snip = {
@@ -2638,6 +2662,44 @@ class PaperTradeEngine:
         except Exception:  # noqa: BLE001
             pass
         return pos
+
+    def flatten_all_positions(
+        self,
+        *,
+        reason: str,
+        price_fn: Callable[[str], float | None] | None = None,
+        by: str = "owner",
+    ) -> list[dict[str, Any]]:
+        """Close every open paper position at the current price (kill switch, D128d). Paper only.
+
+        Price: ``price_fn(symbol)`` (the live mark), else the position's last mark, else its entry. Each close is
+        booked through the normal close path (fees, ledger row, stop counters, alert) with exit_reason
+        ``KILL_SWITCH_FLATTEN`` and the trigger in ``signal_snippet.kill_switch``.
+        """
+        from app.services.kill_switch import EXIT_REASON_FLATTEN
+
+        closed: list[dict[str, Any]] = []
+        with self._lock:
+            for pos in list(self._open.values()):
+                px: float | None = None
+                source = "live"
+                if price_fn is not None:
+                    try:
+                        px = _f(price_fn(pos.symbol))
+                    except Exception:  # noqa: BLE001
+                        px = None
+                if px is None or px <= 0:
+                    px, source = _f(pos.mark_price), "last_mark"
+                if px is None or px <= 0:
+                    px, source = float(pos.entry_price), "entry"
+                snip = dict(pos.signal_snippet or {}) if isinstance(pos.signal_snippet, dict) else {}
+                snip["kill_switch"] = {"reason": str(reason), "by": str(by), "price_source": source}
+                pos.signal_snippet = snip
+                done = self._close_locked(pos, float(px), EXIT_REASON_FLATTEN)
+                row = done.to_dict()
+                row["price_source"] = source
+                closed.append(row)
+        return closed
 
     def _trim_closed(self) -> None:
         if len(self._closed) > self.max_closed:

@@ -197,6 +197,16 @@ class Settings(BaseSettings):
     )
     # 4h book 16 BTCUSDT/ETHUSDT LONG, mirror of forward test BOOK16_4H_FWD-1. Virtual fills only.
     paper_book16_4h_enabled: bool = Field(default=True, alias="PAPER_BOOK16_4H_ENABLED")
+    # Account kill switches for live paper (owner ruling D128d). Default OFF: with it off nothing is created and
+    # live decisions are unchanged. See app/services/kill_switch.py.
+    kill_switches_enabled: bool = Field(default=False, alias="KILL_SWITCHES_ENABLED")
+    kill_switch_daily_loss_limit_pct: float = Field(default=0.05, alias="KILL_SWITCH_DAILY_LOSS_LIMIT_PCT")
+    kill_switch_max_open_risk_pct: float = Field(default=0.10, alias="KILL_SWITCH_MAX_OPEN_RISK_PCT")
+    kill_switch_max_position_notional_usd: float = Field(default=0.0, alias="KILL_SWITCH_MAX_POSITION_NOTIONAL_USD")
+    kill_switch_max_position_notional_pct: float = Field(default=2.0, alias="KILL_SWITCH_MAX_POSITION_NOTIONAL_PCT")
+    kill_switch_heartbeat_timeout_minutes: float = Field(default=90.0, alias="KILL_SWITCH_HEARTBEAT_TIMEOUT_MINUTES")
+    kill_switch_auto_flatten_on_heartbeat: bool = Field(default=True, alias="KILL_SWITCH_AUTO_FLATTEN_ON_HEARTBEAT")
+    kill_switch_auto_flatten_on_mismatch: bool = Field(default=True, alias="KILL_SWITCH_AUTO_FLATTEN_ON_MISMATCH")
     # Explicit trading mode separation (V2.1-A LIVE is never auto-enabled)
     trading_mode: str = Field(default="PAPER", alias="TRADING_MODE")
 

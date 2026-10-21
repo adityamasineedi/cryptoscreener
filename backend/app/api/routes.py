@@ -3479,6 +3479,71 @@ async def paper_close_legacy(
     return {**result, "status": _enrich_paper_status(eng.status())}
 
 
+FLATTEN_CONFIRM_TEXT = "FLATTEN ALL"
+CLEAR_CONFIRM_TEXT = "CLEAR"
+
+
+def _kill_switch_or_409() -> Any:
+    from app.services.kill_switch import get_kill_switch
+
+    ks = get_kill_switch()
+    if ks is None or not ks.config.enabled:
+        raise HTTPException(
+            status_code=409,
+            detail="kill switches are off (KILL_SWITCHES_ENABLED=false) or this process is not the paper writer",
+        )
+    return ks
+
+
+@router.get("/paper/kill-switch")
+async def paper_kill_switch_status() -> dict[str, Any]:
+    """Kill-switch state (owner ruling D128d). Reads only."""
+    from app.services.kill_switch import get_kill_switch
+
+    ks = get_kill_switch()
+    if ks is None:
+        return {"enabled": False, "detail": "KILL_SWITCHES_ENABLED is off, or this process is not the paper writer"}
+    return ks.status()
+
+
+@router.post("/paper/kill-switch/flatten-all", dependencies=[Depends(_require_paper_admin)])
+async def paper_kill_switch_flatten_all(
+    confirm: str = Query(default="", description=f"Type exactly: {FLATTEN_CONFIRM_TEXT}"),
+    note: str = Query(default="", max_length=200),
+) -> dict[str, Any]:
+    """Close every open paper position at the current price and block new entries (D128d). Paper only.
+
+    Each close is booked in the ledger with exit_reason KILL_SWITCH_FLATTEN. Entries stay blocked until the owner
+    clears ``manual_flatten`` (POST /paper/kill-switch/clear).
+    """
+    from app.services.paper_trade import flush_paper_trade_persists, get_paper_trade_engine
+
+    if confirm != FLATTEN_CONFIRM_TEXT:
+        raise HTTPException(status_code=400, detail=f"confirmation required: confirm={FLATTEN_CONFIRM_TEXT}")
+    ks = _kill_switch_or_409()
+    eng = get_paper_trade_engine()
+    if not eng.writer_lock_held:
+        raise HTTPException(status_code=409, detail="this process does not hold the paper writer lock")
+    result = ks.manual_flatten(by="owner_api", note=note)
+    try:
+        result["persisted"] = await flush_paper_trade_persists(eng)
+    except Exception as exc:  # noqa: BLE001
+        result["persist_error"] = str(exc)
+    return result
+
+
+@router.post("/paper/kill-switch/clear", dependencies=[Depends(_require_paper_admin)])
+async def paper_kill_switch_clear(
+    trip: str = Query(..., description="manual_flatten, heartbeat, mismatch or daily_loss_limit"),
+    confirm: str = Query(default="", description=f"Type exactly: {CLEAR_CONFIRM_TEXT}"),
+) -> dict[str, Any]:
+    """The owner clears a latched kill-switch trip so entries can resume (D128d)."""
+    if confirm != CLEAR_CONFIRM_TEXT:
+        raise HTTPException(status_code=400, detail=f"confirmation required: confirm={CLEAR_CONFIRM_TEXT}")
+    ks = _kill_switch_or_409()
+    return {"cleared": ks.clear(trip, by="owner_api"), "tripped": ks.tripped()}
+
+
 @router.get("/alerts")
 async def list_alerts(
     limit: int = Query(default=100, ge=1, le=500),

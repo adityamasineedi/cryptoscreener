@@ -599,10 +599,50 @@ class CalculationOrchestrator:
         self._tasks.append(
             asyncio.create_task(self._paper_loops_heartbeat(paper), name="paper_loops_heartbeat")
         )
+        # Account kill switches (owner ruling D128d): only with KILL_SWITCHES_ENABLED, only in the writer.
+        if bool(getattr(self.settings, "kill_switches_enabled", False)):
+            self._start_kill_switch(paper)
         self._paper_loops_started = True
         names = [name for name, _ in wanted]
         logger.info("paper_loops_started", loops=names)
         return names
+
+    def _start_kill_switch(self, paper: Any) -> Any:
+        """Create the kill switch, attach it to the paper engine and start its 60 s monitor (D128d)."""
+        from app.config import ROOT
+        from app.services.kill_switch import KillSwitch, config_from_settings, set_kill_switch
+        from app.services.paper_trade import _live_price
+
+        ks = KillSwitch(config_from_settings(self.settings),
+                        journal_path=ROOT / "data" / "paper" / "kill_switch_journal.jsonl")
+        ks.attach(paper, price_fn=_live_price)
+        if bool(getattr(self.settings, "paper_passed_watcher_enabled", False)):
+            from app.services.passed_paper_watcher import get_passed_paper_watcher
+
+            # Closed-bar heartbeat: when the passed-book watcher last finished evaluating a closed 1h bar.
+            ks.add_heartbeat_source(
+                "passed_book_last_eval", lambda: (get_passed_paper_watcher().heartbeat() or {}).get("last_eval_at")
+            )
+        paper.kill_switch = ks
+        set_kill_switch(ks)
+        task = asyncio.create_task(self._kill_switch_loop(ks, paper), name="kill_switch_monitor")
+        self._tasks.append(task)
+        self._paper_loop_tasks["kill_switch_monitor"] = task
+        logger.warning("kill_switch_enabled", config=ks.config.to_dict())
+        return ks
+
+    async def _kill_switch_loop(self, ks: Any, paper: Any) -> None:
+        """Every 60 s: heartbeat check (auto-flatten on a stale heartbeat), then persist any flatten."""
+        from app.services.paper_trade import flush_paper_trade_persists
+
+        while self._running:
+            await asyncio.sleep(60.0)
+            try:
+                result = ks.monitor_tick()
+                if result.get("action"):
+                    await flush_paper_trade_persists(paper)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("kill_switch_monitor_failed", error=str(exc))
 
     async def _on_paper_writer_lock(self, paper: Any, conn: Any) -> None:
         """The writer lock arrived after startup: keep its session and start the paper loops."""
