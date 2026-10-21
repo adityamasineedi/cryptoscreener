@@ -9,6 +9,7 @@ against live HEAD b009aca (before kill switches existed):
 SHA-256 of the fixture: fa7045f37c6e551b6ea82ae0896af1538326db6a865eb2289dc061b1bf8a51fd. The scenario drives
 the real engine through 48 hourly bars on three coins (passed-book, experimental and V2.1-A opens, live-mark and
 causal closed-bar exits, gate refusals, latching stops) and records every outcome.
+Re-checked after live moved to b19f731 (P14 + trade alerts): the base output is the same file, same hash.
 """
 
 from __future__ import annotations
