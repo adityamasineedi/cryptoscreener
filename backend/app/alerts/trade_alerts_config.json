@@ -37,7 +37,7 @@
  },
  "rr_decimals": 1,
  "cost": {
-  "_doc": "Round trip = fees on both sides + entry slippage + exit slippage, read from the app's ResearchConfig defaults (taker_fee_rate, entry_slippage_rate, exit_slippage_rate). Skip as SKIPPED_COST when stop distance < multiple x round trip.",
+  "_doc": "Round trip = fees on both sides + entry slippage + exit slippage, read from the app's ResearchConfig defaults (taker_fee_rate, entry_slippage_rate, exit_slippage_rate). Skip as SKIPPED_COST when stop distance < multiple x round trip. A SCREENER signal is also skipped when |TP1 - stop| / signal close is under that same multiple (owner D63). The screener engine itself is not changed.",
   "multiple": 3.0,
   "fee_sides": 2
  },

@@ -288,7 +288,7 @@ def _plan_log(plan: Mapping[str, Any] | None) -> dict[str, Any] | None:
     keys = ("tick", "signal_close", "atr", "zone_capped_by_sl", "zone_lo", "zone_hi", "entry_mid", "stop", "r_unit",
             "targets", "t2_tested", "rr_tested", "rr_raw", "t2_below_min_r", "stop_pct", "leverage",
             "leverage_needed", "leverage_cap_bound", "risk_pct_shown", "round_trip_cost", "stop_frac",
-            "cost_floor_frac", "cost_skip", "rounded")
+            "span_frac", "cost_floor_frac", "cost_band", "cost_skip", "rounded")
     return {k: plan[k] for k in keys}
 
 

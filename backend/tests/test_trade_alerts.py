@@ -233,6 +233,30 @@ def test_cost_skip(tmp_path):
     assert "WOULD SEND" not in (tmp_path / "preview.md").read_text(encoding="utf-8")
 
 
+def test_screener_cost_band_uses_tp1_to_stop(tmp_path):
+    """Owner D63: |TP1 - stop| under 3x round trip rejects a screener signal.
+
+    The stop itself is wide, so the older stop-distance check would let it through.
+    A passed-book signal with the same prices is not a screener row.
+    """
+    c = cfg()
+    tight = sig(source="SCREENER", strategy_id="SCREENER_SETUP", symbol="ETHUSDT",
+                signal_close=100.0, atr=2.0, stop=90.0, tested_target=90.4, target_tested=False)
+    plan, err = build_plan(tight, c)
+    assert err is None and plan["cost_band"] and plan["cost_skip"]
+    assert plan["stop_frac"] > plan["cost_floor_frac"]
+    row = pipe(tmp_path).handle(tight, tight.bar_close)
+    assert row["code"] == "SKIPPED_COST"
+    wide = sig(source="SCREENER", strategy_id="SCREENER_SETUP", symbol="ETHUSDT",
+               signal_close=100.0, atr=2.0, stop=90.0, tested_target=110.0, target_tested=False)
+    wide_plan, wide_err = build_plan(wide, c)
+    assert wide_err is None and wide_plan["cost_band"] is False and wide_plan["cost_skip"] is False
+    other = sig(source="CANDLE12_V2", symbol="ETHUSDT", signal_close=100.0, atr=2.0,
+                stop=90.0, tested_target=90.4)
+    other_plan, other_err = build_plan(other, c)
+    assert other_err == "INVALID_TARGET"
+
+
 def test_late_after_15_minutes(tmp_path):
     p = pipe(tmp_path)
     on_time = sig(signal_bar=T0)

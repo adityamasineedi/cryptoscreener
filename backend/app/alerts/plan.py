@@ -144,7 +144,17 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
     else:
         t2 = float(sig.tested_target)
         tested = bool(sig.target_tested)
-    if (t2 - mid) * sgn <= 0:
+    rt = cfg.round_trip_cost()
+    cost_floor = float(cfg.raw["cost"]["multiple"]) * rt
+    # Screener TP1 is the engine target, not the alert's derived T1. A wide
+    # stop with a TP1 sitting on it still clears the stop-distance check below.
+    span_frac = None
+    if sig.tested_target is not None and close > 0:
+        span_frac = abs(float(sig.tested_target) - stop) / close
+    cost_band = bool(
+        sig.source == "SCREENER" and span_frac is not None and span_frac + 1e-15 < cost_floor
+    )
+    if (t2 - mid) * sgn <= 0 and not cost_band:
         return None, INVALID_TARGET
     t1 = mid + sgn * float(tg["t1_r"]) * r_unit
     t3 = t2 + sgn * float(tg["t3_r_beyond_t2"]) * r_unit
@@ -162,8 +172,6 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
     # Sized by risk. When the cap binds, the full account at the cap risks less than risk_pct: show that.
     real_risk = lev * stop_pct if cap_bound else risk_pct
 
-    rt = cfg.round_trip_cost()
-    cost_floor = float(cfg.raw["cost"]["multiple"]) * rt
     stop_frac = r_unit / mid
 
     zone_lo, zone_hi = (far, close) if long else (close, far)
@@ -189,8 +197,10 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
         "risk_pct_shown": real_risk,
         "round_trip_cost": rt,
         "stop_frac": stop_frac,
+        "span_frac": span_frac,
         "cost_floor_frac": cost_floor,
-        "cost_skip": stop_frac < cost_floor,
+        "cost_band": cost_band,
+        "cost_skip": stop_frac < cost_floor or cost_band,
         "rounded": {
             "zone_a": fmt_price(close, tick),
             "zone_b": fmt_price(far, tick),
