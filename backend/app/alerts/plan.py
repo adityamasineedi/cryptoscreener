@@ -187,6 +187,12 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
     real_risk = lev * stop_pct if cap_bound else risk_pct
 
     stop_frac = r_unit / mid
+    # Owner ruling D145 item 3: entry-to-stop distance against the D144 real costs, measured from the
+    # zone edge nearest the stop (default) or the zone mid (config cost_stop_entry_ref).
+    entry_ref_kind = cfg.cost_stop_entry_ref
+    entry_ref = far if entry_ref_kind == "near_edge" else mid
+    cost_stop_frac = (entry_ref - stop) * sgn / entry_ref
+    cost_stop_floor = cfg.cost_stop_floor()
 
     zone_lo, zone_hi = (far, close) if long else (close, far)
     plan = {
@@ -215,6 +221,12 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
         "cost_floor_frac": cost_floor,
         "cost_band": cost_band,
         "cost_skip": stop_frac < cost_floor or cost_band,
+        "cost_stop_entry_ref": entry_ref_kind,
+        "cost_stop_entry_price": entry_ref,
+        "cost_stop_frac": cost_stop_frac,
+        "cost_stop_round_trip": cfg.cost_stop_round_trip(),
+        "cost_stop_floor_frac": cost_stop_floor,
+        "cost_stop_skip": cost_stop_frac + 1e-15 < cost_stop_floor,
         "rounded": {
             "zone_a": fmt_price(close, tick),
             "zone_b": fmt_price(far, tick),
@@ -228,8 +240,17 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
 
 
 # --- text -------------------------------------------------------------------------------------
+NOT_OPENED_MARK = "❌ NOT OPENED"
+
+
 def render_alert(
-    sig: Signal, plan: Mapping[str, Any], status: str, cfg: AlertConfig, *, sent_at: datetime | None = None
+    sig: Signal,
+    plan: Mapping[str, Any],
+    status: str,
+    cfg: AlertConfig,
+    *,
+    sent_at: datetime | None = None,
+    not_opened_reason: str | None = None,
 ) -> str:
     rd = plan["rounded"]
     if sig.side == "LONG":
@@ -256,6 +277,9 @@ def render_alert(
     if sent_at is not None and cfg.is_forward_runner(sig.source):
         # Owner ruling D51b: forward-runner records land after the bar close; show how long after.
         lines.append(f"⏱ signal +{int((utc(sent_at) - sig.bar_close).total_seconds() // 60)}m")
+    if not_opened_reason is not None:
+        # Owner ruling D145 (send_not_opened true): the first line after the D117 line.
+        lines.insert(0, f"{NOT_OPENED_MARK}: {not_opened_reason}")
     return with_observation_prefix("\n".join(lines), status)
 
 

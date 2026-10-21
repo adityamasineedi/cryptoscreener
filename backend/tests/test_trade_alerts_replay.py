@@ -71,7 +71,7 @@ def _positions(eng: PaperTradeEngine) -> list[dict]:
     return sorted(out, key=lambda d: (d["symbol"], d["source_candle_ts"] or ""))
 
 
-def _run(tmp: Path, monkeypatch, *, alerts_on: bool, detail: bool = False) -> dict:
+def _run(tmp: Path, monkeypatch, *, alerts_on: bool, detail: bool = False, send_not_opened: bool = False) -> dict:
     monkeypatch.setattr("app.services.passed_paper_watcher.evaluate_combination_at_bar", _fake_eval)
     journal = tmp / "decision_journal.jsonl"
     decision_journal.configure(journal, signal_detail=detail)
@@ -84,6 +84,7 @@ def _run(tmp: Path, monkeypatch, *, alerts_on: bool, detail: bool = False) -> di
     if alerts_on:
         raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         raw.update(enabled=True, dry_run=False, allow_killed=True)  # the passed book is KILLED: allow it here
+        raw["send_not_opened"] = send_not_opened
         cfg = AlertConfig(raw, ticks={"BTCUSDT": 0.1}, round_trip_cost=0.0001)
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -151,10 +152,33 @@ def test_paper_decisions_identical_with_alerts_on_and_off(tmp_path, monkeypatch)
 
 
 @pytest.mark.usefixtures("passed_book_open")
-def test_with_signal_detail_not_opened_signals_alert_and_decisions_stay_identical(tmp_path, monkeypatch):
-    """P14 journal detail on: alerts on/off still change nothing, and not-opened signals become alerts."""
+def test_with_signal_detail_not_opened_signals_are_skipped_and_decisions_stay_identical(tmp_path, monkeypatch):
+    """P14 journal detail on: alerts on/off still change nothing. Owner ruling D145: only signals the book
+    opened are sent; not-opened ones are NOT_OPENED skips carrying the paper reason, never tracked."""
     off = _run(tmp_path / "off", monkeypatch, alerts_on=False, detail=True)
     on = _run(tmp_path / "on", monkeypatch, alerts_on=True, detail=True)
+    for key in ("decisions", "journal", "positions", "opened_count", "last_skip"):
+        assert on[key] == off[key], key
+    alerts = [json.loads(x) for x in on["alerts"]]
+    sent = [a for a in alerts if a["kind"] == "ALERT" and a["code"] == "SENT"]
+    assert sent and {a["paper_outcome"] for a in sent} == {"opened"}
+    skipped = [a for a in alerts if a["kind"] == "SKIP" and a["code"] == "NOT_OPENED"]
+    assert skipped and all(a["reason"] == a["paper_skip_reason"] and a["reason"] for a in skipped)
+    assert {a["paper_outcome"] for a in skipped} == {"not_opened"}
+    assert all("NOT OPENED" not in m["text"] for m in on["sent"])
+    replies = {a["alert_id"] for a in alerts if a["kind"] == "FOLLOWUP"}
+    assert not replies & {a["alert_id"] for a in skipped}
+    lines = (tmp_path / "on" / "decision_journal.jsonl").read_text(encoding="utf-8").splitlines()
+    for a in sent + skipped:
+        row = json.loads(lines[a["journal_ref"]["line"] - 1])
+        assert row["outcome"] == a["paper_outcome"] and row["stop_price"] == pytest.approx(a["plan"]["stop"])
+
+
+@pytest.mark.usefixtures("passed_book_open")
+def test_with_signal_detail_send_not_opened_sends_them_marked(tmp_path, monkeypatch):
+    """send_not_opened=true: the not-opened signals are sent, the line after the D117 line says why."""
+    off = _run(tmp_path / "off", monkeypatch, alerts_on=False, detail=True)
+    on = _run(tmp_path / "on", monkeypatch, alerts_on=True, detail=True, send_not_opened=True)
     for key in ("decisions", "journal", "positions", "opened_count", "last_skip"):
         assert on[key] == off[key], key
     alerts = [json.loads(x) for x in on["alerts"]]
@@ -163,10 +187,12 @@ def test_with_signal_detail_not_opened_signals_alert_and_decisions_stay_identica
     assert not_opened and all(a["paper_skip_reason"] for a in not_opened)
     assert {a["paper_outcome"] for a in sent} == {"opened", "not_opened"}
     assert not any(a["code"] == "NOT_OPENED" for a in alerts)
-    lines = (tmp_path / "on" / "decision_journal.jsonl").read_text(encoding="utf-8").splitlines()
     for a in sent:
-        row = json.loads(lines[a["journal_ref"]["line"] - 1])
-        assert row["outcome"] == a["paper_outcome"] and row["stop_price"] == pytest.approx(a["plan"]["stop"])
+        second = a["text"].splitlines()[1]
+        if a["paper_outcome"] == "not_opened":
+            assert second == f"❌ NOT OPENED: {a['paper_skip_reason']}"
+        else:
+            assert "NOT OPENED" not in a["text"]
 
 
 def test_no_decision_path_imports_the_alert_package():

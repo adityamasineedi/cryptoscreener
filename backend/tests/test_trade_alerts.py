@@ -43,7 +43,9 @@ def cfg(round_trip: float | None = 0.0018, **over) -> AlertConfig:
 def sig(**kw) -> Signal:
     base = dict(source="CANDLE12_V2", strategy_id="CANDLE12_V2", symbol="BTCUSDT", side="LONG", timeframe="1h",
                 signal_bar=T0, decided_at=T0 + timedelta(hours=1, minutes=2), stop=98000.0, tested_target=104500.0,
-                signal_close=100000.0, atr=1000.0, journal_ref={"file": "decision_journal.jsonl", "line": 7})
+                signal_close=100000.0, atr=1000.0, journal_ref={"file": "decision_journal.jsonl", "line": 7},
+                # Owner ruling D145: a paper-book signal alerts only when its book opened it.
+                extra={"live_outcome": "opened"})
     base.update(kw)
     return Signal(**base)
 
@@ -590,6 +592,7 @@ def test_golden_screener_alert(tmp_path):
 
 
 GOLDEN_NOT_OPENED = """⚠️ UNPROVEN, for observation only, not for trading
+❌ NOT OPENED: sticky_bos_skip
 ✅ INTRADAY TRADE - ETH
 🏮 TYPE - LONG
 
@@ -603,7 +606,9 @@ GOLDEN_NOT_OPENED = """⚠️ UNPROVEN, for observation only, not for trading
 ⏱ Valid 3 bars · Not financial advice"""
 
 
-def test_golden_not_opened_alert_keeps_the_skip_reason(tmp_path):
+def test_golden_not_opened_signal_is_a_skip_unless_send_not_opened(tmp_path):
+    """Owner ruling D145: a V1 signal the book did not open is a NOT_OPENED skip carrying the paper reason;
+    send_not_opened=true sends it, marked on the line after the D117 line."""
     jrow = {"book": "COMBO_02_V1", "event": "signal", "outcome": "not_opened", "reason": "sticky_bos_skip",
             "source": "V1_PAPER_WATCHER", "strategy_id": "COMBO_02_V1", "symbol": "ETHUSDT", "direction": "LONG",
             "timeframe": "1h", "setup_bar_time": T0.isoformat(), "stop_price": 2450.0, "tp1": 2612.5,
@@ -612,10 +617,15 @@ def test_golden_not_opened_alert_keeps_the_skip_reason(tmp_path):
     data = MemoryData({("ETHUSDT", "1h"): bars_})
     (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=9, data=data, cfg=cfg()))
     assert item.atr == pytest.approx(25.0)
-    row = pipe(tmp_path, data=data).handle(item, item.decided_at)
-    assert row["code"] == "DRY_RUN" and row["kind"] == "ALERT" and row["text"] == GOLDEN_NOT_OPENED
+    row = pipe(tmp_path / "a", data=data).handle(item, item.decided_at)
+    assert (row["kind"], row["code"], row["reason"]) == ("SKIP", "NOT_OPENED", "sticky_bos_skip")
+    assert row["flags"]["not_opened"] == "sticky_bos_skip"
     assert row["paper_outcome"] == "not_opened" and row["paper_skip_reason"] == "sticky_bos_skip"
-    logged = rows(tmp_path)[0]
+    assert "WOULD SEND" not in (tmp_path / "a" / "preview.md").read_text(encoding="utf-8")
+    (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=9, data=data, cfg=cfg()))
+    row = pipe(tmp_path / "b", cfg(send_not_opened=True), data=data).handle(item, item.decided_at)
+    assert row["code"] == "DRY_RUN" and row["kind"] == "ALERT" and row["text"] == GOLDEN_NOT_OPENED
+    logged = rows(tmp_path / "b")[0]
     assert logged["paper_skip_reason"] == "sticky_bos_skip" and logged["journal_ref"]["line"] == 9
 
 
@@ -868,3 +878,274 @@ def test_d120_candle12_v2_journal_rows_are_not_a_source():
     ]
     lines = [(i, json.dumps(r)) for i, r in enumerate(rows_)]
     assert list(journal_items(lines, first_line_no=1, data=MemoryData(), cfg=AlertConfig())) == []
+
+
+# --- owner ruling D145: alert only what the paper book opened; entry-to-stop cost filter ------------
+SOL_TICKS = dict(TICKS, SOLUSDT=0.01)
+
+
+def shipped(**over) -> AlertConfig:
+    """The shipped config, status map and cost model (ResearchConfig round trip), plus the test ticks."""
+    raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    raw.update(over)
+    return AlertConfig(raw, ticks=SOL_TICKS)
+
+
+def _mock_sender(posted: list):
+    def handler(request: httpx.Request) -> httpx.Response:
+        posted.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 500 + len(posted)}})
+
+    return ReplyingTelegramSender(bot_token="t", chat_id="123456789", timeout=1.0,
+                                  client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def _sol_2026_10_21_17h(outcome="not_opened", reason="position_open", strategy_id="COMBO_02_V1") -> Signal:
+    """The second V1 SOL alert SENT on 2026-10-21 (live alerts.jsonl line 8, journal line 10128): bar 17:00 UTC,
+    entry 108.54-108.12, SL 107.70; the journal row says not_opened / position_open (V1 already held SOL)."""
+    extra = {"engine_values": "journal", "live_outcome": outcome, "market_source": "ohlcv"}
+    if reason:
+        extra["skip_reason"] = reason
+    return Signal(source="COMBO_02_V1", strategy_id=strategy_id, symbol="SOLUSDT", side="LONG", timeframe="1h",
+                  signal_bar="2026-10-21T17:00:00+00:00", decided_at="2026-10-21T18:00:15.479720+00:00",
+                  stop=107.69983550980047, tested_target=112.73, signal_close=108.54, atr=0.9008224336387686,
+                  journal_ref={"file": "decision_journal.jsonl", "line": 10128}, extra=extra)
+
+
+SOL_SENT_AT = datetime(2026, 10, 21, 18, 0, 36, 937775, tzinfo=timezone.utc)
+
+
+def test_d145_shipped_defaults():
+    raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    assert raw["send_not_opened"] is False and raw["cost_stop_entry_ref"] == "near_edge"
+    assert raw["cost_stop"]["taker_fee_rate"] == 0.0005 and raw["cost_stop"]["slippage_rate"] == 0.0002
+    assert raw["cost_stop"]["multiple"] == 3.0 and raw["cost_stop"]["fee_sides"] == 2
+    assert raw["paper_book_sources"] == ["COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3", "PASSED_BOOK"]
+    assert raw["no_paper_outcome_sources"] == ["SCREENER"]
+    c = AlertConfig()
+    assert not c.send_not_opened and c.cost_stop_entry_ref == "near_edge"
+    assert c.cost_stop_round_trip() == pytest.approx(0.0014) and c.cost_stop_floor() == pytest.approx(0.0042)
+    assert "mid" in raw["_cost_stop_entry_ref_doc"] and "108.12" in raw["_cost_stop_entry_ref_doc"]
+    # The older stop-distance check keeps the ResearchConfig round trip (unchanged).
+    assert raw["cost"]["multiple"] == 3.0 and raw["cost"]["fee_sides"] == 2
+
+
+def test_d145_older_config_copy_without_the_keys_gets_the_same_defaults():
+    raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    for k in ("send_not_opened", "cost_stop", "cost_stop_entry_ref", "paper_book_sources", "no_paper_outcome_sources"):
+        raw.pop(k)
+    c = AlertConfig(raw)
+    assert not c.send_not_opened and c.cost_stop_entry_ref == "near_edge"
+    assert c.cost_stop_floor() == pytest.approx(0.0042)
+    assert c.has_paper_outcome("COMBO_02_V1", None) and not c.has_paper_outcome("SCREENER", "not_opened")
+    # Only an explicit true sends not-opened signals.
+    assert not AlertConfig(dict(raw, send_not_opened="true")).send_not_opened
+
+
+def test_d145_unknown_entry_ref_fails_at_load():
+    with pytest.raises(ValueError, match="cost_stop_entry_ref"):
+        cfg(cost_stop_entry_ref="edge")
+
+
+def test_d145_golden_a_second_sol_alert_is_not_sent_by_default(tmp_path):
+    """(a) The 2026-10-21 17:00 SOL V1 alert, replayed in live mode (mock transport): nothing is posted."""
+    posted: list = []
+    p = pipe(tmp_path, shipped(enabled=True, dry_run=False), sender=_mock_sender(posted))
+    assert p.delivering
+    s = _sol_2026_10_21_17h()
+    row = p.handle(s, SOL_SENT_AT)
+    assert (row["kind"], row["code"], row["reason"]) == ("SKIP", "NOT_OPENED", "position_open")
+    assert row["paper_outcome"] == "not_opened" and row["paper_skip_reason"] == "position_open"
+    # Its stop is also too tight under near_edge: both rules flag it, NOT_OPENED comes first.
+    assert row["flags"]["not_opened"] == "position_open" and row["flags"]["cost_stop"] is True
+    assert row["flags"]["cost"] is False  # the old mid-based check let it through (it was SENT)
+    assert posted == [] and p.state["trackers"] == {} and p.state["sent_times"] == []
+    assert "telegram_message_id" not in row
+    # Same prices as the alert that was sent.
+    assert row["plan"]["rounded"]["zone_a"] == "108.54" and row["plan"]["rounded"]["zone_b"] == "108.12"
+    assert row["plan"]["rounded"]["sl"] == "107.70"
+
+
+def test_d145_golden_a_forced_opened_sol_is_cost_stop_under_near_edge_not_mid(tmp_path):
+    s = _sol_2026_10_21_17h(outcome="opened", reason="")
+    near, _ = build_plan(s, shipped())
+    # Near edge 108.12: (108.1199 - 107.6998) / 108.1199 = 0.389% < 3 x 0.14% = 0.42%.
+    assert near["cost_stop_entry_ref"] == "near_edge" and near["cost_stop_entry_price"] == pytest.approx(108.11991775)
+    assert near["cost_stop_frac"] == pytest.approx(0.0038854, abs=1e-6) and near["cost_stop_skip"]
+    assert near["cost_stop_floor_frac"] == pytest.approx(0.0042) and not near["cost_skip"]
+    row = pipe(tmp_path / "near", shipped()).handle(s, SOL_SENT_AT)
+    assert (row["kind"], row["code"]) == ("SKIP", "SKIPPED_COST_STOP")
+    assert row["flags"]["not_opened"] is None and row["flags"]["cost"] is False
+    # Mid 108.33: 0.58% >= 0.42%: not skipped, the alert goes out as before.
+    s = _sol_2026_10_21_17h(outcome="opened", reason="")
+    mid, _ = build_plan(s, shipped(cost_stop_entry_ref="mid"))
+    assert mid["cost_stop_entry_price"] == pytest.approx(108.32995888)
+    assert mid["cost_stop_frac"] == pytest.approx(0.0058167, abs=1e-6) and not mid["cost_stop_skip"]
+    row = pipe(tmp_path / "mid", shipped(cost_stop_entry_ref="mid")).handle(s, SOL_SENT_AT)
+    assert (row["kind"], row["code"]) == ("ALERT", "DRY_RUN")
+    assert row["text"].split("\n")[:2] == [D117_LINE, "✅ INTRADAY TRADE - SOL"]
+    assert "👉 ENTRY - $108.54 - $108.12" in row["text"] and "👉 SL - $107.70" in row["text"]
+
+
+def test_d145_cost_stop_boundary_and_short_side():
+    c = cfg()
+    floor = c.cost_stop_floor()
+    # LONG: zone 100 down to 99.8 (atr 0.4); a stop exactly 0.42% under the near edge is not skipped (not "<").
+    stop = 99.8 * (1 - floor)
+    at, _ = build_plan(sig(symbol="ETHUSDT", signal_close=100.0, atr=0.4, stop=stop, tested_target=110.0), c)
+    assert not at["zone_capped_by_sl"] and at["cost_stop_entry_price"] == pytest.approx(99.8)
+    assert at["cost_stop_frac"] == pytest.approx(floor) and not at["cost_stop_skip"]
+    under, _ = build_plan(sig(symbol="ETHUSDT", signal_close=100.0, atr=0.4, stop=stop + 0.01, tested_target=110.0), c)
+    assert under["cost_stop_skip"]
+    # SHORT: the near edge is the zone top (signal close + 0.5 ATR), nearest the stop above.
+    short, _ = build_plan(sig(symbol="ETHUSDT", side="SHORT", signal_close=100.0, atr=0.6, stop=100.7,
+                              tested_target=95.0), c)
+    assert short["cost_stop_entry_price"] == pytest.approx(100.3) and short["zone_hi"] == pytest.approx(100.3)
+    assert short["cost_stop_frac"] == pytest.approx(0.4 / 100.3) and short["cost_stop_skip"]
+
+
+GOLDEN_V1_ETH_OPENED = """⚠️ UNPROVEN, for observation only, not for trading
+✅ INTRADAY TRADE - ETH
+🏮 TYPE - LONG
+
+👉 ENTRY - $2500.00 - $2487.50
+👉 TARGET - $2537.50, $2612.50 (tested), $2656.25 & $2700.00+
+👉 SL - $2450.00
+
+🚨 LEVERAGE - 1x
+📊 R:R - 1:2.7 | Risk 1% of account
+🧪 PAPER · COMBO_02_V1 · 1h
+⏱ Valid 3 bars · Not financial advice"""
+
+
+def _v1_eth(outcome="opened", reason=None) -> Signal:
+    extra = {"live_outcome": outcome, "engine_values": "journal"}
+    if reason:
+        extra["skip_reason"] = reason
+    return sig(source="COMBO_02_V1", strategy_id="COMBO_02_V1", symbol="ETHUSDT", signal_close=2500.0, atr=25.0,
+               stop=2450.0, tested_target=2612.5, extra=extra)
+
+
+def test_d145_golden_b_opened_v1_eth_wide_stop_is_sent(tmp_path):
+    posted: list = []
+    p = pipe(tmp_path, shipped(enabled=True, dry_run=False), sender=_mock_sender(posted))
+    s = _v1_eth()
+    row = p.handle(s, s.bar_close + timedelta(minutes=1))
+    assert (row["kind"], row["code"]) == ("ALERT", "SENT") and row["flags"]["not_opened"] is None
+    assert row["flags"]["cost_stop"] is False and row["plan"]["cost_stop_frac"] == pytest.approx(37.5 / 2487.5)
+    assert [b["text"] for b in posted] == [GOLDEN_V1_ETH_OPENED]
+    assert posted[0]["text"].split("\n")[0] == D117_LINE
+    assert s.alert_id in p.state["trackers"] and p.state["trackers"][s.alert_id]["sent"] is True
+
+
+GOLDEN_NOT_OPENED_POSITION_OPEN = D117_LINE + "\n❌ NOT OPENED: position_open\n" + GOLDEN_V1_ETH_OPENED.split("\n", 1)[1]
+
+
+def test_d145_golden_c_send_not_opened_marks_the_line_after_unproven(tmp_path):
+    posted: list = []
+    p = pipe(tmp_path, shipped(enabled=True, dry_run=False, send_not_opened=True), sender=_mock_sender(posted))
+    s = _v1_eth(outcome="not_opened", reason="position_open")
+    row = p.handle(s, s.bar_close + timedelta(minutes=1))
+    assert (row["kind"], row["code"]) == ("ALERT", "SENT") and row["flags"]["not_opened"] == "position_open"
+    assert [b["text"] for b in posted] == [GOLDEN_NOT_OPENED_POSITION_OPEN]
+    lines = posted[0]["text"].split("\n")
+    assert lines[0] == D117_LINE and lines[1] == "❌ NOT OPENED: position_open"
+    assert lines[2] == "✅ INTRADAY TRADE - ETH" and posted[0]["text"].count("NOT OPENED") == 1
+    # The real SOL signal stays unsent with send_not_opened: its stop is under the near-edge cost floor.
+    sol = p.handle(_sol_2026_10_21_17h(), SOL_SENT_AT)
+    assert sol["code"] == "SKIPPED_COST_STOP" and len(posted) == 1
+    # A FORWARD-PASSED source has no D117 line: the mark is then the first line.
+    plan, _ = build_plan(s, cfg())
+    assert render_alert(s, plan, "FORWARD-PASSED", cfg(), not_opened_reason="x").startswith("❌ NOT OPENED: x\n✅")
+
+
+def test_d145_not_opened_reason_falls_back_to_outcome_and_missing_outcome_is_not_opened(tmp_path):
+    p = pipe(tmp_path)
+    missed = _v1_eth(outcome="missed")
+    assert p.handle(missed, missed.bar_close)["reason"] == "missed"
+    for source in ("COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3"):
+        s = sig(source=source, strategy_id=f"N{source}", symbol="ETHUSDT", extra={})
+        row = p.handle(s, s.bar_close)
+        assert (row["code"], row["reason"]) == ("NOT_OPENED", "no_paper_outcome"), source
+    # Killed and late come first (a missed passed-book row stays LATE).
+    late = _v1_eth(outcome="not_opened", reason="position_open")
+    late.signal_bar = late.signal_bar + timedelta(hours=1)
+    assert p.handle(late, late.bar_close + timedelta(minutes=16))["code"] == "LATE"
+    killed = sig(source="PASSED_BOOK", strategy_id="COMBO_01", extra={"live_outcome": "not_opened"})
+    assert p.handle(killed, killed.bar_close)["code"] == "SUPPRESSED_KILLED"
+
+
+def test_d145_golden_d_screener_is_not_affected(tmp_path):
+    c = shipped()
+    c.ticks["IOSTUSDT"] = 0.0001
+    data = MemoryData({("IOSTUSDT", "15m"): _m15("IOSTUSDT", datetime(2026, 10, 21, 5, 0, tzinfo=timezone.utc))})
+    (item,) = list(journal_items([(0, json.dumps(SCREENER_ROW))], first_line_no=42, data=data, cfg=c))
+    assert item.extra["live_outcome"] == "screener_signal" and not c.has_paper_outcome("SCREENER", "screener_signal")
+    row = pipe(tmp_path / "a", c, data=data).handle(item, item.decided_at)
+    assert row["code"] == "DRY_RUN" and row["text"] == GOLDEN_SCREENER and row["flags"]["not_opened"] is None
+    # Even a screener signal carrying a non-opened outcome is not a NOT_OPENED skip.
+    odd = sig(source="SCREENER", strategy_id="SCREENER_SETUP", symbol="ETHUSDT", target_tested=False,
+              extra={"live_outcome": "not_opened", "skip_reason": "x"})
+    assert pipe(tmp_path / "b", c).handle(odd, odd.bar_close)["code"] == "DRY_RUN"
+
+
+def test_d145_skipped_signals_are_not_tracked(tmp_path):
+    # Live: no tracker and no follow-up for a NOT_OPENED or a SKIPPED_COST_STOP skip.
+    posted: list = []
+    t = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    data = MemoryData({("SOLUSDT", "1h"): [bar(t, 108.3, 108.4, 107.0, 107.2)]})
+    p = pipe(tmp_path / "live", shipped(enabled=True, dry_run=False), data=data, sender=_mock_sender(posted))
+    assert p.handle(_sol_2026_10_21_17h(), SOL_SENT_AT)["code"] == "NOT_OPENED"
+    forced = _sol_2026_10_21_17h(outcome="opened", reason="", strategy_id="COMBO_02_V1_FORCED")
+    assert p.handle(forced, SOL_SENT_AT)["code"] == "SKIPPED_COST_STOP"
+    assert p.state["trackers"] == {} and p.update_trackers(t + timedelta(hours=2)) == 0 and posted == []
+    # Dry run with track_suppressed_in_dry_run false: none either.
+    q = pipe(tmp_path / "dry", shipped(preview={"render_suppressed": True, "track_suppressed_in_dry_run": False}))
+    assert q.handle(_sol_2026_10_21_17h(), SOL_SENT_AT)["code"] == "NOT_OPENED" and q.state["trackers"] == {}
+    # The existing dry-run preview tracking (default true) keeps a not-sent tracker, marked not sent.
+    r = pipe(tmp_path / "dry2", shipped())
+    r.handle(_sol_2026_10_21_17h(), SOL_SENT_AT)
+    assert [(v["sent"], v["not_sent_code"]) for v in r.state["trackers"].values()] == [(False, "NOT_OPENED")]
+
+
+def _fwd3_run(trades):
+    return {"run_at": "2026-10-16T12:20:12+00:00", "row_hash": "abc", "trades": trades,
+            "candidates": [{"signal_time": "2026-10-16T11:00:00+00:00", "fate": "PENDING_NEXT_BAR",
+                            "close": 2476.41, "invalidation": 2403.82, "atr": 19.956}]}
+
+
+@pytest.mark.parametrize("trades,outcome", [
+    ([], "opened"),
+    # An open trade (exit_time = the run's last closed bar) blocks the pending candidate in the contract walk.
+    ([{"signal_time": "2026-10-15T20:00:00+00:00", "exit_time": "2026-10-16T11:00:00+00:00", "outcome": "OPEN"}],
+     "not_opened"),
+    ([{"signal_time": "2026-10-15T20:00:00+00:00", "exit_time": "2026-10-16T09:00:00+00:00", "outcome": "SL"}],
+     "opened"),
+])
+def test_d145_fwd3_pending_candidate_outcome(tmp_path, trades, outcome):
+    p = tmp_path / "runs.jsonl"
+    p.write_text(json.dumps(_fwd3_run(trades)) + "\n", encoding="utf-8")
+    (s,), _ = fwd3_items(p, after_line=0, data=MemoryData(), cfg=cfg(), seen=set())
+    assert s.extra["live_outcome"] == outcome and s.extra["fwd3_fate"] == "PENDING_NEXT_BAR"
+    row = pipe(tmp_path / "out").handle(s, s.decided_at)
+    if outcome == "opened":
+        assert row["code"] == "DRY_RUN"
+    else:
+        assert (row["code"], row["reason"]) == ("NOT_OPENED", "open_trade")
+
+
+def test_d145_fwd1_trades_and_backfilled_positions_are_opened(tmp_path):
+    from app.alerts.sources import paper_trade_items
+
+    run = {"seq": 5, "kind": "RUN", "written_utc": "2026-10-20T04:10:06+00:00", "hash": "h", "payload": {"symbols": {
+        "ETHUSDT": {"open_position": {"trade_id": "e1", "entry_time": "2026-10-20T04:00:00+00:00", "stop_price": 2450.0}},
+    }}}
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(json.dumps(run) + "\n", encoding="utf-8")
+    (s,), _ = fwd1_items(ledger, after_seq=-1, data=MemoryData(), cfg=cfg(), seen=set(), enrich=False)
+    assert s.extra["live_outcome"] == "opened"
+    rows_ = [{"id": "p9", "symbol": "ETHUSDT", "side": "LONG", "timeframe": "1h", "source_candle_ts": T0.isoformat(),
+              "opened_at": (T0 + timedelta(hours=1)).isoformat(), "stop_price": 2450.0, "tp1_price": 2612.5,
+              "signal_snippet": {"source": "V1_PAPER_WATCHER"}}]
+    (b,) = paper_trade_items(rows_, data=MemoryData(), cfg=cfg())
+    assert b.source == "COMBO_02_V1" and b.extra["live_outcome"] == "opened"

@@ -41,6 +41,15 @@
   "multiple": 3.0,
   "fee_sides": 2
  },
+ "cost_stop": {
+  "_doc": "Owner ruling D145 item 3: entry-to-stop cost filter, in addition to the cost check above and the screener TP1-to-stop band (both kept). Skip as SKIPPED_COST_STOP when |entry_ref - stop| / entry_ref < multiple x round trip, round trip = fee_sides x (taker_fee_rate + slippage_rate) = 2 x (0.0005 + 0.0002) = 0.0014 (the D144 real costs), cutoff 0.42%. These numbers are the alert's own, not the ResearchConfig defaults the 'cost' section reads.",
+  "taker_fee_rate": 0.0005,
+  "slippage_rate": 0.0002,
+  "fee_sides": 2,
+  "multiple": 3.0
+ },
+ "cost_stop_entry_ref": "near_edge",
+ "_cost_stop_entry_ref_doc": "Entry price the D145 entry-to-stop filter measures from: 'near_edge' = the entry-zone edge nearest the stop (the smallest distance, the worst fill inside the zone), or 'mid' = the entry-zone mid. Default near_edge. Conflict in the owner's text (D145): it says 'entry mid', but also says the second SOL alert of 2026-10-21 (bar 17:00 UTC, zone 108.54-108.12, SL 107.70, stop about 0.4%) must be skipped. At the mid (108.33) that stop is 0.58% away, above the 0.42% cutoff, so 'mid' would NOT skip it; at the near edge (108.12) it is 0.39%, below the cutoff, so 'near_edge' does. near_edge is the more conservative reading and matches the owner's stated expectation; set 'mid' to follow the literal text.",
  "validity_bars": 3,
  "late_minutes": 15,
  "forward_runner": {
@@ -60,7 +69,11 @@
  "defer_missing_engine_values_seconds": 300,
  "backfill_hours": 24,
  "journal_alert_outcomes": ["opened", "not_opened"],
- "_journal_alert_outcomes_doc": "P14 (owner ruling D51c): not-opened signals alert too when the journal row carries the engine stop and TP1 (DECISION_JOURNAL_SIGNAL_DETAIL on); without them they stay NOT_OPENED skips.",
+ "_journal_alert_outcomes_doc": "P14 (owner ruling D51c): not-opened journal signals that carry the engine stop and TP1 (DECISION_JOURNAL_SIGNAL_DETAIL on) are read as signals; without them they stay NOT_OPENED skips. Since D145 a read not-opened signal is still not sent unless send_not_opened is true.",
+ "send_not_opened": false,
+ "_send_not_opened_doc": "Owner ruling D145 item 2: a paper-book signal (paper_book_sources, or any non-screener signal that carries a paper outcome) alerts only if the book OPENED it. Any other paper outcome is a NOT_OPENED skip carrying the paper reason, never sent and not tracked (the dry-run preview tracking of not-sent signals aside). true sends them anyway, with the line '❌ NOT OPENED: <reason>' right after the UNPROVEN line. Screener signals have no paper outcome and are not affected.",
+ "paper_book_sources": ["COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3", "PASSED_BOOK"],
+ "no_paper_outcome_sources": ["SCREENER"],
  "symbol_exclusions": {
   "_doc": "Owner rulings D108/D120: BTC is for non-directional strategies only, so there is no directional BTC alert. A signal from a listed source on a listed symbol is logged as an EXCLUDED_SYMBOL skip with this reason and is never sent, rendered or tracked. Alerting only: the forward tests and live paper are not touched. CANDLE12_V2 (BTC-only) is dropped from the sources entirely (D120).",
   "reason": "D108/D120 BTC non-directional only",

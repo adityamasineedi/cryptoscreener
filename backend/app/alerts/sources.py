@@ -14,6 +14,13 @@ Sources:
   contract's fixed R multiple off the signal close (config ``sources.lcsc_fwd3_target_r``);
 - backfill only: paper positions opened before the journal existed (``paper_trades``), with no journal row.
 
+Every paper-book signal carries its paper outcome in ``extra["live_outcome"]`` (owner ruling D145: only
+"opened" alerts, see ``pipeline.not_opened_reason``). FWD-1 ledger trades and backfilled positions are
+"opened". FWD-3: TAKEN is "opened"; PENDING_NEXT_BAR (the run's last closed bar, decided at the next bar's
+open) is "opened" unless a trade of the same run is still open at that bar, which blocks it in the
+contract's walk (forward.py ``walk_recorded``: the pending check comes before the open-trade check), then
+it is "not_opened", reason "open_trade". The screener has no paper outcome.
+
 Signal close and ATR always come from the closed bars of the signal timeframe (Postgres ``ohlcv``),
 falling back to values carried by the record when the bar is missing.
 """
@@ -259,6 +266,7 @@ def fwd1_items(
                     signal_bar=utc(t["entry_time"]) - timedelta(hours=4), decided_at=row["written_utc"],
                     journal_ref={"file": "book16_fwd1/ledger.jsonl", "seq": seq, "hash": str(row.get("hash"))[:16]},
                     stop=_f(t.get("stop_price")), tested_target=None, position_id=tid,
+                    extra={"live_outcome": "opened"},  # a ledger trade with an entry time: FWD-1 opened it
                 )
                 if enrich:
                     enrich_market(sig, data, cfg)
@@ -304,11 +312,35 @@ def fwd3_items(
             if enrich:
                 enrich_market(sig, data, cfg)
             fate = str(c.get("fate") or "")
+            sig.extra["fwd3_fate"] = fate
             if fate in FWD3_ALERT_FATES:
+                if fate == "PENDING_NEXT_BAR" and _fwd3_open_trade_blocks(row, st):
+                    sig.extra.update(live_outcome="not_opened", skip_reason="open_trade")
+                else:
+                    sig.extra["live_outcome"] = "opened"
                 out.append(sig)
             else:
                 out.append(SkipRecord("NOT_OPENED", sig, fate))
     return out, len(lines)
+
+
+def _fwd3_open_trade_blocks(row: Mapping[str, Any], signal_time: str) -> bool:
+    """True when a trade of this run, entered before the pending signal, has not exited before its bar.
+
+    forward.py ``walk_recorded`` blocks a candidate while ``i < next_allowed`` (exit bar + 1, or the end of
+    the data for an OPEN trade); an OPEN trade's ``exit_time`` is the run's last closed bar.
+    """
+    try:
+        at = utc(signal_time)
+    except ValueError:
+        return False
+    for t in row.get("trades") or []:
+        try:
+            if utc(t["signal_time"]) < at and utc(t["exit_time"]) >= at:
+                return True
+        except (KeyError, TypeError, ValueError):
+            continue
+    return False
 
 
 # --- backfill: paper positions before the journal -----------------------------------------------
@@ -326,7 +358,8 @@ def paper_trade_items(rows: list[Mapping[str, Any]], *, data: MarketData, cfg: A
             signal_bar=r["source_candle_ts"], decided_at=r["opened_at"],
             journal_ref=None, position_id=str(r["id"]),
             stop=_f(r.get("stop_price")), tested_target=_f(r.get("tp1_price")),
-            extra={"source_ref": f"paper_trades:{r['id']}", "note": "opened before the decision journal existed"},
+            extra={"source_ref": f"paper_trades:{r['id']}", "note": "opened before the decision journal existed",
+                   "live_outcome": "opened"},
         )
         enrich_market(sig, data, cfg)
         out.append(sig)

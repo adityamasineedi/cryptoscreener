@@ -2,9 +2,13 @@
 daily summary. Every alert, skip and follow-up is one row in ``alerts.jsonl``.
 
 Order of the not-sent codes (the first that applies is the row's ``code``; every one that applies is in
-``flags``): SUPPRESSED_KILLED, LATE, plan errors (NO_TICK_SIZE, NO_ENGINE_STOP, NO_MARKET_DATA,
-INVALID_STOP, NO_TESTED_TARGET, INVALID_TARGET), SKIPPED_COST, RATE_LIMITED. Duplicates are DUPLICATE.
-Before all of them, a source's excluded symbol (D108/D120: no directional BTC alert) is EXCLUDED_SYMBOL.
+``flags``): SUPPRESSED_KILLED, LATE, NOT_OPENED, plan errors (NO_TICK_SIZE, NO_ENGINE_STOP, NO_MARKET_DATA,
+INVALID_STOP, NO_TESTED_TARGET, INVALID_TARGET), SKIPPED_COST, SKIPPED_COST_STOP, RATE_LIMITED. Duplicates
+are DUPLICATE. Before all of them, a source's excluded symbol (D108/D120: no directional BTC alert) is
+EXCLUDED_SYMBOL.
+
+Owner ruling D145: NOT_OPENED = a paper-book signal whose paper outcome is not "opened" (sent anyway, marked,
+only with ``send_not_opened`` true); SKIPPED_COST_STOP = entry-to-stop distance under 3x the D144 round trip.
 """
 
 from __future__ import annotations
@@ -25,6 +29,21 @@ from app.alerts.tracker import DONE, expire_if_due, new_tracker, step
 STATE_VERSION = 1
 # Owner rulings D108/D120: a source's excluded symbol (config symbol_exclusions), checked right after dedup.
 EXCLUDED_SYMBOL = "EXCLUDED_SYMBOL"
+# Owner ruling D145.
+NOT_OPENED = "NOT_OPENED"
+SKIPPED_COST_STOP = "SKIPPED_COST_STOP"
+
+
+def not_opened_reason(sig: Signal, cfg: AlertConfig) -> str | None:
+    """Why the paper book did not open this signal, or None when it opened it or there is no paper book.
+
+    A paper-book source (config ``paper_book_sources``) or any non-screener signal carrying a paper outcome
+    alerts only when that outcome is "opened" (owner ruling D145). A missing outcome counts as not opened.
+    """
+    outcome = sig.extra.get("live_outcome")
+    if not cfg.has_paper_outcome(sig.source, outcome) or outcome == "opened":
+        return None
+    return str(sig.extra.get("skip_reason") or outcome or "no_paper_outcome")
 
 
 def fresh_state() -> dict[str, Any]:
@@ -149,17 +168,24 @@ class AlertPipeline:
         lag_min = (now - sig.bar_close).total_seconds() / 60.0
         killed = status == "KILLED" and not cfg.allow_killed
         late = lag_min > cfg.late_minutes_for(sig.source)
+        not_opened = not_opened_reason(sig, cfg)
         plan, err = build_plan(sig, cfg)
         cost = bool(plan and plan["cost_skip"])
-        flags = {"killed": killed, "late": late, "plan_error": err, "cost": cost if plan else None}
+        cost_stop = bool(plan and plan["cost_stop_skip"])
+        flags = {"killed": killed, "late": late, "not_opened": not_opened, "plan_error": err,
+                 "cost": cost if plan else None, "cost_stop": cost_stop if plan else None}
         if killed:
             code = "SUPPRESSED_KILLED"
         elif late:
             code = "LATE"
+        elif not_opened is not None and not cfg.send_not_opened:
+            code = NOT_OPENED
         elif err:
             code = err
         elif cost:
             code = "SKIPPED_COST"
+        elif cost_stop:
+            code = SKIPPED_COST_STOP
         else:
             code = None
         if code is None:
@@ -170,10 +196,12 @@ class AlertPipeline:
                 code = "RATE_LIMITED"
                 flags["rate_limited"] = True
 
-        text = render_alert(sig, plan, status, cfg, sent_at=now) if plan else None
+        text = render_alert(sig, plan, status, cfg, sent_at=now, not_opened_reason=not_opened) if plan else None
         header = f"{sig.decided_at.isoformat()} · {sig.alert_id} · {sig.strategy_id} {sig.symbol} {sig.side} {sig.timeframe} bar {sig.signal_bar.isoformat()}"
         row: dict[str, Any] = {"status": status, "lag_minutes": round(lag_min, 2), "flags": flags,
                                "plan": _plan_log(plan), "text": text, **self._sig_fields(sig)}
+        if code == NOT_OPENED:
+            row["reason"] = not_opened
         if code is None:
             assert text is not None and plan is not None
             if self.delivering:
@@ -298,7 +326,8 @@ def _plan_log(plan: Mapping[str, Any] | None) -> dict[str, Any] | None:
     keys = ("tick", "signal_close", "atr", "zone_capped_by_sl", "zone_lo", "zone_hi", "entry_mid", "stop", "r_unit",
             "targets", "t2_tested", "rr_tested", "rr_raw", "t2_below_min_r", "stop_pct", "leverage",
             "leverage_needed", "leverage_cap_bound", "risk_pct_shown", "round_trip_cost", "stop_frac",
-            "span_frac", "cost_floor_frac", "cost_band", "cost_skip", "rounded")
+            "span_frac", "cost_floor_frac", "cost_band", "cost_skip", "cost_stop_entry_ref", "cost_stop_entry_price",
+            "cost_stop_frac", "cost_stop_round_trip", "cost_stop_floor_frac", "cost_stop_skip", "rounded")
     return {k: plan[k] for k in keys}
 
 

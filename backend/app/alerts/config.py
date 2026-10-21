@@ -13,6 +13,10 @@ STATUS_MAP_PATH = HERE / "status_map.json"
 TICK_SIZES_PATH = HERE / "tick_sizes.json"
 
 STATUSES = ("KILLED", "FORWARD-PASSED", "PAPER", "UNPROVEN")
+# Owner ruling D145. Used only when the config file lacks the keys (an older config copy).
+PAPER_BOOK_SOURCES = ("COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3", "PASSED_BOOK")
+COST_STOP_DEFAULTS = {"taker_fee_rate": 0.0005, "slippage_rate": 0.0002, "fee_sides": 2, "multiple": 3.0}
+COST_STOP_ENTRY_REFS = ("near_edge", "mid")
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -47,6 +51,7 @@ class AlertConfig:
             for k, v in (ticks if ticks is not None else _read(TICK_SIZES_PATH)["ticks"]).items()
         }
         self._round_trip = round_trip_cost
+        _ = self.cost_stop_entry_ref  # an unknown value fails at load, not on the first signal
 
     # --- flags ---------------------------------------------------------------------------------
     @property
@@ -110,6 +115,34 @@ class AlertConfig:
         rc = ResearchConfig()
         sides = float(self.raw["cost"]["fee_sides"])
         return sides * float(rc.taker_fee_rate) + float(rc.entry_slippage_rate) + float(rc.exit_slippage_rate)
+
+    # --- owner ruling D145 ----------------------------------------------------------------------
+    @property
+    def send_not_opened(self) -> bool:
+        """Item 2: send paper-book signals the book did not open (marked NOT OPENED). Off unless explicitly true."""
+        return self.raw.get("send_not_opened", False) is True
+
+    def has_paper_outcome(self, source: str, outcome: Any) -> bool:
+        """A paper-book source, or any source carrying a paper outcome, except the screener (none)."""
+        if str(source) in set(self.raw.get("no_paper_outcome_sources", ["SCREENER"]) or []):
+            return False
+        return str(source) in set(self.raw.get("paper_book_sources") or PAPER_BOOK_SOURCES) or outcome is not None
+
+    def cost_stop_round_trip(self) -> float:
+        """Item 3: fee_sides x (taker + slippage), the D144 real costs (defaults when the section is missing)."""
+        cs = {**COST_STOP_DEFAULTS, **(self.raw.get("cost_stop") or {})}
+        return float(cs["fee_sides"]) * (float(cs["taker_fee_rate"]) + float(cs["slippage_rate"]))
+
+    def cost_stop_floor(self) -> float:
+        cs = {**COST_STOP_DEFAULTS, **(self.raw.get("cost_stop") or {})}
+        return float(cs["multiple"]) * self.cost_stop_round_trip()
+
+    @property
+    def cost_stop_entry_ref(self) -> str:
+        ref = str(self.raw.get("cost_stop_entry_ref", "near_edge"))
+        if ref not in COST_STOP_ENTRY_REFS:
+            raise ValueError(f"cost_stop_entry_ref must be one of {COST_STOP_ENTRY_REFS}, not {ref!r}")
+        return ref
 
     def status_for(self, source: str, strategy_id: str | None = None) -> str:
         entry = (self.status_map.get("sources") or {}).get(str(source))
