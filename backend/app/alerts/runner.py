@@ -49,7 +49,6 @@ def _paths(cfg: AlertConfig, live_root: Path) -> dict[str, Path]:
 
     return {
         "journal": under(s["journal"]),
-        "candle12": under(s["candle12_v2_state"]),
         "fwd1": under(s["book16_fwd1_ledger"]),
         "fwd3": under(s["lcsc_fwd3_runs"]),
     }
@@ -91,8 +90,7 @@ def poll_once(pipe: AlertPipeline, paths: dict[str, Path], now: datetime) -> dic
     st["deferred"] = []
     defer_s = float(pipe.cfg.raw["defer_missing_engine_values_seconds"])
     for line_no, raw in batch:
-        for item in src.journal_items([(0, raw)], first_line_no=line_no, data=pipe.data, cfg=pipe.cfg,
-                                      candle12_state=paths["candle12"]):
+        for item in src.journal_items([(0, raw)], first_line_no=line_no, data=pipe.data, cfg=pipe.cfg):
             if src.awaiting_engine_values(item) and (now - item.decided_at).total_seconds() < defer_s:
                 st["deferred"].append({"line": line_no, "raw": raw})
                 counts["deferred"] += 1
@@ -202,7 +200,7 @@ def backfill(cfg: AlertConfig, data: MarketData, paths: dict[str, Path], out_dir
                     lines.append((i, ln))
             except (ValueError, KeyError):
                 continue
-        items += list(src.journal_items(lines, first_line_no=1, data=data, cfg=cfg, candle12_state=paths["candle12"]))
+        items += list(src.journal_items(lines, first_line_no=1, data=data, cfg=cfg))
     sigs1, _ = src.fwd1_items(paths["fwd1"], after_seq=-1, data=data, cfg=cfg, seen=set())
     items += [s for s in sigs1 if s.decided_at >= start]
     its3, _ = src.fwd3_items(paths["fwd3"], after_line=0, data=data, cfg=cfg, seen=set())

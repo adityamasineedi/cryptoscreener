@@ -13,7 +13,7 @@ from app.alerts.data import MemoryData
 from app.alerts.pipeline import AlertPipeline
 from app.alerts.plan import Signal, build_plan, render_alert, render_followup, round_to_tick, fmt_price
 from app.alerts.sender import ReplyingTelegramSender
-from app.alerts.sources import SkipRecord, fwd3_items, journal_items
+from app.alerts.sources import SkipRecord, fwd1_items, fwd3_items, journal_items
 from app.alerts.tracker import new_tracker, step, expire_if_due
 
 T0 = datetime(2026, 10, 20, 17, 0, tzinfo=timezone.utc)
@@ -21,7 +21,9 @@ STATUS = {
     "default": "UNPROVEN",
     "sources": {
         "PASSED_BOOK": {"status": "KILLED"},
+        # Synthetic map for the pipeline unit tests (the shipped map is tested on its own below).
         "CANDLE12_V2": {"status": "PAPER"},
+        "COMBO_02_V1": {"status": "PAPER"},
         "LCSC_FWD3": {"status": "PAPER"},
         "BOOK16_FWD1": {"status": "PAPER"},
         "FP": {"status": "FORWARD-PASSED"},
@@ -80,7 +82,8 @@ def test_killed_sources_in_shipped_status_map():
     c = AlertConfig()
     assert c.status_for("PASSED_BOOK") == "KILLED"
     assert c.status_for("COMBO_02_V1") == "PAPER"  # owner ruling D51a
-    assert c.status_for("CANDLE12_V2") == "PAPER"
+    # Owner ruling D120: CANDLE12_V2 (BTC-only) is dropped from alerts.
+    assert "CANDLE12_V2" not in c.status_map["sources"] and "CANDLE12_V2" in c.status_map["dropped_sources"]
     assert c.status_for("BOOK16_FWD1") == "PAPER" and c.status_for("LCSC_FWD3") == "PAPER"
     assert c.status_for("SOMETHING_NEW") == "UNPROVEN"
 
@@ -431,17 +434,14 @@ def test_journal_rows_become_signals_with_engine_stop_and_tp1(tmp_path):
         {"id": "v1", "symbol": "BTCUSDT", "stop_price": 97.0, "tp1_price": 109.0, "status": "CLOSED",
          "source_candle_ts": bar_t.isoformat(), "signal_snippet": {"source": "V1_PAPER_WATCHER"}},
     ]
-    state = tmp_path / "c12.json"
-    state.write_text(json.dumps({"open": {"key": "k1", "tp1": 108.0}, "closed": []}), encoding="utf-8")
     data = MemoryData({(s, "1h"): _closed_hours(s, bar_t) for s in ("ARBUSDT", "BTCUSDT")}, trades)
-    items = list(journal_items(lines, first_line_no=11, data=data, cfg=cfg(), candle12_state=state))
-    assert len(items) == 4
-    a, b, v, c12 = items
+    items = list(journal_items(lines, first_line_no=11, data=data, cfg=cfg()))
+    assert len(items) == 3  # the CANDLE12_V2 row is ignored (owner ruling D120)
+    a, b, v = items
     assert (a.source, a.stop, a.tested_target, a.signal_close, a.journal_ref["line"]) == ("PASSED_BOOK", 102.0, 95.0, 100.0, 11)
     assert a.atr == pytest.approx(2.0) and a.journal_ref["sha256"]
     assert isinstance(b, SkipRecord) and b.code == "NOT_OPENED" and "symbol_has_open_position" in b.reason
     assert (v.source, v.stop, v.tested_target, v.position_id) == ("COMBO_02_V1", 97.0, 109.0, "v1")
-    assert (c12.source, c12.stop, c12.tested_target, c12.journal_ref["line"]) == ("CANDLE12_V2", 96.0, 108.0, 15)
 
 
 def test_fwd3_target_is_the_contracts_2r_from_signal_close(tmp_path):
@@ -470,7 +470,7 @@ def test_watch_starts_at_the_end_defers_until_the_position_exists(tmp_path):
            "direction": "SHORT", "symbol": "BTCUSDT", "timeframe": "1h", "setup_bar_time": "2026-10-19T00:00:00+00:00",
            "ts": "2026-10-19T01:05:00+00:00"}
     journal.write_text(json.dumps(old) + "\n", encoding="utf-8")
-    paths = {"journal": journal, "candle12": live / "none.json", "fwd1": live / "none1", "fwd3": live / "none3"}
+    paths = {"journal": journal, "fwd1": live / "none1", "fwd3": live / "none3"}
     data = MemoryData({("BTCUSDT", "1h"): _closed_hours("BTCUSDT", T0)})
     p = pipe(tmp_path / "out", cfg(allow_killed=True), data=data)
     prime(p, paths)
@@ -540,12 +540,13 @@ def test_forward_runner_late_after_45_minutes(tmp_path):
 def test_fwd1_uses_the_45_minute_limit_and_signal_line(tmp_path):
     fb = cfg(no_tested_target={"action": "fallback_r", "fallback_t2_r": 2.0})
     p = pipe(tmp_path, fb)
-    s = sig(source="BOOK16_FWD1", strategy_id="BOOK16_4H", timeframe="4h", tested_target=None,
+    # ETH: FWD-1 BTC trades are excluded from alerts (owner ruling D120).
+    s = sig(source="BOOK16_FWD1", strategy_id="BOOK16_4H", timeframe="4h", tested_target=None, symbol="ETHUSDT",
             signal_bar="2026-10-20T00:00:00+00:00", decided_at="2026-10-20T04:10:06+00:00")
     row = p.handle(s, s.decided_at)
     assert row["code"] == "DRY_RUN" and row["text"].endswith("⏱ signal +10m")
-    assert "SWING TRADE - BTC" in row["text"] and "(untested)" in row["text"]
-    late = sig(source="BOOK16_FWD1", strategy_id="BOOK16_4H", timeframe="4h", tested_target=None,
+    assert "SWING TRADE - ETH" in row["text"] and "(untested)" in row["text"]
+    late = sig(source="BOOK16_FWD1", strategy_id="BOOK16_4H", timeframe="4h", tested_target=None, symbol="ETHUSDT",
                signal_bar="2026-10-20T04:00:00+00:00", decided_at="2026-10-20T08:46:00+00:00")
     assert p.handle(late, late.decided_at)["code"] == "LATE"
     # Not a forward runner: no extra line.
@@ -581,7 +582,7 @@ def test_golden_screener_alert(tmp_path):
     c = cfg()
     c.ticks["IOSTUSDT"] = 0.0001
     data = MemoryData({("IOSTUSDT", "15m"): _m15("IOSTUSDT", datetime(2026, 10, 21, 5, 0, tzinfo=timezone.utc))})
-    (item,) = list(journal_items([(0, json.dumps(SCREENER_ROW))], first_line_no=42, data=data, cfg=c, candle12_state=None))
+    (item,) = list(journal_items([(0, json.dumps(SCREENER_ROW))], first_line_no=42, data=data, cfg=c))
     assert item.source == "SCREENER" and not item.target_tested and item.atr == pytest.approx(0.01)
     row = pipe(tmp_path, c, data=data).handle(item, item.decided_at)
     assert row["code"] == "DRY_RUN" and row["status"] == "UNPROVEN" and row["text"] == GOLDEN_SCREENER
@@ -589,44 +590,43 @@ def test_golden_screener_alert(tmp_path):
 
 
 GOLDEN_NOT_OPENED = """⚠️ UNPROVEN, for observation only, not for trading
-✅ INTRADAY TRADE - BTC
+✅ INTRADAY TRADE - ETH
 🏮 TYPE - LONG
 
-👉 ENTRY - $100000.0 - $99500.0
-👉 TARGET - $101500.0, $104500.0 (tested), $106250.0 & $108000.0+
-👉 SL - $98000.0
+👉 ENTRY - $2500.00 - $2487.50
+👉 TARGET - $2537.50, $2612.50 (tested), $2656.25 & $2700.00+
+👉 SL - $2450.00
 
 🚨 LEVERAGE - 1x
 📊 R:R - 1:2.7 | Risk 1% of account
-🧪 PAPER · CANDLE12_V2 · 1h
+🧪 PAPER · COMBO_02_V1 · 1h
 ⏱ Valid 3 bars · Not financial advice"""
 
 
 def test_golden_not_opened_alert_keeps_the_skip_reason(tmp_path):
-    jrow = {"book": "CANDLE12_V2", "event": "skip", "reason": "second_open_ignored", "key": "k2", "held": "k1",
-            "source": "CANDLE12_V2_PAPER", "strategy_id": "CANDLE12_V2", "symbol": "BTCUSDT", "direction": "LONG",
-            "timeframe": "1h", "setup_bar_time": T0.isoformat(), "signal_outcome": "not_opened",
-            "signal_reason": "second_open_ignored", "stop_price": 98000.0, "tp1": 104500.0,
-            "signal_entry_price": 100000.0, "detail_version": 1, "ts": (T0 + timedelta(hours=1, minutes=2)).isoformat()}
-    bars_ = [bar(T0 - timedelta(hours=39 - i), 100000.0, 100500.0, 99500.0, 100000.0) for i in range(40)]
-    data = MemoryData({("BTCUSDT", "1h"): bars_})
-    (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=9, data=data, cfg=cfg(), candle12_state=None))
-    assert item.atr == pytest.approx(1000.0)
+    jrow = {"book": "COMBO_02_V1", "event": "signal", "outcome": "not_opened", "reason": "sticky_bos_skip",
+            "source": "V1_PAPER_WATCHER", "strategy_id": "COMBO_02_V1", "symbol": "ETHUSDT", "direction": "LONG",
+            "timeframe": "1h", "setup_bar_time": T0.isoformat(), "stop_price": 2450.0, "tp1": 2612.5,
+            "signal_entry_price": 2500.0, "detail_version": 1, "ts": (T0 + timedelta(hours=1, minutes=2)).isoformat()}
+    bars_ = [bar(T0 - timedelta(hours=39 - i), 2500.0, 2512.5, 2487.5, 2500.0) for i in range(40)]
+    data = MemoryData({("ETHUSDT", "1h"): bars_})
+    (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=9, data=data, cfg=cfg()))
+    assert item.atr == pytest.approx(25.0)
     row = pipe(tmp_path, data=data).handle(item, item.decided_at)
     assert row["code"] == "DRY_RUN" and row["kind"] == "ALERT" and row["text"] == GOLDEN_NOT_OPENED
-    assert row["paper_outcome"] == "not_opened" and row["paper_skip_reason"] == "second_open_ignored"
+    assert row["paper_outcome"] == "not_opened" and row["paper_skip_reason"] == "sticky_bos_skip"
     logged = rows(tmp_path)[0]
-    assert logged["paper_skip_reason"] == "second_open_ignored" and logged["journal_ref"]["line"] == 9
+    assert logged["paper_skip_reason"] == "sticky_bos_skip" and logged["journal_ref"]["line"] == 9
 
 
 def test_not_opened_without_detail_is_still_a_skip():
     jrow = {"book": "PASSED_BOOK", "event": "signal", "outcome": "not_opened", "reason": "symbol_has_open_position",
             "strategy_id": "COMBO_01", "direction": "SHORT", "symbol": "ARBUSDT", "timeframe": "1h",
             "setup_bar_time": T0.isoformat(), "ts": (T0 + timedelta(hours=1)).isoformat()}
-    (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=1, data=MemoryData(), cfg=cfg(), candle12_state=None))
+    (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=1, data=MemoryData(), cfg=cfg()))
     assert isinstance(item, SkipRecord) and item.code == "NOT_OPENED"
     with_detail = dict(jrow, stop_price=102.0, tp1=95.0, source="PASSED_CAP_BOOK", detail_version=1)
-    (sig_,) = list(journal_items([(0, json.dumps(with_detail))], first_line_no=1, data=MemoryData(), cfg=cfg(), candle12_state=None))
+    (sig_,) = list(journal_items([(0, json.dumps(with_detail))], first_line_no=1, data=MemoryData(), cfg=cfg()))
     assert isinstance(sig_, Signal) and sig_.stop == 102.0 and sig_.extra["skip_reason"] == "symbol_has_open_position"
 
 
@@ -637,7 +637,7 @@ def test_v1_signal_rows_with_detail():
     opened = dict(base, outcome="opened", reason="")
     skipped = dict(base, outcome="not_opened", reason="sticky_bos_skip")
     items = list(journal_items([(0, json.dumps(opened)), (1, json.dumps(skipped))], first_line_no=1,
-                               data=MemoryData(), cfg=cfg(), candle12_state=None))
+                               data=MemoryData(), cfg=cfg()))
     assert len(items) == 1 and items[0].extra["skip_reason"] == "sticky_bos_skip" and items[0].tested_target == 109.0
 
 
@@ -694,7 +694,6 @@ def test_d117_shipped_sources_and_statuses():
         "COMBO_02_V1": "PAPER",  # V1
         "BOOK16_FWD1": "PAPER",  # FWD-1
         "LCSC_FWD3": "PAPER",  # FWD-3
-        "CANDLE12_V2": "PAPER",  # owner D117 keeps it PAPER although DISCOVERY Gate 2 killed it
         "SCREENER": "UNPROVEN",
         "PASSED_BOOK": "KILLED",
     }
@@ -702,7 +701,8 @@ def test_d117_shipped_sources_and_statuses():
     assert set(c.status_map["sources"]) == set(expected)
     assert "FORWARD-PASSED" not in {v["status"] for v in c.status_map["sources"].values()}
     ev = {k: v["evidence"] for k, v in c.status_map["sources"].items()}
-    assert "KILLED.md" in ev["CANDLE12_V2"] and "Gate 2" in ev["CANDLE12_V2"] and "D117" in ev["CANDLE12_V2"]
+    dropped = c.status_map["dropped_sources"]["CANDLE12_V2"]["evidence"]
+    assert "KILLED.md" in dropped and "Gate 2" in dropped and "D117" in dropped and "D120" in dropped
     assert "Not wired" not in ev["SCREENER"] and "DECISION_JOURNAL_SIGNAL_DETAIL" in ev["SCREENER"]
 
 
@@ -710,15 +710,15 @@ def test_d117_every_shipped_source_alerts_with_the_prefix_and_killed_stays_off(t
     raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     c = AlertConfig(raw, ticks=TICKS, round_trip_cost=0.0018)  # the shipped status map
     p = pipe(tmp_path, c)
-    for i, source in enumerate(["COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3", "CANDLE12_V2", "SCREENER"]):
-        s = sig(source=source, strategy_id=f"S{i}")
+    for i, source in enumerate(["COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3", "SCREENER"]):
+        s = sig(source=source, strategy_id=f"S{i}", symbol="ETHUSDT")  # BTC is excluded (D120)
         row = p.handle(s, s.bar_close + timedelta(minutes=1))
         assert row["code"] == "DRY_RUN" and row["text"].split("\n")[0] == D117_LINE, source
         assert row["status"] == ("UNPROVEN" if source == "SCREENER" else "PAPER")
     killed = sig(source="PASSED_BOOK", strategy_id="COMBO_01")
     assert p.handle(killed, killed.bar_close)["code"] == "SUPPRESSED_KILLED"
     preview = (tmp_path / "preview.md").read_text(encoding="utf-8")
-    assert preview.count("```\n" + D117_LINE + "\n") == 6  # 5 would-send + the rendered KILLED preview
+    assert preview.count("```\n" + D117_LINE + "\n") == 5  # 4 would-send + the rendered KILLED preview
 
 
 def test_d117_followups_and_summary_carry_the_prefix_unless_forward_passed():
@@ -790,3 +790,81 @@ def test_d117_private_chat_sender_posts_only_to_that_chat(tmp_path):
                                     client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
     assert sender.send("a") == 7 and sender.send("b", reply_to=7) == 7
     assert [b["chat_id"] for b in bodies] == ["123456789", "123456789"]
+
+
+# --- owner ruling D120 (D108: BTC is for non-directional strategies only) ------------------------------
+D120_REASON = "D108/D120 BTC non-directional only"
+
+
+def test_d120_shipped_symbol_exclusions():
+    c = AlertConfig()
+    assert c.symbol_exclusion_reason == D120_REASON
+    for source in ("COMBO_02_V1", "BOOK16_FWD1", "SCREENER"):
+        assert c.excluded_symbols(source) == frozenset({"BTCUSDT"}), source
+        assert c.symbol_excluded(source, "btcusdt") and not c.symbol_excluded(source, "ETHUSDT")
+    assert c.excluded_symbols("LCSC_FWD3") == frozenset() and c.excluded_symbols("PASSED_BOOK") == frozenset()
+    assert "candle12_v2_state" not in c.raw["sources"]
+
+
+@pytest.mark.parametrize("source,strategy,tf", [
+    ("COMBO_02_V1", "COMBO_02_V1", "1h"), ("BOOK16_FWD1", "BOOK16_4H", "4h"), ("SCREENER", "SCREENER_SETUP", "15m"),
+])
+def test_d120_btc_signal_is_a_logged_skip_and_eth_alerts(tmp_path, source, strategy, tf):
+    raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    c = AlertConfig(raw, ticks=TICKS, round_trip_cost=0.0018)  # the shipped status map and exclusions
+    p = pipe(tmp_path, c)
+    btc = sig(source=source, strategy_id=strategy, timeframe=tf, symbol="BTCUSDT")
+    row = p.handle(btc, btc.bar_close + timedelta(minutes=1))
+    assert (row["kind"], row["code"], row["reason"]) == ("SKIP", "EXCLUDED_SYMBOL", D120_REASON)
+    assert row["symbol"] == "BTCUSDT" and "text" not in row and btc.alert_id not in p.state["trackers"]
+    assert not (tmp_path / "preview.md").exists()  # never rendered
+    eth = sig(source=source, strategy_id=strategy, timeframe=tf, symbol="ETHUSDT", signal_close=2500.0, atr=25.0,
+              stop=2450.0, tested_target=2612.5)
+    row = p.handle(eth, eth.bar_close + timedelta(minutes=1))
+    assert row["kind"] == "ALERT" and row["code"] == "DRY_RUN" and row["text"].split("\n")[0] == D117_LINE
+    logged = rows(tmp_path)
+    assert [(r["symbol"], r["code"]) for r in logged] == [("BTCUSDT", "EXCLUDED_SYMBOL"), ("ETHUSDT", "DRY_RUN")]
+    assert logged[0]["reason"] == D120_REASON
+
+
+def test_d120_btc_screener_journal_row_is_excluded(tmp_path):
+    raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    c = AlertConfig(raw, ticks=dict(TICKS, IOSTUSDT=0.0001), round_trip_cost=0.0018)
+    btc_row = dict(SCREENER_ROW, symbol="BTCUSDT", stop_price=95000.0, tp1=112000.0, signal_entry_price=100000.0)
+    data = MemoryData({("BTCUSDT", "15m"): _m15("BTCUSDT", datetime(2026, 10, 21, 5, 0, tzinfo=timezone.utc))})
+    (item,) = list(journal_items([(0, json.dumps(btc_row))], first_line_no=3, data=data, cfg=c))
+    row = pipe(tmp_path, c, data=data).handle(item, item.decided_at)
+    assert row["code"] == "EXCLUDED_SYMBOL" and row["reason"] == D120_REASON and row["journal_ref"]["line"] == 3
+
+
+def test_d120_fwd1_btc_trade_excluded_eth_trade_alerts(tmp_path):
+    raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    raw["no_tested_target"] = {"action": "fallback_r", "fallback_t2_r": 2.0}
+    c = AlertConfig(raw, ticks=TICKS, round_trip_cost=0.0018)
+    t = {"entry_time": "2026-10-20T04:00:00+00:00", "stop_price": 0.0}
+    run = {"seq": 5, "kind": "RUN", "written_utc": "2026-10-20T04:10:06+00:00", "hash": "h", "payload": {"symbols": {
+        "BTCUSDT": {"open_position": dict(t, trade_id="b1", stop_price=98000.0)},
+        "ETHUSDT": {"open_position": dict(t, trade_id="e1", stop_price=2450.0)},
+    }}}
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(json.dumps(run) + "\n", encoding="utf-8")
+    bar0 = datetime(2026, 10, 20, 0, 0, tzinfo=timezone.utc)
+    data = MemoryData({
+        ("BTCUSDT", "4h"): [bar(bar0 - timedelta(hours=4 * (39 - i)), 100000.0, 100500.0, 99500.0, 100000.0) for i in range(40)],
+        ("ETHUSDT", "4h"): [bar(bar0 - timedelta(hours=4 * (39 - i)), 2500.0, 2512.5, 2487.5, 2500.0) for i in range(40)],
+    })
+    sigs, _ = fwd1_items(ledger, after_seq=-1, data=data, cfg=c, seen=set())
+    p = pipe(tmp_path / "out", c, data=data)
+    codes = {s.symbol: p.handle(s, s.decided_at)["code"] for s in sigs}
+    assert codes == {"BTCUSDT": "EXCLUDED_SYMBOL", "ETHUSDT": "DRY_RUN"}
+
+
+def test_d120_candle12_v2_journal_rows_are_not_a_source():
+    rows_ = [
+        {"book": "CANDLE12_V2", "event": "entry", "key": "k1", "entry_time": T0.isoformat(), "entry_price": 100.5,
+         "stop_price": 96.0, "tp1": 108.0, "detail_version": 1, "ts": (T0 + timedelta(hours=1)).isoformat()},
+        {"book": "CANDLE12_V2", "event": "skip", "reason": "second_open_ignored", "setup_bar_time": T0.isoformat(),
+         "stop_price": 96.0, "tp1": 108.0, "detail_version": 1, "ts": (T0 + timedelta(hours=1)).isoformat()},
+    ]
+    lines = [(i, json.dumps(r)) for i, r in enumerate(rows_)]
+    assert list(journal_items(lines, first_line_no=1, data=MemoryData(), cfg=AlertConfig())) == []

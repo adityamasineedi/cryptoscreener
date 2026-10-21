@@ -113,7 +113,7 @@ def _run(tmp: Path, monkeypatch, *, alerts_on: bool, detail: bool = False) -> di
                                    [dict(p.to_dict(), id=p.id) for p in eng._open.values()])  # noqa: SLF001
             lines, offset = read_lines(journal, offset)
             now = window[-1]["time"] + timedelta(hours=1, minutes=1)
-            for item in journal_items(lines, first_line_no=nlines + 1, data=pipe.data, cfg=pipe.cfg, candle12_state=None):
+            for item in journal_items(lines, first_line_no=nlines + 1, data=pipe.data, cfg=pipe.cfg):
                 pipe.handle(item, now)
             nlines += len(lines)
             pipe.update_trackers(now)

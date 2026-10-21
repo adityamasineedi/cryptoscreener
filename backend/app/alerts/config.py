@@ -89,6 +89,18 @@ class AlertConfig:
             return float(self.raw["forward_runner"]["late_minutes"])
         return float(self.raw["late_minutes"])
 
+    def excluded_symbols(self, source: str) -> frozenset[str]:
+        """Symbols a source never alerts on (owner rulings D108/D120: no directional BTC alerts)."""
+        rules = ((self.raw.get("symbol_exclusions") or {}).get("sources") or {}).get(str(source)) or {}
+        return frozenset(str(s).upper() for s in rules.get("exclude_symbols") or [])
+
+    def symbol_excluded(self, source: str, symbol: str) -> bool:
+        return str(symbol or "").upper() in self.excluded_symbols(source)
+
+    @property
+    def symbol_exclusion_reason(self) -> str:
+        return str((self.raw.get("symbol_exclusions") or {}).get("reason") or "symbol excluded")
+
     def round_trip_cost(self) -> float:
         """Fees both sides + entry and exit slippage, from the app's own ResearchConfig defaults."""
         if self._round_trip is not None:

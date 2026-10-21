@@ -4,6 +4,7 @@ daily summary. Every alert, skip and follow-up is one row in ``alerts.jsonl``.
 Order of the not-sent codes (the first that applies is the row's ``code``; every one that applies is in
 ``flags``): SUPPRESSED_KILLED, LATE, plan errors (NO_TICK_SIZE, NO_ENGINE_STOP, NO_MARKET_DATA,
 INVALID_STOP, NO_TESTED_TARGET, INVALID_TARGET), SKIPPED_COST, RATE_LIMITED. Duplicates are DUPLICATE.
+Before all of them, a source's excluded symbol (D108/D120: no directional BTC alert) is EXCLUDED_SYMBOL.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from app.alerts.sources import SkipRecord
 from app.alerts.tracker import DONE, expire_if_due, new_tracker, step
 
 STATE_VERSION = 1
+# Owner rulings D108/D120: a source's excluded symbol (config symbol_exclusions), checked right after dedup.
+EXCLUDED_SYMBOL = "EXCLUDED_SYMBOL"
 
 
 def fresh_state() -> dict[str, Any]:
@@ -136,6 +139,13 @@ class AlertPipeline:
 
         cfg = self.cfg
         status = cfg.status_for(sig.source, sig.strategy_id)
+        if cfg.symbol_excluded(sig.source, sig.symbol):
+            # Owner rulings D108/D120: no directional BTC alert. Logged only: never sent, rendered or tracked.
+            self._stats(now, status)["not_sent"] += 1
+            row = {"kind": "SKIP", "code": EXCLUDED_SYMBOL, "reason": cfg.symbol_exclusion_reason,
+                   "status": status, **self._sig_fields(sig)}
+            self._log(now, row)
+            return row
         lag_min = (now - sig.bar_close).total_seconds() / 60.0
         killed = status == "KILLED" and not cfg.allow_killed
         late = lag_min > cfg.late_minutes_for(sig.source)

@@ -6,7 +6,9 @@ Sources:
     (``paper_trades`` by ``position_id``, the engine's own values); ``missed`` -> alert row judged LATE;
     ``not_opened`` -> logged NOT_OPENED (no position, so no engine stop was recorded);
   - COMBO_02_V1 ``opened`` rows: stop from the row (the position's stop), TP1 from that paper position;
-  - CANDLE12_V2 ``entry`` rows: stop from the row, TP1 from the virtual-paper state file (same key);
+  - SCREENER ``signal`` rows (P14 detail): the engine's final stop and first target;
+  - CANDLE12_V2 rows are not a source (owner ruling D120: the book is BTC-only, and BTC is for
+    non-directional strategies only, D108). Its forward paper is not touched;
 - BOOK16 FWD-1 ledger RUN rows (outside the journal): each new trade, stop from the trade, no fixed target;
 - LCSC FWD-3 runs (outside the journal): each new candidate, stop = its invalidation, target from the
   contract's fixed R multiple off the signal close (config ``sources.lcsc_fwd3_target_r``);
@@ -26,7 +28,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from app.alerts.config import AlertConfig
-from app.alerts.data import MarketData, read_json
+from app.alerts.data import MarketData
 from app.alerts.plan import Signal, atr_at, utc
 
 BOOK_SOURCE = {"PASSED_CAP_BOOK": "PASSED_BOOK", "V1_PAPER_WATCHER": "COMBO_02_V1"}
@@ -89,7 +91,6 @@ def journal_items(
     first_line_no: int,
     data: MarketData,
     cfg: AlertConfig,
-    candle12_state: Path | None,
 ) -> Iterator[Signal | SkipRecord]:
     outcomes = set(cfg.raw.get("journal_alert_outcomes") or ["opened"])
     for i, raw in lines:
@@ -100,7 +101,7 @@ def journal_items(
         ref = line_ref("decision_journal.jsonl", first_line_no + i, raw, row)
         book, event = row.get("book"), row.get("event")
         try:
-            item = _journal_item(book, event, row, ref, data, cfg, candle12_state, outcomes)
+            item = _journal_item(book, event, row, ref, data, cfg, outcomes)
         except Exception as exc:  # noqa: BLE001 - one bad row never stops the sidecar
             row_err = f"{type(exc).__name__}: {str(exc)[:200]}"
             try:
@@ -116,7 +117,7 @@ def journal_items(
             yield item
 
 
-def _journal_item(book, event, row, ref, data, cfg, candle12_state, outcomes):  # noqa: ANN001
+def _journal_item(book, event, row, ref, data, cfg, outcomes):  # noqa: ANN001
     """One journal row -> Signal, SkipRecord or None.
 
     P14 rows (``DECISION_JOURNAL_SIGNAL_DETAIL`` on) carry ``stop_price``, ``tp1`` and ``source``: then a signal
@@ -183,31 +184,8 @@ def _journal_item(book, event, row, ref, data, cfg, candle12_state, outcomes):  
             return SkipRecord("NOT_OPENED", sig, f"{outcome}:{row.get('reason') or ''}")
         enrich_market(sig, data, cfg)
         return sig
-    if book == "CANDLE12_V2" and event == "entry":
-        sig = Signal(
-            source="CANDLE12_V2", strategy_id="CANDLE12_V2", symbol="BTCUSDT", side="LONG", timeframe="1h",
-            signal_bar=row["entry_time"], decided_at=row["ts"], journal_ref=ref, stop=_f(row.get("stop_price")),
-            position_id=str(row.get("key") or "") or None, extra={"live_outcome": "opened"},
-        )
-        if has_detail and row.get("tp1") is not None:
-            sig.tested_target = _f(row.get("tp1"))
-            sig.extra["engine_values"] = "journal"
-        else:
-            state = read_json(candle12_state) if candle12_state else None
-            sig.tested_target = _candle12_tp1(state, row.get("key"))
-        enrich_market(sig, data, cfg)
-        return sig
-    if book == "CANDLE12_V2" and event == "skip" and has_detail and row.get("setup_bar_time"):
-        sig = Signal(
-            source="CANDLE12_V2", strategy_id="CANDLE12_V2", symbol="BTCUSDT", side="LONG", timeframe="1h",
-            signal_bar=row["setup_bar_time"], decided_at=row["ts"], journal_ref=ref, stop=_f(row.get("stop_price")),
-            tested_target=_f(row.get("tp1")), position_id=str(row.get("key") or "") or None,
-            extra={"live_outcome": "not_opened", "skip_reason": str(row.get("reason") or ""), "engine_values": "journal"},
-        )
-        if "not_opened" not in outcomes:
-            return SkipRecord("NOT_OPENED", sig, str(row.get("reason") or ""))
-        enrich_market(sig, data, cfg)
-        return sig
+    if book == "CANDLE12_V2":
+        return None  # owner ruling D120: dropped from alerts (BTC-only book; BTC is non-directional only, D108)
     if book == "SCREENER" and event == "signal" and has_detail:
         sig = Signal(
             source="SCREENER", strategy_id=str(row.get("strategy_id") or "SCREENER_SETUP"), symbol=str(row["symbol"]),
@@ -236,17 +214,7 @@ def awaiting_engine_values(item: "Signal | SkipRecord") -> bool:
         return False
     if item.extra.get("engine_values") == "journal":
         return False  # P14 rows carry the engine values themselves
-    return item.source in ("PASSED_BOOK", "COMBO_02_V1", "CANDLE12_V2") and (item.stop is None or item.tested_target is None)
-
-
-def _candle12_tp1(state: Mapping[str, Any] | None, key: Any) -> float | None:
-    if not state or key is None:
-        return None
-    rows = [state.get("open") or {}] + list(state.get("closed") or [])
-    for r in rows:
-        if r and r.get("key") == key:
-            return _f(r.get("tp1"))
-    return None
+    return item.source in ("PASSED_BOOK", "COMBO_02_V1") and (item.stop is None or item.tested_target is None)
 
 
 def _f(v: Any) -> float | None:

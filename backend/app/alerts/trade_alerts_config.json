@@ -61,13 +61,21 @@
  "backfill_hours": 24,
  "journal_alert_outcomes": ["opened", "not_opened"],
  "_journal_alert_outcomes_doc": "P14 (owner ruling D51c): not-opened signals alert too when the journal row carries the engine stop and TP1 (DECISION_JOURNAL_SIGNAL_DETAIL on); without them they stay NOT_OPENED skips.",
+ "symbol_exclusions": {
+  "_doc": "Owner rulings D108/D120: BTC is for non-directional strategies only, so there is no directional BTC alert. A signal from a listed source on a listed symbol is logged as an EXCLUDED_SYMBOL skip with this reason and is never sent, rendered or tracked. Alerting only: the forward tests and live paper are not touched. CANDLE12_V2 (BTC-only) is dropped from the sources entirely (D120).",
+  "reason": "D108/D120 BTC non-directional only",
+  "sources": {
+   "COMBO_02_V1": {"exclude_symbols": ["BTCUSDT"]},
+   "BOOK16_FWD1": {"exclude_symbols": ["BTCUSDT"]},
+   "SCREENER": {"exclude_symbols": ["BTCUSDT"]}
+  }
+ },
  "preview": {
   "render_suppressed": true,
   "track_suppressed_in_dry_run": true
  },
  "sources": {
   "journal": "data/paper/decision_journal.jsonl",
-  "candle12_v2_state": "backend/data/candle12_v2_paper/btcusdt_long.json",
   "book16_fwd1_ledger": "D:/cryptoscreener-worktrees/book16-fwd1/forward/book16_fwd1/ledger.jsonl",
   "lcsc_fwd3_runs": "D:/cryptoscreener-worktrees/lcsc-fwd3/backend/scripts/lcsc_validation/forward_out/runs.jsonl",
   "lcsc_fwd3_target_r": 2.0,

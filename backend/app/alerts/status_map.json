@@ -1,6 +1,11 @@
 {
- "_doc": "STATUS per alert source. Facts as of 2026-10-21 (owner ruling D117, research-audit DECISIONS D130), from research-audit research/KILLED.md, research/KILLED_BOOKS.md, research/SCORECARD.csv, research/DECISIONS.md and the forward-test records. Precedence for research evidence: KILLED > FORWARD-PASSED > PAPER > UNPROVEN; an owner ruling sets the alert status where noted (COMBO_02_V1 D51a, CANDLE12_V2 D117). KILLED sends nothing unless trade_alerts_config.json allow_killed is true (default false, D51). No source has a frozen forward rule that has PASSED, so nothing is FORWARD-PASSED, and every alert, follow-up and summary starts with the D117 line 'UNPROVEN, for observation only, not for trading' (plan.OBSERVATION_PREFIX).",
+ "_doc": "STATUS per alert source. Facts as of 2026-10-21 (owner ruling D117, research-audit DECISIONS D130), from research-audit research/KILLED.md, research/KILLED_BOOKS.md, research/SCORECARD.csv, research/DECISIONS.md and the forward-test records. Precedence for research evidence: KILLED > FORWARD-PASSED > PAPER > UNPROVEN; an owner ruling sets the alert status where noted (COMBO_02_V1 D51a). Owner ruling D120 (D108: BTC is non-directional only): no directional BTC alert; BTCUSDT is excluded per source in trade_alerts_config.json symbol_exclusions (V1, FWD-1, screener), and CANDLE12_V2 (BTC-only) is dropped (dropped_sources). KILLED sends nothing unless trade_alerts_config.json allow_killed is true (default false, D51). No source has a frozen forward rule that has PASSED, so nothing is FORWARD-PASSED, and every alert, follow-up and summary starts with the D117 line 'UNPROVEN, for observation only, not for trading' (plan.OBSERVATION_PREFIX).",
  "default": "UNPROVEN",
+ "dropped_sources": {
+  "CANDLE12_V2": {
+   "evidence": "Dropped from alerts by owner ruling D120 (D108: BTC is for non-directional strategies only; CANDLE12_V2 is BTC-only, so no alert source is left). Before D120, owner ruling D117 kept it PAPER for observation although the research tournament KILLED CANDLE12_V2|LONG at DISCOVERY Gate 2, E9 (research-audit research/KILLED.md: 56 trades, +0.297 R/trade). Its forward virtual paper in the live app (since 2026-10-17) is not touched; the sidecar ignores its journal rows (sources.py)."
+  }
+ },
  "sources": {
   "PASSED_BOOK": {
    "status": "KILLED",
@@ -17,15 +22,11 @@
   },
   "COMBO_02_V1": {
    "status": "PAPER",
-   "evidence": "Owner rulings D51a and D117: COMBO_02 v1 (V1) alerts as PAPER, for observation. Forward-tested in live paper (V1_PAPER_WATCHER, BTC/ETH/SOL 1h long). Its research line COMBO_02|LONG is KILLED at DISCOVERY Gate 2, E9 (KILLED.md: 940 trades, -0.134 R/trade); the owner's ruling sets the alert status."
-  },
-  "CANDLE12_V2": {
-   "status": "PAPER",
-   "evidence": "The research tournament KILLED CANDLE12_V2|LONG at DISCOVERY Gate 2, E9 (research-audit research/KILLED.md: 56 trades, +0.297 R/trade). Owner ruling D117 keeps it PAPER for observation. Forward virtual paper in the live app since 2026-10-17 (state backend/data/candle12_v2_paper/btcusdt_long.json); no frozen forward rule has passed."
+   "evidence": "Owner rulings D51a and D117: COMBO_02 v1 (V1) alerts as PAPER, for observation. Forward-tested in live paper (V1_PAPER_WATCHER, BTC/ETH/SOL 1h long). Its research line COMBO_02|LONG is KILLED at DISCOVERY Gate 2, E9 (KILLED.md: 940 trades, -0.134 R/trade); the owner's ruling sets the alert status. D120: BTCUSDT signals are excluded (EXCLUDED_SYMBOL skip), so V1 alerts on ETH and SOL only."
   },
   "BOOK16_FWD1": {
    "status": "PAPER",
-   "evidence": "Owner ruling D117: FWD-1 is PAPER. BOOK16_4H FWD-1 forward test (worktree book16-fwd1, ledger forward/book16_fwd1/ledger.jsonl): status COLLECTING, 0 closed trades (ledger seq 73, 2026-10-21 12:10 UTC). Research: MTF_4H_16_BREAKOUT252|LONG passed DISCOVERY Gate 2 (35 trades, +1.356 R/trade; DECISIONS D117 row, not independent of the 10-18 screen) and is KILLED at VALIDATION Gate 1 (KILLED.md: 13 trades, under 30, E11); the F1X variant is KILLED at VALIDATION Gate 3. No forward pass read."
+   "evidence": "Owner ruling D117: FWD-1 is PAPER. BOOK16_4H FWD-1 forward test (worktree book16-fwd1, ledger forward/book16_fwd1/ledger.jsonl): status COLLECTING, 0 closed trades (ledger seq 73, 2026-10-21 12:10 UTC). Research: MTF_4H_16_BREAKOUT252|LONG passed DISCOVERY Gate 2 (35 trades, +1.356 R/trade; DECISIONS D117 row, not independent of the 10-18 screen) and is KILLED at VALIDATION Gate 1 (KILLED.md: 13 trades, under 30, E11); the F1X variant is KILLED at VALIDATION Gate 3. No forward pass read. D120: BTCUSDT trades are excluded (EXCLUDED_SYMBOL skip), so FWD-1 alerts on ETH only."
   },
   "LCSC_FWD3": {
    "status": "PAPER",
@@ -33,7 +34,7 @@
   },
   "SCREENER": {
    "status": "UNPROVEN",
-   "evidence": "Generic screener setup signals (SignalEngine ENTRY_CANDIDATE, strategy SCREENER_SETUP) have no backtest row in SCORECARD.csv. Active alert source since 0b4352d (cherry-picked as 65ef14d on live/telegram-alerts-v2): the sidecar alerts on P14 decision-journal rows book SCREENER, event signal (engine final stop and first target; T2 shown as untested; the D63 TP1-to-stop cost band applies). Those rows are written by SetupSignalService in the backend process that holds the paper writer lock, only with DECISION_JOURNAL_SIGNAL_DETAIL=true (P14 flag, default off); with it off the screener sends nothing."
+   "evidence": "Generic screener setup signals (SignalEngine ENTRY_CANDIDATE, strategy SCREENER_SETUP) have no backtest row in SCORECARD.csv. Active alert source since 0b4352d (cherry-picked as 65ef14d on live/telegram-alerts-v2): the sidecar alerts on P14 decision-journal rows book SCREENER, event signal (engine final stop and first target; T2 shown as untested; the D63 TP1-to-stop cost band applies). Those rows are written by SetupSignalService in the backend process that holds the paper writer lock, only with DECISION_JOURNAL_SIGNAL_DETAIL=true (P14 flag, default off); with it off the screener sends nothing. D120: BTCUSDT screener signals are excluded (a screener setup is directional; EXCLUDED_SYMBOL skip)."
   }
  }
 }
