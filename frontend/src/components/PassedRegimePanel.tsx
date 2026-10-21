@@ -4,15 +4,14 @@ import {
   type PassedRegimeResponse,
   type PassedRegimeSide,
 } from "../api/client";
+import { formatIst, formatUtc } from "../paper/zoneTime";
 import { PassedBookHealth } from "./PassedBookHealth";
 import { SymbolAllowlistLines } from "./SymbolAllowlistLines";
 
 const POLL_MS = 5000;
 
 function fmtTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString();
+  return formatIst(iso);
 }
 
 function trendTone(trend: string): string {
@@ -80,7 +79,9 @@ export function PassedRegimePanel() {
               {snapshot ? " · showing last snapshot" : ""}
             </span>
           ) : null}
-          {!error && snapshot?.timestamp ? `Updated ${fmtTime(snapshot.timestamp)}` : null}
+          {!error && snapshot?.timestamp ? (
+            <span title={formatUtc(snapshot.timestamp)}>Updated {fmtTime(snapshot.timestamp)}</span>
+          ) : null}
         </div>
       </div>
 
@@ -193,7 +194,9 @@ export function PassedRegimePanel() {
                     key={`${row.recorded_at}-${row.symbol}-${row.strategy_id}-${row.direction}-${index}`}
                     className="border-t border-terminal-border/40"
                   >
-                    <td className="px-2 py-1.5 font-mono">{fmtTime(row.setup_bar_time)}</td>
+                    <td className="px-2 py-1.5 font-mono" title={formatUtc(row.setup_bar_time)}>
+                      {fmtTime(row.setup_bar_time)}
+                    </td>
                     <td className="px-2 py-1.5 font-mono">{row.symbol}</td>
                     <td className="px-2 py-1.5 font-mono">{row.strategy_id}</td>
                     <td className="px-2 py-1.5 font-mono">{row.timeframe}</td>

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.dashboard_review_routes import router as dashboard_review_router
 from app.api.diagnostics_routes import router as diagnostics_router
 from app.api.routes import router, ws_router
 from app.grid_trading.api import router as grid_trading_router
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(router, prefix="/api")
+    app.include_router(dashboard_review_router, prefix="/api")
     app.include_router(diagnostics_router, prefix="/api")
     app.include_router(intraday_bos_sd_router, prefix="/api")
     app.include_router(regime_lab_router, prefix="/api")

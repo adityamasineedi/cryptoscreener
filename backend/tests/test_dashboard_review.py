@@ -1,0 +1,106 @@
+"""Read-only dashboard snapshot. No engine is created and no file is written."""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+from app.api.dashboard_review_routes import paper_dashboard_review, router
+from app.services.dashboard_review import build_dashboard_review, missed_breakdown
+
+
+def _settings(**flags: bool) -> SimpleNamespace:
+    base = {
+        "paper_v1_watcher_enabled": False,
+        "paper_passed_watcher_enabled": False,
+        "paper_candle12_v2_btc_long_enabled": False,
+        "paper_book16_4h_enabled": False,
+        "paper_legacy_auto_entry_enabled": False,
+        "paper_v21a_watcher_enabled": False,
+        "paper_v1_telegram_enabled": False,
+        "paper_v21a_telegram_enabled": False,
+    }
+    base.update(flags)
+    return SimpleNamespace(**base)
+
+
+def test_route_is_get_only_and_does_not_create_the_engine(monkeypatch):
+    methods = {tuple(sorted(getattr(route, "methods", []) or [])) for route in router.routes}
+    assert methods == {("GET",)}
+    import app.services.paper_trade as paper
+
+    monkeypatch.setattr(paper, "_engine", None)
+    seen = {}
+
+    def _build(**kwargs):
+        seen.update(kwargs)
+        return {"read_only": True}
+
+    monkeypatch.setattr("app.api.dashboard_review_routes.build_dashboard_review", _build)
+    import asyncio
+
+    assert asyncio.run(paper_dashboard_review()) == {"read_only": True}
+    assert seen["engine"] is None
+    assert paper._engine is None
+
+
+def test_snapshot_reads_flags_and_writes_nothing(tmp_path):
+    now = datetime(2026, 10, 21, 6, 0, tzinfo=timezone.utc)
+    snap = build_dashboard_review(
+        root=tmp_path,
+        settings=_settings(paper_v1_watcher_enabled=True, paper_v1_telegram_enabled=True),
+        engine=None,
+        now=now,
+    )
+    assert list(tmp_path.rglob("*")) == []
+    assert snap["read_only"] is True
+    assert snap["reset_blocked"] is True
+    assert [row["id"] for row in snap["forward_tests"] if row["running"]] == ["V1"]
+    passed = next(row for row in snap["watchers"] if row["id"] == "PASSED")
+    assert len(passed["coins"]) == 27
+    atom = next(row for row in passed["coins"] if row["symbol"] == "ATOMUSDT")
+    assert atom == {"symbol": "ATOMUSDT", "group": "mid", "risk_percent": 0.01}
+    assert "V2.1-A" not in snap["telegram_text"]
+    assert "COMBO_02 v1" in snap["telegram_text"]
+
+
+def test_missed_breakdown_keeps_unknown_rows_unknown(tmp_path):
+    paper = tmp_path / "data" / "paper"
+    paper.mkdir(parents=True)
+    (paper / "passed_paper_watermark.json").write_text(
+        json.dumps(
+            {
+                "missed_signals": 160,
+                "unevaluated_bars": 34,
+                "recent_missed": [
+                    {
+                        "symbol": "DOGEUSDT",
+                        "reason": "late_tip",
+                        "strategy_id": "COMBO_02",
+                        "recorded_at": "2026-10-19T17:44:00+00:00",
+                        "setup_bar_time": "2026-10-18T19:00:00+00:00",
+                    },
+                    {
+                        "symbol": "TONUSDT",
+                        "reason": "history_short",
+                        "strategy_id": "COMBO_01",
+                        "recorded_at": "2026-10-21T03:50:00+00:00",
+                        "setup_bar_time": "2026-10-21T02:00:00+00:00",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    snap = build_dashboard_review(root=tmp_path, settings=_settings(), engine=None)
+    missed = snap["missed"]
+    assert missed["counter"] == 160
+    assert missed["by_reason"]["late bar"] == 1
+    assert missed["by_reason"]["ohlcv_catchup"] == 1
+    assert missed["by_reason"]["sleep"] == 0
+    assert missed["by_reason"]["crash"] == 0
+    assert missed["unretained"] == 159
+    assert missed["after_restart_unknown"] == []
+    assert missed["after_restart"][0]["bucket"] == "ohlcv_catchup"
+    assert missed_breakdown([], {"missed_signals": 3, "recent_missed": []})["unretained"] == 3

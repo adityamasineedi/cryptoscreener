@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { fetchBook16Paper, type Book16PaperResponse, type Book16PaperTrade } from "../api/client";
+import { formatIst, formatUtc } from "../paper/zoneTime";
 
 const POLL_MS = 30000;
 
 function fmtTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString();
+  return formatIst(iso);
 }
 
 function usd(v: number | null | undefined, signed = false): string {
@@ -79,10 +78,10 @@ export function Book16PaperPanel() {
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-terminal-text">4h book 16 · 252-bar breakout (BTC/ETH, LONG)</h2>
-          <p className="mt-1 text-[11px] text-terminal-muted">
+          <p className="mt-1 text-[11px] text-terminal-muted" title={formatUtc(snapshot?.start)}>
             Virtual paper from {fmtTime(snapshot?.start)}, mirror of forward test {snapshot?.mirrors ?? "BOOK16_4H_FWD-1"}{" "}
             (the official record). $10,000 per coin, 0.5% risk per trade; after fees, slippage and funding. No
-            orders. Updates after each 4h close.
+            orders. Updates after each 4h close. Forward read at 30 trades; at ~13/year that is about 2.3 years.
           </p>
         </div>
         <div className="text-right font-mono text-[10px] text-terminal-muted" aria-live="polite">
@@ -92,7 +91,9 @@ export function Book16PaperPanel() {
               {snapshot ? " · showing last snapshot" : ""}
             </span>
           ) : null}
-          {!error && snapshot ? `Book updated ${fmtTime(snapshot.updated_utc)}` : null}
+          {!error && snapshot ? (
+            <span title={formatUtc(snapshot.updated_utc)}>Book updated {fmtTime(snapshot.updated_utc)}</span>
+          ) : null}
         </div>
       </div>
 
@@ -169,8 +170,12 @@ export function Book16PaperPanel() {
                   {closed.map((t) => (
                     <tr key={t.trade_id} className="border-t border-terminal-border/40">
                       <td className="px-2 py-1">{t.symbol}</td>
-                      <td className="px-2 py-1">{fmtTime(t.entry_time)}</td>
-                      <td className="px-2 py-1">{fmtTime(t.exit_time)}</td>
+                      <td className="px-2 py-1" title={formatUtc(t.entry_time)}>
+                        {fmtTime(t.entry_time)}
+                      </td>
+                      <td className="px-2 py-1" title={formatUtc(t.exit_time)}>
+                        {fmtTime(t.exit_time)}
+                      </td>
                       <td className="px-2 py-1">{EXIT_LABEL[t.exit_reason ?? ""] ?? t.exit_reason}</td>
                       <td className="px-2 py-1 text-right">{px(t.entry_price)}</td>
                       <td className="px-2 py-1 text-right">{px(t.exit_price)}</td>

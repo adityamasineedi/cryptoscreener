@@ -3,9 +3,11 @@ import {
   closeLegacyPaperPositions,
   disablePaperTrade,
   enablePaperTrade,
+  fetchDashboardReview,
   fetchPaperOpportunities,
   fetchPaperPositions,
   resetPaperTrade,
+  type DashboardReview,
   type PaperOpportunity,
   type PaperPosition,
   type PaperStatus,
@@ -13,6 +15,16 @@ import {
 } from "../api/client";
 import { PassedRegimePanel } from "./PassedRegimePanel";
 import { Book16PaperPanel } from "./Book16PaperPanel";
+import {
+  BookConfigHeader,
+  BookRollupPanel,
+  MissedBreakdown,
+  RunnerHealthPanel,
+  StopStatePanel,
+} from "./PaperDashboardReview";
+import { recordPaperAction, readPaperActions, type PaperActionEntry } from "../paper/actionLog";
+import { splitCancelled } from "../paper/bookStats";
+import { formatIst, formatUtc } from "../paper/zoneTime";
 import {
   CLOSED_LIMIT,
   closedTruncationNote,
@@ -29,12 +41,7 @@ function fmt(n: number | null | undefined, digits = 2): string {
 }
 
 function fmtTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
+  return formatIst(iso);
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -88,6 +95,11 @@ export function PaperTradePanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [oppLoading, setOppLoading] = useState(false);
+  const [review, setReview] = useState<DashboardReview | null>(null);
+  const [actions, setActions] = useState<PaperActionEntry[]>(() => readPaperActions());
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [typedAction, setTypedAction] = useState("");
+  const [showDuplicateFills, setShowDuplicateFills] = useState(false);
   const warmOnce = useRef(false);
 
   const refreshBook = useCallback(async () => {
@@ -148,66 +160,85 @@ export function PaperTradePanel() {
     };
   }, [refreshBook, refreshOpps]);
 
-  async function toggleEnabled() {
-    // Before status loads the current state is unknown: send nothing.
-    if (!status) return;
-    setBusy(true);
-    try {
-      const currentlyOn = status.enabled === true;
-      const next = currentlyOn ? await disablePaperTrade() : await enablePaperTrade();
-      setStatus(next);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
       try {
-        localStorage.setItem("cs.paper.auto", next.enabled ? "1" : "0");
+        const next = await fetchDashboardReview();
+        if (alive) setReview(next);
       } catch {
-        /* ignore */
+        /* The safety lock stays on until a review payload arrives. */
       }
-      await refreshBook();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Toggle failed");
-    } finally {
-      setBusy(false);
-    }
+    };
+    load();
+    const id = window.setInterval(load, 15000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  function ask(action: string) {
+    setTypedAction("");
+    setPendingAction(action);
+    setError(null);
   }
 
-  async function onReset() {
-    if (!window.confirm("Reset paper book and equity to starting balance?")) return;
-    setBusy(true);
-    try {
-      const next = await resetPaperTrade();
-      setStatus(next);
-      await refreshBook();
-      await refreshOpps(0);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Reset failed");
-    } finally {
-      setBusy(false);
-    }
+  function note(action: string) {
+    setActions(recordPaperAction(action));
   }
 
-  async function onCloseLegacy() {
-    if (
-      !window.confirm(
-        "Close/archive ALL open legacy RESEARCH 15M paper positions?\n\n" +
-          "This does NOT touch COMBO_02 v1 watcher positions.\n" +
-          "Reason: legacy_cleanup. Requires explicit confirmation.",
-      )
-    ) {
-      return;
-    }
+  async function runConfirmed() {
+    const action = pendingAction;
+    if (!action || typedAction !== action) return;
+    setPendingAction(null);
     setBusy(true);
     try {
-      const result = await closeLegacyPaperPositions(true);
-      if (!result.ok) {
-        setError(result.message || result.error || "Legacy cleanup failed");
-      } else {
+      if (action === "RESET") {
+        const next = await resetPaperTrade();
+        setStatus(next);
+        await refreshBook();
+        await refreshOpps(0);
+      } else if (action === "CLOSE LEGACY") {
+        const result = await closeLegacyPaperPositions(true);
+        if (!result.ok) {
+          setError(result.message || result.error || "Legacy cleanup failed");
+          return;
+        }
         setStatus(result.status);
         await refreshBook();
+      } else if (action === "AUTO OFF" || action === "AUTO ON") {
+        if (!status) return;
+        const next = status.enabled === true ? await disablePaperTrade() : await enablePaperTrade();
+        setStatus(next);
+        try {
+          localStorage.setItem("cs.paper.auto", next.enabled ? "1" : "0");
+        } catch {
+          /* ignore */
+        }
+        await refreshBook();
       }
+      note(action);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Legacy cleanup failed");
+      setError(e instanceof Error ? e.message : `${action} failed`);
     } finally {
       setBusy(false);
     }
+  }
+
+  function toggleEnabled() {
+    // Before status loads the current state is unknown: send nothing.
+    if (!status) return;
+    ask(status.enabled === true ? "AUTO OFF" : "AUTO ON");
+  }
+
+  function onReset() {
+    if (review == null || review.reset_blocked) return;
+    ask("RESET");
+  }
+
+  function onCloseLegacy() {
+    ask("CLOSE LEGACY");
   }
 
   const statusLoaded = status != null;
@@ -223,38 +254,7 @@ export function PaperTradePanel() {
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-terminal-border pb-3">
         <div>
           <h1 className="font-display text-lg tracking-tight">Paper Trade</h1>
-          <p className="mt-1 max-w-xl text-[11px] text-terminal-muted">
-            Parallel paper streams:{" "}
-            <span className="text-terminal-text">COMBO_02 v1 1h watcher</span>{" "}
-            (BTC / ETH / SOL) and 15m{" "}
-            <span className="text-terminal-text">RESEARCH_15M</span> Trade chances,
-            each with its own source label. LEGACY and v1 tracks stay open
-            separately on the same symbol; Telegram only for COMBO_02 v1.
-            Exits at
-            stop or TP1 on mark/last. No real exchange orders. Freeze:{" "}
-            <span className="font-mono text-terminal-text/80">v1-combo02-long-htf</span>.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-            <span className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-300">
-              v1 core: BTC @ 2%
-            </span>
-            <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-amber-200">
-              paper universe: ETH/SOL + liquid majors @ 2%
-            </span>
-            <span className="rounded border border-terminal-border bg-white/5 px-1.5 py-0.5 text-terminal-muted">
-              research: 15m RESEARCH_15M stream
-            </span>
-            {status?.v1_profile?.enabled === false ? (
-              <span className="rounded border border-rose-500/40 bg-rose-500/10 px-1.5 py-0.5 text-rose-200">
-                v1 profile OFF
-              </span>
-            ) : null}
-            {status?.v1_profile?.secondary_enabled === false ? (
-              <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-amber-200">
-                secondary disabled
-              </span>
-            ) : null}
-          </div>
+          <BookConfigHeader review={review} />
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -275,21 +275,83 @@ export function PaperTradePanel() {
             type="button"
             disabled={busy}
             onClick={onCloseLegacy}
-            title="Archive open RESEARCH 15M / experimental paper positions only"
+            data-testid="paper-close-legacy"
+            title="Archive open RESEARCH 15M paper positions. Type CLOSE LEGACY to confirm."
             className="rounded border border-sky-500/40 px-3 py-1.5 text-[11px] uppercase tracking-wide text-sky-200 hover:bg-sky-500/10"
           >
             Close legacy
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || review == null || review.reset_blocked}
             onClick={onReset}
-            className="rounded border border-terminal-border px-3 py-1.5 text-[11px] uppercase tracking-wide text-terminal-muted hover:bg-white/5"
+            data-testid="paper-reset"
+            title={
+              review == null
+                ? "Reset stays off until the dashboard review loads"
+                : review.reset_blocked
+                  ? `Reset is off: ${review.forward_tests
+                      .filter((row) => row.running)
+                      .map((row) => `${row.id} (${row.why})`)
+                      .join("; ")}`
+                  : "Type RESET to confirm"
+            }
+            className="rounded border border-terminal-border px-3 py-1.5 text-[11px] uppercase tracking-wide text-terminal-muted hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Reset
           </button>
         </div>
       </div>
+      {review == null || review.reset_blocked ? (
+        <p className="text-[11px] text-amber-200/90" data-testid="paper-reset-locked">
+          Reset is off
+          {review == null
+            ? " until the dashboard review loads."
+            : `: ${review.forward_tests
+                .filter((row) => row.running)
+                .map((row) => `${row.id} (${row.why})`)
+                .join("; ")}.`}
+        </p>
+      ) : null}
+      {pendingAction ? (
+        <form
+          className="flex flex-wrap items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px]"
+          data-testid="paper-confirm"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runConfirmed();
+          }}
+        >
+          <label>
+            Type {pendingAction} to confirm
+            <input
+              className="ml-2 rounded border border-terminal-border bg-black/30 px-2 py-1 font-mono text-terminal-text"
+              value={typedAction}
+              onChange={(event) => setTypedAction(event.target.value)}
+              data-testid="paper-confirm-input"
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={typedAction !== pendingAction || busy}
+            data-testid="paper-confirm-submit"
+            className="rounded border border-amber-400/50 px-2 py-1 text-[11px] uppercase disabled:opacity-40"
+          >
+            Confirm
+          </button>
+          <button type="button" className="text-[11px] text-terminal-muted" onClick={() => setPendingAction(null)}>
+            Cancel
+          </button>
+        </form>
+      ) : null}
+      <ol className="text-[10px] text-terminal-muted" data-testid="paper-action-log">
+        {actions.map((entry) => (
+          <li key={`${entry.at}-${entry.action}`} title={formatUtc(entry.at)}>
+            {formatIst(entry.at)} · {entry.action}
+          </li>
+        ))}
+      </ol>
 
       {error ? (
         <div className="rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200">
@@ -303,18 +365,34 @@ export function PaperTradePanel() {
         watcher={watcher}
         telegram={telegram}
         status={status}
+        review={review}
       />
       <PassedRegimePanel />
+      <MissedBreakdown review={review} />
       <Book16PaperPanel />
+      <BookRollupPanel
+        open={open}
+        closed={closed}
+        startingEquity={status?.starting_equity ?? 1000}
+        combined={{
+          equity: status?.equity ?? null,
+          realized: status?.realized_pnl_usd ?? null,
+          openRisk: status?.open_risk_usd ?? null,
+          trades: status?.closed_count ?? null,
+        }}
+        candle12={review?.candle12_v2 ?? null}
+      />
+      <StopStatePanel review={review} />
+      <RunnerHealthPanel review={review} />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <Stat
-          label="Equity (all streams)"
+          label="Equity · all streams combined"
           value={`$${fmt(status?.equity)}`}
           title="Pooled paper equity: starting equity + realized PnL of every stream (v1, passed book, research). New positions size from this number."
         />
         <Stat
-          label="Realized PnL (all streams)"
+          label="Realized PnL · all streams combined"
           value={`$${fmt(status?.realized_pnl_usd)}`}
           tone={(status?.realized_pnl_usd ?? 0) >= 0 ? "up" : "down"}
         />
@@ -393,17 +471,31 @@ export function PaperTradePanel() {
       </section>
 
       <section>
-        <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
-          Cancelled
-          <span className="ml-2 font-mono normal-case text-terminal-muted/80">
-            ({closed.filter((r) => String(r.status || "").toUpperCase() === "CANCELLED").length})
-          </span>
-        </h2>
-        <TradeTable
-          rows={closed.filter((r) => String(r.status || "").toUpperCase() === "CANCELLED")}
-          empty="No cancelled paper trades."
-          mode="cancelled"
-        />
+        {(() => {
+          const split = splitCancelled(closed);
+          const rows = showDuplicateFills ? [...split.visible, ...split.duplicates] : split.visible;
+          return (
+            <>
+              <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
+                Cancelled
+                <span className="ml-2 font-mono normal-case text-terminal-muted/80">({rows.length})</span>
+              </h2>
+              {split.duplicates.length ? (
+                <p className="mb-2 text-[11px] text-terminal-muted" data-testid="paper-duplicate-fills">
+                  duplicate_fill {split.duplicates.length}{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => setShowDuplicateFills((on) => !on)}
+                  >
+                    {showDuplicateFills ? "hide" : "show"}
+                  </button>
+                </p>
+              ) : null}
+              <TradeTable rows={rows} empty="No cancelled paper trades." mode="cancelled" />
+            </>
+          );
+        })()}
       </section>
     </div>
   );
@@ -415,12 +507,14 @@ function MonitorPanel({
   watcher,
   telegram,
   status,
+  review,
 }: {
   autoOn: boolean;
   monitor: PaperStatus["monitor"];
   watcher: PaperStatus["v1_watcher"];
   telegram: PaperStatus["telegram"];
   status: PaperStatus | null;
+  review: DashboardReview | null;
 }) {
   const liveBooks = watcher?.live?.length ? watcher.live : [];
   const books: Array<PaperWatcherBookLive | { symbol: string; timeframe?: string; tier?: string; risk_percent?: number }> =
@@ -433,12 +527,16 @@ function MonitorPanel({
       : null;
   const tgReady = Boolean(telegram?.ready);
   const tgReason = telegram?.reason || null;
+  const v1Watcher = review?.watchers.find((row) => row.id === "V1");
   const bookRisk =
     status?.v1_book_risk && Object.keys(status.v1_book_risk).length
       ? Object.entries(status.v1_book_risk)
           .map(([sym, row]) => `${sym.replace("USDT", "")} ${row.risk_pct_display || fmtPct(row.risk_percent)}`)
           .join(" · ")
-      : "BTC/ETH/SOL 2%";
+      : v1Watcher
+        ? v1Watcher.risk
+        : "—";
+  const openWatchers = (review?.watchers || []).filter((row) => row.can_open).map((row) => row.id);
   return (
     <section className="rounded border border-terminal-border bg-terminal-panel/40 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -446,9 +544,12 @@ function MonitorPanel({
           <h2 className="text-[11px] uppercase tracking-wide text-terminal-muted">
             Auto monitor · Telegram
           </h2>
-          <p className="mt-1 max-w-3xl text-[12px] text-terminal-text/90">
-            {monitor?.explanation ||
-              "Auto paper opens from the COMBO_02 v1 1h watcher (BTC/ETH/SOL)."}
+          <p className="mt-1 max-w-3xl text-[12px] text-terminal-text/90" data-testid="paper-auto-line">
+            {review
+              ? `Watchers that can open trades: ${openWatchers.length ? openWatchers.join(", ") : "none"}. Armed: ${
+                  review.armed_books.length ? review.armed_books.join(", ") : "none"
+                }.`
+              : "Reading which watchers can open trades."}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
             <span
@@ -510,10 +611,7 @@ function MonitorPanel({
             {tgReady ? "READY · delivery on" : "NOT READY"}
           </div>
           <div className="mt-1 text-[10px] leading-relaxed opacity-90">
-            {telegram?.label || "PAPER_ENTRY / PAPER_EXIT from v1 watcher only"}
-            <br />
-            monitors {(telegram?.monitors || ["BTCUSDT", "ETHUSDT", "SOLUSDT"]).join(", ")} @{" "}
-            {telegram?.timeframe || "1h"}
+            {review?.telegram_text || "Reading Telegram delivery flags."}
             {tgReason ? (
               <>
                 <br />
@@ -863,7 +961,10 @@ function TradeTable({
                   </td>
                   <td className="px-2 py-1.5">{fmt(r.quantity, 4)}</td>
                   <td className="px-2 py-1.5 text-amber-200/90">{r.exit_reason || "—"}</td>
-                  <td className="px-2 py-1.5 text-terminal-muted whitespace-nowrap">
+                  <td
+                    className="px-2 py-1.5 text-terminal-muted whitespace-nowrap"
+                    title={`${formatUtc(r.opened_at)} → ${formatUtc(r.closed_at)}`}
+                  >
                     {fmtTimeRange(r)}
                   </td>
                 </>
@@ -912,11 +1013,14 @@ function TradeTable({
                       <td className="px-2 py-1.5">{fmt(r.r_multiple, 2)}</td>
                     </>
                   )}
-                  <td className="px-2 py-1.5 text-terminal-muted">{fmtTime(r.opened_at)}</td>
+                  <td className="px-2 py-1.5 text-terminal-muted" title={formatUtc(r.opened_at)}>
+                    {fmtTime(r.opened_at)}
+                  </td>
                   {mode === "closed" ? (
                     <td
                       className="px-2 py-1.5 text-terminal-muted whitespace-nowrap"
                       data-testid="paper-closed-at"
+                      title={formatUtc(r.closed_at)}
                     >
                       {fmtTime(r.closed_at)}
                     </td>

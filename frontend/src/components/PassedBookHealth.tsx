@@ -1,4 +1,5 @@
 import type { PassedRegimeMissedRow, PassedRegimeResponse } from "../api/client";
+import { formatIst, formatUtc } from "../paper/zoneTime";
 import { coinLabel } from "./SymbolAllowlistLines";
 
 /** 45 -> "45s", 3360 -> "56m", 3900 -> "1h 5m". Missing -> "—". */
@@ -14,9 +15,7 @@ export function fmtLag(seconds: number | null | undefined): string {
 }
 
 function fmtTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString();
+  return formatIst(iso);
 }
 
 function count(value: number | null | undefined): string {
@@ -66,7 +65,11 @@ export function PassedBookHealth({ snapshot }: { snapshot: PassedRegimeResponse 
         ) : null}
         <span className="text-terminal-muted">
           Last evaluated bar{" "}
-          <span className="font-mono text-terminal-text" data-testid="passed-health-last-bar">
+          <span
+            className="font-mono text-terminal-text"
+            data-testid="passed-health-last-bar"
+            title={formatUtc(beat?.last_eval_bar)}
+          >
             {lastBar}
           </span>
         </span>
@@ -129,7 +132,9 @@ export function PassedBookHealth({ snapshot }: { snapshot: PassedRegimeResponse 
                 className="flex flex-wrap gap-x-3 text-terminal-text"
                 data-testid="passed-health-missed-row"
               >
-                <span className="text-terminal-muted">{fmtTime(row.setup_bar_time)}</span>
+                <span className="text-terminal-muted" title={formatUtc(row.setup_bar_time)}>
+                  {fmtTime(row.setup_bar_time)}
+                </span>
                 <span>{missedWhat(row)}</span>
                 <span className="text-amber-300">{row.note || row.reason || "—"}</span>
                 <span className="text-terminal-muted">lag {fmtLag(row.lag_seconds)}</span>

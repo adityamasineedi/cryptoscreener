@@ -7,6 +7,7 @@ import {
   type PassedRegimeResponse,
 } from "../api/client";
 import { liveAutoStrategies, splitLivePaperRows } from "../paper/livePaper";
+import { formatIst, formatUtc } from "../paper/zoneTime";
 
 const POLL_MS = 15000;
 
@@ -19,9 +20,7 @@ function fmt(n: number | null | undefined, digits = 2): string {
 }
 
 function fmtTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleString();
+  return formatIst(iso);
 }
 
 function LiveRows({ rows }: { rows: PaperPosition[] }) {
@@ -51,7 +50,9 @@ function LiveRows({ rows }: { rows: PaperPosition[] }) {
                 <td className="px-2 py-1.5 font-mono">{row.symbol}</td>
                 <td className="px-2 py-1.5 font-mono">{strategy}</td>
                 <td className="px-2 py-1.5">{row.side}</td>
-                <td className="px-2 py-1.5 whitespace-nowrap">{fmtTime(row.opened_at)}</td>
+                <td className="px-2 py-1.5 whitespace-nowrap" title={formatUtc(row.opened_at)}>
+                  {fmtTime(row.opened_at)}
+                </td>
                 <td className="px-2 py-1.5 font-mono whitespace-nowrap">
                   {fmt(row.stop_price, 4)} → {fmt(row.entry_price, 4)} → {fmt(row.tp1_price, 4)}
                 </td>

@@ -2330,8 +2330,84 @@ export type PaperOpportunity = {
   ohlcv_freshness?: string | null;
 };
 
+export type DashboardWatcher = {
+  id: string;
+  can_open: boolean;
+  coins: unknown;
+  risk: string;
+  sides?: string[][];
+};
+
+export type DashboardReview = {
+  read_only: boolean;
+  as_of: string;
+  armed_books: string[];
+  watchers: DashboardWatcher[];
+  telegram_text: string;
+  forward_tests: Array<{ id: string; running: boolean; why: string }>;
+  reset_blocked: boolean;
+  stops: {
+    counter_start: { first_run_utc?: string; ruling?: string } | null;
+    limits: {
+      consecutive_loss_halt?: number;
+      consecutive_loss_symbol_halt?: number;
+      peak_drawdown_halt_pct?: number;
+      strategy_drawdown_halt_r?: number;
+      daily_loss_halt_r?: number;
+    };
+    books: Record<
+      string,
+      {
+        halted: boolean;
+        halts: Array<{ halt: string; tripped_at?: string | null; resets_at?: string | null }>;
+        paused_coins: Array<{ symbol?: string; resets_at?: string | null }>;
+        consecutive_losses: number | null;
+        symbol_streaks: Record<string, number>;
+        drawdown_pct: number | null;
+        strategy_drawdown_r: number | null;
+        day_pnl_r: number | null;
+        equity: number | null;
+      }
+    >;
+    journal_tail: Array<Record<string, unknown>>;
+    engine_loaded: boolean;
+  };
+  missed: {
+    counter: number;
+    unevaluated_bars: number;
+    retained_rows: number;
+    unretained: number;
+    by_reason: Record<string, number>;
+    by_book: Record<string, number>;
+    by_day: Record<string, number>;
+    after_restart_utc: string;
+    after_restart: Array<Record<string, unknown>>;
+    after_restart_unknown: Array<Record<string, unknown>>;
+    note: string;
+  };
+  runners: Array<{
+    runner: string;
+    last_heartbeat: string | null;
+    age_seconds: number | null;
+    status: string;
+    detail: string;
+  }>;
+  candle12_v2: {
+    present: boolean;
+    equity: number | null;
+    realized_pnl: number | null;
+    net_r: number | null;
+    trades: number;
+    open_risk: number | null;
+  };
+};
+
 export function fetchPaperStatus() {
   return getJson<PaperStatus>("/api/paper/status");
+}
+
+export function fetchDashboardReview(signal?: AbortSignal) {
+  return getJson<DashboardReview>("/api/paper/dashboard-review", { signal });
 }
 
 export function fetchPaperPositions(closedLimit = 50) {

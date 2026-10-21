@@ -1,10 +1,13 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   disablePaperTrade,
+  fetchDashboardReview,
   fetchPaperOpportunities,
   fetchPaperPositions,
+  resetPaperTrade,
+  type DashboardReview,
   type PaperPosition,
   type PaperStatus,
 } from "../api/client";
@@ -16,6 +19,8 @@ vi.mock("../api/client", async (importOriginal) => {
     ...actual,
     fetchPaperPositions: vi.fn(),
     fetchPaperOpportunities: vi.fn(),
+    fetchDashboardReview: vi.fn(async () => REVIEW),
+    resetPaperTrade: vi.fn(),
     disablePaperTrade: vi.fn(),
     // Mounted PassedRegimePanel: never resolves, so it stays in its loading state.
     fetchPassedRegime: vi.fn(() => new Promise(() => {})),
@@ -23,6 +28,59 @@ vi.mock("../api/client", async (importOriginal) => {
     fetchBook16Paper: vi.fn(() => new Promise(() => {})),
   };
 });
+
+const REVIEW: DashboardReview = {
+  read_only: true,
+  as_of: "2026-10-21T06:00:00+00:00",
+  armed_books: ["V1", "PASSED"],
+  watchers: [
+    {
+      id: "V1",
+      can_open: true,
+      coins: [{ symbol: "BTCUSDT", risk_percent: 0.02, timeframe: "1h" }],
+      risk: "2% of equity on each 1h book",
+    },
+    {
+      id: "PASSED",
+      can_open: true,
+      coins: [{ symbol: "ATOMUSDT", group: "mid", risk_percent: 0.01 }],
+      risk: "2% large-cap list, 1% mid-cap list",
+    },
+  ],
+  telegram_text: "Telegram sends PAPER_ENTRY / PAPER_EXIT for COMBO_02 v1 (1 1h books).",
+  forward_tests: [{ id: "V1", running: true, why: "PAPER_V1_WATCHER_ENABLED" }],
+  reset_blocked: true,
+  stops: {
+    counter_start: { first_run_utc: "2026-10-20T17:57:21+00:00", ruling: "owner D27/D34" },
+    limits: { consecutive_loss_halt: 3, peak_drawdown_halt_pct: 0.1, strategy_drawdown_halt_r: 6 },
+    books: {},
+    journal_tail: [],
+    engine_loaded: false,
+  },
+  missed: {
+    counter: 160,
+    unevaluated_bars: 34,
+    retained_rows: 2,
+    unretained: 159,
+    by_reason: { sleep: 0, crash: 0, "late bar": 1, ohlcv_catchup: 1, other: 0 },
+    by_book: { PASSED_BOOK: 2 },
+    by_day: { "2026-10-19": 1 },
+    after_restart_utc: "2026-10-21T03:48:00+00:00",
+    after_restart: [],
+    after_restart_unknown: [],
+    note: "missed_signals counts late_tip only.",
+  },
+  runners: [
+    {
+      runner: "passed book",
+      last_heartbeat: "2026-10-21T06:01:24+00:00",
+      age_seconds: 30,
+      status: "FRESH",
+      detail: "watermark",
+    },
+  ],
+  candle12_v2: { present: true, equity: 1000, realized_pnl: 0, net_r: 0, trades: 0, open_risk: 0 },
+};
 
 const STATUS: PaperStatus = {
   enabled: true,
@@ -390,5 +448,112 @@ describe("PaperTradePanel Auto control before status loads (P6)", () => {
     expect(toggle.disabled).toBe(true);
     toggle.click();
     expect(vi.mocked(disablePaperTrade)).not.toHaveBeenCalled();
+  });
+});
+
+describe("Paper dashboard safety and copy", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPaperPositions).mockResolvedValue({ open: [], closed: [], status: STATUS });
+    vi.mocked(fetchPaperOpportunities).mockResolvedValue({
+      rows: [],
+      count: 0,
+      ready: 0,
+      near: 0,
+      forming: 0,
+      auto_enabled: true,
+      note: "",
+    });
+    vi.mocked(fetchDashboardReview).mockResolvedValue(REVIEW);
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it("builds the header from the review and drops the stale phrases", async () => {
+    render(<PaperTradePanel />);
+    const config = await screen.findByTestId("paper-book-config");
+    expect(config).toHaveTextContent("V1");
+    expect(config).toHaveTextContent("ATOMUSDT");
+    expect(screen.getByTestId("paper-auto-line")).toHaveTextContent("Watchers that can open trades: V1, PASSED");
+    expect(screen.getByText(/COMBO_02 v1 \(1 1h books\)/)).toBeTruthy();
+    expect(screen.queryByText(/ETH\/SOL \+ liquid majors/)).toBeNull();
+    expect(screen.queryByText(/V2\.1-A/)).toBeNull();
+    expect(screen.queryByText(/auto opens only from the v1 watcher/i)).toBeNull();
+    expect(screen.getByTestId("paper-missed-breakdown")).toHaveTextContent("160");
+    expect(screen.getByTestId("paper-missed-breakdown")).toHaveTextContent("late bar 1");
+    expect(screen.getByTestId("paper-combined-label")).toHaveTextContent("all streams combined");
+  });
+
+  it("keeps Reset off while a forward test is running", async () => {
+    render(<PaperTradePanel />);
+    const reset = (await screen.findByTestId("paper-reset")) as HTMLButtonElement;
+    expect(reset.disabled).toBe(true);
+    expect(screen.getByTestId("paper-reset-locked")).toHaveTextContent("V1");
+    expect(screen.getByTestId("paper-reset-locked")).toHaveTextContent("PAPER_V1_WATCHER_ENABLED");
+    fireEvent.click(reset);
+    expect(screen.queryByTestId("paper-confirm")).toBeNull();
+  });
+
+  it("asks for the action name and logs a successful reset", async () => {
+    vi.mocked(fetchDashboardReview).mockResolvedValue({
+      ...REVIEW,
+      reset_blocked: false,
+      forward_tests: [{ id: "V1", running: false, why: "PAPER_V1_WATCHER_ENABLED" }],
+    });
+    vi.mocked(resetPaperTrade).mockResolvedValue(STATUS);
+    render(<PaperTradePanel />);
+    const reset = (await screen.findByTestId("paper-reset")) as HTMLButtonElement;
+    expect(reset.disabled).toBe(false);
+    fireEvent.click(reset);
+    fireEvent.change(screen.getByTestId("paper-confirm-input"), { target: { value: "NO" } });
+    expect((screen.getByTestId("paper-confirm-submit") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId("paper-confirm-input"), { target: { value: "RESET" } });
+    fireEvent.click(screen.getByTestId("paper-confirm-submit"));
+    expect(await screen.findByTestId("paper-action-log")).toHaveTextContent("RESET");
+    expect(screen.getByTestId("paper-action-log").textContent).toMatch(/IST/);
+    expect(vi.mocked(resetPaperTrade)).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides duplicate_fill cancellations until show is clicked", async () => {
+    const cancelled = {
+      ...STATUS,
+      id: "dup",
+    };
+    vi.mocked(fetchPaperPositions).mockResolvedValue({
+      open: [],
+      closed: [
+        {
+          id: "dup-1",
+          symbol: "TRXUSDT",
+          side: "LONG",
+          status: "CANCELLED",
+          entry_price: 0.1,
+          stop_price: 0.09,
+          tp1_price: 0.12,
+          quantity: 1,
+          risk_usd: 1,
+          opened_at: "2026-10-13T12:00:00+00:00",
+          closed_at: "2026-10-13T19:03:00+00:00",
+          exit_price: 0.1,
+          exit_reason: "duplicate_fill",
+          pnl_usd: 0,
+          r_multiple: 0,
+          mark_price: null,
+          unrealized_pnl_usd: null,
+          unrealized_r: null,
+          source_candle_ts: "2026-10-13T12:00:00+00:00",
+          timeframe: "1h",
+        },
+      ],
+      status: { ...STATUS, ...cancelled },
+    });
+    render(<PaperTradePanel />);
+    const line = await screen.findByTestId("paper-duplicate-fills");
+    expect(line).toHaveTextContent("duplicate_fill 1");
+    expect(screen.queryByText("TRXUSDT")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "show" }));
+    expect(screen.getByText("TRXUSDT")).toBeTruthy();
   });
 });

@@ -2,6 +2,7 @@
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchPassedRegime, type PassedRegimeResponse } from "../api/client";
+import { formatIst, formatUtc } from "../paper/zoneTime";
 import { PassedRegimePanel } from "./PassedRegimePanel";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -216,7 +217,8 @@ describe("PassedRegimePanel", () => {
     expect(first).toContain("BULLISH");
     expect(first).toContain("not_opened");
     expect(first).toContain("symbol_has_open_position");
-    expect(first).toContain(new Date("2026-10-14T08:00:00+00:00").toLocaleString());
+    expect(first).toContain(formatIst("2026-10-14T08:00:00+00:00"));
+    expect(rows[0].querySelector("td")?.getAttribute("title")).toBe(formatUtc("2026-10-14T08:00:00+00:00"));
     const second = rows[1].textContent ?? "";
     expect(second).toContain("BTCUSDT");
     expect(second).toContain("opened");
@@ -443,7 +445,10 @@ describe("PassedRegimePanel · passed book health", () => {
       response({ heartbeat: HEARTBEAT, missed_signals: 0, unevaluated_bars: 0, recent_missed: [] }),
     );
 
-    expect(health("last-bar")).toBe(`ETH ${new Date("2026-10-17T11:00:00+00:00").toLocaleString()}`);
+    expect(health("last-bar")).toBe(`ETH ${formatIst("2026-10-17T11:00:00+00:00")}`);
+    expect(screen.getByTestId("passed-health-last-bar").getAttribute("title")).toBe(
+      formatUtc("2026-10-17T11:00:00+00:00"),
+    );
     expect(health("lag")).toBe("5m");
     expect(health("since")).toBe("2m ago");
     expect(health("missed")).toBe("0");
@@ -495,7 +500,10 @@ describe("PassedRegimePanel · passed book health", () => {
 
     const rows = screen.getAllByTestId("passed-health-missed-row").map((row) => row.textContent ?? "");
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain(new Date("2026-10-17T09:00:00+00:00").toLocaleString());
+    expect(rows[0]).toContain(formatIst("2026-10-17T09:00:00+00:00"));
+    expect(screen.getAllByTestId("passed-health-missed-row")[0].querySelector("span")?.getAttribute("title")).toBe(
+      formatUtc("2026-10-17T09:00:00+00:00"),
+    );
     expect(rows[0]).toContain("ARB · COMBO_02_V2 · SHORT");
     expect(rows[0]).toContain("missed: evaluated late (56m)");
     expect(rows[0]).toContain("lag 56m");
