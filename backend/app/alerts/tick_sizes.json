@@ -1,0 +1,32 @@
+{
+ "_source": "Binance USDT-M futures PRICE_FILTER tickSize, copied from research-audit research/out/paper_plan/exchange_filters.json (snapshot file dated 2026-10-20). A symbol not listed here is skipped as NO_TICK_SIZE, never guessed.",
+ "ticks": {
+  "AAVEUSDT": 0.01,
+  "ADAUSDT": 0.0001,
+  "APTUSDT": 0.0001,
+  "ARBUSDT": 1e-05,
+  "ATOMUSDT": 0.001,
+  "AVAXUSDT": 0.001,
+  "BCHUSDT": 0.01,
+  "BNBUSDT": 0.01,
+  "BTCUSDT": 0.1,
+  "DOGEUSDT": 1e-05,
+  "DOTUSDT": 0.0001,
+  "ETCUSDT": 0.001,
+  "ETHUSDT": 0.01,
+  "FILUSDT": 0.0001,
+  "ICPUSDT": 0.001,
+  "INJUSDT": 0.001,
+  "LINKUSDT": 0.001,
+  "LTCUSDT": 0.01,
+  "NEARUSDT": 0.001,
+  "OPUSDT": 1e-05,
+  "RENDERUSDT": 0.001,
+  "SOLUSDT": 0.01,
+  "SUIUSDT": 0.0001,
+  "TONUSDT": 0.0001,
+  "TRXUSDT": 1e-05,
+  "UNIUSDT": 0.001,
+  "XRPUSDT": 0.0001
+ }
+}

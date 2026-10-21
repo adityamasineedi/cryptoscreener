@@ -1,0 +1,70 @@
+{
+ "_doc": "Telegram trade alerts (owner message 2026-10-21). Every number the alert rules use lives in this file. Output-only: no paper or trading decision reads this file, the alert code or the alert state.",
+ "enabled": false,
+ "dry_run": true,
+ "allow_killed": false,
+ "telegram": {
+  "bot_token_env": "TELEGRAM_BOT_TOKEN",
+  "chat_id_env": "TRADE_ALERTS_TELEGRAM_CHAT_ID",
+  "timeout_seconds": 15
+ },
+ "labels": [
+  {"max_minutes": 15, "label": "SCALP"},
+  {"max_minutes": 60, "label": "INTRADAY"},
+  {"max_minutes": 1440, "label": "SWING"}
+ ],
+ "entry_zone": {
+  "atr_period": 14,
+  "atr_multiple": 0.5,
+  "min_sl_gap_fraction_of_stop": 0.5,
+  "atr_lookback_bars": 200
+ },
+ "targets": {
+  "t1_r": 1.0,
+  "t3_r_beyond_t2": 1.0,
+  "t4_r_beyond_t2": 2.0,
+  "min_tested_t2_r": 2.0
+ },
+ "no_tested_target": {
+  "action": "skip",
+  "fallback_t2_r": 2.0
+ },
+ "risk": {
+  "risk_pct": 1.0,
+  "min_leverage": 1,
+  "max_leverage": 3,
+  "display_decimals": 2
+ },
+ "rr_decimals": 1,
+ "cost": {
+  "_doc": "Round trip = fees on both sides + entry slippage + exit slippage, read from the app's ResearchConfig defaults (taker_fee_rate, entry_slippage_rate, exit_slippage_rate). Skip as SKIPPED_COST when stop distance < multiple x round trip.",
+  "multiple": 3.0,
+  "fee_sides": 2
+ },
+ "validity_bars": 3,
+ "late_minutes": 15,
+ "rate_limit": {
+  "max_alerts": 20,
+  "window_minutes": 60
+ },
+ "tracking": {
+  "max_track_bars": 200
+ },
+ "daily_summary_hour_utc": 0,
+ "poll_seconds": 30,
+ "defer_missing_engine_values_seconds": 300,
+ "backfill_hours": 24,
+ "journal_alert_outcomes": ["opened"],
+ "preview": {
+  "render_suppressed": true,
+  "track_suppressed_in_dry_run": true
+ },
+ "sources": {
+  "journal": "data/paper/decision_journal.jsonl",
+  "candle12_v2_state": "backend/data/candle12_v2_paper/btcusdt_long.json",
+  "book16_fwd1_ledger": "D:/cryptoscreener-worktrees/book16-fwd1/forward/book16_fwd1/ledger.jsonl",
+  "lcsc_fwd3_runs": "D:/cryptoscreener-worktrees/lcsc-fwd3/backend/scripts/lcsc_validation/forward_out/runs.jsonl",
+  "lcsc_fwd3_target_r": 2.0,
+  "_lcsc_fwd3_target_r_doc": "LCSC FWD-3 contract: target 2R off the signal close (stop = invalidation); used because the run record lists the target only once the trade is filled."
+ }
+}

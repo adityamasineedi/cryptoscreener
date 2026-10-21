@@ -1,0 +1,32 @@
+{
+ "_doc": "STATUS per alert source (owner message 2026-10-21). Built by hand on 2026-10-21 from research-audit research/SCORECARD.csv, research/KILLED.md, research/KILLED_BOOKS.md and the forward-test records. Precedence when several apply: KILLED > FORWARD-PASSED > PAPER > UNPROVEN. KILLED sends nothing unless trade_alerts_config.json allow_killed is true. No source has a frozen forward rule that has PASSED, so nothing is FORWARD-PASSED.",
+ "default": "UNPROVEN",
+ "sources": {
+  "PASSED_BOOK": {
+   "status": "KILLED",
+   "strategies": ["COMBO_02_V2", "COMBO_02", "COMBO_02_CLOSED_HTF", "COMBO_03_TRANSITION", "COMBO_03_TRANSITION_B", "COMBO_01", "COMBO_02_LOCAL"],
+   "evidence": "KILLED_BOOKS.md 2026-10-20 22:35 (passed book KILLED at Gate 2, GATES section 5); owner ruling D40: live paper keeps it only as a parity test. Sides COMBO_01, COMBO_02, COMBO_02_CLOSED_HTF, COMBO_02_LOCAL (LONG and SHORT) are in KILLED.md (DISCOVERY Gate 2, E9); COMBO_02_V2 and COMBO_03_TRANSITION(_B) are NOT_RUN in SCORECARD.csv. The book-level kill covers every side it runs."
+  },
+  "COMBO_02_V1": {
+   "status": "KILLED",
+   "would_be_without_kill": "PAPER",
+   "evidence": "Forward-testing in live paper (V1_PAPER_WATCHER, BTC/ETH/SOL 1h long), but its research line COMBO_02|LONG (and COMBO_02_CLOSED_HTF|LONG) is KILLED at DISCOVERY Gate 2 (KILLED.md). KILLED takes precedence over PAPER, so it is suppressed by default. Change to PAPER here only on an owner ruling."
+  },
+  "CANDLE12_V2": {
+   "status": "PAPER",
+   "evidence": "Forward virtual paper in the live app since 2026-10-17 (state backend/data/candle12_v2_paper/btcusdt_long.json); SCORECARD.csv CANDLE12_V2|LONG DISCOVERY NOT_RUN; not in KILLED.md; no frozen forward rule has passed."
+  },
+  "BOOK16_FWD1": {
+   "status": "PAPER",
+   "evidence": "BOOK16_4H_FWD-1 forward test (worktree book16-fwd1, ledger forward/book16_fwd1/ledger.jsonl), status COLLECTING with 0 closed trades; SCORECARD.csv MTF_4H_16_BREAKOUT252|LONG DISCOVERY NOT_RUN; not killed."
+  },
+  "LCSC_FWD3": {
+   "status": "PAPER",
+   "evidence": "LCSC_V1_ETHUSDT_LONG/FWD-3 forward test (worktree lcsc-fwd3, forward_out/runs.jsonl), 1 closed trade; not in SCORECARD.csv or KILLED.md; no pass read."
+  },
+  "SCREENER": {
+   "status": "UNPROVEN",
+   "evidence": "Generic screener setup signals (SignalEngine ENTRY_CANDIDATE) have no backtest row in SCORECARD.csv. Not wired as an alert source in this phase (no engine stop or tested target is persisted)."
+  }
+ }
+}

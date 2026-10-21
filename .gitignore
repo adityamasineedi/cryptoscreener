@@ -66,3 +66,7 @@ backend/scripts/strategy_search/out/engine_signals/
 backend/scripts/strategy_search/study2/out/regimes/
 backend/scripts/strategy_search/study2/paper/state/
 backend/scripts/smc_monthly/btc_ohlcv.csv
+
+# Trade-alert sidecar output (dry-run previews, alert log, state)
+data/alerts/
+data/alerts_*/
