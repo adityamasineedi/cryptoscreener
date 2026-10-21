@@ -42,6 +42,12 @@ def configure(path: str | Path | None, *, signal_detail: bool = False) -> None:
         _once.clear()
 
 
+def set_signal_detail(on: bool) -> None:
+    """Turn signal detail on or off for the configured journal (no journal path: stays off)."""
+    global _signal_detail
+    _signal_detail = bool(on) and _path is not None
+
+
 def enabled() -> bool:
     return _path is not None
 

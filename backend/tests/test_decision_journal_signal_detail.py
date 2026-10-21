@@ -64,9 +64,15 @@ def test_detail_adds_fields_without_replacing_and_swallows_errors(tmp_path):
     assert [r.get("n") for r in rows[2:]] == [None, 1]  # None-builder wrote nothing; once-key wrote once
 
 
-def test_detail_needs_a_journal_path():
+def test_detail_needs_a_journal_path(tmp_path):
     decision_journal.configure(None, signal_detail=True)
     assert not decision_journal.signal_detail_enabled()
+    decision_journal.set_signal_detail(True)
+    assert not decision_journal.signal_detail_enabled()
+    decision_journal.configure(tmp_path / "j.jsonl")
+    decision_journal.set_signal_detail(True)
+    assert decision_journal.signal_detail_enabled()
+    decision_journal.configure(None)
 
 
 # --- passed book replay ----------------------------------------------------------------------------------
