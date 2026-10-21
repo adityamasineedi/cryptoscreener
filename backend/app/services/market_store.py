@@ -12,6 +12,46 @@ logger = get_logger("market_store")
 
 Subscriber = Callable[[dict[str, Any]], Awaitable[None]]
 
+# funding_rates keeps a coin's funding at most once a minute (owner ruling D54, P16a): the mark-price
+# stream updates every second for ~525 coins, and storing every tick grew the table ~2 GB a day.
+# Around each settlement time every tick is still kept, exactly as before, so the rows at or nearest a
+# settlement are unchanged. A settlement is a coin's next funding time from the mark stream.
+FUNDING_PERSIST_MIN_SECONDS = 60.0
+FUNDING_SETTLEMENT_WINDOW_SECONDS = 120.0
+
+
+def funding_row_due(
+    previous: tuple[datetime, datetime | None, datetime | None] | None,
+    ts: datetime,
+    next_funding: datetime | None,
+) -> bool:
+    """Whether a coin's funding tick at ``ts`` is stored.
+
+    ``previous`` is the coin's last stored (time, next funding time, last passed settlement).
+    """
+    if previous is None:
+        return True
+    last_ts, last_next, last_settlement = previous
+    if next_funding is not None and last_next is not None and next_funding != last_next:
+        return True  # a settlement passed since the last stored row
+    window = FUNDING_SETTLEMENT_WINDOW_SECONDS
+    for settlement in (next_funding, last_next, last_settlement):
+        if settlement is not None and abs((ts - settlement).total_seconds()) <= window:
+            return True
+    return (ts - last_ts).total_seconds() >= FUNDING_PERSIST_MIN_SECONDS
+
+
+def funding_state_after(
+    previous: tuple[datetime, datetime | None, datetime | None] | None,
+    ts: datetime,
+    next_funding: datetime | None,
+) -> tuple[datetime, datetime | None, datetime | None]:
+    """The coin's state after storing a tick: the passed settlement is remembered for its window."""
+    last_settlement = previous[2] if previous else None
+    if previous and previous[1] is not None and next_funding is not None and next_funding != previous[1]:
+        last_settlement = previous[1]
+    return (ts, next_funding, last_settlement)
+
 
 class MarketDataStore:
     """In-process market cache with optional Redis mirroring."""
@@ -29,6 +69,8 @@ class MarketDataStore:
         self._dirty_marks: set[str] = set()
         self._flush_task: asyncio.Task | None = None
         self._flush_interval = 0.25  # batch browser updates
+        # Last stored funding row per coin: (time, next funding time, last passed settlement) (P16a).
+        self._funding_last: dict[str, tuple[datetime, datetime | None, datetime | None]] = {}
 
     async def connect_redis(self, redis_client) -> None:
         self.redis = redis_client
@@ -90,6 +132,7 @@ class MarketDataStore:
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("redis_set_failed", error=str(exc))
 
+        funding_rows: list[dict[str, Any]] = []
         for sym in marks:
             m = self.mark_prices.get(sym)
             if m:
@@ -110,18 +153,27 @@ class MarketDataStore:
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("redis_set_failed", error=str(exc))
                 if m.funding_rate is not None:
-                    try:
-                        from app.services.persistence import persistence
-
-                        await persistence.persist_funding(
-                            sym,
-                            float(m.funding_rate),
-                            mark_price=m.mark_price,
-                            source=m.source,
-                            ts=m.timestamp,
+                    previous = self._funding_last.get(sym)
+                    if funding_row_due(previous, m.timestamp, m.next_funding_time):
+                        funding_rows.append(
+                            {
+                                "symbol": sym,
+                                "funding_rate": float(m.funding_rate),
+                                "mark_price": m.mark_price,
+                                "source": m.source,
+                                "time": m.timestamp,
+                            }
                         )
-                    except Exception:  # noqa: BLE001
-                        pass
+                        self._funding_last[sym] = funding_state_after(previous, m.timestamp, m.next_funding_time)
+
+        if funding_rows:
+            # One batched write per flush, not one transaction per coin (P16a).
+            try:
+                from app.services.persistence import persistence
+
+                await persistence.persist_funding_batch(funding_rows)
+            except Exception:  # noqa: BLE001
+                pass
 
         if batch:
             event = {

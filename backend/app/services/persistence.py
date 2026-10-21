@@ -236,6 +236,42 @@ class PersistenceService:
         except Exception as exc:  # noqa: BLE001
             self._errors += 1
             logger.warning("persist_funding_failed", error=str(exc))
+
+    async def persist_funding_batch(self, rows: list[dict[str, Any]]) -> None:
+        """Store many funding rows in one transaction (owner ruling D54, P16a).
+
+        Each row: symbol, funding_rate, mark_price, source, time. Same upsert as persist_funding.
+        """
+        if not self.active or not rows:
+            return
+        sql = text(
+            """
+            INSERT INTO funding_rates (time, symbol, funding_rate, mark_price, source)
+            VALUES (:time, :symbol, :funding_rate, :mark_price, :source)
+            ON CONFLICT (time, symbol) DO UPDATE SET
+                funding_rate = EXCLUDED.funding_rate,
+                mark_price = EXCLUDED.mark_price,
+                source = EXCLUDED.source
+            """
+        )
+        params = [
+            {
+                "time": r.get("time") or datetime.now(timezone.utc),
+                "symbol": str(r["symbol"]).upper(),
+                "funding_rate": r["funding_rate"],
+                "mark_price": r.get("mark_price"),
+                "source": r.get("source") or "binance",
+            }
+            for r in rows
+        ]
+        try:
+            async with db_manager.engine.begin() as conn:
+                await conn.execute(sql, params)
+            self._writes += len(params)
+        except Exception as exc:  # noqa: BLE001
+            self._errors += 1
+            logger.warning("persist_funding_batch_failed", error=str(exc), rows=len(params))
+
     async def persist_open_interest(
         self,
         symbol: str,
