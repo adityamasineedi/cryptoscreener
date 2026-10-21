@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  P12 / D128a: the "LIVE backend autostart (P12)" task as XML, equivalent to register_autostart.ps1 (Interactive).
+  Replace __USER__ (e.g. MYPC\owner) and check the two paths, then, as the owner:
+    schtasks /Create /TN "LIVE backend autostart (P12)" /XML live_autostart_task.xml
+  Remove:  schtasks /Delete /TN "LIVE backend autostart (P12)" /F
+  StartBoundary is any past time; the repetition makes it fire every 5 minutes from then on.
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>P12: start the live backend from the pinned deploy worktree when it is down. Does nothing if live is up, stopped by the owner (data\live_stopped_by_owner) or paused after a crash loop (data\live_autostart_paused).</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>__USER__</UserId>
+    </LogonTrigger>
+    <TimeTrigger>
+      <Enabled>true</Enabled>
+      <StartBoundary>2026-10-22T00:00:00</StartBoundary>
+      <Repetition>
+        <Interval>PT5M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>__USER__</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT10M</ExecutionTimeLimit>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "D:\cryptoscreener-deploy\scripts\live\start_live.ps1" -Auto -LiveRoot "D:\cryptoscreener" -DeployDir "D:\cryptoscreener-deploy"</Arguments>
+      <WorkingDirectory>D:\cryptoscreener-deploy</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
