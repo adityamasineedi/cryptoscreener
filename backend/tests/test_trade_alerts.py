@@ -23,6 +23,7 @@ STATUS = {
         "PASSED_BOOK": {"status": "KILLED"},
         "CANDLE12_V2": {"status": "PAPER"},
         "LCSC_FWD3": {"status": "PAPER"},
+        "BOOK16_FWD1": {"status": "PAPER"},
         "FP": {"status": "FORWARD-PASSED"},
     },
 }
@@ -76,7 +77,7 @@ def test_labels_by_timeframe():
 def test_killed_sources_in_shipped_status_map():
     c = AlertConfig()
     assert c.status_for("PASSED_BOOK") == "KILLED"
-    assert c.status_for("COMBO_02_V1") == "KILLED"
+    assert c.status_for("COMBO_02_V1") == "PAPER"  # owner ruling D51a
     assert c.status_for("CANDLE12_V2") == "PAPER"
     assert c.status_for("BOOK16_FWD1") == "PAPER" and c.status_for("LCSC_FWD3") == "PAPER"
     assert c.status_for("SOMETHING_NEW") == "UNPROVEN"
@@ -455,3 +456,67 @@ def test_watch_starts_at_the_end_defers_until_the_position_exists(tmp_path):
     assert counts["DRY_RUN"] == 1 and "deferred" not in counts
     alert = [r for r in rows(tmp_path / "out") if r["kind"] == "ALERT"][0]
     assert alert["journal_ref"]["line"] == 2 and alert["position_id"] == "p2"
+
+
+# --- forward runners (owner ruling D51b) ---------------------------------------------------------
+GOLDEN_FWD3 = """✅ INTRADAY TRADE - ETH
+🏮 TYPE - LONG
+
+👉 ENTRY - $2476.41 - $2466.43
+👉 TARGET - $2539.02, $2621.59 (tested), $2689.19 & $2756.79+
+👉 SL - $2403.82
+
+🚨 LEVERAGE - 1x
+📊 R:R - 1:2.2 | Risk 1% of account
+🧪 PAPER · LCSC_V1 · 1h
+⏱ Valid 3 bars · Not financial advice
+⏱ signal +20m"""
+
+
+def _fwd3_sig():
+    # The real FWD-3 candidate of 2026-10-16 11:00 (forward_out/runs.jsonl), recorded at 12:20:12 UTC.
+    close, stop = 2476.41, 2403.82
+    return sig(source="LCSC_FWD3", strategy_id="LCSC_V1", symbol="ETHUSDT", signal_bar="2026-10-16T11:00:00+00:00",
+               decided_at="2026-10-16T12:20:12+00:00", signal_close=close, atr=19.956005821806066, stop=stop,
+               tested_target=close + 2 * (close - stop))
+
+
+def test_forward_runner_late_limit_is_45_minutes():
+    c = AlertConfig()
+    assert c.late_minutes_for("LCSC_FWD3") == 45 and c.late_minutes_for("BOOK16_FWD1") == 45
+    assert c.late_minutes_for("PASSED_BOOK") == 15 and c.late_minutes_for("CANDLE12_V2") == 15
+
+
+def test_golden_fwd3_alert_shows_minutes_since_bar_close(tmp_path):
+    p = pipe(tmp_path)
+    s = _fwd3_sig()
+    row = p.handle(s, s.decided_at)
+    assert row["code"] == "DRY_RUN" and not row["flags"]["late"] and row["lag_minutes"] == pytest.approx(20.2)
+    assert row["text"] == GOLDEN_FWD3
+    assert GOLDEN_FWD3 in (tmp_path / "preview.md").read_text(encoding="utf-8")
+
+
+def test_forward_runner_late_after_45_minutes(tmp_path):
+    p = pipe(tmp_path)
+    s = _fwd3_sig()
+    assert p.handle(s, s.bar_close + timedelta(minutes=45))["code"] == "DRY_RUN"
+    late = _fwd3_sig()
+    late.signal_bar = late.signal_bar + timedelta(hours=1)
+    row = p.handle(late, late.bar_close + timedelta(minutes=45, seconds=1))
+    assert row["code"] == "LATE" and row["flags"]["late"]
+
+
+def test_fwd1_uses_the_45_minute_limit_and_signal_line(tmp_path):
+    fb = cfg(no_tested_target={"action": "fallback_r", "fallback_t2_r": 2.0})
+    p = pipe(tmp_path, fb)
+    s = sig(source="BOOK16_FWD1", strategy_id="BOOK16_4H", timeframe="4h", tested_target=None,
+            signal_bar="2026-10-20T00:00:00+00:00", decided_at="2026-10-20T04:10:06+00:00")
+    row = p.handle(s, s.decided_at)
+    assert row["code"] == "DRY_RUN" and row["text"].endswith("⏱ signal +10m")
+    assert "SWING TRADE - BTC" in row["text"] and "(untested)" in row["text"]
+    late = sig(source="BOOK16_FWD1", strategy_id="BOOK16_4H", timeframe="4h", tested_target=None,
+               signal_bar="2026-10-20T04:00:00+00:00", decided_at="2026-10-20T08:46:00+00:00")
+    assert p.handle(late, late.decided_at)["code"] == "LATE"
+    # Not a forward runner: no extra line.
+    other = sig()
+    assert "signal +" not in p.handle(other, other.bar_close + timedelta(minutes=5))["text"]

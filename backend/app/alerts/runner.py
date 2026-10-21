@@ -143,13 +143,21 @@ def cmd_watch(args: argparse.Namespace) -> int:
     state = load_state(state_path)
     pipe = AlertPipeline(cfg, out_dir=out_dir, data=data, mode="watch", sender=sender, state=state)
     started = datetime.now(timezone.utc)
-    if not state_path.exists():
+    fresh = not state_path.exists()
+    if fresh:
         prime(pipe, paths)
         pipe.maybe_daily_summary(started)
         save_state(pipe.state, state_path)
-    pipe.preview.note(f"## WATCH started {started.isoformat()} ({pipe.run_mode})")
+    resumed = "fresh start" if fresh else "resumed from state.json"
+    pipe.preview.note(f"## WATCH started {started.isoformat()} ({pipe.run_mode}, {resumed})")
     _say(f"trade alerts watch: mode={pipe.run_mode} out={out_dir}")
     stop_at = started + timedelta(hours=float(args.hours)) if args.hours else None
+    if args.until:
+        # A restarted dry run keeps its original end (owner ruling D51b restart).
+        until = utc(args.until)
+        stop_at = min(stop_at, until) if stop_at else until
+    if stop_at:
+        _say(f"watch stops at {stop_at.isoformat()}")
     try:
         while True:
             now = datetime.now(timezone.utc)
@@ -242,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--config", default=None, help="defaults to app/alerts/trade_alerts_config.json")
     ap.add_argument("--hours", type=float, default=None, help="watch: stop after N hours; backfill: window")
     ap.add_argument("--once", action="store_true", help="watch: one poll and exit")
+    ap.add_argument("--until", default=None, help="watch: stop at this UTC time (ISO 8601)")
     ap.add_argument("--journal-only", action="store_true", help="backfill: skip pre-journal paper positions")
     args = ap.parse_args(argv)
     return cmd_watch(args) if args.command == "watch" else cmd_backfill(args)

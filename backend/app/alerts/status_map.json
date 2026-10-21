@@ -4,13 +4,20 @@
  "sources": {
   "PASSED_BOOK": {
    "status": "KILLED",
-   "strategies": ["COMBO_02_V2", "COMBO_02", "COMBO_02_CLOSED_HTF", "COMBO_03_TRANSITION", "COMBO_03_TRANSITION_B", "COMBO_01", "COMBO_02_LOCAL"],
+   "strategies": [
+    "COMBO_02_V2",
+    "COMBO_02",
+    "COMBO_02_CLOSED_HTF",
+    "COMBO_03_TRANSITION",
+    "COMBO_03_TRANSITION_B",
+    "COMBO_01",
+    "COMBO_02_LOCAL"
+   ],
    "evidence": "KILLED_BOOKS.md 2026-10-20 22:35 (passed book KILLED at Gate 2, GATES section 5); owner ruling D40: live paper keeps it only as a parity test. Sides COMBO_01, COMBO_02, COMBO_02_CLOSED_HTF, COMBO_02_LOCAL (LONG and SHORT) are in KILLED.md (DISCOVERY Gate 2, E9); COMBO_02_V2 and COMBO_03_TRANSITION(_B) are NOT_RUN in SCORECARD.csv. The book-level kill covers every side it runs."
   },
   "COMBO_02_V1": {
-   "status": "KILLED",
-   "would_be_without_kill": "PAPER",
-   "evidence": "Forward-testing in live paper (V1_PAPER_WATCHER, BTC/ETH/SOL 1h long), but its research line COMBO_02|LONG (and COMBO_02_CLOSED_HTF|LONG) is KILLED at DISCOVERY Gate 2 (KILLED.md). KILLED takes precedence over PAPER, so it is suppressed by default. Change to PAPER here only on an owner ruling."
+   "status": "PAPER",
+   "evidence": "Owner ruling D51a (2026-10-21): COMBO_02 v1 status = PAPER. Forward-testing in live paper (V1_PAPER_WATCHER, BTC/ETH/SOL 1h long); its research line COMBO_02|LONG is KILLED at DISCOVERY Gate 2 (KILLED.md), overridden for alert status by the owner."
   },
   "CANDLE12_V2": {
    "status": "PAPER",

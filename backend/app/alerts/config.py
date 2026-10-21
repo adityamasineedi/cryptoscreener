@@ -80,6 +80,15 @@ class AlertConfig:
                 return str(row["label"])
         return str(sorted(self.raw["labels"], key=lambda r: float(r["max_minutes"]))[-1]["label"])
 
+    def is_forward_runner(self, source: str) -> bool:
+        return str(source) in set((self.raw.get("forward_runner") or {}).get("sources") or [])
+
+    def late_minutes_for(self, source: str) -> float:
+        """Forward runners have their own LATE limit (owner ruling D51b); everything else the spec's."""
+        if self.is_forward_runner(source):
+            return float(self.raw["forward_runner"]["late_minutes"])
+        return float(self.raw["late_minutes"])
+
     def round_trip_cost(self) -> float:
         """Fees both sides + entry and exit slippage, from the app's own ResearchConfig defaults."""
         if self._round_trip is not None:

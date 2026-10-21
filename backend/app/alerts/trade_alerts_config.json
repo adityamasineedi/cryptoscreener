@@ -43,6 +43,11 @@
  },
  "validity_bars": 3,
  "late_minutes": 15,
+ "forward_runner": {
+  "_doc": "Owner ruling D51b: scheduled forward runners (FWD-1, FWD-3) keep their frozen schedules; their records land after the bar close, so they get their own LATE limit and their alerts show the minutes since the signal bar close.",
+  "sources": ["BOOK16_FWD1", "LCSC_FWD3"],
+  "late_minutes": 45
+ },
  "rate_limit": {
   "max_alerts": 20,
   "window_minutes": 60

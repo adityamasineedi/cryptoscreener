@@ -201,7 +201,9 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
 
 
 # --- text -------------------------------------------------------------------------------------
-def render_alert(sig: Signal, plan: Mapping[str, Any], status: str, cfg: AlertConfig) -> str:
+def render_alert(
+    sig: Signal, plan: Mapping[str, Any], status: str, cfg: AlertConfig, *, sent_at: datetime | None = None
+) -> str:
     rd = plan["rounded"]
     if sig.side == "LONG":
         a, b = rd["zone_a"], rd["zone_b"]  # signal close down to the far edge
@@ -211,8 +213,7 @@ def render_alert(sig: Signal, plan: Mapping[str, Any], status: str, cfg: AlertCo
     mark = "(tested)" if plan["t2_tested"] else "(untested)"
     rr = f"{plan['rr_tested']:.{int(cfg.raw['rr_decimals'])}f}"
     risk = fmt_num(float(plan["risk_pct_shown"]), int(cfg.raw["risk"]["display_decimals"]))
-    return "\n".join(
-        [
+    lines = [
             f"✅ {cfg.label_for(sig.timeframe)} TRADE - {base_asset(sig.symbol)}",
             f"🏮 TYPE - {sig.side}",
             "",
@@ -224,8 +225,11 @@ def render_alert(sig: Signal, plan: Mapping[str, Any], status: str, cfg: AlertCo
             f"📊 R:R - 1:{rr} | Risk {risk}% of account",
             f"🧪 {status} · {sig.strategy_id} · {sig.timeframe}",
             f"⏱ Valid {int(cfg.raw['validity_bars'])} bars · Not financial advice",
-        ]
-    )
+    ]
+    if sent_at is not None and cfg.is_forward_runner(sig.source):
+        # Owner ruling D51b: forward-runner records land after the bar close; show how long after.
+        lines.append(f"⏱ signal +{int((utc(sent_at) - sig.bar_close).total_seconds() // 60)}m")
+    return "\n".join(lines)
 
 
 def render_followup(event: Mapping[str, Any], tracker: Mapping[str, Any]) -> str:

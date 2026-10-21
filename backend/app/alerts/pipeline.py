@@ -135,7 +135,7 @@ class AlertPipeline:
         status = cfg.status_for(sig.source, sig.strategy_id)
         lag_min = (now - sig.bar_close).total_seconds() / 60.0
         killed = status == "KILLED" and not cfg.allow_killed
-        late = lag_min > float(cfg.raw["late_minutes"])
+        late = lag_min > cfg.late_minutes_for(sig.source)
         plan, err = build_plan(sig, cfg)
         cost = bool(plan and plan["cost_skip"])
         flags = {"killed": killed, "late": late, "plan_error": err, "cost": cost if plan else None}
@@ -157,7 +157,7 @@ class AlertPipeline:
                 code = "RATE_LIMITED"
                 flags["rate_limited"] = True
 
-        text = render_alert(sig, plan, status, cfg) if plan else None
+        text = render_alert(sig, plan, status, cfg, sent_at=now) if plan else None
         header = f"{sig.decided_at.isoformat()} · {sig.alert_id} · {sig.strategy_id} {sig.symbol} {sig.side} {sig.timeframe} bar {sig.signal_bar.isoformat()}"
         row: dict[str, Any] = {"status": status, "lag_minutes": round(lag_min, 2), "flags": flags,
                                "plan": _plan_log(plan), "text": text, **self._sig_fields(sig)}
