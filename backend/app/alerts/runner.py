@@ -27,7 +27,7 @@ from app.alerts.config import AlertConfig, load_config
 from app.alerts.data import MarketData, PostgresReadOnly, read_env_values
 from app.alerts.pipeline import AlertPipeline, load_state, merge_stats, save_state
 from app.alerts.plan import utc
-from app.alerts.sender import ReplyingTelegramSender
+from app.alerts.sender import ReplyingTelegramSender, is_private_chat_id
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -62,6 +62,11 @@ def _sender(cfg: AlertConfig, env: dict[str, str]) -> ReplyingTelegramSender | N
     token, chat = env.get(tg["bot_token_env"]), env.get(tg["chat_id_env"])
     if not token or not chat:
         _say(f"telegram delivery requested but {tg['bot_token_env']} / {tg['chat_id_env']} not set: dry run")
+        return None
+    if not is_private_chat_id(chat):
+        # Owner ruling D117: private chat only. The id itself is never printed.
+        _say(f"telegram delivery requested but {tg['chat_id_env']} is not a private chat id "
+             "(a group, channel or @name): dry run")
         return None
     return ReplyingTelegramSender(bot_token=token, chat_id=chat, timeout=float(tg["timeout_seconds"]))
 

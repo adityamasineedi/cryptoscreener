@@ -26,8 +26,22 @@ class _NoFeed:
         return None
 
 
+def is_private_chat_id(chat_id: object) -> bool:
+    """Owner ruling D117: deliver to a private chat only.
+
+    Telegram private chats (one user) have a positive integer id. Groups have negative ids, supergroups and
+    channels ``-100...``, and a public channel or group can be addressed as ``@name``: none of those pass.
+    """
+    s = str(chat_id or "").strip()
+    return s.isascii() and s.isdigit() and int(s) > 0
+
+
 class ReplyingTelegramSender(TelegramAlertSubscriber):
-    """The existing Telegram sender plus ``send(text, reply_to)`` returning the message id."""
+    """The existing Telegram sender plus ``send(text, reply_to)`` returning the message id.
+
+    It posts only to its one ``chat_id``, and only when that id is a private chat (D117): with a group,
+    supergroup, channel or ``@name`` id the sender is disabled, so the pipeline stays in dry run.
+    """
 
     def __init__(
         self,
@@ -39,6 +53,14 @@ class ReplyingTelegramSender(TelegramAlertSubscriber):
     ) -> None:
         super().__init__(bot_token=bot_token, chat_id=chat_id, feed=_NoFeed(), timeout=timeout)  # type: ignore[arg-type]
         self._client_factory = client_factory or (lambda: httpx.Client(timeout=self.timeout))
+
+    @property
+    def private_chat(self) -> bool:
+        return is_private_chat_id(self.chat_id)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.bot_token and self.chat_id) and self.private_chat
 
     def send(self, text: str, reply_to: int | None = None) -> int | None:
         if not self.enabled or not text:

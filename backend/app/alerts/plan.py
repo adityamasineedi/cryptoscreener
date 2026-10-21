@@ -22,6 +22,20 @@ INVALID_STOP = "INVALID_STOP"
 NO_TESTED_TARGET = "NO_TESTED_TARGET"
 INVALID_TARGET = "INVALID_TARGET"
 
+# Owner ruling D117: every message about a source whose status is not FORWARD-PASSED starts with this exact
+# line. No source is FORWARD-PASSED today, so every alert, follow-up and summary carries it (PAPER included).
+OBSERVATION_PREFIX = "⚠️ UNPROVEN, for observation only, not for trading"
+FORWARD_PASSED = "FORWARD-PASSED"
+
+
+def needs_observation_prefix(status: Any) -> bool:
+    """True unless the status is exactly FORWARD-PASSED (a missing or unknown status gets the prefix)."""
+    return str(status or "") != FORWARD_PASSED
+
+
+def with_observation_prefix(text: str, status: Any) -> str:
+    return f"{OBSERVATION_PREFIX}\n{text}" if needs_observation_prefix(status) else text
+
 
 def utc(value: Any) -> datetime:
     if isinstance(value, datetime):
@@ -242,10 +256,15 @@ def render_alert(
     if sent_at is not None and cfg.is_forward_runner(sig.source):
         # Owner ruling D51b: forward-runner records land after the bar close; show how long after.
         lines.append(f"⏱ signal +{int((utc(sent_at) - sig.bar_close).total_seconds() // 60)}m")
-    return "\n".join(lines)
+    return with_observation_prefix("\n".join(lines), status)
 
 
 def render_followup(event: Mapping[str, Any], tracker: Mapping[str, Any]) -> str:
+    """A follow-up reply, with the D117 prefix of its alert's status (the tracker's ``status``)."""
+    return with_observation_prefix(_followup_text(event, tracker), tracker.get("status"))
+
+
+def _followup_text(event: Mapping[str, Any], tracker: Mapping[str, Any]) -> str:
     coin = base_asset(str(tracker["symbol"]))
     side = str(tracker["side"])
     tick = float(tracker["tick"])
@@ -283,7 +302,11 @@ def render_summary(day: str, groups: Mapping[str, Mapping[str, Any]], *, title: 
             f"W/L {int(g.get('wins') or 0)}/{int(g.get('losses') or 0)}, R {float(g.get('total_r') or 0):+.1f}"
             f", not sent {int(g.get('not_sent') or 0)}"
         )
-    return "\n".join(lines)
+    # Groups are keyed by status: the D117 prefix unless every group is FORWARD-PASSED (an empty summary has it).
+    text = "\n".join(lines)
+    if groups and not any(needs_observation_prefix(name) for name in groups):
+        return text
+    return with_observation_prefix(text, None)
 
 
 def atr_at(bars: Sequence[Mapping[str, Any]], period: int) -> float | None:

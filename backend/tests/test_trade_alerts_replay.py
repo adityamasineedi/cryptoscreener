@@ -90,7 +90,7 @@ def _run(tmp: Path, monkeypatch, *, alerts_on: bool, detail: bool = False) -> di
             sent.append(json.loads(request.content))
             return httpx.Response(200, json={"ok": True, "result": {"message_id": len(sent)}})
 
-        sender = ReplyingTelegramSender(bot_token="t", chat_id="c", timeout=1.0,
+        sender = ReplyingTelegramSender(bot_token="t", chat_id="123456789", timeout=1.0,
                                         client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
         pipe = AlertPipeline(cfg, out_dir=tmp / "alerts", data=MemoryData(), mode="watch", sender=sender)
         assert pipe.delivering

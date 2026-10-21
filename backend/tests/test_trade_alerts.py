@@ -28,6 +28,8 @@ STATUS = {
     },
 }
 TICKS = {"BTCUSDT": 0.1, "ETHUSDT": 0.01, "ARBUSDT": 0.0001}
+# Owner ruling D117: the exact first line of every message whose status is not FORWARD-PASSED.
+PREFIX = "⚠️ UNPROVEN, for observation only, not for trading\n"
 
 
 def cfg(round_trip: float | None = 0.0018, **over) -> AlertConfig:
@@ -84,7 +86,8 @@ def test_killed_sources_in_shipped_status_map():
 
 
 # --- golden messages ---------------------------------------------------------------------------
-GOLDEN_LONG = """✅ INTRADAY TRADE - BTC
+GOLDEN_LONG = """⚠️ UNPROVEN, for observation only, not for trading
+✅ INTRADAY TRADE - BTC
 🏮 TYPE - LONG
 
 👉 ENTRY - $100000.0 - $99500.0
@@ -106,7 +109,8 @@ def test_golden_long():
     assert render_alert(s, plan, c.status_for(s.source), c) == GOLDEN_LONG
 
 
-GOLDEN_SHORT = """✅ SWING TRADE - ETH
+GOLDEN_SHORT = """⚠️ UNPROVEN, for observation only, not for trading
+✅ SWING TRADE - ETH
 🏮 TYPE - SHORT
 
 👉 ENTRY - $2500.00 - $2520.00
@@ -128,7 +132,8 @@ def test_golden_short_zone_low_to_high():
     assert render_alert(s, plan, "PAPER", c) == GOLDEN_SHORT
 
 
-GOLDEN_TICK = """✅ INTRADAY TRADE - ARB
+GOLDEN_TICK = """⚠️ UNPROVEN, for observation only, not for trading
+✅ INTRADAY TRADE - ARB
 🏮 TYPE - SHORT
 
 👉 ENTRY - $0.1891 - $0.1897
@@ -160,7 +165,8 @@ def test_entry_zone_never_closer_than_half_the_stop_to_the_sl():
     assert plan["entry_mid"] == pytest.approx(99.5) and plan["r_unit"] == pytest.approx(1.5)
 
 
-GOLDEN_CAP = """✅ INTRADAY TRADE - ETH
+GOLDEN_CAP = """⚠️ UNPROVEN, for observation only, not for trading
+✅ INTRADAY TRADE - ETH
 🏮 TYPE - LONG
 
 👉 ENTRY - $100.00 - $99.90
@@ -302,7 +308,7 @@ def test_expiry_after_validity_bars():
         evs += step(tr, bar(t + timedelta(hours=k), 100500, 101000, 100200, 100600))
     assert [e["kind"] for e in evs] == ["expired"]
     assert evs[0]["at"] == (t + timedelta(hours=3)).isoformat()
-    assert render_followup(evs[0], tr) == "❌ NOT FILLED - expired"
+    assert render_followup(evs[0], tr) == PREFIX + "❌ NOT FILLED - expired"
 
 
 def test_expiry_with_missing_bars():
@@ -326,12 +332,12 @@ def test_fill_targets_and_result_in_r():
     assert [(e["kind"], e.get("target")) for e in e2] == [("target", 1), ("target", 2), ("final", None)]
     assert e2[-1]["r"] == pytest.approx((104500 - 100000) / 1750)
     texts = [render_followup(e, tr) for e in e1 + e2]
-    assert texts == [
+    assert texts == [PREFIX + x for x in [
         "✅ ENTRY FILLED - BTC LONG @ $100000.0",
         "🎯 T1 HIT - BTC @ $101500.0 (+0.9R)",
         "🎯 T2 HIT - BTC @ $104500.0 (+2.6R)",
         "🏁 RESULT - BTC LONG +2.6R (tested exit: T2)",
-    ]
+    ]]
 
 
 def test_stop_and_target_on_one_bar_counts_as_stop():
@@ -343,7 +349,7 @@ def test_stop_and_target_on_one_bar_counts_as_stop():
     step(tr, bar(t, 99800, 99900, 99600, 99700))
     evs = step(tr, bar(t + timedelta(hours=1), 99700, 102000, 97000, 98500))
     assert [e["kind"] for e in evs] == ["sl", "final"] and evs[1]["exit"] == "SL"
-    assert render_followup(evs[0], tr) == "🛑 SL HIT - BTC @ $98000.0 (-1.0R)"
+    assert render_followup(evs[0], tr) == PREFIX + "🛑 SL HIT - BTC @ $98000.0 (-1.0R)"
 
 
 def test_pipeline_followups_and_daily_summary(tmp_path):
@@ -357,7 +363,7 @@ def test_pipeline_followups_and_daily_summary(tmp_path):
     assert p.update_trackers(t + timedelta(hours=3)) == 3
     out = p.maybe_daily_summary(datetime(2026, 10, 21, 0, 0, 30, tzinfo=timezone.utc))
     assert out == [
-        "📅 DAILY SUMMARY - 2026-10-20 UTC\n"
+        PREFIX + "📅 DAILY SUMMARY - 2026-10-20 UTC\n"
         "Alerts sent: 1 | Filled: 1\n"
         "Wins: 0 | Losses: 1 | Total R: -1.1\n"
         "PAPER: sent 1, filled 1, W/L 0/1, R -1.1, not sent 0"
@@ -376,7 +382,7 @@ def test_live_mode_sends_and_replies(tmp_path):
         sent.append(body)
         return httpx.Response(200, json={"ok": True, "result": {"message_id": 100 + len(sent)}})
 
-    sender = ReplyingTelegramSender(bot_token="t", chat_id="c", timeout=1.0,
+    sender = ReplyingTelegramSender(bot_token="t", chat_id="123456789", timeout=1.0,
                                     client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
     s = sig()
     t = s.bar_close
@@ -386,7 +392,7 @@ def test_live_mode_sends_and_replies(tmp_path):
     assert p.handle(s, t)["code"] == "SENT"
     p.update_trackers(t + timedelta(hours=1))
     assert sent[0]["text"] == GOLDEN_LONG and "reply_to_message_id" not in sent[0]
-    assert sent[1]["reply_to_message_id"] == 101 and sent[1]["text"].startswith("✅ ENTRY FILLED")
+    assert sent[1]["reply_to_message_id"] == 101 and sent[1]["text"].startswith(PREFIX + "✅ ENTRY FILLED")
     assert not (tmp_path / "preview.md").exists()
 
 
@@ -483,7 +489,8 @@ def test_watch_starts_at_the_end_defers_until_the_position_exists(tmp_path):
 
 
 # --- forward runners (owner ruling D51b) ---------------------------------------------------------
-GOLDEN_FWD3 = """✅ INTRADAY TRADE - ETH
+GOLDEN_FWD3 = """⚠️ UNPROVEN, for observation only, not for trading
+✅ INTRADAY TRADE - ETH
 🏮 TYPE - LONG
 
 👉 ENTRY - $2476.41 - $2466.43
@@ -547,7 +554,8 @@ def test_fwd1_uses_the_45_minute_limit_and_signal_line(tmp_path):
 
 
 # --- P14 journal detail rows (owner ruling D51c) -----------------------------------------------------
-GOLDEN_SCREENER = """✅ SCALP TRADE - IOST
+GOLDEN_SCREENER = """⚠️ UNPROVEN, for observation only, not for trading
+✅ SCALP TRADE - IOST
 🏮 TYPE - LONG
 
 👉 ENTRY - $1.0000 - $0.9950
@@ -580,7 +588,8 @@ def test_golden_screener_alert(tmp_path):
     assert row["journal_ref"]["line"] == 42 and row["journal_ref"]["book"] == "SCREENER"
 
 
-GOLDEN_NOT_OPENED = """✅ INTRADAY TRADE - BTC
+GOLDEN_NOT_OPENED = """⚠️ UNPROVEN, for observation only, not for trading
+✅ INTRADAY TRADE - BTC
 🏮 TYPE - LONG
 
 👉 ENTRY - $100000.0 - $99500.0
@@ -630,3 +639,154 @@ def test_v1_signal_rows_with_detail():
     items = list(journal_items([(0, json.dumps(opened)), (1, json.dumps(skipped))], first_line_no=1,
                                data=MemoryData(), cfg=cfg(), candle12_state=None))
     assert len(items) == 1 and items[0].extra["skip_reason"] == "sticky_bos_skip" and items[0].tested_target == 109.0
+
+
+# --- owner ruling D117: observation prefix, sources, private chat only -------------------------------
+D117_LINE = "⚠️ UNPROVEN, for observation only, not for trading"
+
+
+def test_d117_prefix_constant_is_exact():
+    from app.alerts.plan import OBSERVATION_PREFIX
+
+    assert OBSERVATION_PREFIX == D117_LINE
+    assert OBSERVATION_PREFIX.encode("utf-8") == (
+        b"\xe2\x9a\xa0\xef\xb8\x8f UNPROVEN, for observation only, not for trading"
+    )
+
+
+@pytest.mark.parametrize("status", ["PAPER", "UNPROVEN", "KILLED", "", "SOMETHING_ELSE"])
+def test_d117_every_non_forward_passed_alert_starts_with_the_line(status):
+    c = cfg()
+    s = sig()
+    plan, _ = build_plan(s, c)
+    text = render_alert(s, plan, status, c)
+    lines = text.split("\n")
+    assert lines[0] == D117_LINE and lines[1].startswith("✅ INTRADAY TRADE - BTC")
+    assert text.count(D117_LINE) == 1
+
+
+GOLDEN_FORWARD_PASSED = """✅ INTRADAY TRADE - BTC
+🏮 TYPE - LONG
+
+👉 ENTRY - $100000.0 - $99500.0
+👉 TARGET - $101500.0, $104500.0 (tested), $106250.0 & $108000.0+
+👉 SL - $98000.0
+
+🚨 LEVERAGE - 1x
+📊 R:R - 1:2.7 | Risk 1% of account
+🧪 FORWARD-PASSED · CANDLE12_V2 · 1h
+⏱ Valid 3 bars · Not financial advice"""
+
+
+def test_d117_golden_forward_passed_has_no_prefix():
+    c = cfg()
+    s = sig(source="FP")
+    plan, _ = build_plan(s, c)
+    assert c.status_for("FP") == "FORWARD-PASSED"
+    assert render_alert(s, plan, "FORWARD-PASSED", c) == GOLDEN_FORWARD_PASSED
+    assert GOLDEN_LONG == D117_LINE + "\n" + GOLDEN_FORWARD_PASSED.replace("FORWARD-PASSED", "PAPER")
+
+
+def test_d117_shipped_sources_and_statuses():
+    c = AlertConfig()
+    assert not c.allow_killed  # D51: KILLED stays off
+    expected = {
+        "COMBO_02_V1": "PAPER",  # V1
+        "BOOK16_FWD1": "PAPER",  # FWD-1
+        "LCSC_FWD3": "PAPER",  # FWD-3
+        "CANDLE12_V2": "PAPER",  # owner D117 keeps it PAPER although DISCOVERY Gate 2 killed it
+        "SCREENER": "UNPROVEN",
+        "PASSED_BOOK": "KILLED",
+    }
+    assert {k: c.status_for(k) for k in expected} == expected
+    assert set(c.status_map["sources"]) == set(expected)
+    assert "FORWARD-PASSED" not in {v["status"] for v in c.status_map["sources"].values()}
+    ev = {k: v["evidence"] for k, v in c.status_map["sources"].items()}
+    assert "KILLED.md" in ev["CANDLE12_V2"] and "Gate 2" in ev["CANDLE12_V2"] and "D117" in ev["CANDLE12_V2"]
+    assert "Not wired" not in ev["SCREENER"] and "DECISION_JOURNAL_SIGNAL_DETAIL" in ev["SCREENER"]
+
+
+def test_d117_every_shipped_source_alerts_with_the_prefix_and_killed_stays_off(tmp_path):
+    raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    c = AlertConfig(raw, ticks=TICKS, round_trip_cost=0.0018)  # the shipped status map
+    p = pipe(tmp_path, c)
+    for i, source in enumerate(["COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3", "CANDLE12_V2", "SCREENER"]):
+        s = sig(source=source, strategy_id=f"S{i}")
+        row = p.handle(s, s.bar_close + timedelta(minutes=1))
+        assert row["code"] == "DRY_RUN" and row["text"].split("\n")[0] == D117_LINE, source
+        assert row["status"] == ("UNPROVEN" if source == "SCREENER" else "PAPER")
+    killed = sig(source="PASSED_BOOK", strategy_id="COMBO_01")
+    assert p.handle(killed, killed.bar_close)["code"] == "SUPPRESSED_KILLED"
+    preview = (tmp_path / "preview.md").read_text(encoding="utf-8")
+    assert preview.count("```\n" + D117_LINE + "\n") == 6  # 5 would-send + the rendered KILLED preview
+
+
+def test_d117_followups_and_summary_carry_the_prefix_unless_forward_passed():
+    from app.alerts.plan import render_summary
+
+    c = cfg()
+    s = sig()
+    plan, _ = build_plan(s, c)
+    tr = new_tracker(s, plan, c, sent=True)
+    ev = {"kind": "fill", "price": 100000.0}
+    tr["status"] = "PAPER"
+    assert render_followup(ev, tr) == D117_LINE + "\n✅ ENTRY FILLED - BTC LONG @ $100000.0"
+    tr["status"] = "FORWARD-PASSED"
+    assert render_followup(ev, tr) == "✅ ENTRY FILLED - BTC LONG @ $100000.0"
+    g = {"sent": 1, "not_sent": 0, "filled": 0, "wins": 0, "losses": 0, "total_r": 0.0}
+    assert render_summary("2026-10-21", {"PAPER": g}).split("\n")[0] == D117_LINE
+    assert render_summary("2026-10-21", {}).split("\n")[0] == D117_LINE
+    assert render_summary("2026-10-21", {"FORWARD-PASSED": g, "UNPROVEN": g}).split("\n")[0] == D117_LINE
+    assert render_summary("2026-10-21", {"FORWARD-PASSED": g}).startswith("📅 DAILY SUMMARY")
+
+
+@pytest.mark.parametrize("chat_id,private", [
+    ("123456789", True), (" 42 ", True), ("-123456789", False), ("-1001234567890", False),
+    ("@somechannel", False), ("c", False), ("", False), ("0", False), ("１２３", False), ("12.5", False),
+])
+def test_d117_private_chat_ids_only(chat_id, private):
+    from app.alerts.sender import is_private_chat_id
+
+    assert is_private_chat_id(chat_id) is private
+
+
+@pytest.mark.parametrize("chat_id", ["-123456789", "-1001234567890", "@somechannel"])
+def test_d117_group_or_channel_chat_never_sends(tmp_path, chat_id):
+    from app.alerts.runner import _sender
+
+    posted = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        posted.append(request)
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 1}})
+
+    sender = ReplyingTelegramSender(bot_token="t", chat_id=chat_id, timeout=1.0,
+                                    client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    assert not sender.enabled and sender.send("x") is None
+    p = pipe(tmp_path, cfg(enabled=True, dry_run=False), sender=sender)
+    assert not p.delivering
+    s = sig()
+    assert p.handle(s, s.bar_close)["code"] == "DRY_RUN"
+    assert posted == []
+    env = {"TELEGRAM_BOT_TOKEN": "t", "TRADE_ALERTS_TELEGRAM_CHAT_ID": chat_id}
+    assert _sender(cfg(enabled=True, dry_run=False), env) is None
+
+
+def test_d117_private_chat_sender_posts_only_to_that_chat(tmp_path):
+    from app.alerts.runner import _sender
+
+    env = {"TELEGRAM_BOT_TOKEN": "t", "TRADE_ALERTS_TELEGRAM_CHAT_ID": "123456789"}
+    built = _sender(cfg(enabled=True, dry_run=False), env)
+    assert built is not None and built.enabled and built.chat_id == "123456789"
+    # The live app's own chat id (TELEGRAM_CHAT_ID) is never read by the sidecar.
+    assert _sender(cfg(enabled=True, dry_run=False), {"TELEGRAM_BOT_TOKEN": "t", "TELEGRAM_CHAT_ID": "123"}) is None
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 7}})
+
+    sender = ReplyingTelegramSender(bot_token="t", chat_id="123456789", timeout=1.0,
+                                    client_factory=lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    assert sender.send("a") == 7 and sender.send("b", reply_to=7) == 7
+    assert [b["chat_id"] for b in bodies] == ["123456789", "123456789"]
