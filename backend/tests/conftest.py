@@ -1,4 +1,43 @@
+import os
+from pathlib import Path
+
 import pytest
+
+# Owner ruling D50 (P13): tests never reach the live database. app.config's default DATABASE_URL (and the
+# repo's .env) is the live Postgres. Environment variables outrank .env in pydantic-settings, and this runs
+# before any test imports the app, so by default every test sees no database and no Redis. A test run that
+# needs a database sets TEST_DATABASE_URL to an isolated test database; the live one is refused.
+_NO_DB_URL = "postgresql+asyncpg://tests-no-database@127.0.0.1:1/none"
+
+
+def _live_database_urls() -> set[str]:
+    urls = set()
+    for env in (Path(__file__).resolve().parents[2] / ".env", Path(__file__).resolve().parents[1] / ".env"):
+        try:
+            for line in env.read_text(encoding="utf-8").splitlines():
+                if line.startswith("DATABASE_URL="):
+                    urls.add(line.split("=", 1)[1].strip())
+        except OSError:
+            pass
+    try:
+        from app.config import Settings
+
+        urls.add(str(Settings.model_fields["database_url"].default))
+    except Exception:  # noqa: BLE001
+        pass
+    return {u.replace("postgresql+asyncpg://", "postgresql://") for u in urls if u}
+
+
+_test_db = os.environ.get("TEST_DATABASE_URL", "").strip()
+if _test_db:
+    if _test_db.replace("postgresql+asyncpg://", "postgresql://") in _live_database_urls():
+        raise pytest.UsageError("TEST_DATABASE_URL points at the live database; use an isolated test database (P13)")
+    os.environ["DATABASE_URL"] = _test_db
+    os.environ["DATABASE_ENABLED"] = "true"
+else:
+    os.environ["DATABASE_URL"] = _NO_DB_URL
+    os.environ["DATABASE_ENABLED"] = "false"
+os.environ["REDIS_ENABLED"] = os.environ.get("TEST_REDIS_ENABLED", "false")
 
 pytest_plugins = []
 
