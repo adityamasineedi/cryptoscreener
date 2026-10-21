@@ -440,7 +440,12 @@ async def test_retry_takes_the_lock_after_the_holder_leaves():
 
     class _Db:
         enabled = True
-        engine = True
+
+        @property
+        def engine(self) -> "_Db":
+            # The lock connects through db.engine; ``engine = True`` had no connect()
+            # and made this test retry forever (it hung before P11 too).
+            return self
 
         async def connect(self) -> _FakeConn:
             calls["n"] += 1

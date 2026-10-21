@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -46,6 +47,8 @@ PAPER_WRITER_LOCK_ATTEMPTS = 5
 PAPER_LEDGER_RETRY_SECONDS = 30.0
 # A mark older than this (or not LIVE) is not used to exit a paper position.
 PAPER_MARK_MAX_AGE_SECONDS = 30.0
+# Seconds between paper_loops_running log lines (owner ruling D41, P11).
+PAPER_LOOPS_HEARTBEAT_SECONDS = 3600.0
 
 
 async def acquire_paper_writer_lock(
@@ -98,7 +101,7 @@ async def retry_paper_writer_lock(
     paper: Any,
     db: Any,
     *,
-    on_acquired: Callable[[Any], None] | None = None,
+    on_acquired: Callable[[Any], Any] | None = None,
     interval: float = 15.0,
     keep_running: Callable[[], bool] = lambda: True,
 ) -> None:
@@ -107,6 +110,10 @@ async def retry_paper_writer_lock(
     Startup only waits a few seconds. A force-stopped process can hold the
     Postgres advisory lock until the server notices the socket is gone, and
     this process would otherwise refuse every paper open until the next boot.
+
+    ``on_acquired`` (sync or async) starts the paper loops. If it fails, the
+    lock is released and retried: a process never holds the lock without its
+    paper loops (owner ruling D41, P11).
     """
     while keep_running() and not getattr(paper, "writer_lock_held", False):
         await asyncio.sleep(interval)
@@ -115,10 +122,28 @@ async def retry_paper_writer_lock(
         held, conn = await acquire_paper_writer_lock(db, attempts=1)
         if held:
             paper.writer_lock_held = True
-            if on_acquired is not None:
-                on_acquired(conn)
             logger.info("paper_writer_lock_acquired_on_retry", key=PAPER_WRITER_LOCK_KEY)
+            if on_acquired is None:
+                return
+            try:
+                result = on_acquired(conn)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as exc:  # noqa: BLE001
+                await release_paper_writer_lock(paper, conn, reason=f"paper_loops_failed: {exc}")
+                continue
             return
+
+
+async def release_paper_writer_lock(paper: Any, conn: Any, *, reason: str) -> None:
+    """Give the writer lock back: closing its session releases the advisory lock."""
+    paper.writer_lock_held = False
+    if conn is not None:
+        try:
+            await conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+    logger.warning("paper_writer_lock_released", key=PAPER_WRITER_LOCK_KEY, reason=reason)
 
 
 async def load_paper_ledger(paper: Any, store: Any) -> bool:
@@ -278,6 +303,9 @@ class CalculationOrchestrator:
         self._calc_events = 0
         # Dedicated connection holding the paper writer advisory lock.
         self._paper_writer_lock_conn: Any | None = None
+        # Paper loops start once, at startup or when the lock arrives later (P11).
+        self._paper_loops_started = False
+        self._paper_loop_tasks: dict[str, asyncio.Task] = {}
 
     async def start(self, symbols: list[str]) -> None:
         if not self.settings.use_real_data:
@@ -348,9 +376,7 @@ class CalculationOrchestrator:
                     retry_paper_writer_lock(
                         paper,
                         db_manager,
-                        on_acquired=lambda conn: setattr(
-                            self, "_paper_writer_lock_conn", conn
-                        ),
+                        on_acquired=lambda conn: self._on_paper_writer_lock(paper, conn),
                         keep_running=lambda: self._running,
                     ),
                     name="paper_writer_lock_retry",
@@ -514,52 +540,16 @@ class CalculationOrchestrator:
         self._tasks.append(
             asyncio.create_task(self._setup_ensure_loop(), name="setup_ensure_loop")
         )
-        # Paper loops run only in the process that holds the writer lock.
+        # Paper loops run only in the process that holds the writer lock. A process
+        # that gets the lock later starts them then (_on_paper_writer_lock, P11).
         if paper.writer_lock_held:
-            # Every paper decision is journaled by this process only (owner ruling D19).
-            from app.config import ROOT
-            from app.services import decision_journal
-
-            decision_journal.configure(ROOT / "data" / "paper" / "decision_journal.jsonl")
-            self._tasks.append(
-                asyncio.create_task(self._paper_trade_loop(), name="paper_trade_loop")
-            )
-        if paper.writer_lock_held and bool(
-            getattr(self.settings, "paper_v1_watcher_enabled", True)
-        ):
-            self._tasks.append(
-                asyncio.create_task(
-                    self._v1_paper_watcher_loop(), name="v1_paper_watcher_loop"
+            try:
+                self._start_paper_loops(paper)
+            except Exception as exc:  # noqa: BLE001
+                await release_paper_writer_lock(
+                    paper, self._paper_writer_lock_conn, reason=f"paper_loops_failed: {exc}"
                 )
-            )
-        if paper.writer_lock_held and bool(
-            getattr(self.settings, "paper_v21a_watcher_enabled", False)
-        ):
-            self._tasks.append(
-                asyncio.create_task(
-                    self._v21a_paper_watcher_loop(), name="v21a_paper_watcher_loop"
-                )
-            )
-        if paper.writer_lock_held and bool(
-            getattr(self.settings, "paper_passed_watcher_enabled", False)
-        ):
-            self._tasks.append(
-                asyncio.create_task(
-                    self._passed_paper_watcher_loop(), name="passed_paper_watcher_loop"
-                )
-            )
-        if paper.writer_lock_held and bool(
-            getattr(self.settings, "paper_candle12_v2_btc_long_enabled", False)
-        ):
-            self._tasks.append(
-                asyncio.create_task(
-                    self._candle12_v2_paper_loop(), name="candle12_v2_paper_loop"
-                )
-            )
-        if paper.writer_lock_held and bool(getattr(self.settings, "paper_book16_4h_enabled", False)):
-            self._tasks.append(
-                asyncio.create_task(self._book16_paper_loop(), name="book16_paper_loop")
-            )
+                self._paper_writer_lock_conn = None
         self._tasks.append(
             asyncio.create_task(self._kline_live_rebalance_loop(), name="kline_live_rebalance")
         )
@@ -579,6 +569,56 @@ class CalculationOrchestrator:
                 getattr(self.settings, "paper_v1_watcher_enabled", True)
             ),
         )
+
+    def _start_paper_loops(self, paper: Any) -> list[str]:
+        """Start the paper loops this process runs as the paper writer. Once only."""
+        if self._paper_loops_started:
+            return []
+        # Every paper decision is journaled by this process only (owner ruling D19).
+        from app.config import ROOT
+        from app.services import decision_journal
+
+        decision_journal.configure(ROOT / "data" / "paper" / "decision_journal.jsonl")
+        wanted: list[tuple[str, Any]] = [("paper_trade_loop", self._paper_trade_loop)]
+        if bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
+            wanted.append(("v1_paper_watcher_loop", self._v1_paper_watcher_loop))
+        if bool(getattr(self.settings, "paper_v21a_watcher_enabled", False)):
+            wanted.append(("v21a_paper_watcher_loop", self._v21a_paper_watcher_loop))
+        if bool(getattr(self.settings, "paper_passed_watcher_enabled", False)):
+            wanted.append(("passed_paper_watcher_loop", self._passed_paper_watcher_loop))
+        if bool(getattr(self.settings, "paper_candle12_v2_btc_long_enabled", False)):
+            wanted.append(("candle12_v2_paper_loop", self._candle12_v2_paper_loop))
+        if bool(getattr(self.settings, "paper_book16_4h_enabled", False)):
+            wanted.append(("book16_paper_loop", self._book16_paper_loop))
+        for name, loop in wanted:
+            task = asyncio.create_task(loop(), name=name)
+            self._tasks.append(task)
+            self._paper_loop_tasks[name] = task
+        self._tasks.append(
+            asyncio.create_task(self._paper_loops_heartbeat(paper), name="paper_loops_heartbeat")
+        )
+        self._paper_loops_started = True
+        names = [name for name, _ in wanted]
+        logger.info("paper_loops_started", loops=names)
+        return names
+
+    async def _on_paper_writer_lock(self, paper: Any, conn: Any) -> None:
+        """The writer lock arrived after startup: keep its session and start the paper loops."""
+        self._paper_writer_lock_conn = conn
+        self._start_paper_loops(paper)
+
+    def paper_loops_status(self, paper: Any) -> dict[str, Any]:
+        """Which paper loops this process runs; logged hourly as paper_loops_running."""
+        return {
+            "writer_lock_held": bool(getattr(paper, "writer_lock_held", False)),
+            "loops": {name: not task.done() for name, task in self._paper_loop_tasks.items()},
+        }
+
+    async def _paper_loops_heartbeat(self, paper: Any) -> None:
+        """Log paper_loops_running now and then once an hour (owner ruling D41, P11)."""
+        while self._running:
+            logger.info("paper_loops_running", **self.paper_loops_status(paper))
+            await asyncio.sleep(PAPER_LOOPS_HEARTBEAT_SECONDS)
 
     def _select_kline_live_symbols(self, universe: list[str] | None = None) -> list[str]:
         """Sticky top-volume + focus/visible — avoids WS reconnect thrash."""
