@@ -103,6 +103,8 @@ def _decision_journal_switch():
     from app.services import decision_journal
 
     path = os.environ.get("DECISION_JOURNAL_TEST_PATH")
-    decision_journal.configure(path or None)
+    # P14: DECISION_JOURNAL_TEST_SIGNAL_DETAIL=1 also turns signal detail on for the whole suite.
+    detail = os.environ.get("DECISION_JOURNAL_TEST_SIGNAL_DETAIL", "") not in ("", "0", "false", "False")
+    decision_journal.configure(path or None, signal_detail=detail)
     yield
     decision_journal.configure(None)

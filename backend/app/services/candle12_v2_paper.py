@@ -221,7 +221,8 @@ def paper_step(
                 # The engine allows one trade at a time; a second open means the
                 # stored one left the window unresolved. Keep the first booking.
                 logger.warning("candle12_v2_second_open_ignored", key=key, held=open_row.get("key"))
-                decision_journal.write("CANDLE12_V2", "skip", reason="second_open_ignored", key=key, held=open_row.get("key"))
+                decision_journal.write("CANDLE12_V2", "skip", reason="second_open_ignored", key=key, held=open_row.get("key"),
+                                       _detail=_signal_detail(row, "not_opened", "second_open_ignored"))
                 continue
             state["open"] = row
             alerts.append({"kind": "entry", "row": row})
@@ -233,6 +234,28 @@ def paper_step(
     state["live_orders"] = False
     state["_alerts"] = alerts
     return state
+
+
+def _signal_detail(row: Mapping[str, Any], outcome: str, reason: str) -> Any:
+    """P14 journal signal detail: engine stop, tested target (TP1), source. Built only with detail on."""
+
+    def build() -> dict[str, Any]:
+        return {
+            "source": "CANDLE12_V2_PAPER",
+            "strategy_id": STRATEGY_ID,
+            "symbol": SYMBOL,
+            "direction": DIRECTION,
+            "timeframe": TIMEFRAME,
+            "setup_bar_time": row.get("entry_time"),
+            "signal_outcome": outcome,
+            "signal_reason": reason,
+            "stop_price": row.get("stop_price"),
+            "tp1": row.get("tp1"),
+            "signal_entry_price": row.get("entry_price"),
+            "detail_version": 1,
+        }
+
+    return build
 
 
 def format_signal(alert: Mapping[str, Any]) -> str:
@@ -338,7 +361,8 @@ def sync_candles(
         row = alert.get("row") if isinstance(alert.get("row"), Mapping) else {}
         decision_journal.write("CANDLE12_V2", str(alert.get("kind") or "alert"), key=row.get("key"),
                                entry_time=row.get("entry_time"), entry_price=row.get("entry_price"),
-                               stop_price=row.get("stop_price"), exit_time=row.get("exit_time"), outcome=row.get("outcome"))
+                               stop_price=row.get("stop_price"), exit_time=row.get("exit_time"), outcome=row.get("outcome"),
+                               _detail=_signal_detail(row, "opened", "") if alert.get("kind") == "entry" else None)
     save_state(state, path)
     return {
         "status": "OK",

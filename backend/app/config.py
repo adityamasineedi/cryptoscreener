@@ -227,6 +227,9 @@ class Settings(BaseSettings):
     )
 
     # Telegram alerts for v1 paper PAPER_ENTRY / PAPER_EXIT (optional)
+    # P14 (owner ruling D51c): every paper-book and screener signal is journaled with its engine stop,
+    # tested target and source. Output-only; read once when the journal is configured. Default off.
+    decision_journal_signal_detail: bool = Field(default=False, alias="DECISION_JOURNAL_SIGNAL_DETAIL")
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")
 

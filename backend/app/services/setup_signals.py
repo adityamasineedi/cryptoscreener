@@ -17,6 +17,53 @@ from app.services.engine_store import engine_store
 from app.services.ohlcv_store import ohlcv_store
 
 
+_SCREENER_ENTRY_STATUSES = frozenset({"LONG_ENTRY_CANDIDATE", "SHORT_ENTRY_CANDIDATE", "ENTRY_CANDIDATE"})
+
+
+def screener_signal_detail(symbol: str, payload: dict[str, Any]) -> Any:
+    """P14 decision-journal row for a screener entry signal: (dedup key, fields), or None.
+
+    Built inside the journal only when signal detail is on. One row per symbol, timeframe, direction and
+    setup bar: the screener recomputes the same setup many times.
+    """
+
+    def build() -> tuple[str, dict[str, Any]] | None:
+        status = str(payload.get("status") or "")
+        direction = str(payload.get("direction") or "").upper()
+        if status not in _SCREENER_ENTRY_STATUSES or direction not in ("LONG", "SHORT"):
+            return None
+        stop = payload.get("stop") or {}
+        final_stop = stop.get("final_stop") if isinstance(stop, dict) else None
+        if final_stop is None or stop.get("provisional"):
+            return None
+        tf = str(payload.get("timeframe") or "")
+        bar = (payload.get("source_candle_timestamps") or {}).get(tf)
+        if not tf or not bar:
+            return None
+        targets = [t for t in (payload.get("targets") or []) if isinstance(t, dict)]
+        entry = payload.get("entry") or {}
+        sym = str(symbol).upper()
+        fields = {
+            "source": "SETUP_SIGNAL_SERVICE",
+            "strategy_id": "SCREENER_SETUP",
+            "symbol": sym,
+            "direction": direction,
+            "timeframe": tf,
+            "setup_bar_time": bar,
+            "status": status,
+            "outcome": "signal",
+            "stop_price": final_stop,
+            "tp1": targets[0].get("target_price") if targets else None,
+            "tp1_r": targets[0].get("r_multiple") if targets else None,
+            "signal_entry_price": entry.get("entry_price") if isinstance(entry, dict) else None,
+            "calculated_at": payload.get("calculated_at"),
+            "detail_version": 1,
+        }
+        return f"{sym}|{tf}|{direction}|{bar}", fields
+
+    return build
+
+
 class SetupSignalService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
@@ -174,6 +221,10 @@ class SetupSignalService:
             payload["ohlcv_freshness"] = "OK"
         payload["triggered_timeframe"] = triggered_timeframe
         engine_store.set_setup_signal(sym, payload)
+        # P14: the screener's entry signals go to the decision journal (signal detail on only; never raises).
+        from app.services import decision_journal
+
+        decision_journal.write_signal_once("SCREENER", "signal", screener_signal_detail(sym, payload))
 
         ms = (time.perf_counter() - t0) * 1000.0
         self.calc_latencies_ms.append(ms)

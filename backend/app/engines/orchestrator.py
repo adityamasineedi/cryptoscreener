@@ -578,7 +578,10 @@ class CalculationOrchestrator:
         from app.config import ROOT
         from app.services import decision_journal
 
-        decision_journal.configure(ROOT / "data" / "paper" / "decision_journal.jsonl")
+        decision_journal.configure(
+            ROOT / "data" / "paper" / "decision_journal.jsonl",
+            signal_detail=bool(getattr(self.settings, "decision_journal_signal_detail", False)),
+        )
         wanted: list[tuple[str, Any]] = [("paper_trade_loop", self._paper_trade_loop)]
         if bool(getattr(self.settings, "paper_v1_watcher_enabled", True)):
             wanted.append(("v1_paper_watcher_loop", self._v1_paper_watcher_loop))

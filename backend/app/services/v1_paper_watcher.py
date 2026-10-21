@@ -387,6 +387,58 @@ class V1PaperWatcher:
             if kind in _POST_EVAL_REFUSALS:
                 self._bar_refusals[sym] = {"reason": kind, "bar": bar, "detail": detail}
 
+    def _journal_signal(
+        self,
+        symbol: str,
+        bar: str | None,
+        result: Mapping[str, Any] | None,
+        outcome: str,
+        reason: str = "",
+        *,
+        position: Any = None,
+        detail: str | None = None,
+    ) -> None:
+        """P14: one journal row per v1 entry signal, opened or not. Written only with signal detail on.
+
+        The builder runs inside the journal (never raises, never called with detail off); nothing here
+        changes what the watcher decides.
+        """
+        if self.replay_mode:
+            return
+
+        def build() -> dict[str, Any] | None:
+            if not is_v1_long_entry(result):
+                return None
+            r = dict(result or {})
+            tp1 = r.get("tp1")
+            if tp1 is None:
+                targets = r.get("targets") or []
+                if targets and isinstance(targets[0], Mapping):
+                    tp1 = targets[0].get("target_price")
+            row: dict[str, Any] = {
+                "source": "V1_PAPER_WATCHER",
+                "strategy_id": "COMBO_02_V1",
+                "symbol": normalize_symbol(symbol),
+                "direction": "LONG",
+                "timeframe": self.timeframe,
+                "setup_bar_time": bar,
+                "outcome": outcome,
+                "reason": reason,
+                "stop_price": r.get("stop_price"),
+                "tp1": tp1,
+                "signal_entry_price": r.get("entry_price"),
+                "detail_version": 1,
+            }
+            if detail:
+                row["detail"] = detail
+            if position is not None:
+                row["position_id"] = str(getattr(position, "id", "") or "")
+                row["position_stop_price"] = getattr(position, "stop_price", None)
+                row["position_tp1"] = getattr(position, "tp1_price", None)
+            return row
+
+        decision_journal.write_signal("COMBO_02_V1", "signal", build)
+
     def _with_refusals(self, snaps: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         """Attach the watcher's refusal to a snapshot of the same closed bar."""
         with self._lock:
@@ -863,12 +915,14 @@ class V1PaperWatcher:
             )
             reason = "exit_bar_no_entry" if phase == "exit" else "position_open"
             self._note_skip(book.symbol, f"{book.symbol}:{reason}", tip_iso)
+            self._journal_signal(book.symbol, tip_iso, result, "not_opened", reason)
             return None
 
         if not self._bos_break_allows_entry(
             book.symbol, series_1h, tip_idx, last_exit_bar=last_exit
         ):
             self._note_skip(book.symbol, f"{book.symbol}:sticky_bos_skip", tip_iso)
+            self._journal_signal(book.symbol, tip_iso, result, "not_opened", "sticky_bos_skip")
             return None
 
         if not is_v1_long_entry(result):
@@ -884,6 +938,7 @@ class V1PaperWatcher:
             lag = tip_open_lag_seconds(tip_ts, self.timeframe)
             if lag is not None and lag > MAX_OPEN_LAG_SECONDS:
                 self._note_skip(book.symbol, f"{book.symbol}:late_tip", tip_iso)
+                self._journal_signal(book.symbol, tip_iso, result, "missed", "late_tip")
                 return None
 
         if not self.replay_mode:
@@ -923,6 +978,7 @@ class V1PaperWatcher:
             self._note_skip(
                 book.symbol, f"{book.symbol}:paper_open_skipped", tip_iso, detail=detail
             )
+            self._journal_signal(book.symbol, tip_iso, result, "not_opened", "paper_open_skipped", detail=detail)
         else:
             if not self.replay_mode:
                 decision_journal.write(
@@ -931,6 +987,7 @@ class V1PaperWatcher:
                     quantity=getattr(pos, "quantity", None), risk_usd=getattr(pos, "risk_usd", None),
                     entry_type=result.get("entry_type") if isinstance(result, dict) else None,
                 )
+            self._journal_signal(book.symbol, tip_iso, result, "opened", position=pos)
             # An earlier bar's skip no longer describes this book.
             self._clear_skip(book.symbol)
             with self._lock:

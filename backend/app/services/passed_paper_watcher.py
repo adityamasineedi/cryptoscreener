@@ -131,6 +131,27 @@ _watcher: PassedPaperWatcher | None = None
 _watcher_lock = threading.Lock()
 
 
+def _signal_detail_of(result: Mapping[str, Any] | None) -> Any:
+    """Decision-journal signal detail (P14): read when the journal writes, only with signal detail on."""
+
+    def build() -> dict[str, Any]:
+        r = dict(result or {})
+        tp1 = r.get("tp1")
+        if tp1 is None:
+            targets = r.get("targets") or []
+            if targets and isinstance(targets[0], Mapping):
+                tp1 = targets[0].get("target_price")
+        return {
+            "source": "PASSED_CAP_BOOK",
+            "stop_price": r.get("stop_price"),
+            "tp1": tp1,
+            "signal_entry_price": r.get("entry_price"),
+            "detail_version": 1,
+        }
+
+    return build
+
+
 HOUR = timedelta(hours=1)
 DAY = timedelta(days=1)
 H4 = timedelta(hours=4)
@@ -335,18 +356,20 @@ class PassedPaperWatcher:
             return f"engine_refused:{detail[len(prefix):]}"
         return "engine_refused"
 
-    def _record_signal(self, **fields: Any) -> dict[str, Any]:
+    def _record_signal(self, *, _detail: Any = None, **fields: Any) -> dict[str, Any]:
         row = dict(fields)
         row["recorded_at"] = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._signals.appendleft(row)
-        decision_journal.write("PASSED_BOOK", "signal", **row)
+        # ``_detail`` (P14) only adds journal fields when signal detail is on; the row above is unchanged.
+        decision_journal.write("PASSED_BOOK", "signal", _detail=_detail, **row)
         return row
 
-    def _record_missed(self, signal: Mapping[str, Any], lag: float | None) -> None:
+    def _record_missed(self, signal: Mapping[str, Any], lag: float | None, *, _detail: Any = None) -> None:
         """A permitted signal on a bar evaluated after the late-open bound. Nothing opens."""
         lag_s = float(lag or 0.0)
         row = self._record_signal(
+            _detail=_detail,
             **signal,
             outcome=MISSED_OUTCOME,
             reason="late_tip",
@@ -792,18 +815,20 @@ class PassedPaperWatcher:
                 "trend": trend,
                 "as_of_daily_bar": as_of_daily,
             }
+            # P14: engine stop, tested target and source for the journal (used only with signal detail on).
+            detail = _signal_detail_of(result)
             if not side_permitted:
                 # Failed this coin's test: never opens here, whatever else holds.
                 not_allowed = True
                 bar_info["signals_not_allowed"] += 1
                 self._record_signal(
-                    **signal, outcome="not_opened", reason=SYMBOL_SIDE_NOT_ALLOWED
+                    **signal, _detail=detail, outcome="not_opened", reason=SYMBOL_SIDE_NOT_ALLOWED
                 )
                 continue
             if late:
                 # Past the late-open bound: journaled and counted, never opened.
                 late_refused = True
-                self._record_missed(signal, lag)
+                self._record_missed(signal, lag, _detail=detail)
                 continue
             # One open paper position per symbol, whichever stream holds it.
             try:
@@ -817,19 +842,19 @@ class PassedPaperWatcher:
                 )
                 failed = True
                 self._record_signal(
-                    **signal, outcome="not_opened", reason="open_position_check_failed"
+                    **signal, _detail=detail, outcome="not_opened", reason="open_position_check_failed"
                 )
                 continue
             if has_open:
                 blocked = True
                 self._record_signal(
-                    **signal, outcome="not_opened", reason="symbol_has_open_position"
+                    **signal, _detail=detail, outcome="not_opened", reason="symbol_has_open_position"
                 )
                 continue
             if not REGIME_BOOK_OPEN:
                 book_closed = True
                 self._record_signal(
-                    **signal, outcome="not_opened", reason=REGIME_BOOK_CLOSED_REASON
+                    **signal, _detail=detail, outcome="not_opened", reason=REGIME_BOOK_CLOSED_REASON
                 )
                 continue
             # Fill at the next bar's open with the backtest's causal slippage
@@ -847,7 +872,7 @@ class PassedPaperWatcher:
                     bar=tip_iso,
                     next_bar=fill.get("fill_bar_time"),
                 )
-                self._record_signal(**signal, outcome="not_opened", reason=SKIP_FILL_BAR_GAP)
+                self._record_signal(**signal, _detail=detail, outcome="not_opened", reason=SKIP_FILL_BAR_GAP)
                 continue
             eval_result = dict(result or {})
             eval_result["signal_entry_price"] = eval_result.get("entry_price")
@@ -871,14 +896,14 @@ class PassedPaperWatcher:
                 opened.append(pos)
                 self.opened_count += 1
                 self._record_signal(
-                    **signal,
+                    **signal, _detail=detail,
                     outcome="opened",
                     reason="",
                     position_id=str(getattr(pos, "id", "") or ""),
                 )
             else:
                 self._record_signal(
-                    **signal,
+                    **signal, _detail=detail,
                     outcome="not_opened",
                     reason=self._engine_refusal(paper, sym),
                 )
