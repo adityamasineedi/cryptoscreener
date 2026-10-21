@@ -60,6 +60,8 @@ class Signal:
     journal_ref: dict[str, Any] | None = None
     position_id: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    # False when the strategy's target has no backtest behind it (the screener): T2 shows "(untested)".
+    target_tested: bool = True
 
     def __post_init__(self) -> None:
         self.symbol = str(self.symbol).upper()
@@ -141,6 +143,7 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
         tested = False
     else:
         t2 = float(sig.tested_target)
+        tested = bool(sig.target_tested)
     if (t2 - mid) * sgn <= 0:
         return None, INVALID_TARGET
     t1 = mid + sgn * float(tg["t1_r"]) * r_unit

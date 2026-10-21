@@ -59,7 +59,8 @@
  "poll_seconds": 30,
  "defer_missing_engine_values_seconds": 300,
  "backfill_hours": 24,
- "journal_alert_outcomes": ["opened"],
+ "journal_alert_outcomes": ["opened", "not_opened"],
+ "_journal_alert_outcomes_doc": "P14 (owner ruling D51c): not-opened signals alert too when the journal row carries the engine stop and TP1 (DECISION_JOURNAL_SIGNAL_DETAIL on); without them they stay NOT_OPENED skips.",
  "preview": {
   "render_suppressed": true,
   "track_suppressed_in_dry_run": true

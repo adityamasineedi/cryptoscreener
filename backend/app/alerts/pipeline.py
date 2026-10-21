@@ -112,6 +112,9 @@ class AlertPipeline:
             "decided_at": sig.decided_at.isoformat(),
             "journal_ref": sig.journal_ref,
             "position_id": sig.position_id,
+            # P14: what live paper did with this signal, and why it did not open.
+            "paper_outcome": sig.extra.get("live_outcome"),
+            "paper_skip_reason": sig.extra.get("skip_reason"),
             "extra": sig.extra or None,
         }
 

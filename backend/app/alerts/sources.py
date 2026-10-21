@@ -117,6 +117,13 @@ def journal_items(
 
 
 def _journal_item(book, event, row, ref, data, cfg, candle12_state, outcomes):  # noqa: ANN001
+    """One journal row -> Signal, SkipRecord or None.
+
+    P14 rows (``DECISION_JOURNAL_SIGNAL_DETAIL`` on) carry ``stop_price``, ``tp1`` and ``source``: then a signal
+    that did not open alerts too, from the engine values in the row. Without them, not-opened signals stay
+    NOT_OPENED skips, as before.
+    """
+    has_detail = row.get("detail_version") is not None
     if book == "PASSED_BOOK" and event == "signal" and row.get("strategy_id"):
         sig = Signal(
             source="PASSED_BOOK",
@@ -130,16 +137,23 @@ def _journal_item(book, event, row, ref, data, cfg, candle12_state, outcomes):  
             position_id=row.get("position_id") or None,
         )
         outcome = str(row.get("outcome") or "")
+        sig.extra["live_outcome"] = outcome
+        if row.get("reason"):
+            sig.extra["skip_reason"] = str(row.get("reason"))
+        if has_detail:
+            sig.stop, sig.tested_target = _f(row.get("stop_price")), _f(row.get("tp1"))
+            sig.extra["engine_values"] = "journal"
         if outcome == "missed":
-            sig.extra["live_outcome"] = "missed"
             enrich_market(sig, data, cfg)
             return sig
-        if outcome not in outcomes:
+        if outcome not in outcomes or (outcome != "opened" and not has_detail):
             return SkipRecord("NOT_OPENED", sig, f"{outcome}:{row.get('reason') or ''}")
-        pos = _lookup(sig, data.paper_trade, sig.position_id) if sig.position_id else None
-        if pos:
-            sig.stop = _f(pos.get("stop_price"))
-            sig.tested_target = _f(pos.get("tp1_price"))
+        if not has_detail and sig.position_id:
+            pos = _lookup(sig, data.paper_trade, sig.position_id)
+            if pos:
+                sig.stop = _f(pos.get("stop_price"))
+                sig.tested_target = _f(pos.get("tp1_price"))
+                sig.extra["engine_values"] = "paper_trades"
         enrich_market(sig, data, cfg)
         return sig
     if book == "COMBO_02_V1" and event == "opened":
@@ -148,20 +162,60 @@ def _journal_item(book, event, row, ref, data, cfg, candle12_state, outcomes):  
             timeframe="1h", signal_bar=row["bar"], decided_at=row["ts"], journal_ref=ref,
             stop=_f(row.get("stop_price")),
         )
+        sig.extra["live_outcome"] = "opened"
         pos = _lookup(sig, data.v1_trade, sig.symbol, str(row["bar"]))
         if pos:
             sig.position_id = str(pos.get("id"))
             sig.tested_target = _f(pos.get("tp1_price"))
         enrich_market(sig, data, cfg)
         return sig
+    if book == "COMBO_02_V1" and event == "signal" and has_detail:
+        outcome = str(row.get("outcome") or "")
+        if outcome == "opened":
+            return None  # the "opened" row of the same decision is the alert
+        sig = Signal(
+            source="COMBO_02_V1", strategy_id="COMBO_02_V1", symbol=str(row["symbol"]), side="LONG",
+            timeframe=str(row.get("timeframe") or "1h"), signal_bar=row["setup_bar_time"], decided_at=row["ts"],
+            journal_ref=ref, stop=_f(row.get("stop_price")), tested_target=_f(row.get("tp1")),
+            extra={"live_outcome": outcome, "skip_reason": str(row.get("reason") or ""), "engine_values": "journal"},
+        )
+        if outcome not in outcomes and outcome != "missed":
+            return SkipRecord("NOT_OPENED", sig, f"{outcome}:{row.get('reason') or ''}")
+        enrich_market(sig, data, cfg)
+        return sig
     if book == "CANDLE12_V2" and event == "entry":
         sig = Signal(
             source="CANDLE12_V2", strategy_id="CANDLE12_V2", symbol="BTCUSDT", side="LONG", timeframe="1h",
             signal_bar=row["entry_time"], decided_at=row["ts"], journal_ref=ref, stop=_f(row.get("stop_price")),
-            position_id=str(row.get("key") or "") or None,
+            position_id=str(row.get("key") or "") or None, extra={"live_outcome": "opened"},
         )
-        state = read_json(candle12_state) if candle12_state else None
-        sig.tested_target = _candle12_tp1(state, row.get("key"))
+        if has_detail and row.get("tp1") is not None:
+            sig.tested_target = _f(row.get("tp1"))
+            sig.extra["engine_values"] = "journal"
+        else:
+            state = read_json(candle12_state) if candle12_state else None
+            sig.tested_target = _candle12_tp1(state, row.get("key"))
+        enrich_market(sig, data, cfg)
+        return sig
+    if book == "CANDLE12_V2" and event == "skip" and has_detail and row.get("setup_bar_time"):
+        sig = Signal(
+            source="CANDLE12_V2", strategy_id="CANDLE12_V2", symbol="BTCUSDT", side="LONG", timeframe="1h",
+            signal_bar=row["setup_bar_time"], decided_at=row["ts"], journal_ref=ref, stop=_f(row.get("stop_price")),
+            tested_target=_f(row.get("tp1")), position_id=str(row.get("key") or "") or None,
+            extra={"live_outcome": "not_opened", "skip_reason": str(row.get("reason") or ""), "engine_values": "journal"},
+        )
+        if "not_opened" not in outcomes:
+            return SkipRecord("NOT_OPENED", sig, str(row.get("reason") or ""))
+        enrich_market(sig, data, cfg)
+        return sig
+    if book == "SCREENER" and event == "signal" and has_detail:
+        sig = Signal(
+            source="SCREENER", strategy_id=str(row.get("strategy_id") or "SCREENER_SETUP"), symbol=str(row["symbol"]),
+            side=str(row["direction"]), timeframe=str(row["timeframe"]), signal_bar=row["setup_bar_time"],
+            decided_at=row["ts"], journal_ref=ref, stop=_f(row.get("stop_price")), tested_target=_f(row.get("tp1")),
+            target_tested=False,
+            extra={"live_outcome": "screener_signal", "screener_status": row.get("status"), "engine_values": "journal"},
+        )
         enrich_market(sig, data, cfg)
         return sig
     return None
@@ -180,6 +234,8 @@ def awaiting_engine_values(item: "Signal | SkipRecord") -> bool:
     """A journal alert whose stop or tested target is not readable yet (written just after the row)."""
     if not isinstance(item, Signal) or item.extra.get("live_outcome") == "missed":
         return False
+    if item.extra.get("engine_values") == "journal":
+        return False  # P14 rows carry the engine values themselves
     return item.source in ("PASSED_BOOK", "COMBO_02_V1", "CANDLE12_V2") and (item.stop is None or item.tested_target is None)
 
 

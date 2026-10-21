@@ -520,3 +520,89 @@ def test_fwd1_uses_the_45_minute_limit_and_signal_line(tmp_path):
     # Not a forward runner: no extra line.
     other = sig()
     assert "signal +" not in p.handle(other, other.bar_close + timedelta(minutes=5))["text"]
+
+
+# --- P14 journal detail rows (owner ruling D51c) -----------------------------------------------------
+GOLDEN_SCREENER = """✅ SCALP TRADE - IOST
+🏮 TYPE - LONG
+
+👉 ENTRY - $1.0000 - $0.9950
+👉 TARGET - $1.0450, $1.1200 (untested), $1.1675 & $1.2150+
+👉 SL - $0.9500
+
+🚨 LEVERAGE - 1x
+📊 R:R - 1:2.6 | Risk 1% of account
+🧪 UNPROVEN · SCREENER_SETUP · 15m
+⏱ Valid 3 bars · Not financial advice"""
+
+SCREENER_ROW = {"book": "SCREENER", "event": "signal", "source": "SETUP_SIGNAL_SERVICE", "strategy_id": "SCREENER_SETUP",
+                "symbol": "IOSTUSDT", "direction": "LONG", "timeframe": "15m", "setup_bar_time": "2026-10-21T05:00:00+00:00",
+                "status": "LONG_ENTRY_CANDIDATE", "outcome": "signal", "stop_price": 0.95, "tp1": 1.12, "tp1_r": 2.4,
+                "signal_entry_price": 1.0, "detail_version": 1, "ts": "2026-10-21T05:15:04+00:00"}
+
+
+def _m15(symbol, end_open, n=40):
+    return [bar(end_open - timedelta(minutes=15 * (n - 1 - i)), 1.0, 1.005, 0.995, 1.0) for i in range(n)]
+
+
+def test_golden_screener_alert(tmp_path):
+    c = cfg()
+    c.ticks["IOSTUSDT"] = 0.0001
+    data = MemoryData({("IOSTUSDT", "15m"): _m15("IOSTUSDT", datetime(2026, 10, 21, 5, 0, tzinfo=timezone.utc))})
+    (item,) = list(journal_items([(0, json.dumps(SCREENER_ROW))], first_line_no=42, data=data, cfg=c, candle12_state=None))
+    assert item.source == "SCREENER" and not item.target_tested and item.atr == pytest.approx(0.01)
+    row = pipe(tmp_path, c, data=data).handle(item, item.decided_at)
+    assert row["code"] == "DRY_RUN" and row["status"] == "UNPROVEN" and row["text"] == GOLDEN_SCREENER
+    assert row["journal_ref"]["line"] == 42 and row["journal_ref"]["book"] == "SCREENER"
+
+
+GOLDEN_NOT_OPENED = """✅ INTRADAY TRADE - BTC
+🏮 TYPE - LONG
+
+👉 ENTRY - $100000.0 - $99500.0
+👉 TARGET - $101500.0, $104500.0 (tested), $106250.0 & $108000.0+
+👉 SL - $98000.0
+
+🚨 LEVERAGE - 1x
+📊 R:R - 1:2.7 | Risk 1% of account
+🧪 PAPER · CANDLE12_V2 · 1h
+⏱ Valid 3 bars · Not financial advice"""
+
+
+def test_golden_not_opened_alert_keeps_the_skip_reason(tmp_path):
+    jrow = {"book": "CANDLE12_V2", "event": "skip", "reason": "second_open_ignored", "key": "k2", "held": "k1",
+            "source": "CANDLE12_V2_PAPER", "strategy_id": "CANDLE12_V2", "symbol": "BTCUSDT", "direction": "LONG",
+            "timeframe": "1h", "setup_bar_time": T0.isoformat(), "signal_outcome": "not_opened",
+            "signal_reason": "second_open_ignored", "stop_price": 98000.0, "tp1": 104500.0,
+            "signal_entry_price": 100000.0, "detail_version": 1, "ts": (T0 + timedelta(hours=1, minutes=2)).isoformat()}
+    bars_ = [bar(T0 - timedelta(hours=39 - i), 100000.0, 100500.0, 99500.0, 100000.0) for i in range(40)]
+    data = MemoryData({("BTCUSDT", "1h"): bars_})
+    (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=9, data=data, cfg=cfg(), candle12_state=None))
+    assert item.atr == pytest.approx(1000.0)
+    row = pipe(tmp_path, data=data).handle(item, item.decided_at)
+    assert row["code"] == "DRY_RUN" and row["kind"] == "ALERT" and row["text"] == GOLDEN_NOT_OPENED
+    assert row["paper_outcome"] == "not_opened" and row["paper_skip_reason"] == "second_open_ignored"
+    logged = rows(tmp_path)[0]
+    assert logged["paper_skip_reason"] == "second_open_ignored" and logged["journal_ref"]["line"] == 9
+
+
+def test_not_opened_without_detail_is_still_a_skip():
+    jrow = {"book": "PASSED_BOOK", "event": "signal", "outcome": "not_opened", "reason": "symbol_has_open_position",
+            "strategy_id": "COMBO_01", "direction": "SHORT", "symbol": "ARBUSDT", "timeframe": "1h",
+            "setup_bar_time": T0.isoformat(), "ts": (T0 + timedelta(hours=1)).isoformat()}
+    (item,) = list(journal_items([(0, json.dumps(jrow))], first_line_no=1, data=MemoryData(), cfg=cfg(), candle12_state=None))
+    assert isinstance(item, SkipRecord) and item.code == "NOT_OPENED"
+    with_detail = dict(jrow, stop_price=102.0, tp1=95.0, source="PASSED_CAP_BOOK", detail_version=1)
+    (sig_,) = list(journal_items([(0, json.dumps(with_detail))], first_line_no=1, data=MemoryData(), cfg=cfg(), candle12_state=None))
+    assert isinstance(sig_, Signal) and sig_.stop == 102.0 and sig_.extra["skip_reason"] == "symbol_has_open_position"
+
+
+def test_v1_signal_rows_with_detail():
+    base = {"book": "COMBO_02_V1", "event": "signal", "source": "V1_PAPER_WATCHER", "strategy_id": "COMBO_02_V1",
+            "symbol": "BTCUSDT", "direction": "LONG", "timeframe": "1h", "setup_bar_time": T0.isoformat(),
+            "stop_price": 97.0, "tp1": 109.0, "detail_version": 1, "ts": (T0 + timedelta(hours=1)).isoformat()}
+    opened = dict(base, outcome="opened", reason="")
+    skipped = dict(base, outcome="not_opened", reason="sticky_bos_skip")
+    items = list(journal_items([(0, json.dumps(opened)), (1, json.dumps(skipped))], first_line_no=1,
+                               data=MemoryData(), cfg=cfg(), candle12_state=None))
+    assert len(items) == 1 and items[0].extra["skip_reason"] == "sticky_bos_skip" and items[0].tested_target == 109.0

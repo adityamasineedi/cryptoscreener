@@ -71,10 +71,10 @@ def _positions(eng: PaperTradeEngine) -> list[dict]:
     return sorted(out, key=lambda d: (d["symbol"], d["source_candle_ts"] or ""))
 
 
-def _run(tmp: Path, monkeypatch, *, alerts_on: bool) -> dict:
+def _run(tmp: Path, monkeypatch, *, alerts_on: bool, detail: bool = False) -> dict:
     monkeypatch.setattr("app.services.passed_paper_watcher.evaluate_combination_at_bar", _fake_eval)
     journal = tmp / "decision_journal.jsonl"
-    decision_journal.configure(journal)
+    decision_journal.configure(journal, signal_detail=detail)
     eng = PaperTradeEngine(enabled=True, risk_policy=PaperRiskPolicy(enabled=False))
     watcher = PassedPaperWatcher(enabled=True, paper_engine=eng)
     candles = _candles(262)
@@ -148,6 +148,25 @@ def test_paper_decisions_identical_with_alerts_on_and_off(tmp_path, monkeypatch)
         ref = a["journal_ref"]
         row = json.loads(lines[ref["line"] - 1])
         assert row["event"] == "signal" and row["outcome"] == "opened" and row["strategy_id"] == a["strategy_id"]
+
+
+@pytest.mark.usefixtures("passed_book_open")
+def test_with_signal_detail_not_opened_signals_alert_and_decisions_stay_identical(tmp_path, monkeypatch):
+    """P14 journal detail on: alerts on/off still change nothing, and not-opened signals become alerts."""
+    off = _run(tmp_path / "off", monkeypatch, alerts_on=False, detail=True)
+    on = _run(tmp_path / "on", monkeypatch, alerts_on=True, detail=True)
+    for key in ("decisions", "journal", "positions", "opened_count", "last_skip"):
+        assert on[key] == off[key], key
+    alerts = [json.loads(x) for x in on["alerts"]]
+    sent = [a for a in alerts if a["kind"] == "ALERT" and a["code"] == "SENT"]
+    not_opened = [a for a in sent if a["paper_outcome"] == "not_opened"]
+    assert not_opened and all(a["paper_skip_reason"] for a in not_opened)
+    assert {a["paper_outcome"] for a in sent} == {"opened", "not_opened"}
+    assert not any(a["code"] == "NOT_OPENED" for a in alerts)
+    lines = (tmp_path / "on" / "decision_journal.jsonl").read_text(encoding="utf-8").splitlines()
+    for a in sent:
+        row = json.loads(lines[a["journal_ref"]["line"] - 1])
+        assert row["outcome"] == a["paper_outcome"] and row["stop_price"] == pytest.approx(a["plan"]["stop"])
 
 
 def test_no_decision_path_imports_the_alert_package():
