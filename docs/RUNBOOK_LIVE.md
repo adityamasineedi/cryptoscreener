@@ -3,7 +3,7 @@
 What to do when something breaks in live paper. Proposal on branch `live/d128e-runbook`; it changes no code.
 
 **Ground rules (they override anything below):**
-- **C1.** No real orders, no exchange API keys, no real money. Every position in this runbook is a paper position. The "exchange later" notes describe a future that C1 does not allow today. They apply only if the owner amends C1 (GATES E29, D129 dormant).
+- **C1 (v2.5, D131).** No real orders, no real money. Exchange API keys exist only for Binance Futures **testnet**. The owner sets them in the root `.env`; they are never logged, printed or committed. They are used only by the D128c adapter, the kill switches and the reconciliation tests, and the code refuses any non-testnet URL. Every live position in this runbook is a paper position. The "exchange" notes apply to the testnet adapter today and to real money only after a separate amendment (C1 v3).
 - **D53.** Only the **owner** starts, stops or restarts a live process: the backend, the frontend, the forward runners (FWD-1, FWD-3, CANDLE12 V3 OOS-2) and their scheduled tasks. A Claude session only diagnoses (read-only), writes the exact steps into `research/OWNER_QUEUE.md`, and verifies afterwards.
 - **C2.** Nothing here changes live paper behaviour: no edits to `.env`, armed sides, stops, risk or engine code as a "fix". A real fix is a `live/*` branch with a replay test, merged by the owner.
 - **Frozen files.** Never edit, move or restore by hand anything listed in `docs/candle12_v3_oos_contract.lock.json` (37 files) or the CANDLE12 V3 OOS-2 store. The OOS-2 runner re-fingerprints them every 5 minutes and halts on drift.
