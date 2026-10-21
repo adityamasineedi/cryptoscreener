@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -207,6 +207,19 @@ class Settings(BaseSettings):
     kill_switch_heartbeat_timeout_minutes: float = Field(default=90.0, alias="KILL_SWITCH_HEARTBEAT_TIMEOUT_MINUTES")
     kill_switch_auto_flatten_on_heartbeat: bool = Field(default=True, alias="KILL_SWITCH_AUTO_FLATTEN_ON_HEARTBEAT")
     kill_switch_auto_flatten_on_mismatch: bool = Field(default=True, alias="KILL_SWITCH_AUTO_FLATTEN_ON_MISMATCH")
+    # Execution adapter, Binance Futures TESTNET only (owner rulings D128c, D131; CONSTITUTION v2.5 C1). Off by
+    # default. The keys are set by the owner in the root .env only and are never logged, printed or committed;
+    # the client refuses any non-testnet base URL and a constitution older than v2.5.
+    execution_testnet_enabled: bool = Field(default=False, alias="EXECUTION_TESTNET_ENABLED")
+    binance_testnet_futures_rest: str = Field(
+        default="https://testnet.binancefuture.com", alias="BINANCE_TESTNET_FUTURES_REST"
+    )
+    binance_testnet_api_key: SecretStr | None = Field(default=None, alias="BINANCE_TESTNET_API_KEY")
+    binance_testnet_api_secret: SecretStr | None = Field(default=None, alias="BINANCE_TESTNET_API_SECRET")
+    execution_constitution_path: str = Field(
+        default="D:/cryptoscreener-worktrees/research-audit/prompts/CONSTITUTION.md",
+        alias="EXECUTION_CONSTITUTION_PATH",
+    )
     # Explicit trading mode separation (V2.1-A LIVE is never auto-enabled)
     trading_mode: str = Field(default="PAPER", alias="TRADING_MODE")
 
