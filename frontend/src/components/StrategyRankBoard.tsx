@@ -1,5 +1,8 @@
 /**
- * Ranked strategy board — read-only view of strategy_rank/ranked.json.
+ * Strategies page board (owner D191, DECISIONS D218). Display only.
+ *
+ * Top: the research scorecard (static snapshot, research/scorecardSnapshot.ts).
+ * Below, collapsed: the old in-sample ranking, a read-only view of strategy_rank/ranked.json.
  * Order, pass flags and sums come from the backend as written by merge_rank.py.
  */
 import { useMemo, useState, type ReactNode } from "react";
@@ -8,6 +11,13 @@ import type {
   StrategyRankResponse,
   StrategyRankRow,
 } from "../api/client";
+import { researchVerdictFor } from "../research/scorecardSnapshot";
+import { ResearchScorecard, verdictClass } from "./ResearchScorecard";
+
+export const OLD_RANKING_TITLE =
+  "Old in-sample ranking (window 2026-02-14 to 2026-10-12 overlaps the sealed holdout; not evidence)";
+/** Current default taker fee (owner D144; grid and backtest defaults since e4e389e). */
+export const CURRENT_DEFAULT_TAKER_PCT = 0.05;
 
 const TOP_N = 15;
 
@@ -54,6 +64,52 @@ function sourceNote(row: StrategyRankRow): string | null {
 const badge =
   "rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide";
 
+const SMALL_RUN = /[:,;]?\s*small run\b[\s\S]*$/i;
+
+/**
+ * Card text without the catalog's "small run" result. That run (BTC 1h, 1,200 bars to
+ * 2026-10-16) is not part of this ranking, and its window is inside the sealed holdout, so the
+ * card leaves it out and says so.
+ */
+export function withoutSmallRun(summary: string): { text: string; dropped: boolean } {
+  const hit = SMALL_RUN.exec(summary);
+  if (!hit) return { text: summary, dropped: false };
+  const head = summary.slice(0, hit.index).trim().replace(/[:,;]$/, "");
+  return { text: head ? `${head}.` : "", dropped: true };
+}
+
+/** The research verdict badge for one ranked card. Verdict and stage only; no research numbers. */
+export function ResearchVerdictBadge({
+  strategyId,
+  direction,
+}: {
+  strategyId: string;
+  direction: string;
+}) {
+  const hit = researchVerdictFor(strategyId, direction);
+  if (!hit) {
+    return (
+      <span
+        className={`${badge} border-terminal-border bg-white/5 font-normal normal-case text-terminal-muted`}
+        title="This id has no row in the research SCORECARD, KILLED.md or FINAL_VERDICT."
+        data-testid="research-verdict-badge"
+      >
+        Research: no verdict (not in scorecard)
+      </span>
+    );
+  }
+  const { entry, key, note } = hit;
+  return (
+    <span
+      className={`${badge} ${verdictClass(entry.verdict)}`}
+      title={`Research row ${key} (${entry.source})${note ? `; ${note}` : ""}. See the scorecard above.`}
+      data-testid="research-verdict-badge"
+    >
+      Research: {entry.verdict} · {entry.stage}
+    </span>
+  );
+}
+
 function Stat({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
@@ -74,6 +130,7 @@ function RankRow({
 }) {
   const muted = row.do_not_use || row.alias_of != null;
   const note = sourceNote(row);
+  const summary = withoutSmallRun(row.summary);
   return (
     <button
       type="button"
@@ -93,6 +150,7 @@ function RankRow({
           <span className="font-mono text-[12px] font-semibold text-terminal-text">
             {row.strategy_id}
           </span>
+          <ResearchVerdictBadge strategyId={row.strategy_id} direction={row.direction} />
           <span className={`${badge} ${directionClass(row.direction)}`}>
             {directionLabel(row.direction)}
           </span>
@@ -126,9 +184,15 @@ function RankRow({
         </div>
         <div className="mt-1 text-sm font-medium text-terminal-text">{row.name}</div>
         <p className="mt-1 text-[11px] leading-relaxed text-terminal-muted">
-          {row.summary}
+          {summary.text}
           {note ? ` ${note}` : ""}
         </p>
+        {summary.dropped ? (
+          <p className="mt-1 text-[10px] text-terminal-muted" data-testid="small-run-dropped">
+            A separate small run in the catalog text is left off this card: it is not part of
+            this ranking and its window is inside the sealed holdout.
+          </p>
+        ) : null}
         {row.gates.length ? (
           <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-terminal-muted">
             <span className="text-terminal-text">How it works: </span>
@@ -210,155 +274,169 @@ export function StrategyRankBoard({
       className="mb-6 rounded-lg border border-terminal-border/70 bg-black/20 p-4"
       data-testid="strategy-rank-board"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-base font-semibold text-terminal-text">
-          Ranked by backtest
+      <ResearchScorecard />
+
+      <details
+        className="mt-6 rounded border border-terminal-border/60 bg-terminal-panel/20 px-3 py-2"
+        data-testid="old-ranking"
+      >
+        <summary
+          className="cursor-pointer font-display text-sm font-semibold text-terminal-text"
+          data-testid="old-ranking-summary"
+        >
+          {OLD_RANKING_TITLE}
+        </summary>
+        <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
           {!failed && win?.start && win?.end ? (
             <span
-              className="ml-3 rounded border border-terminal-accent/50 bg-terminal-accent/10 px-2 py-0.5 font-mono text-[12px] font-semibold text-terminal-text"
+              className="rounded border border-terminal-accent/50 bg-terminal-accent/10 px-2 py-0.5 font-mono text-[12px] font-semibold text-terminal-text"
               data-testid="strategy-rank-dates"
             >
               Tested {win.start} to {win.end}
             </span>
           ) : null}
-        </h2>
-        {rank?.source?.path ? (
-          <span className="font-mono text-[10px] text-terminal-muted">{rank.source.path}</span>
-        ) : null}
-      </div>
-
-      {loading ? (
-        <div className="mt-2 text-sm text-terminal-muted">Loading ranking…</div>
-      ) : null}
-      {failed ? (
-        <div
-          className="mt-2 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-          data-testid="strategy-rank-error"
-        >
-          Ranking unavailable. {failed} The catalog below is not affected.
+          {rank?.source?.path ? (
+            <span className="font-mono text-[10px] text-terminal-muted">{rank.source.path}</span>
+          ) : null}
         </div>
-      ) : null}
 
-      {!failed && win && group ? (
-        <>
-          <dl
-            className="mt-3 grid gap-x-6 gap-y-2 rounded border border-terminal-border/50 bg-terminal-panel/30 px-3 py-2 text-[11px] sm:grid-cols-2 xl:grid-cols-4"
-            data-testid="strategy-rank-window"
+        {loading ? (
+          <div className="mt-2 text-sm text-terminal-muted">Loading ranking…</div>
+        ) : null}
+        {failed ? (
+          <div
+            className="mt-2 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+            data-testid="strategy-rank-error"
           >
-            <div>
-              <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">
-                Backtest window
-              </dt>
-              <dd className="mt-0.5 font-mono text-terminal-text">
-                {win.start} to {win.end}
-                {win.note ? <span className="text-terminal-muted"> ({win.note})</span> : null}
-              </dd>
-              <dd className="mt-0.5 text-amber-200">{win.sample_note}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">
-                Coins ({win.coins.length}, {win.market})
-              </dt>
-              <dd className="mt-0.5 font-mono text-terminal-text">{win.coins.join(" ")}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">Account</dt>
-              <dd className="mt-0.5 font-mono text-terminal-text">
-                {acct?.principal_usd} USD, {acct?.risk_usd} USD risk per trade, {acct?.leverage}x
-              </dd>
-              <dd className="mt-0.5 text-terminal-muted">{acct?.exceptions}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">Fees</dt>
-              <dd className="mt-0.5 font-mono text-terminal-text">
-                {win.fees?.taker_pct}% taker, {win.fees?.maker_pct}% maker
-              </dd>
-            </div>
-          </dl>
+            Ranking unavailable. {failed} The catalog below is not affected.
+          </div>
+        ) : null}
 
-          {rank?.pass_rule?.text ? (
-            <p className="mt-2 text-[11px] leading-relaxed text-terminal-muted">
-              {rank.pass_rule.text}
-            </p>
-          ) : null}
-          {rank?.caveats?.length ? (
-            <ul
-              className="mt-2 space-y-1 text-[11px] leading-relaxed text-amber-200/90"
-              data-testid="strategy-rank-caveats"
+        {!failed && win && group ? (
+          <>
+            <dl
+              className="mt-3 grid gap-x-6 gap-y-2 rounded border border-terminal-border/50 bg-terminal-panel/30 px-3 py-2 text-[11px] sm:grid-cols-2 xl:grid-cols-4"
+              data-testid="strategy-rank-window"
             >
-              {rank.caveats.map((c) => (
-                <li key={c}>• {c}</li>
-              ))}
-            </ul>
-          ) : null}
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">
+                  Backtest window
+                </dt>
+                <dd className="mt-0.5 font-mono text-terminal-text">
+                  {win.start} to {win.end}
+                  {win.note ? <span className="text-terminal-muted"> ({win.note})</span> : null}
+                </dd>
+                <dd className="mt-0.5 text-amber-200">{win.sample_note}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">
+                  Coins ({win.coins.length}, {win.market})
+                </dt>
+                <dd className="mt-0.5 font-mono text-terminal-text">{win.coins.join(" ")}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">Account</dt>
+                <dd className="mt-0.5 font-mono text-terminal-text">
+                  {acct?.principal_usd} USD, {acct?.risk_usd} USD risk per trade, {acct?.leverage}x
+                </dd>
+                <dd className="mt-0.5 text-terminal-muted">{acct?.exceptions}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-wide text-terminal-muted">Fees</dt>
+                <dd className="mt-0.5 font-mono text-terminal-text" data-testid="strategy-rank-fees">
+                  this ranking used {win.fees?.taker_pct}% taker; current default{" "}
+                  {CURRENT_DEFAULT_TAKER_PCT.toFixed(2)}% (D144)
+                </dd>
+                {win.fees?.maker_pct != null ? (
+                  <dd className="mt-0.5 text-terminal-muted">Maker {win.fees.maker_pct}%.</dd>
+                ) : null}
+              </div>
+            </dl>
 
-          <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Trading style">
-            {groups.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                role="tab"
-                aria-selected={g.id === group.id}
-                onClick={() => setGroupId(g.id)}
-                data-testid={`rank-tab-${g.id}`}
-                className={`rounded border px-2.5 py-1 text-[11px] transition ${
-                  g.id === group.id
-                    ? "border-terminal-accent bg-terminal-accent/10 text-terminal-text"
-                    : "border-terminal-border/70 text-terminal-muted hover:text-terminal-text"
-                }`}
+            {rank?.pass_rule?.text ? (
+              <p className="mt-2 text-[11px] leading-relaxed text-terminal-muted">
+                {rank.pass_rule.text}
+              </p>
+            ) : null}
+            {rank?.caveats?.length ? (
+              <ul
+                className="mt-2 space-y-1 text-[11px] leading-relaxed text-amber-200/90"
+                data-testid="strategy-rank-caveats"
               >
-                {groupTitle(g)}
-                <span className="ml-1.5 font-mono text-[10px] text-terminal-muted">
-                  {g.cells_passing ?? 0} of {g.cells ?? 0} cells pass
-                </span>
-              </button>
-            ))}
-          </div>
+                {rank.caveats.map((c) => (
+                  <li key={c}>• {c}</li>
+                ))}
+              </ul>
+            ) : null}
 
-          {group.caveats.length ? (
-            <ul className="mt-3 space-y-1 text-[11px] leading-relaxed text-amber-200/90">
-              {group.caveats.map((c) => (
-                <li key={c}>• {c}</li>
+            <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Trading style">
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={g.id === group.id}
+                  onClick={() => setGroupId(g.id)}
+                  data-testid={`rank-tab-${g.id}`}
+                  className={`rounded border px-2.5 py-1 text-[11px] transition ${
+                    g.id === group.id
+                      ? "border-terminal-accent bg-terminal-accent/10 text-terminal-text"
+                      : "border-terminal-border/70 text-terminal-muted hover:text-terminal-text"
+                  }`}
+                >
+                  {groupTitle(g)}
+                  <span className="ml-1.5 font-mono text-[10px] text-terminal-muted">
+                    {g.cells_net_positive ?? 0} of {g.cells ?? 0} cells net &gt; 0 (old rule)
+                  </span>
+                </button>
               ))}
-            </ul>
-          ) : null}
+            </div>
 
-          {group.hidden && group.hidden.duplicates + group.hidden.failures > 0 ? (
-            <p className="mt-3 text-[11px] text-terminal-muted" data-testid="rank-hidden-note">
-              Left off this list: {group.hidden.failures} that lost money or made no trades,{" "}
-              {group.hidden.duplicates} duplicate{group.hidden.duplicates === 1 ? "" : "s"} of
-              another row.
-            </p>
-          ) : null}
-          {!group.rows.length ? (
-            <p className="mt-3 text-[11px] text-terminal-muted">
-              No strategy in this group ended the window with a positive net.
-            </p>
-          ) : null}
+            {group.caveats.length ? (
+              <ul className="mt-3 space-y-1 text-[11px] leading-relaxed text-amber-200/90">
+                {group.caveats.map((c) => (
+                  <li key={c}>• {c}</li>
+                ))}
+              </ul>
+            ) : null}
 
-          <div className="mt-3 space-y-2" data-testid={`rank-group-${group.id}`}>
-            {(showAll[group.id] ? group.rows : group.rows.slice(0, TOP_N)).map((row) => (
-              <RankRow
-                key={row.key}
-                row={row}
-                selected={row.key === selectedKey}
-                onSelect={() => onSelect(row)}
-              />
-            ))}
-          </div>
-          {group.rows.length > TOP_N ? (
-            <button
-              type="button"
-              onClick={() => setShowAll((s) => ({ ...s, [group.id]: !s[group.id] }))}
-              className="mt-3 rounded border border-terminal-border/70 px-2.5 py-1 text-[11px] text-terminal-muted hover:text-terminal-text"
-            >
-              {showAll[group.id]
-                ? `Show top ${TOP_N}`
-                : `Show all ${group.rows.length} ranked rows`}
-            </button>
-          ) : null}
-        </>
-      ) : null}
+            {group.hidden && group.hidden.duplicates + group.hidden.failures > 0 ? (
+              <p className="mt-3 text-[11px] text-terminal-muted" data-testid="rank-hidden-note">
+                Left off this list: {group.hidden.failures} that lost money or made no trades,{" "}
+                {group.hidden.duplicates} duplicate{group.hidden.duplicates === 1 ? "" : "s"} of
+                another row.
+              </p>
+            ) : null}
+            {!group.rows.length ? (
+              <p className="mt-3 text-[11px] text-terminal-muted">
+                No strategy in this group ended the window with a positive net.
+              </p>
+            ) : null}
+
+            <div className="mt-3 space-y-2" data-testid={`rank-group-${group.id}`}>
+              {(showAll[group.id] ? group.rows : group.rows.slice(0, TOP_N)).map((row) => (
+                <RankRow
+                  key={row.key}
+                  row={row}
+                  selected={row.key === selectedKey}
+                  onSelect={() => onSelect(row)}
+                />
+              ))}
+            </div>
+            {group.rows.length > TOP_N ? (
+              <button
+                type="button"
+                onClick={() => setShowAll((s) => ({ ...s, [group.id]: !s[group.id] }))}
+                className="mt-3 rounded border border-terminal-border/70 px-2.5 py-1 text-[11px] text-terminal-muted hover:text-terminal-text"
+              >
+                {showAll[group.id]
+                  ? `Show top ${TOP_N}`
+                  : `Show all ${group.rows.length} ranked rows`}
+              </button>
+            ) : null}
+          </>
+        ) : null}
+      </details>
     </section>
   );
 }
@@ -378,8 +456,9 @@ export function StrategyRankDetail({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[10px] uppercase tracking-wide text-terminal-muted">
-          Backtest rank {row.rank}
+          Old in-sample rank {row.rank}
         </span>
+        <ResearchVerdictBadge strategyId={row.strategy_id} direction={row.direction} />
         <span className={`${badge} ${directionClass(row.direction)}`}>
           {directionLabel(row.direction)}
         </span>

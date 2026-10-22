@@ -11,7 +11,16 @@
  *   3. research/DECISIONS.md for outcomes recorded only there: the COMBO_02_V2 family
  *      NOT RUN (D127, owner D110), MTF_4H_16 INCONCLUSIVE (D122, owner D96), and
  *      EMA200 / SMA50 falling with their family's VALIDATION kill (D122).
- * SCORECARD rows without a strategy|side key (R-REG-3..7, UNTESTABLE books) are left out.
+ * SCORECARD rows without a strategy|side key (R-REG-3..7, PATH_B_EXPERIMENTAL) are left out.
+ *
+ * Extended 2026-10-22 for the Strategies page (owner D191, DECISIONS D218), from the same
+ * three files, unchanged at research-audit 019c0bb:
+ *   4. research/KILLED.md for N1, HR-1 and HD-1 (killed at DISCOVERY; VALIDATION not reached);
+ *   5. research/FINAL_VERDICT.md for N2 (INCONCLUSIVE at VALIDATION, D172) and HD-2
+ *      (INCONCLUSIVE at DISCOVERY, D168);
+ *   6. research/SCORECARD.csv UNTESTABLE rows for INTRADAY_BOS_SD_V1 and SMALL_CAP_VOLUME_BOS,
+ *      shown as NOT RUN with the UNTESTABLE reason.
+ * `family` names the later study an entry belongs to (FINAL_VERDICT / KILLED.md names).
  *
  * The live app cannot read the research worktree at runtime. This file does not refresh
  * itself: regenerate it when the research verdicts change. Display only; nothing else
@@ -27,6 +36,8 @@ export type ResearchVerdict = {
   stage: string;
   reason: string;
   source: string;
+  /** Later study name (N1, N2, HD-2, HR-1, HD-1, H-COMBO, H-F1X, XS-MOM); unset for tournament rows. */
+  family?: string;
 };
 
 export const SCORECARD_SNAPSHOT: Readonly<Record<string, ResearchVerdict>> = {
@@ -101,10 +112,10 @@ export const SCORECARD_SNAPSHOT: Readonly<Record<string, ResearchVerdict>> = {
   "DAILY_TREND_19_COMBINED|BOTH": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 1: under 30 trades, E11; 19 trades; +1.222 R/trade", source: "KILLED.md" },
   "DAILY_TREND_ROTATION|BOTH": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 110 trades; −0.008 R/trade", source: "KILLED.md" },
   "DAILY_TREND_STATIC12|BOTH": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 327 trades; −0.006 R/trade", source: "KILLED.md" },
-  "HCOMBO_T4_F1F3|SHORT": { verdict: "KILLED", stage: "VALIDATION", reason: "Gate 3: PF 0.86, own-twin pct 2.0 < p90, 27% coins positive, 2x slip -0.123, ex-2-best -115.1 R; D188; 127 other combos were not candidates at DISCOVERY; no re-search on this data (E31); 1,117 trades; −0.090 R/trade", source: "KILLED.md" },
+  "HCOMBO_T4_F1F3|SHORT": { verdict: "KILLED", stage: "VALIDATION", reason: "Gate 3: PF 0.86, own-twin pct 2.0 < p90, 27% coins positive, 2x slip -0.123, ex-2-best -115.1 R; D188; 127 other combos were not candidates at DISCOVERY; no re-search on this data (E31); 1,117 trades; −0.090 R/trade", source: "KILLED.md", family: "H-COMBO" },
   "LARGE_CAP_SWEEP_CHOCH|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 996 trades; +0.052 R/trade", source: "KILLED.md" },
   "MID_CAP_FVG_DISCOUNT|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 2,243 trades; −0.081 R/trade", source: "KILLED.md" },
-  "MTF_4H_16_BREAKOUT252_F1X|LONG": { verdict: "KILLED", stage: "VALIDATION", reason: "Gate 3, E22/E23: net R/trade < 0, PF 0.75, baseline pct 0.325, 24% coins positive, 2x slip < 0, ex-2-best < 0; no variant on the same data (D105d); 169 trades; −0.206 R/trade", source: "KILLED.md" },
+  "MTF_4H_16_BREAKOUT252_F1X|LONG": { verdict: "KILLED", stage: "VALIDATION", reason: "Gate 3, E22/E23: net R/trade < 0, PF 0.75, baseline pct 0.325, 24% coins positive, 2x slip < 0, ex-2-best < 0; no variant on the same data (D105d); 169 trades; −0.206 R/trade", source: "KILLED.md", family: "H-F1X" },
   "MTF_4H_16_BREAKOUT252|LONG": { verdict: "INCONCLUSIVE", stage: "VALIDATION", reason: "owner D96: 13 VALIDATION trades, +0.977 R/trade, under the 30-trade line; no holdout; its F1X follow-up was KILLED at VALIDATION Gate 3 (D126); FWD-1 continues", source: "DECISIONS D122, D124 (owner D96)" },
   "OSE_A_corrected_baseline|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 5,845 trades; −0.038 R/trade", source: "KILLED.md" },
   "OSE_A_corrected_baseline|SHORT": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 5,770 trades; −0.021 R/trade", source: "KILLED.md" },
@@ -114,8 +125,31 @@ export const SCORECARD_SNAPSHOT: Readonly<Record<string, ResearchVerdict>> = {
   "OSE_C_retest|SHORT": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 2,691 trades; −0.051 R/trade", source: "KILLED.md" },
   "OSE_D_faster_confirmation|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 6,779 trades; −0.043 R/trade", source: "KILLED.md" },
   "OSE_D_faster_confirmation|SHORT": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 6,646 trades; −0.024 R/trade", source: "KILLED.md" },
-  "XS_MOM|LONG_SHORT": { verdict: "KILLED", stage: "VALIDATION-not-reached", reason: "DISCOVERY: fails 2x costs -2.91%, max DD 30.5% > 25%, ex-2-best -0.19; no variant on this data (E24); 100 active weeks; +10.95% net", source: "KILLED.md" },
+  "XS_MOM|LONG_SHORT": { verdict: "KILLED", stage: "VALIDATION-not-reached", reason: "DISCOVERY: fails 2x costs -2.91%, max DD 30.5% > 25%, ex-2-best -0.19; no variant on this data (E24); 100 active weeks; +10.95% net", source: "KILLED.md", family: "XS-MOM" },
+  "N1_BTC_RANGE_GRID|NON_DIRECTIONAL": { verdict: "KILLED", stage: "VALIDATION-not-reached", reason: "DISCOVERY: net < 0, max DD 16.1% > 15%, fees doubled -21.7%; D159; no variant on this data; -15.9% net", source: "KILLED.md", family: "N1" },
+  "N2_BTC_FUNDING_CARRY|NON_DIRECTIONAL": { verdict: "INCONCLUSIVE", stage: "VALIDATION", reason: "E25 sample rule: 0 completed carry holds, 3 required (BTC funding never averaged above the 0.01% entry level); DISCOVERY passed (D167); no holdout run; D172", source: "FINAL_VERDICT.md", family: "N2" },
+  "HD2_FUNDING_EXTREMES|LONG_SHORT": { verdict: "INCONCLUSIVE", stage: "DISCOVERY", reason: "E24 sample rule: 22 active weeks, 26 required; every other DISCOVERY rule passed; no VALIDATION look (E24/E30); D168", source: "FINAL_VERDICT.md", family: "HD-2" },
+  "HR1_SWEEP_CHOCH_30M|BOTH": { verdict: "KILLED", stage: "VALIDATION-not-reached", reason: "DISCOVERY Gate 2: PF 0.91, random pct 71.5 < p90, 42% coins positive, 2x slip < 0, ex-2-best < 0; D181; no variant on this data; 1,417 trades; −0.045 R/trade", source: "KILLED.md", family: "HR-1" },
+  "HD1_TAKER_FLOW|LONG_SHORT": { verdict: "KILLED", stage: "VALIDATION-not-reached", reason: "DISCOVERY: random pct 71 < p90, 2x costs -2.7%, max DD 30.0% > 25%, ex-2-best -25.9%; D182; no variant on this data; 97 active weeks; +5.2% net", source: "KILLED.md", family: "HD-1" },
+  "INTRADAY_BOS_SD_V1|LONG": { verdict: "NOT RUN", stage: "DISCOVERY", reason: "UNTESTABLE: no 1m data before 2026-07-15 (D7)", source: "SCORECARD.csv (DESIGN_FLAWS.md)" },
+  "INTRADAY_BOS_SD_V1|SHORT": { verdict: "NOT RUN", stage: "DISCOVERY", reason: "UNTESTABLE: no 1m data before 2026-07-15 (D7)", source: "SCORECARD.csv (DESIGN_FLAWS.md)" },
+  "SMALL_CAP_VOLUME_BOS|LONG": { verdict: "NOT RUN", stage: "DISCOVERY", reason: "UNTESTABLE: no small-cap coin in the 27", source: "SCORECARD.csv (DESIGN_FLAWS.md)" },
 };
+
+/**
+ * The later studies in FINAL_VERDICT / KILLED.md order (owner D191: N1/N2/HD-2/HR-1/HD-1/H-COMBO,
+ * H-F1X, XS-MOM). The Strategies page lists these first.
+ */
+export const LATER_STUDY_KEYS: readonly string[] = [
+  "N1_BTC_RANGE_GRID|NON_DIRECTIONAL",
+  "N2_BTC_FUNDING_CARRY|NON_DIRECTIONAL",
+  "HD2_FUNDING_EXTREMES|LONG_SHORT",
+  "HR1_SWEEP_CHOCH_30M|BOTH",
+  "HD1_TAKER_FLOW|LONG_SHORT",
+  "HCOMBO_T4_F1F3|SHORT",
+  "MTF_4H_16_BREAKOUT252_F1X|LONG",
+  "XS_MOM|LONG_SHORT",
+];
 
 /** Panel ids that research knows under another spelling. */
 const RESEARCH_ALIASES: Readonly<Record<string, string>> = {
@@ -156,7 +190,15 @@ export function researchVerdictFor(combinationId: string, direction: string): Re
   }
   const key = `${id}|${side}`;
   const entry = SCORECARD_SNAPSHOT[key];
-  return entry ? { key, entry, note: null } : null;
+  if (entry) return { key, entry, note: null };
+  // "INTRADAY_BOS_SD_V1.C" is variant C of INTRADAY_BOS_SD_V1; research has one row for the book.
+  const base = id.split(".")[0];
+  if (base !== id) {
+    const baseKey = `${base}|${side}`;
+    const baseEntry = SCORECARD_SNAPSHOT[baseKey];
+    if (baseEntry) return { key: baseKey, entry: baseEntry, note: `research verdict for ${base} (all variants)` };
+  }
+  return null;
 }
 
 export function hasBacktestLookaheadD3(combinationId: string): boolean {

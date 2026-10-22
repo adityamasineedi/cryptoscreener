@@ -113,6 +113,8 @@ def test_missing_empty_and_invalid_file(tmp_path):
 
 def test_fill_label_reads_the_execution_model():
     assert fill_label("LEGACY_SIGNAL_CLOSE") == "Signal close, no slippage"
-    assert fill_label("CAUSAL_NEXT_OPEN") == "Next bar open"
+    assert fill_label("CAUSAL_NEXT_OPEN") == "Next bar open, 0.05% slippage included"
+    assert fill_label("LEGACY_SIGNAL_CLOSE", "COMBO_SD_A") == "Signal close, 0.02% slippage included"
+    assert fill_label("LEGACY_SIGNAL_CLOSE", "COMBO_02") == "Signal close, no slippage"
     assert fill_label("entry next bar open with 0.02% adverse slippage") == "0.02% slippage included"
     assert fill_label("taker both sides; no slippage") == "No slippage"

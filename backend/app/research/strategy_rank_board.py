@@ -36,9 +36,20 @@ BOARD_CAVEATS: tuple[str, ...] = (
     "In-sample only: one window, no out-of-sample test.",
     "COMBO_01 and COMBO_02_LOCAL are nearly the same strategy. COMBO_02_CLOSED_HTF "
     "matches COMBO_02. They are aliases, not separate winners.",
-    "COMBO strategies fill at the signal close with no slippage. CANDLE12_V2 and the "
-    "OSE variants include 0.02% slippage, so their figures are the more conservative ones.",
+    # Owner D191 (DECISIONS D218): what this ranking did, from ranked.json execution_model and
+    # the code at 0dd074a (2026-10-12, the ranking day). Not the research harness's costs.
+    "Fills in this ranking: most COMBO ids, the multicap engine (LARGE_CAP_SWEEP_CHOCH, "
+    "MID_CAP_FVG_DISCOUNT, SMALL_CAP_VOLUME_BOS) and SHORT_PULLBACK_REJECTION_RESEARCH fill at "
+    "the signal-bar close with no slippage. COMBO_SD_* also fill at the signal close, with "
+    "0.02% adverse slippage on both legs. COMBO_02_V2 fills at the next bar's open with 0.05% "
+    "adverse slippage on both legs. CANDLE12_V2 and the OSE variants include 0.02% slippage; "
+    "intraday BOS/SD 0.05% (its targets fill without slippage).",
+    "Fees in every cell: 0.04% taker, 0.02% maker. The research verdicts above used their own "
+    "harness and costs, not these.",
 )
+# COMBO_SD_* rows: the Backtest screen's post-step adds this slippage to LEGACY_SIGNAL_CLOSE
+# fills (backtest_cpu_worker, sd_structure.review.SD_SLIPPAGE_RATE).
+SD_ID_PREFIX = "COMBO_SD_"
 GROUP_CAVEATS: dict[str, tuple[str, ...]] = {
     "day": ("Shorts on 1h are negative or marginal across the ten coins.",),
     "scalp": (
@@ -89,13 +100,16 @@ def _load_rank_file(path: Path) -> tuple[dict[str, Any] | None, str, str | None]
     return data, "OK", None
 
 
-def fill_label(execution_model: str) -> str:
-    """Short fill-model label from the rank row's execution_model text."""
+def fill_label(execution_model: str, strategy_id: str = "") -> str:
+    """Short fill-model label from the rank row's execution_model text (display only)."""
     text = str(execution_model or "").strip()
     if text == "LEGACY_SIGNAL_CLOSE":
+        if str(strategy_id).startswith(SD_ID_PREFIX):
+            return "Signal close, 0.02% slippage included"
         return "Signal close, no slippage"
     if text == "CAUSAL_NEXT_OPEN":
-        return "Next bar open"
+        # ResearchConfig entry/exit slippage 0.0005 (same at 0dd074a, the ranking day).
+        return "Next bar open, 0.05% slippage included"
     hit = re.search(r"(\d+(?:\.\d+)?)% adverse", text)
     if hit:
         return f"{hit.group(1)}% slippage included"
@@ -354,7 +368,7 @@ def build_strategy_rank_board(
                 "worst_cell_net_usd": _num(roll.get("worst_cell_net_usd")),
                 "best_cell_net_usd": _num(roll.get("best_cell_net_usd")),
                 "execution_models": models,
-                "fill_label": " / ".join(dict.fromkeys(fill_label(m) for m in models)) or "Not stated",
+                "fill_label": " / ".join(dict.fromkeys(fill_label(m, sid) for m in models)) or "Not stated",
                 "risk_usd": risk,
                 "leverage": leverage,
                 "sizing_note": sizing_note,
