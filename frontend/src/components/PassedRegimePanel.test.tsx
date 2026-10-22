@@ -519,6 +519,44 @@ describe("PassedRegimePanel · passed book health", () => {
     ).toHaveLength(0);
   });
 
+  it("shows missed signals since the forward start with the all-time total in a tooltip, and a never-evaluated coin once (D181)", async () => {
+    const ton = (bar: string) => ({
+      ...NOT_EVALUATED,
+      symbol: "TONUSDT",
+      bars: 1,
+      reason: "history_short",
+      setup_bar_time: bar,
+      note: "missed: bar not evaluated (history_short, 61m late)",
+    });
+    await renderWith(
+      response({
+        heartbeat: HEARTBEAT,
+        missed_signals: 160,
+        missed_signals_since: { since: "2026-10-21T00:00:00+00:00", count: 0 },
+        not_tradable: [
+          { symbol: "TONUSDT", reason: "history_short", label: "no history / no market cap", bars: 19, last: "2026-10-21T20:01:05+00:00" },
+        ],
+        recent_missed: [ton("2026-10-21T18:00:00+00:00"), ton("2026-10-21T17:00:00+00:00"), MISSED_LATE],
+      }),
+    );
+
+    expect(health("missed")).toBe("0");
+    const counter = screen.getByTestId("passed-health-missed");
+    expect(counter.getAttribute("title")).toBe(`Since ${formatUtc("2026-10-21T00:00:00+00:00")}. All time: 160`);
+    expect(counter.parentElement?.textContent).toContain("Missed signals since 2026-10-21 00:00 UTC");
+
+    const blocked = screen.getAllByTestId("passed-health-not-tradable");
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].textContent).toBe("TON · NOT TRADABLE: no history / no market cap");
+
+    const rows = screen.getAllByTestId("passed-health-missed-row").map((row) => row.textContent ?? "");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain("ARB · COMBO_02_V2 · SHORT");
+    expect(screen.getByTestId("passed-health-missed-list").querySelector("summary")?.textContent).toBe(
+      "Recent missed · 1",
+    );
+  });
+
   it("shows — for every field an older backend does not send", async () => {
     await renderWith(response());
 

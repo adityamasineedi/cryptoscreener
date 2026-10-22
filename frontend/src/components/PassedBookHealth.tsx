@@ -39,7 +39,17 @@ function missedWhat(row: PassedRegimeMissedRow): string {
 export function PassedBookHealth({ snapshot }: { snapshot: PassedRegimeResponse }) {
   const beat = snapshot.heartbeat ?? null;
   const stale = beat?.stale === true;
-  const missed = snapshot.recent_missed ?? [];
+  const notTradable = snapshot.not_tradable ?? [];
+  const blocked = new Set(notTradable.map((row) => `${row.symbol}|${row.reason}`));
+  // A coin that can never be evaluated is shown once (below), not as one "missed" row per hour.
+  const missed = (snapshot.recent_missed ?? []).filter(
+    (row) => !(row.outcome === "not_evaluated" && blocked.has(`${row.symbol ?? ""}|${row.reason ?? ""}`)),
+  );
+  const since = snapshot.missed_signals_since;
+  const missedShown = since ? since.count : snapshot.missed_signals;
+  const missedTitle = since
+    ? `Since ${formatUtc(since.since)}. All time: ${count(snapshot.missed_signals)}`
+    : "All time";
   const owed = Object.entries(beat?.pending_by_symbol ?? {}).filter(([, n]) => n > 0);
   const lastBar = beat?.last_eval_bar
     ? `${beat.last_eval_symbol ? `${coinLabel(beat.last_eval_symbol)} ` : ""}${fmtTime(beat.last_eval_bar)}`
@@ -90,13 +100,14 @@ export function PassedBookHealth({ snapshot }: { snapshot: PassedRegimeResponse 
               : `${fmtLag(beat.seconds_since_last_eval)} ago`}
           </span>
         </span>
-        <span className="text-terminal-muted">
-          Missed signals{" "}
+        <span className="text-terminal-muted" title={missedTitle}>
+          Missed signals{since ? " since 2026-10-21 00:00 UTC" : ""}{" "}
           <span
-            className={`font-mono ${snapshot.missed_signals ? "text-amber-300" : "text-terminal-text"}`}
+            className={`font-mono ${missedShown ? "text-amber-300" : "text-terminal-text"}`}
             data-testid="passed-health-missed"
+            title={missedTitle}
           >
-            {count(snapshot.missed_signals)}
+            {count(missedShown)}
           </span>
         </span>
         <span className="text-terminal-muted">
@@ -119,6 +130,17 @@ export function PassedBookHealth({ snapshot }: { snapshot: PassedRegimeResponse 
           </span>
         </span>
       </div>
+
+      {notTradable.map((row) => (
+        <div
+          key={`${row.symbol}-${row.reason}`}
+          className="mt-1 font-mono text-[10px] text-terminal-muted"
+          data-testid="passed-health-not-tradable"
+          title={`${row.bars} ${row.bars === 1 ? "bar" : "bars"} not evaluated (${row.reason}); last ${formatUtc(row.last)}`}
+        >
+          {coinLabel(row.symbol)} · <span className="text-amber-300">NOT TRADABLE: {row.label}</span>
+        </div>
+      ))}
 
       {missed.length ? (
         <details className="mt-1.5" data-testid="passed-health-missed-list">

@@ -3165,6 +3165,13 @@ async def paper_passed_regime() -> dict[str, Any]:
     out["watcher_loop_enabled"] = bool(
         getattr(get_settings(), "paper_passed_watcher_enabled", False)
     )
+    # Owner D181, display only: missed signals since the forward start, and coins that can never be evaluated.
+    try:
+        from app.services.passed_health_view import passed_health_extras
+
+        out.update(await asyncio.to_thread(passed_health_extras))
+    except Exception:  # noqa: BLE001 - the panel falls back to the all-time counter
+        pass
     out["timestamp"] = datetime.now(timezone.utc).isoformat()
     return out
 

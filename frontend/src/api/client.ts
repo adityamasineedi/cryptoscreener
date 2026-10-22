@@ -1875,6 +1875,10 @@ export type PassedRegimeResponse = {
   unevaluated_bars?: number;
   /** Newest first, up to 20. */
   recent_missed?: PassedRegimeMissedRow[];
+  /** Late-tip missed signals since the forward start (owner D181); `missed_signals` is all-time. */
+  missed_signals_since?: { since: string; count: number };
+  /** Coins whose bars are never evaluated (e.g. history_short), shown once instead of hourly rows. */
+  not_tradable?: { symbol: string; reason: string; label: string; bars: number; last: string | null }[];
   heartbeat?: PassedRegimeHeartbeat | null;
   /** False while new passed-regime entries are off; signals are still recorded. */
   book_open?: boolean;
