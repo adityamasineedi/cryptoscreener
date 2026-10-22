@@ -36,6 +36,7 @@ from typing import Any, Iterator, Mapping
 
 from app.alerts.config import AlertConfig
 from app.alerts.data import MarketData
+from app.alerts.fwd_ledgers import read_jsonl_lines, read_jsonl_readonly
 from app.alerts.plan import Signal, atr_at, utc
 
 BOOK_SOURCE = {"PASSED_CAP_BOOK": "PASSED_BOOK", "V1_PAPER_WATCHER": "COMBO_02_V1"}
@@ -241,11 +242,8 @@ def fwd1_items(
         return [], after_seq
     out: list[Signal] = []
     last = after_seq
-    for raw in p.read_text(encoding="utf-8").splitlines():
-        try:
-            row = json.loads(raw)
-        except ValueError:
-            continue
+    rows, _ = read_jsonl_readonly(p)  # read only; a torn last line waits for the next poll (D150)
+    for row in rows:
         seq = int(row.get("seq", -1))
         if seq <= after_seq:
             continue
@@ -253,7 +251,8 @@ def fwd1_items(
         if row.get("kind") != "RUN":
             continue
         for sym, book in ((row.get("payload") or {}).get("symbols") or {}).items():
-            trades = [book.get("open_position")] + list(book.get("closed_trades") or []) + list(book.get("pending_closed") or [])
+            # The collector's RUN summary holds ``closed_trades`` as a COUNT (the trades are TRADE_CLOSED rows).
+            trades = [book.get("open_position")] + _trade_list(book.get("closed_trades")) + _trade_list(book.get("pending_closed"))
             for t in trades:
                 if not t or not t.get("entry_time"):
                     continue
@@ -274,6 +273,10 @@ def fwd1_items(
     return out, last
 
 
+def _trade_list(v: Any) -> list[Any]:
+    return [t for t in v if isinstance(t, Mapping)] if isinstance(v, list) else []
+
+
 # --- LCSC FWD-3 ---------------------------------------------------------------------------------
 FWD3_ALERT_FATES = {"TAKEN", "PENDING_NEXT_BAR"}
 
@@ -285,14 +288,11 @@ def fwd3_items(
     if not p.exists():
         return [], after_line
     out: list[Signal | SkipRecord] = []
-    lines = p.read_text(encoding="utf-8").splitlines()
+    # Read only. Complete lines only: a torn last line is not counted, so the next poll reads it (D150).
+    lines = read_jsonl_lines(p)
     target_r = float(cfg.raw["sources"].get("lcsc_fwd3_target_r", 2.0))
-    for n, raw in enumerate(lines, start=1):
-        if n <= after_line:
-            continue
-        try:
-            row = json.loads(raw)
-        except ValueError:
+    for n, row in enumerate(lines, start=1):
+        if n <= after_line or row is None:
             continue
         for c in row.get("candidates") or []:
             st = str(c.get("signal_time") or "")

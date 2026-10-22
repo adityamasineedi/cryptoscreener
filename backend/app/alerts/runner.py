@@ -25,6 +25,7 @@ from typing import Any
 from app.alerts import sources as src
 from app.alerts.config import AlertConfig, load_config
 from app.alerts.data import MarketData, PostgresReadOnly, read_env_values
+from app.alerts.fwd_ledgers import ForwardLedgers
 from app.alerts.pipeline import AlertPipeline, all_summary_alerts, load_state, merge_stats, save_state
 from app.alerts.plan import utc
 from app.alerts.sender import ReplyingTelegramSender, is_private_chat_id
@@ -144,7 +145,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
     sender = _sender(cfg, env)
     state_path = out_dir / "state.json"
     state = load_state(state_path)
-    pipe = AlertPipeline(cfg, out_dir=out_dir, data=data, mode="watch", sender=sender, state=state)
+    pipe = AlertPipeline(cfg, out_dir=out_dir, data=data, mode="watch", sender=sender, state=state,
+                         fwd_ledgers=ForwardLedgers(paths["fwd1"], paths["fwd3"]))
     started = datetime.now(timezone.utc)
     fresh = not state_path.exists()
     if fresh:
@@ -184,7 +186,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
 def backfill(cfg: AlertConfig, data: MarketData, paths: dict[str, Path], out_dir: Path, *, now: datetime, hours: float,
              paper_trades: bool = True) -> dict[str, Any]:
     start = now - timedelta(hours=hours)
-    pipe = AlertPipeline(cfg, out_dir=out_dir, data=data, mode="backfill")
+    pipe = AlertPipeline(cfg, out_dir=out_dir, data=data, mode="backfill",
+                         fwd_ledgers=ForwardLedgers(paths["fwd1"], paths["fwd3"]))
     pipe.preview.note(
         f"## BACKFILL {start.isoformat()} -> {now.isoformat()} (dry run over real records; LATE judged at the time "
         "live recorded each decision)"

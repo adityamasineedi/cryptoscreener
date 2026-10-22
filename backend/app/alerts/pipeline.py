@@ -13,6 +13,16 @@ only with ``send_not_opened`` true); SKIPPED_COST_STOP = entry-to-stop distance 
 Owner ruling D149: the daily summary's main section counts only sent alerts for trades a paper book OPENED and
 shows the paper ledger's result for each (paper_trades, read only); the tracker's numbers follow under
 "alert levels touched (not paper trades)".
+
+Owner rulings D150, D193(a), D194 (DECISIONS D221), v4:
+- a KILLED source listed in ``killed_opened_exception_sources`` (empty by default; the v4 config lists
+  PASSED_BOOK) is not SUPPRESSED_KILLED when its paper outcome is "opened": every other rule still applies, and
+  its alert, follow-ups and summary line carry the config's label right after the D117 line. Its other signals
+  stay SUPPRESSED_KILLED; ``allow_killed`` is unchanged for every source;
+- ledger results: a sent alert for an exception trade (paper ledger, D149), a FWD-1 trade or a FWD-3 trade
+  (their own ledgers, D150, read only) gets its result as a reply from that ledger. The alert-level tracker
+  still runs for those alerts, but its replies are logged as LEVELS_ONLY and not posted (they are alert levels,
+  not the trade); when it ends and the ledger has no result yet, the reply says the result is pending.
 """
 
 from __future__ import annotations
@@ -25,7 +35,17 @@ from typing import Any, Mapping
 
 from app.alerts.config import AlertConfig, timeframe_minutes
 from app.alerts.data import MarketData
-from app.alerts.plan import Signal, base_asset, build_plan, render_alert, render_followup, render_summary, utc
+from app.alerts.fwd_ledgers import FWD_LEDGER_NAMES, PAPER_LEDGER_NAME, ForwardLedgers, paper_result
+from app.alerts.plan import (
+    Signal,
+    base_asset,
+    build_plan,
+    render_alert,
+    render_followup,
+    render_ledger_followup,
+    render_summary,
+    utc,
+)
 from app.alerts.sender import PreviewWriter, ReplyingTelegramSender
 from app.alerts.sources import BOOK_SOURCE, SkipRecord
 from app.alerts.tracker import DONE, expire_if_due, new_tracker, step
@@ -40,6 +60,10 @@ SKIPPED_COST_STOP = "SKIPPED_COST_STOP"
 LEDGER_SNIPPET_SOURCES: dict[str, list[str]] = {}
 for _snip, _src in BOOK_SOURCE.items():
     LEDGER_SNIPPET_SOURCES.setdefault(_src, []).append(_snip)
+# v4: a ledger-result alert's alert-level tracker replies are logged with this code, never posted.
+LEVELS_ONLY = "LEVELS_ONLY"
+# v4: how long a ledger-result alert waits for its ledger's result before it is dropped from the state.
+LEDGER_WATCH_DEFAULT_DAYS = 45.0
 
 
 def not_opened_reason(sig: Signal, cfg: AlertConfig) -> str | None:
@@ -99,10 +123,13 @@ class AlertPipeline:
         mode: str = "watch",
         sender: ReplyingTelegramSender | None = None,
         state: dict[str, Any] | None = None,
+        fwd_ledgers: ForwardLedgers | None = None,
     ) -> None:
         if mode not in ("watch", "backfill"):
             raise ValueError(mode)
         self.cfg = cfg
+        # D150: the FWD-1 / FWD-3 ledgers, read only. None (tests' default) reads no file: results stay pending.
+        self.fwd_ledgers = fwd_ledgers or ForwardLedgers()
         self.out_dir = Path(out_dir)
         self.log_path = self.out_dir / "alerts.jsonl"
         self.preview = PreviewWriter(self.out_dir / "preview.md")
@@ -175,7 +202,10 @@ class AlertPipeline:
             self._log(now, row)
             return row
         lag_min = (now - sig.bar_close).total_seconds() / 60.0
-        killed = status == "KILLED" and not cfg.allow_killed
+        # v4 (D150/D193a/D194): a listed KILLED source's OPENED paper trade is not suppressed; it is labelled.
+        exception = cfg.killed_opened_exception(sig.source, status, sig.extra.get("live_outcome"))
+        killed_label = cfg.killed_opened_exception_label if exception else None
+        killed = status == "KILLED" and not cfg.allow_killed and not exception
         late = lag_min > cfg.late_minutes_for(sig.source)
         not_opened = not_opened_reason(sig, cfg)
         plan, err = build_plan(sig, cfg)
@@ -183,6 +213,8 @@ class AlertPipeline:
         cost_stop = bool(plan and plan["cost_stop_skip"])
         flags = {"killed": killed, "late": late, "not_opened": not_opened, "plan_error": err,
                  "cost": cost if plan else None, "cost_stop": cost_stop if plan else None}
+        if exception:
+            flags["killed_opened_exception"] = True
         if killed:
             code = "SUPPRESSED_KILLED"
         elif late:
@@ -205,12 +237,16 @@ class AlertPipeline:
                 code = "RATE_LIMITED"
                 flags["rate_limited"] = True
 
-        text = render_alert(sig, plan, status, cfg, sent_at=now, not_opened_reason=not_opened) if plan else None
+        text = render_alert(sig, plan, status, cfg, sent_at=now, not_opened_reason=not_opened,
+                            killed_label=killed_label) if plan else None
         header = f"{sig.decided_at.isoformat()} · {sig.alert_id} · {sig.strategy_id} {sig.symbol} {sig.side} {sig.timeframe} bar {sig.signal_bar.isoformat()}"
         row: dict[str, Any] = {"status": status, "lag_minutes": round(lag_min, 2), "flags": flags,
                                "plan": _plan_log(plan), "text": text, **self._sig_fields(sig)}
         if code == NOT_OPENED:
             row["reason"] = not_opened
+        ledger = self._result_ledger(sig, exception)
+        if ledger is not None and code is None:
+            row["result_ledger"] = ledger
         if code is None:
             assert text is not None and plan is not None
             if self.delivering:
@@ -226,8 +262,13 @@ class AlertPipeline:
             self._stats(now, status)["sent"] += 1
             tr = new_tracker(sig, plan, cfg, sent=True)
             tr.update(status=status, journal_ref=sig.journal_ref, strategy_id=sig.strategy_id)
+            if killed_label:
+                tr["killed_label"] = killed_label
+            if ledger is not None:
+                tr["ledger_result"] = ledger
+                self._watch_ledger(sig, status, plan, ledger, killed_label, now)
             self.state["trackers"][sig.alert_id] = tr
-            self._record_sent(sig, status, now, not_opened)
+            self._record_sent(sig, status, now, not_opened, killed_label)
             row.update(kind="ALERT", code=code)
         else:
             self._stats(now, status)["not_sent"] += 1
@@ -239,22 +280,102 @@ class AlertPipeline:
                 if pv.get("track_suppressed_in_dry_run", True):
                     tr = new_tracker(sig, plan, cfg, sent=False)
                     tr.update(status=status, journal_ref=sig.journal_ref, strategy_id=sig.strategy_id, not_sent_code=code)
+                    if killed_label:
+                        tr["killed_label"] = killed_label
                     self.state["trackers"][sig.alert_id] = tr
         self._log(now, row)
         return row
 
-    def _record_sent(self, sig: Signal, status: str, now: datetime, not_opened: str | None) -> None:
+    def _record_sent(self, sig: Signal, status: str, now: datetime, not_opened: str | None,
+                     killed_label: str | None = None) -> None:
         """Owner ruling D149: every sent alert, for the daily summary (only ``opened`` paper-book ones count
         in its main section; a not-opened one sent under send_not_opened does not)."""
         paper_book = self.cfg.has_paper_outcome(sig.source, sig.extra.get("live_outcome"))
         day = now.date().isoformat()
-        self.state.setdefault("summary_alerts", {}).setdefault(day, []).append({
+        rec = {
             "alert_id": sig.alert_id, "source": sig.source, "strategy_id": sig.strategy_id, "status": status,
             "symbol": sig.symbol, "side": sig.side, "timeframe": sig.timeframe,
             "signal_bar": sig.signal_bar.isoformat(), "bar_close": sig.bar_close.isoformat(),
             "position_id": sig.position_id, "paper_book": paper_book,
             "opened": bool(paper_book and not_opened is None),
-        })
+        }
+        if killed_label:
+            rec["killed_label"] = killed_label
+        self.state.setdefault("summary_alerts", {}).setdefault(day, []).append(rec)
+
+    # --- v4: results from the trade's own ledger (paper D149, FWD-1 / FWD-3 D150) ------------------------------
+    @staticmethod
+    def _result_ledger(sig: Signal, exception: bool) -> str | None:
+        """Which ledger holds this alert's trade result: FWD-1 / FWD-3 for their trades, the paper ledger for
+        an exception (KILLED, opened) trade; None keeps v3's alert-level follow-ups."""
+        if sig.extra.get("live_outcome") != "opened":
+            return None
+        if sig.source in FWD_LEDGER_NAMES:
+            return FWD_LEDGER_NAMES[sig.source]
+        return PAPER_LEDGER_NAME if exception else None
+
+    def _watch_ledger(self, sig: Signal, status: str, plan: Mapping[str, Any], ledger: str,
+                      killed_label: str | None, now: datetime) -> None:
+        days = float(self.cfg.raw.get("ledger_followup_max_days") or LEDGER_WATCH_DEFAULT_DAYS)
+        w = {"alert_id": sig.alert_id, "ledger": ledger, "source": sig.source, "strategy_id": sig.strategy_id,
+             "status": status, "symbol": sig.symbol, "side": sig.side, "timeframe": sig.timeframe,
+             "signal_bar": sig.signal_bar.isoformat(), "bar_close": sig.bar_close.isoformat(),
+             "position_id": sig.position_id, "tick": plan["tick"], "tracker_done": False, "pending_sent": False,
+             "watch_until": (now + timedelta(days=days)).isoformat()}
+        if killed_label:
+            w["killed_label"] = killed_label
+        self.state.setdefault("ledger_watch", {})[sig.alert_id] = w
+
+    def ledger_result(self, a: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The trade's result in its own ledger: FWD-1 / FWD-3 from theirs (read only), else the paper ledger."""
+        if str(a.get("source")) in FWD_LEDGER_NAMES:
+            return self.fwd_ledgers.result(str(a.get("source")), a.get("position_id"))
+        return paper_result(self.ledger_trade(a))
+
+    def update_ledger_followups(self, now: datetime) -> int:
+        """Reply with each watched alert's ledger result once the ledger records it; when its alert-level
+        tracker has ended first, reply once that the result is pending. A failed read is retried next poll."""
+        now = utc(now)
+        watch = self.state.get("ledger_watch") or {}
+        n = 0
+        for aid in list(watch):
+            w = watch[aid]
+            try:
+                res = self.ledger_result(w)
+            except Exception:  # noqa: BLE001 - retried next poll
+                continue
+            if res is not None and str(res.get("status")) == "CLOSED":
+                self._ledger_followup(w, res, now)
+                del watch[aid]
+                n += 1
+            elif w.get("tracker_done") and not w.get("pending_sent"):
+                self._ledger_followup(w, res, now)
+                w["pending_sent"] = True
+                n += 1
+            elif now >= utc(w["watch_until"]):
+                del watch[aid]
+        return n
+
+    def _ledger_followup(self, w: Mapping[str, Any], res: Mapping[str, Any] | None, now: datetime) -> None:
+        text = render_ledger_followup(w, res)
+        closed = res is not None and str(res.get("status")) == "CLOSED"
+        row: dict[str, Any] = {
+            "kind": "FOLLOWUP", "event": "ledger_result" if closed else "ledger_pending", "alert_id": w["alert_id"],
+            "reply_to": w["alert_id"], "alert_sent": True, "status": w.get("status"),
+            "strategy_id": w.get("strategy_id"), "symbol": w["symbol"], "side": w["side"],
+            "timeframe": w["timeframe"], "event_at": now.isoformat(), "ledger": w["ledger"],
+            "ledger_result": dict(res) if res else None, "position_id": w.get("position_id"), "text": text,
+        }
+        if self.delivering:
+            reply_to = self.state["message_ids"].get(w["alert_id"])
+            msg_id = self.sender.send(text, reply_to=reply_to) if self.sender else None
+            row.update(code="SENT" if msg_id is not None else "SEND_FAILED", telegram_message_id=msg_id,
+                       telegram_reply_to=reply_to)
+        else:
+            row["code"] = "DRY_RUN"
+            self.preview.write(f"{now.isoformat()} · {w['ledger']} ledger follow-up · reply to {w['alert_id']} · "
+                               f"{base_asset(str(w['symbol']))}", text)
+        self._log(now, row)
 
     def ledger_trade(self, a: Mapping[str, Any]) -> dict[str, Any] | None:
         """The paper ledger's trade for an opened alert: by position_id, else the book's trade on the same
@@ -275,7 +396,14 @@ class AlertPipeline:
         out = []
         for a in alerts:
             a = dict(a)
-            if a.get("paper_book") and a.get("opened"):
+            if a.get("paper_book") and a.get("opened") and str(a.get("source")) in FWD_LEDGER_NAMES:
+                # Owner ruling D150: a FWD-1 / FWD-3 trade's result from its own ledger (read only).
+                a["fwd_ledger"] = FWD_LEDGER_NAMES[str(a["source"])]
+                try:
+                    a["ledger"] = self.ledger_result(a)
+                except Exception as exc:  # noqa: BLE001 - the summary still goes out, marked
+                    a["ledger"], a["ledger_error"] = None, type(exc).__name__
+            elif a.get("paper_book") and a.get("opened"):
                 try:
                     t = self.ledger_trade(a)
                 except Exception as exc:  # noqa: BLE001 - the summary still goes out, marked
@@ -309,6 +437,8 @@ class AlertPipeline:
                 n += 1
             if tr["state"] == DONE:
                 del self.state["trackers"][aid]
+        if self.state.get("ledger_watch"):
+            n += self.update_ledger_followups(now)
         return n
 
     def _followup(self, tr: dict[str, Any], ev: dict[str, Any], now: datetime) -> None:
@@ -333,7 +463,18 @@ class AlertPipeline:
             "timeframe": tr["timeframe"], "event_at": when, "price": ev.get("price"), "r": ev.get("r"),
             "target": ev.get("target"), "exit": ev.get("exit"), "journal_ref": tr.get("journal_ref"), "text": text,
         }
-        if sent and self.delivering:
+        if sent and tr.get("ledger_result"):
+            # v4: this alert's result comes from its ledger (D149/D150); the alert-level reply is only logged.
+            row.update(code=LEVELS_ONLY, ledger=tr["ledger_result"])
+            if ev["kind"] in ("final", "expired"):
+                w = (self.state.get("ledger_watch") or {}).get(tr["alert_id"])
+                if w is not None:
+                    w["tracker_done"] = True
+            if not self.delivering:
+                self.preview.write(f"{when} · follow-up, alert levels only (not sent; result from the "
+                                   f"{tr['ledger_result']} ledger) · reply to {tr['alert_id']} · "
+                                   f"{base_asset(tr['symbol'])}", text)
+        elif sent and self.delivering:
             reply_to = self.state["message_ids"].get(tr["alert_id"])
             msg_id = self.sender.send(text, reply_to=reply_to) if self.sender else None
             row.update(code="SENT" if msg_id is not None else "SEND_FAILED", telegram_message_id=msg_id,

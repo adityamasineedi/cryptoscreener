@@ -3,6 +3,11 @@
  "enabled": false,
  "dry_run": true,
  "allow_killed": false,
+ "killed_opened_exception_sources": [],
+ "killed_opened_exception_label": "⚠️ KILLED STRATEGY (research) · PARITY TEST · observation only",
+ "_killed_opened_exception_doc": "Owner rulings D150, D193(a), D194 (DECISIONS D221), v4: a source listed here whose status is KILLED alerts the signals its paper book OPENED (paper outcome 'opened') instead of SUPPRESSED_KILLED. Every other rule still applies (cost filter, entry-to-stop cost filter, LATE, dedup, rate limit, symbol exclusions, the D117 line). The alert, its follow-ups and its daily-summary line carry the label above right after the D117 line, and its result reply comes from the paper ledger (D149). Its not-opened signals stay SUPPRESSED_KILLED. allow_killed is unchanged and still applies to every other source. The shipped config leaves the list empty, and a config without the key behaves as v3; the v4 enabled copy (trade_alerts_config.enabled.v4.json) lists PASSED_BOOK.",
+ "ledger_followup_max_days": 45,
+ "_ledger_followup_doc": "v4 (D149/D150): a sent alert whose trade result lives in a ledger (FWD-1 and FWD-3 trades: their own ledgers, read only; a killed_opened_exception trade: the paper ledger) gets that ledger's result as its reply, or 'result pending in FWD ledger' / 'result pending in paper ledger' once the alert-level tracker has ended without one. The tracker's own replies for those alerts are logged as LEVELS_ONLY, not posted. The alert stops waiting for its ledger after this many days.",
  "telegram": {
   "bot_token_env": "TELEGRAM_BOT_TOKEN",
   "chat_id_env": "TRADE_ALERTS_TELEGRAM_CHAT_ID",

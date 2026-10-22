@@ -17,6 +17,10 @@ STATUSES = ("KILLED", "FORWARD-PASSED", "PAPER", "UNPROVEN")
 PAPER_BOOK_SOURCES = ("COMBO_02_V1", "BOOK16_FWD1", "LCSC_FWD3", "PASSED_BOOK")
 COST_STOP_DEFAULTS = {"taker_fee_rate": 0.0005, "slippage_rate": 0.0002, "fee_sides": 2, "multiple": 3.0}
 COST_STOP_ENTRY_REFS = ("near_edge", "mid")
+# Owner rulings D150, D193(a), D194 (DECISIONS D221): a KILLED source listed in the config key
+# ``killed_opened_exception_sources`` alerts the signals its paper book OPENED, with this line right after the
+# D117 line. The list defaults to EMPTY here, so a config without the key behaves exactly as v3.
+KILLED_OPENED_EXCEPTION_LABEL = "⚠️ KILLED STRATEGY (research) · PARITY TEST · observation only"
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -70,6 +74,20 @@ class AlertConfig:
     @property
     def allow_killed(self) -> bool:
         return bool(self.raw.get("allow_killed", False))
+
+    # --- owner rulings D150 / D193(a) / D194 (DECISIONS D221) ---------------------------------------
+    @property
+    def killed_opened_exception_sources(self) -> frozenset[str]:
+        """KILLED sources whose OPENED paper trades still alert (per-source exception). Empty by default."""
+        return frozenset(str(s) for s in (self.raw.get("killed_opened_exception_sources") or []))
+
+    @property
+    def killed_opened_exception_label(self) -> str:
+        return str(self.raw.get("killed_opened_exception_label") or KILLED_OPENED_EXCEPTION_LABEL)
+
+    def killed_opened_exception(self, source: str, status: str, outcome: Any) -> bool:
+        """True for a KILLED signal of a listed source whose paper outcome is exactly ``opened``."""
+        return status == "KILLED" and str(source) in self.killed_opened_exception_sources and outcome == "opened"
 
     def section(self, name: str) -> dict[str, Any]:
         return dict(self.raw[name])

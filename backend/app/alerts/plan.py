@@ -251,6 +251,7 @@ def render_alert(
     *,
     sent_at: datetime | None = None,
     not_opened_reason: str | None = None,
+    killed_label: str | None = None,
 ) -> str:
     rd = plan["rounded"]
     if sig.side == "LONG":
@@ -280,12 +281,54 @@ def render_alert(
     if not_opened_reason is not None:
         # Owner ruling D145 (send_not_opened true): the first line after the D117 line.
         lines.insert(0, f"{NOT_OPENED_MARK}: {not_opened_reason}")
-    return with_observation_prefix("\n".join(lines), status)
+    return _labelled("\n".join(lines), status, killed_label)
+
+
+def _labelled(text: str, status: Any, killed_label: str | None) -> str:
+    """The D117 line first, then (owner rulings D150/D193a/D194) the KILLED-strategy exception label."""
+    if killed_label:
+        text = f"{killed_label}\n{text}"
+    return with_observation_prefix(text, status)
 
 
 def render_followup(event: Mapping[str, Any], tracker: Mapping[str, Any]) -> str:
     """A follow-up reply, with the D117 prefix of its alert's status (the tracker's ``status``)."""
-    return with_observation_prefix(_followup_text(event, tracker), tracker.get("status"))
+    return _labelled(_followup_text(event, tracker), tracker.get("status"), tracker.get("killed_label"))
+
+
+# Owner ruling D150: a FWD-1 / FWD-3 alert's result is the one its forward test's own ledger records.
+LEDGER_PENDING_FWD = "result pending in FWD ledger"
+LEDGER_PENDING_PAPER = "result pending in paper ledger"
+
+
+def ledger_pending_text(ledger: str) -> str:
+    return LEDGER_PENDING_PAPER if ledger == "paper" else LEDGER_PENDING_FWD
+
+
+def render_ledger_followup(watch: Mapping[str, Any], result: Mapping[str, Any] | None) -> str:
+    """A reply carrying the trade's result from its ledger (paper ledger D149, FWD ledgers D150), or the
+    pending line when the ledger has no result yet. Same D117 prefix and KILLED label as the alert."""
+    coin = base_asset(str(watch["symbol"]))
+    side = str(watch["side"])
+    ledger = str(watch["ledger"])
+    if not result or str(result.get("status")) != "CLOSED":
+        text = f"⏳ RESULT - {coin} {side}: {ledger_pending_text(ledger)}"
+    else:
+        text = f"🏁 RESULT ({ledger} ledger) - {coin} {side}: " + _result_parts(result, watch.get("tick"))
+    return _labelled(text, watch.get("status"), watch.get("killed_label"))
+
+
+def _result_parts(led: Mapping[str, Any], tick: Any = None) -> str:
+    parts = [str(led.get("status") or "?")]
+    if led.get("exit_reason"):
+        parts.append(str(led["exit_reason"]))
+    r, pnl = led.get("r_multiple"), led.get("pnl_usd")
+    parts.append(f"R {float(r):+.2f}" if r is not None else "R -")
+    parts.append(f"pnl {_usd(float(pnl))}" if pnl is not None else "pnl -")
+    px = led.get("exit_price")
+    if px is not None and tick:
+        parts.append(f"exit ${fmt_price(float(px), float(tick))}")
+    return ", ".join(parts)
 
 
 def _followup_text(event: Mapping[str, Any], tracker: Mapping[str, Any]) -> str:
@@ -326,18 +369,18 @@ def _fmt_ledger(a: Mapping[str, Any]) -> str:
     except (TypeError, ValueError):
         bar = str(a.get("signal_bar"))
     head = f"- {a.get('strategy_id')} {base_asset(str(a.get('symbol')))} {a.get('side')} {a.get('timeframe')} bar {bar}: "
+    tail = f" · {a['killed_label']}" if a.get("killed_label") else ""
     led = a.get("ledger")
+    fwd = a.get("fwd_ledger")  # owner ruling D150: FWD-1 / FWD-3 results come from their own ledgers
     if a.get("ledger_error"):
-        return head + f"ledger: read failed ({a['ledger_error']})"
+        return head + f"ledger: read failed ({a['ledger_error']})" + tail
+    if fwd:
+        if not led or str(led.get("status")) != "CLOSED":
+            return head + f"{fwd} ledger: {LEDGER_PENDING_FWD}" + tail
+        return head + f"{fwd} ledger: " + _result_parts(led) + tail
     if not led:
-        return head + LEDGER_NOT_FOUND
-    parts = [str(led.get("status") or "?")]
-    if led.get("exit_reason"):
-        parts.append(str(led["exit_reason"]))
-    r, pnl = led.get("r_multiple"), led.get("pnl_usd")
-    parts.append(f"R {float(r):+.2f}" if r is not None else "R -")
-    parts.append(f"pnl {_usd(float(pnl))}" if pnl is not None else "pnl -")
-    return head + ", ".join(parts)
+        return head + LEDGER_NOT_FOUND + tail
+    return head + _result_parts(led) + tail
 
 
 def _ledger_groups(opened: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -348,16 +391,22 @@ def _ledger_groups(opened: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, A
         g["count"] += 1
         led = a.get("ledger")
         if not led:
-            g["not_found"] += 1
+            if a.get("fwd_ledger") and not a.get("ledger_error"):
+                g["open"] += 1  # D150: not in the FWD ledger yet = result pending
+            else:
+                g["not_found"] += 1
             continue
         if str(led.get("status")) == "CLOSED":
             g["closed"] += 1
             r = float(led.get("r_multiple") or 0.0)
+            pnl = float(led.get("pnl_usd") or 0.0)
             g["total_r"] += r
-            g["pnl_usd"] += float(led.get("pnl_usd") or 0.0)
-            if r > 0:
+            g["pnl_usd"] += pnl
+            # FWD-1 records no R multiple: its win or loss is the sign of its net pnl.
+            score = r if led.get("r_multiple") is not None else pnl
+            if score > 0:
                 g["wins"] += 1
-            elif r < 0:
+            elif score < 0:
                 g["losses"] += 1
         else:
             g["open"] += 1
