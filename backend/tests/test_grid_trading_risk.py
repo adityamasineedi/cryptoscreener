@@ -19,6 +19,8 @@ def _config(**overrides) -> GridConfig:
         "capital": 1000.0,
         "max_capital": 5000.0,
         "fee_bps": 0.0,
+        # These cases price every fill at fee_bps: the taker falls back to it (D207 default is 5).
+        "taker_fee_bps": None,
         "slippage_bps": 0.0,
         "stop_price": 90.0,
         "max_drawdown": 0.9,
