@@ -57,6 +57,7 @@ from app.research.trade_fees import (
     DEFAULT_TAKER_FEE,
     enrich_trades,
 )
+from app.services import seal
 from app.services.engine_store import engine_store
 from app.services.ohlcv_store import ohlcv_store
 from app.signals.config import SignalConfig
@@ -80,6 +81,10 @@ def _load_candles_memory(symbol: str, timeframe: str, limit: int) -> list[dict[s
     candles = ohlcv_store.get_candles_for_engine(
         symbol, timeframe, include_open=False
     )
+    if seal.seal_active():
+        # The in-memory store holds the latest live bars: a sealed backtest keeps none after
+        # 2026-07-14 (owner D202), and never caches the sealed view for an unsealed caller.
+        return list(seal.clamp_candles(candles or [])[-limit:])
     candles = list(candles[-limit:]) if candles else []
     _CANDLE_CACHE[cache_key] = candles
     return candles
@@ -121,8 +126,22 @@ async def _load_research_candles(
 
     sym = normalize_research_symbol(symbol)
     tf = normalize_research_timeframe(timeframe)
+    sealed = seal.seal_active()
+    if sealed:
+        # Owner D202: an explicit date after 2026-07-14 is refused (HTTP 400 at the routes),
+        # never clamped. A missing end is closed at the seal below.
+        seal.check_request_dates(start_date, end_date)
     bounds = resolve_date_bounds(start_date, end_date)
     dated = bounds["start"] is not None or bounds["end_exclusive"] is not None
+    if sealed and dated:
+        end_excl = seal.clamp_end_exclusive(bounds["end_exclusive"])
+        bounds["end_exclusive"] = end_excl
+        bounds["end_exclusive_utc"] = end_excl.isoformat()
+        if bounds.get("end_date_inclusive") is None:
+            bounds["end_date_inclusive"] = seal.SEAL_LAST_DAY
+        if bounds["start"] is not None and end_excl <= bounds["start"]:
+            bounds["end_exclusive"] = bounds["start"]
+            bounds["end_exclusive_utc"] = bounds["start"].isoformat()
     # Tail jobs have no calendar start. When requested, fetch lookback in
     # front of `limit` so the first eval bar is not INSUFFICIENT_BARS_BEFORE_WALK.
     apply_warmup = int(warmup_bars) if dated or tail_warmup else 0
@@ -147,6 +166,8 @@ async def _load_research_candles(
 
                 start_s = start_date[:10] if start_date else None
                 end_s = end_date[:10] if end_date else None
+                if sealed:
+                    end_s = seal.clamp_end_day(end_s)
                 ds = await get_research_cache(cache_cfg).load(
                     symbol=sym,
                     timeframe=tf,
@@ -172,7 +193,13 @@ async def _load_research_candles(
                 )
             else:
                 fetch_n = max(int(limit), 1) + (apply_warmup if tail_warmup else 0)
-                raw = await load_ohlcv_series_tail(sym, tf, limit=fetch_n)
+                if sealed:
+                    # DB-tail counts back N bars (warm-up included) from the seal, not today.
+                    raw = await load_ohlcv_series_tail(
+                        sym, tf, limit=fetch_n, end_exclusive=seal.SEAL_END_EXCLUSIVE
+                    )
+                else:
+                    raw = await load_ohlcv_series_tail(sym, tf, limit=fetch_n)
         elif not raw:
             source = "ohlcv_store_memory"
             mem_limit = 50_000 if bounds["start"] else max(int(limit), 1)
@@ -187,6 +214,9 @@ async def _load_research_candles(
         source = "ohlcv_store_memory_fallback"
         raw = _load_candles_memory(sym, tf, limit)
 
+    if sealed:
+        # Last line of the seal: no bar at or after 2026-07-15 00:00 UTC reaches a backtest.
+        raw = seal.clamp_candles(raw)
     window, eval_start, slice_meta = slice_candles_for_research(
         raw,
         start=bounds["start"],
@@ -203,6 +233,12 @@ async def _load_research_candles(
         "limit": limit,
         "warmup_bars_requested": apply_warmup,
     }
+    if sealed:
+        # Run record: the bars actually loaded (warm-up included).
+        span = seal.bar_span(window)
+        meta["data_first_bar"] = span["first_bar"]
+        meta["data_last_bar"] = span["last_bar"]
+        meta["sealed_through"] = seal.SEAL_LAST_DAY
     logger.info(
         "bos_research_candles_loaded",
         symbol=sym,
@@ -918,6 +954,8 @@ class BosResearchService:
             ),
         }
 
+    # Owner D202: the Backtest-tab matrix runs inside the seal (no bar after 2026-07-14).
+    @seal.sealed
     async def strategy_matrix(
         self,
         *,
@@ -1393,6 +1431,10 @@ class BosResearchService:
                         row_payload,
                         reports_root=_reports_parent / "reports",
                     )
+                # Run record (owner D202): the first and last bar this cell actually loaded.
+                row_payload["data_first_bar"] = load_meta.get("data_first_bar")
+                row_payload["data_last_bar"] = load_meta.get("data_last_bar")
+                row_payload["sealed_through"] = seal.SEAL_LAST_DAY
                 rows.append(row_payload)
         return {
             "status": "OK",

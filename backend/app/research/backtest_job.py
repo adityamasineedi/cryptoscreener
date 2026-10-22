@@ -35,6 +35,8 @@ from app.research.backtest_timing import (
     utc_now_iso,
 )
 from app.research.backtest_ui_config import (
+    BACKTEST_TAB_MAKER_FEE_PCT,
+    BACKTEST_TAB_TAKER_FEE_PCT,
     BacktestConfigError,
     ResolvedBacktestConfig,
     enrich_row_with_config,
@@ -43,6 +45,7 @@ from app.research.backtest_ui_config import (
 )
 from app.research.market_structure.attach import slim_backtest_row_for_api
 from app.research.query_utils import normalize_research_symbol, normalize_research_timeframe
+from app.services import seal
 
 JobStatus = Literal["idle", "running", "done", "error", "cancelled", "stalled"]
 
@@ -96,8 +99,8 @@ class BacktestJob:
     risk_usd: float = 20.0
     principal_usd: float = 1000.0
     leverage: float = 2.0
-    taker_fee_pct: float = 0.04
-    maker_fee_pct: float = 0.02
+    taker_fee_pct: float = BACKTEST_TAB_TAKER_FEE_PCT
+    maker_fee_pct: float = BACKTEST_TAB_MAKER_FEE_PCT
     include_trades: bool = True
     # Research-only: replay each row's trades through VectorBT and use its fills
     # when parity passes (app.research.vectorbt_execution). Off by default.
@@ -131,6 +134,9 @@ class BacktestJob:
     load_meta: dict[str, Any] = field(default_factory=dict)
     timing: dict[str, Any] = field(default_factory=dict)
     elapsed_seconds: float | None = None
+    # Run record (owner D202): earliest first bar and latest last bar any cell loaded.
+    data_first_bar: str | None = None
+    data_last_bar: str | None = None
     _resolved: ResolvedBacktestConfig | None = field(default=None, repr=False)
     _t0: float = field(default=0.0, repr=False)
     # Start of the running cell: the timeout is per cell, so a large matrix is not cut off.
@@ -273,6 +279,11 @@ class BacktestJob:
                 "end_date": self.end_date,
                 "limit": self.limit,
             },
+            "data_window": {
+                "first_bar": self.data_first_bar,
+                "last_bar": self.data_last_bar,
+                "sealed_through": seal.SEAL_LAST_DAY,
+            },
             **identity,
         }
         if self.vectorbt_execution:
@@ -387,8 +398,8 @@ class BacktestJobService:
         risk_percent: float | None = None,
         principal_usd: float = 1000.0,
         leverage: float = 2.0,
-        taker_fee_pct: float = 0.04,
-        maker_fee_pct: float = 0.02,
+        taker_fee_pct: float = BACKTEST_TAB_TAKER_FEE_PCT,
+        maker_fee_pct: float = BACKTEST_TAB_MAKER_FEE_PCT,
         include_trades: bool = True,
         start_date: str | None = None,
         end_date: str | None = None,
@@ -417,6 +428,9 @@ class BacktestJobService:
         maker = max(0.0, min(float(maker_fee_pct), 1.0))
         start_s = str(start_date).strip()[:10] if start_date else None
         end_s = str(end_date).strip()[:10] if end_date else None
+        # Seal (owner D202), before anything loads: an explicit day after 2026-07-14 is
+        # refused with SealedRangeError (the route answers HTTP 400), never clamped.
+        seal.check_request_dates(start_s, end_s)
 
         # Ranked strategies with their own engine (CANDLE12, multi-cap, OSE).
         from app.research.engine_backtest import engine_request_error, engine_strategy_id
@@ -434,8 +448,8 @@ class BacktestJobService:
             )
 
             if is_daily_trend(engine_id):
-                # Holdout guard, before any candle load: end <= 2026-07-14 (inclusive
-                # UI date); a tail request becomes the days of `lim` bars ending 2026-07-14.
+                # Holdout guard, before any candle load: end <= seal.SEAL_LAST_DAY (inclusive
+                # UI date); a tail request becomes the days of `lim` bars ending on it.
                 try:
                     start_s, end_s = daily_trend_dates(
                         start_s,
@@ -663,6 +677,11 @@ class BacktestJobService:
         return out
 
     async def _run(self, job: BacktestJob) -> None:
+        """The job body inside the seal (owner D202): no cell loads a bar after 2026-07-14."""
+        with seal.sealed_scope():
+            await self._run_sealed(job)
+
+    async def _run_sealed(self, job: BacktestJob) -> None:
         from app.research.service import get_bos_research_service
 
         try:
@@ -881,6 +900,17 @@ class BacktestJobService:
                             if isinstance(row, dict)
                             else row
                         )
+                spans = [
+                    {"first_bar": r.get("data_first_bar"), "last_bar": r.get("data_last_bar")}
+                    for r in payload_rows
+                    if isinstance(r, dict)
+                ]
+                merged = seal.merge_spans(
+                    spans
+                    + [{"first_bar": job.data_first_bar, "last_bar": job.data_last_bar}]
+                )
+                job.data_first_bar = merged["first_bar"]
+                job.data_last_bar = merged["last_bar"]
                 job.done_cells = i + 1
                 job.trades_done += sum(
                     int(r.get("sample_size") or 0) for r in payload_rows if isinstance(r, dict)

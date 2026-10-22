@@ -24,7 +24,8 @@ Window
     The book runs on 1h bars only. A request names a timeframe; anything but
     1h is rejected, never reinterpreted. Two modes, as on the screen:
       * dates    start_date / end_date are UTC calendar days (end inclusive).
-      * lookback ``limit`` is a count of 1h bars ending at the latest bar.
+      * lookback ``limit`` is a count of 1h bars ending at the seal (2026-07-14 23:00,
+        app.services.seal), not at the latest stored bar.
     Warm-up bars are loaded in front of the window and are never traded: each
     symbol's walk starts at the loader's ``eval_start``.
     ``MAX_EVAL_BARS`` caps the evaluated 1h bars per symbol. When it applies
@@ -54,6 +55,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from app.research.backtest_ui_config import BACKTEST_TAB_MAKER_FEE_PCT, BACKTEST_TAB_TAKER_FEE_PCT
 from app.research.passed_cap_book import PRINCIPAL_USD, cap_symbols
 from app.research.passed_regime_backtest import (
     DEFAULT_PNL_MODEL,
@@ -61,8 +63,13 @@ from app.research.passed_regime_backtest import (
     normalize_pnl_model,
     sides_in_scope,
 )
+from app.services import seal
 
 RUN_TIMEFRAME = "1h"
+# Fees the book charges (owner D144 / D202): passed explicitly to the sizing step, so the
+# shared passed_regime_backtest defaults (0.04% taker, as scripts/run_passed_cap_book.py) stay.
+TAB_TAKER_FEE = BACKTEST_TAB_TAKER_FEE_PCT / 100.0
+TAB_MAKER_FEE = BACKTEST_TAB_MAKER_FEE_PCT / 100.0
 # Per-symbol cap on evaluated 1h bars. Same as the screen's API bar cap.
 MAX_EVAL_BARS = 20_000
 DEFAULT_LIMIT = 1440
@@ -84,12 +91,12 @@ _cancel_flags: dict[str, bool] = {}
 
 def _fixed_config() -> dict[str, Any]:
     """What the book uses regardless of the screen's risk and fee fields."""
-    from app.research.passed_regime_backtest import LEVERAGE, MAKER_FEE, TAKER_FEE
+    from app.research.passed_regime_backtest import LEVERAGE
 
     return {
         "principal_usd": PRINCIPAL_USD,
-        "taker_fee_pct": TAKER_FEE * 100.0,
-        "maker_fee_pct": MAKER_FEE * 100.0,
+        "taker_fee_pct": round(TAB_TAKER_FEE * 100.0, 10),
+        "maker_fee_pct": round(TAB_MAKER_FEE * 100.0, 10),
         "leverage": LEVERAGE,
         "risk_rule": "passed_risk_percent: 2% large / 1% mid of principal, halved when the side is against the BTC daily trend",
         "fill_model": (
@@ -171,6 +178,22 @@ def _scope_rows(directions: Any) -> list[dict[str, str]]:
         {"strategy_id": cid, "timeframe": tf, "direction": side}
         for cid, tf, side in sides_in_scope(directions)
     ]
+
+
+def run_plan(directions: Any = None) -> dict[str, Any]:
+    """What a run with these directions executes, from the same code path the run takes.
+
+    ``sides_in_scope`` is what ``passed_regime_backtest.run_symbol`` walks; ``fixed_config``
+    is the sizing and fees the sizing step uses. Read-only.
+    """
+    scope = normalize_directions(directions)
+    return {
+        "directions": list(scope),
+        "timeframe": RUN_TIMEFRAME,
+        "sides_in_scope": _scope_rows(scope),
+        "fixed_config": _fixed_config(),
+        "sealed_through": seal.SEAL_LAST_DAY,
+    }
 
 
 def _allowlist_view(allowlist: Any, symbols: list[str], scope: Any, applied: bool) -> dict[str, Any]:
@@ -325,6 +348,9 @@ async def _load_book(symbol: str, window: dict[str, Any]) -> tuple[dict[str, Any
         "bars_evaluated": evaluated,
         "period_start": _bar_iso(candles[eval_start]) if evaluated > 0 else None,
         "period_end": _bar_iso(candles[-1]) if evaluated > 0 else None,
+        # Run record (owner D202): first and last 1h bar loaded, warm-up included.
+        "data_first_bar": _bar_iso(candles[0]) if candles else None,
+        "data_last_bar": _bar_iso(candles[-1]) if candles else None,
         "capped": capped,
         "candle_source": meta.get("candle_source"),
     }
@@ -447,6 +473,9 @@ def _execute(
         return build_result(
             payload["symbol_results"],
             clock,
+            # D144 costs, passed explicitly (passed_regime_backtest's defaults are not edited).
+            taker_fee=float(payload.get("taker_fee", TAB_TAKER_FEE)),
+            maker_fee=float(payload.get("maker_fee", TAB_MAKER_FEE)),
             postprocess_fn=postprocess_fn,
             pnl_model=model,
             candles_by_symbol=payload.get("candles_by_symbol"),
@@ -581,9 +610,15 @@ def _evaluated(per_symbol: dict[str, dict[str, Any]]) -> dict[str, Any]:
     rows = [row for row in per_symbol.values() if row.get("bars_evaluated")]
     starts = [row["period_start"] for row in rows if row.get("period_start")]
     ends = [row["period_end"] for row in rows if row.get("period_end")]
+    span = seal.merge_spans(
+        [{"first_bar": r.get("data_first_bar"), "last_bar": r.get("data_last_bar")} for r in per_symbol.values()]
+    )
     return {
         "period_start": min(starts) if starts else None,
         "period_end": max(ends) if ends else None,
+        "data_first_bar": span["first_bar"],
+        "data_last_bar": span["last_bar"],
+        "sealed_through": seal.SEAL_LAST_DAY,
         "bars_loaded": sum(int(row.get("bars_loaded") or 0) for row in rows),
         "warmup_bars": sum(int(row.get("warmup_bars") or 0) for row in rows),
         "bars_evaluated": sum(int(row.get("bars_evaluated") or 0) for row in rows),
@@ -592,6 +627,12 @@ def _evaluated(per_symbol: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 
 async def _run(job: dict[str, Any]) -> None:
+    """The run inside the seal (owner D202): no load reaches a bar after 2026-07-14."""
+    with seal.sealed_scope():
+        await _run_sealed(job)
+
+
+async def _run_sealed(job: dict[str, Any]) -> None:
     job_id = job["job_id"]
 
     def cancelled() -> bool:
@@ -615,6 +656,10 @@ async def _run(job: dict[str, Any]) -> None:
         job["phase"] = "loading"
         job["current"] = "BTCUSDT 1d regime"
         btc_daily = await _load_btc_daily(window)
+        job["window"]["btc_daily"] = {
+            "first_bar": _bar_iso(btc_daily[0]) if btc_daily else None,
+            "last_bar": _bar_iso(btc_daily[-1]) if btc_daily else None,
+        }
         for index, symbol in enumerate(symbols, start=1):
             if cancelled():
                 break
@@ -673,6 +718,8 @@ async def _run(job: dict[str, Any]) -> None:
                 "op": "finish",
                 "symbol_results": results,
                 "btc_daily": btc_daily,
+                "taker_fee": TAB_TAKER_FEE,
+                "maker_fee": TAB_MAKER_FEE,
                 "pnl_model": job["pnl_model"],
                 "directions": job["directions"],
                 "candles_by_symbol": candles_by_symbol,
@@ -729,6 +776,11 @@ async def start(
         window = resolve_window(limit=limit, timeframe=timeframe, start_date=start_date, end_date=end_date)
     except RequestError as exc:
         return {"status": "REJECTED", "error": str(exc)}
+    # Seal (owner D202): an explicit day after 2026-07-14 is refused (the route answers 400 first).
+    try:
+        seal.check_request_dates(window["start_date"], window["end_date"])
+    except seal.SealedRangeError as exc:
+        return {"status": "REJECTED", "error": str(exc), "error_code": exc.code}
     try:
         scope = normalize_directions(directions)
     except ValueError as exc:

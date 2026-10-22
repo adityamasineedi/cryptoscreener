@@ -48,7 +48,8 @@ BARS_PER_YEAR = {"1h": 24 * 365, "4h": 6 * 365, "1d": 365}
 
 # Bars from this date on are kept out of every run unless a request opts in, so
 # one untouched window stays available for a final check after walk-forward.
-HOLDOUT_START = datetime(2026, 7, 15, tzinfo=timezone.utc)
+# The global seal (app.services.seal, SEALS.md S0): 2026-07-15 00:00 UTC.
+from app.services.seal import SEAL_END_EXCLUSIVE as HOLDOUT_START  # noqa: E402
 
 BTC_SYMBOL = "BTCUSDT"
 LIQUIDITY_LOOKBACK_DAYS = 90

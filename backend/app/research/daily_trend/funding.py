@@ -27,7 +27,10 @@ import pandas as pd
 
 BUNDLE = Path(__file__).with_name("funding_btc_eth_to_2026-07-14.csv")
 BUNDLE_SYMBOLS = ("BTCUSDT", "ETHUSDT")
-HOLDOUT_START = pd.Timestamp("2026-07-15", tz="UTC")
+# The global seal (app.services.seal, SEALS.md S0): 2026-07-15 00:00 UTC.
+from app.services.seal import SEAL_END_EXCLUSIVE as _SEAL_END_EXCLUSIVE  # noqa: E402
+
+HOLDOUT_START = pd.Timestamp(_SEAL_END_EXCLUSIVE)
 COVERAGE_ORDER = ("COMPLETE", "PARTIAL", "UNRESOLVED", "MISSING")
 
 

@@ -85,8 +85,12 @@ _DAILY_TREND_BOOKS: tuple[tuple[str, int, int, str], ...] = (
 )
 DAILY_TREND_FAMILY = "daily_trend"
 # The pre-registered screen's holdout: no bar at or after this instant may be loaded.
-DAILY_TREND_HOLDOUT_START = datetime(2026, 7, 15, tzinfo=timezone.utc)
-DAILY_TREND_LAST_END_DATE = "2026-07-14"  # inclusive UI end date (end_exclusive 2026-07-15)
+# The global seal (app.services.seal, SEALS.md S0) is the one source of the date.
+from app.services.seal import SEAL_END_EXCLUSIVE as _SEAL_END_EXCLUSIVE  # noqa: E402
+from app.services.seal import SEAL_LAST_DAY as _SEAL_LAST_DAY  # noqa: E402
+
+DAILY_TREND_HOLDOUT_START = _SEAL_END_EXCLUSIVE
+DAILY_TREND_LAST_END_DATE = _SEAL_LAST_DAY  # inclusive UI end date (end_exclusive 2026-07-15)
 DAILY_TREND_HOLDOUT_CODE = "daily_trend_holdout_sealed"
 DAILY_TREND_HOLDOUT_MESSAGE = (
     "daily trend books: holdout from 2026-07-15 is sealed; end date must be <= 2026-07-14"
@@ -904,6 +908,11 @@ async def run_engine_cell_isolated(
     return await asyncio.to_thread(_run)
 
 
+from app.services.seal import sealed as _sealed  # noqa: E402
+
+
+# Owner D202: one Backtest-screen engine cell, inside the seal (no bar after 2026-07-14).
+@_sealed
 async def engine_strategy_matrix(
     *,
     strategy_id: str,
@@ -1001,6 +1010,10 @@ async def engine_strategy_matrix(
         period_end=_iso(candles[-1].get("time")) if candles else None,
         include_trades=include_trades,
     )
+    # Run record (owner D202): the first and last bar this cell actually loaded.
+    row["data_first_bar"] = load_meta.get("data_first_bar")
+    row["data_last_bar"] = load_meta.get("data_last_bar")
+    row["sealed_through"] = load_meta.get("sealed_through")
     return {**base, "status": "OK", "rows": [row]}
 
 

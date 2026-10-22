@@ -32,6 +32,7 @@ from app.services.coverage import build_data_coverage, build_ohlcv_coverage
 from app.services.performance import performance_monitor
 from app.services.screener import ScreenerService
 from app.services.system_stats import build_system_stats
+from app.services import seal
 
 router = APIRouter()
 ws_router = APIRouter()
@@ -69,6 +70,14 @@ def _require_paper_admin(request: Request) -> None:
     ):
         return
     raise HTTPException(status_code=403, detail="paper admin access required")
+
+
+def _refuse_sealed_dates(start_date: Any = None, end_date: Any = None) -> None:
+    """HTTP 400 for a calendar request past the seal (owner D202). Never clamps an explicit date."""
+    try:
+        seal.check_request_dates(start_date, end_date)
+    except seal.SealedRangeError as exc:
+        raise seal.http_sealed_error(exc) from exc
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -820,7 +829,8 @@ async def signal_backtest(
     candles = ohlcv_store.get_candles_for_engine(
         symbol.upper(), timeframe, include_open=False
     )
-    candles = candles[-limit:]
+    # Seal (owner D202): the in-memory store holds live bars; none after 2026-07-14 is used.
+    candles = seal.clamp_candles(candles)[-limit:]
     if len(candles) < 50:
         return {
             "symbol": symbol.upper(),
@@ -884,21 +894,26 @@ async def research_ohlcv_range(
         r = await conn.execute(
             text(
                 """
-                SELECT symbol, timeframe, COUNT(*), MIN(time), MAX(time)
+                SELECT symbol, timeframe, COUNT(*), MIN(time), MAX(time),
+                       COUNT(*) FILTER (WHERE time < :seal_ts),
+                       MAX(time) FILTER (WHERE time < :seal_ts)
                 FROM ohlcv
                 WHERE symbol = ANY(:syms) AND timeframe = ANY(:tfs)
                 GROUP BY symbol, timeframe
                 """
             ),
-            {"syms": syms, "tfs": tfs},
+            {"syms": syms, "tfs": tfs, "seal_ts": seal.SEAL_END_EXCLUSIVE},
         )
-        for sym, tf, n, t0, t1 in r.fetchall():
+        for sym, tf, n, t0, t1, n_sealed, t1_sealed in r.fetchall():
             found[(str(sym).upper(), str(tf))] = {
                 "symbol": str(sym).upper(),
                 "timeframe": str(tf),
                 "bars": int(n or 0),
                 "start": t0.isoformat() if t0 else None,
                 "end": t1.isoformat() if t1 else None,
+                # Metadata (SEALS.md C3c): the bars a backtest may use, those before the seal.
+                "sealed_bars": int(n_sealed or 0),
+                "sealed_end": t1_sealed.isoformat() if t1_sealed else None,
             }
     for sym in syms:
         for tf in tfs:
@@ -911,6 +926,8 @@ async def research_ohlcv_range(
                         "bars": 0,
                         "start": None,
                         "end": None,
+                        "sealed_bars": 0,
+                        "sealed_end": None,
                     },
                 )
             )
@@ -945,7 +962,10 @@ async def research_ohlcv_candles(
     pad_bars: int = Query(default=64, ge=0, le=500),
     holdout: bool = Query(
         default=False,
-        description="Holdout-guarded strategy (trend screen books): no candle at or after 2026-07-15",
+        description=(
+            "Kept for old clients. Every chart stops before the seal "
+            "(app.services.seal: no candle at or after 2026-07-15), whatever this says"
+        ),
     ),
 ) -> dict[str, Any]:
     """Load Postgres OHLCV around a blotter trade window for backtest chart overlay.
@@ -984,15 +1004,10 @@ async def research_ohlcv_candles(
     # end_exclusive: one bar past padded exit so the exit candle is included
     range_start = start_dt - pad
     range_end_excl = end_dt + pad + timedelta(milliseconds=step_ms)
-    # 1d bars on the Backtest screen belong to the daily trend books, whose holdout from
-    # 2026-07-15 is sealed: never load a daily candle at or after it, even as chart padding.
-    # The 4h trend book's charts ask for the same cap with holdout=true (`is True`: a direct
-    # call without the argument gets the Query default object, which is truthy).
-    from app.research.engine_backtest import DAILY_TREND_HOLDOUT_START
-
-    if tf == "1d" or holdout is True:
-        range_end_excl = min(range_end_excl, DAILY_TREND_HOLDOUT_START)
-        range_start = min(range_start, range_end_excl)
+    # Seal (owner D202, SEALS.md S0): Backtest-tab charts never load a candle at or after
+    # 2026-07-15, even as padding, for every strategy and timeframe.
+    range_end_excl = seal.clamp_end_exclusive(range_end_excl)
+    range_start = min(range_start, range_end_excl)
 
     if db_manager.engine is None:
         return {
@@ -1007,13 +1022,15 @@ async def research_ohlcv_candles(
         }
 
     try:
-        raw = await load_ohlcv_series_range(
-            sym,
-            tf,
-            start=range_start,
-            end_exclusive=range_end_excl,
-            warmup_bars=0,
-        )
+        with seal.sealed_scope():
+            raw = await load_ohlcv_series_range(
+                sym,
+                tf,
+                start=range_start,
+                end_exclusive=range_end_excl,
+                warmup_bars=0,
+            )
+        raw = seal.clamp_candles(raw)
     except Exception as exc:  # noqa: BLE001
         return {
             "status": "ERROR",
@@ -1181,8 +1198,24 @@ async def research_cap_book_agents() -> dict[str, Any]:
     from app.research.cap_book_monitor import read_cap_book_agents
 
     out = read_cap_book_agents()
+    # Its window (1h 20 Sep - 10 Oct 2026, 4h 31 Aug - 10 Oct) lies inside the seal (owner D202).
+    out["sealed"] = True
+    out["sealed_label"] = seal.PROFIT_CHECKER_SEALED_LABEL
+    out["window"] = {tf: {"start": w[0], "end": w[1]} for tf, w in seal.PROFIT_CHECKER_WINDOW.items()}
+    out["rerun_allowed"] = False
+    out["rerun_refused_reason"] = seal.SEALED_MESSAGE
     out["timestamp"] = datetime.now(timezone.utc).isoformat()
     return out
+
+
+@router.post("/research/cap-book-agents/rerun")
+async def research_cap_book_agents_rerun() -> dict[str, Any]:
+    """Re-running the Profit checker would read 2026-08-31 -> 2026-10-10: refused by the seal."""
+    starts = [w[0] for w in seal.PROFIT_CHECKER_WINDOW.values()]
+    ends = [w[1] for w in seal.PROFIT_CHECKER_WINDOW.values()]
+    _refuse_sealed_dates(min(starts), max(ends))
+    # The window lies after the seal, so the check above always refuses; never run anything.
+    raise seal.http_sealed_error()
 
 
 @router.post("/research/regime-backtest/start")
@@ -1199,6 +1232,7 @@ async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict
     """
     from app.research.regime_backtest_job import start
 
+    _refuse_sealed_dates(body.get("start_date"), body.get("end_date"))
     symbols = body.get("symbols") or []
     if isinstance(symbols, str):
         symbols = [part for part in symbols.split(",") if part.strip()]
@@ -1246,6 +1280,20 @@ async def regime_backtest_status() -> dict[str, Any]:
     return status()
 
 
+@router.get("/research/regime-backtest/plan")
+async def regime_backtest_plan(
+    directions: str | None = Query(default=None, description="LONG, SHORT, or both when absent"),
+) -> dict[str, Any]:
+    """What a regime-book run executes: its sides in scope (the code path's PASSED_SIDES rows)
+    and the sizing and fees it uses. Read-only; nothing runs."""
+    from app.research.regime_backtest_job import run_plan
+
+    try:
+        return run_plan(directions)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/research/regime-backtest/cancel")
 async def regime_backtest_cancel() -> dict[str, Any]:
     """Stop the running regime-book backtest (its worker process is killed)."""
@@ -1281,7 +1329,13 @@ async def research_long_strategy_backtest_start(
     paused SHORT requests. Does not create paper/live trades or send Telegram.
     """
     from app.research.backtest_job import backtest_job_service
-    from app.research.backtest_ui_config import BacktestConfigError
+    from app.research.backtest_ui_config import (
+        BACKTEST_TAB_MAKER_FEE_PCT,
+        BACKTEST_TAB_TAKER_FEE_PCT,
+        BacktestConfigError,
+    )
+
+    _refuse_sealed_dates(body.get("start_date"), body.get("end_date"))
 
     def _as_list(v: Any) -> list[str]:
         if v is None:
@@ -1339,9 +1393,9 @@ async def research_long_strategy_backtest_start(
             ),
             principal_usd=principal,
             leverage=float(body.get("leverage") or 2.0),
-            # Explicit 0 fees are honoured; only absent/blank uses the default.
-            taker_fee_pct=float(_first_given(body, "taker_fee_pct", default=0.04)),
-            maker_fee_pct=float(_first_given(body, "maker_fee_pct", default=0.02)),
+            # Explicit 0 fees are honoured; only absent/blank uses the D144 default.
+            taker_fee_pct=float(_first_given(body, "taker_fee_pct", default=BACKTEST_TAB_TAKER_FEE_PCT)),
+            maker_fee_pct=float(_first_given(body, "maker_fee_pct", default=BACKTEST_TAB_MAKER_FEE_PCT)),
             include_trades=bool(body.get("include_trades", True)),
             # Research-only VectorBT execution gate; strict opt-in ("false" stays off).
             vectorbt_execution=(
@@ -1359,6 +1413,8 @@ async def research_long_strategy_backtest_start(
                 else None
             ),
         )
+    except seal.SealedRangeError as exc:
+        raise seal.http_sealed_error(exc) from exc
     except BacktestConfigError as exc:
         return {
             "status": "ERROR",
@@ -1907,10 +1963,10 @@ async def research_long_strategy_backtest(
     risk_mode: str | None = Query(default=None),
     research_risk_override: bool = Query(default=False),
     taker_fee_pct: float = Query(
-        default=0.04,
+        default=0.05,
         ge=0.0,
         le=1.0,
-        description="Taker fee percent of notional (0.04 = Binance USDT-M VIP0)",
+        description="Taker fee percent of notional (default 0.05, owner D144)",
     ),
     maker_fee_pct: float = Query(
         default=0.02,
@@ -1936,6 +1992,7 @@ async def research_long_strategy_backtest(
     )
     from app.research.service import get_bos_research_service
 
+    _refuse_sealed_dates(start_date, end_date)
     syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     tfs = [t.strip() for t in timeframes.split(",") if t.strip()]
     if not syms or not tfs:
@@ -1974,7 +2031,7 @@ async def research_long_strategy_backtest(
             "status": "ERROR",
             "error": (
                 "daily trend books run only through POST /research/long-strategy/backtest/start "
-                "(holdout from 2026-07-15 is sealed; end date must be <= 2026-07-14)"
+                f"(holdout after {seal.SEAL_LAST_DAY} is sealed; end date must be <= {seal.SEAL_LAST_DAY})"
             ),
             "error_code": DAILY_TREND_HOLDOUT_CODE,
             "reason": DAILY_TREND_HOLDOUT_CODE,
@@ -2196,6 +2253,7 @@ async def research_bos_combinations_compare(
     """
     from app.research.service import get_bos_research_service
 
+    _refuse_sealed_dates(start_date, end_date)
     payload = await get_bos_research_service().compare(
         symbol=symbol,
         timeframe=timeframe,
@@ -2220,6 +2278,7 @@ async def research_bos_combination_detail(
 ) -> dict[str, Any]:
     from app.research.service import get_bos_research_service
 
+    _refuse_sealed_dates(start_date, end_date)
     svc = get_bos_research_service()
     meta = svc.get_combination(combination_id)
     if meta is None:
@@ -2254,6 +2313,7 @@ async def research_bos_combination_backtest(
     from app.research.service import get_bos_research_service
 
     # Date-bounded backtest via detail's postgres loader + single combo engine.
+    _refuse_sealed_dates(start_date, end_date)
     detail = await get_bos_research_service().detail(
         combination_id,
         symbol=symbol,
@@ -2547,6 +2607,7 @@ async def research_multi_cap_strategies_run(
     if isinstance(timeframes, str):
         timeframes = [timeframes]
 
+    _refuse_sealed_dates(body.get("start") or body.get("start_date"), body.get("end") or body.get("end_date"))
     payload = await get_multi_cap_strategies_service().run(
         strategy_ids=strategy_ids,
         symbols=symbols,

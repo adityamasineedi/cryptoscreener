@@ -260,7 +260,11 @@ def test_job_steps_match_run_regime_book(monkeypatch: pytest.MonkeyPatch):
     _bearish(monkeypatch)
     daily = _daily(70)
     books = {LARGE[0]: {"candles": _hourly(150), "eval_start": 80}, LARGE[1]: {"candles": _hourly(150), "eval_start": 80}}
-    whole = book.run_regime_book(books, daily, backtest_fn=_FakeWalk([90, 100]), postprocess_fn=_postprocess)
+    # The job charges the Backtest tab's D144 fees (owner D202); run_regime_book takes them explicitly.
+    whole = book.run_regime_book(
+        books, daily, backtest_fn=_FakeWalk([90, 100]), postprocess_fn=_postprocess,
+        taker_fee=job_mod.TAB_TAKER_FEE, maker_fee=job_mod.TAB_MAKER_FEE,
+    )
     parts = [
         job_mod._execute({"op": "symbol", "symbol": s, "book": b, "btc_daily": daily}, backtest_fn=_FakeWalk([90, 100]))
         for s, b in books.items()
@@ -492,7 +496,8 @@ def test_job_steps_match_run_regime_book_with_one_side_in_scope(monkeypatch: pyt
     daily = _daily(70)
     books = {LARGE[0]: {"candles": _hourly(150), "eval_start": 80}, LARGE[1]: {"candles": _hourly(150), "eval_start": 80}}
     whole = book.run_regime_book(
-        books, daily, backtest_fn=_FakeWalk([90, 100]), postprocess_fn=_postprocess, directions=["SHORT"]
+        books, daily, backtest_fn=_FakeWalk([90, 100]), postprocess_fn=_postprocess, directions=["SHORT"],
+        taker_fee=job_mod.TAB_TAKER_FEE, maker_fee=job_mod.TAB_MAKER_FEE,
     )
     parts = [
         job_mod._execute(

@@ -260,9 +260,12 @@ def test_job_refuses_other_symbols_and_the_holdout():
     with pytest.raises(BacktestConfigError) as err:
         asyncio.run(_start(svc, symbols=["BTCUSDT", "SOLUSDT"]))
     assert err.value.code == "engine_request_unsupported"
-    with pytest.raises(BacktestConfigError) as err:
+    from app.services.seal import SEALED_CODE, SealedRangeError
+
+    # Owner D202: the global seal refuses an end after 2026-07-14 (HTTP 400 at the route).
+    with pytest.raises(SealedRangeError) as err:
         asyncio.run(_start(svc, start_date="2025-01-01", end_date="2026-07-15"))
-    assert err.value.code == DAILY_TREND_HOLDOUT_CODE
+    assert err.value.code == SEALED_CODE
     assert svc.status()["status"] == "idle"
 
 
@@ -307,7 +310,8 @@ def test_chart_candles_with_holdout_flag_stop_before_2026_07_15():
         return []
 
     engine = MagicMock()
-    for holdout, capped in ((True, True), (False, False)):
+    # Owner D202: every chart stops before the seal, holdout flag or not.
+    for holdout, capped in ((True, True), (False, True)):
         captured.clear()
         with patch("app.research.postgres_ohlcv.load_ohlcv_series_range", side_effect=fake_range), \
                 patch("app.services.database.db_manager.engine", engine):

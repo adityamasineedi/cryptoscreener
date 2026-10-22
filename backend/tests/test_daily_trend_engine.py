@@ -256,19 +256,34 @@ def _start(svc: BacktestJobService, **kw):
 
 
 def test_job_rejects_end_date_2026_07_15():
+    # Owner D202: the global seal refuses it first, with the one Sealed message (HTTP 400 at the route).
+    from app.services.seal import SEALED_CODE, SEALED_MESSAGE, SealedRangeError
+
     svc = BacktestJobService()
-    with pytest.raises(BacktestConfigError) as err:
+    with pytest.raises(SealedRangeError) as err:
         asyncio.run(_start(svc, start_date="2025-01-01", end_date="2026-07-15"))
-    assert err.value.code == DAILY_TREND_HOLDOUT_CODE
-    assert "end date must be <= 2026-07-14" in str(err.value)
+    assert err.value.code == SEALED_CODE
+    assert str(err.value) == SEALED_MESSAGE
     assert svc.status()["status"] == "idle"
 
 
 def test_job_rejects_start_inside_holdout():
+    from app.services.seal import SEALED_CODE, SealedRangeError
+
     svc = BacktestJobService()
-    with pytest.raises(BacktestConfigError) as err:
+    with pytest.raises(SealedRangeError) as err:
         asyncio.run(_start(svc, start_date="2026-08-01"))
+    assert err.value.code == SEALED_CODE
+
+
+def test_daily_trend_dates_still_refuse_the_holdout_on_their_own():
+    """Second line of the guard: daily_trend_dates keeps its own holdout code."""
+    from app.research.engine_backtest import DailyTrendHoldoutError, daily_trend_dates
+
+    with pytest.raises(DailyTrendHoldoutError) as err:
+        daily_trend_dates("2025-01-01", "2026-07-15", 365)
     assert err.value.code == DAILY_TREND_HOLDOUT_CODE
+    assert "end date must be <= 2026-07-14" in str(err.value)
 
 
 def _fake_db():
@@ -461,7 +476,8 @@ def test_chart_candles_for_1d_never_reach_the_holdout():
             patch("app.services.database.db_manager.engine", engine):
         asyncio.run(routes.research_ohlcv_candles(symbol="BTCUSDT", timeframe="1h", start="2026-07-10",
                                                   end="2026-07-14", pad_bars=64))
-    assert captured["end_exclusive"] > datetime(2026, 7, 15, tzinfo=timezone.utc)  # intraday unchanged
+    # Owner D202: intraday charts stop at the seal too.
+    assert captured["end_exclusive"] <= datetime(2026, 7, 15, tzinfo=timezone.utc)
 
 
 def test_max_mode_keeps_the_books_warm_up_out_of_the_evaluated_window():

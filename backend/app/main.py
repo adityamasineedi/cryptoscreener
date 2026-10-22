@@ -115,6 +115,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Owner D202: every backtest path runs inside the seal (no OHLCV after 2026-07-14).
+    from app.services.seal import SealGuardMiddleware
+
+    app.add_middleware(SealGuardMiddleware)
     app.include_router(router, prefix="/api")
     app.include_router(dashboard_review_router, prefix="/api")
     app.include_router(diagnostics_router, prefix="/api")

@@ -7,6 +7,11 @@ Used by:
 This module loads raw OHLCV only. It does NOT load or mix research *result*
 datasets (BOS combination metrics vs Candle-12 V2 trade JSON).
 Never fabricates, interpolates, or substitutes another timeframe.
+
+Seal (owner D202): inside ``app.services.seal.sealed_scope`` (every backtest request and job)
+no loader here asks for a bar at or after ``SEAL_END_EXCLUSIVE`` (2026-07-15 00:00 UTC): a
+tail counts back from the seal and a range end is clamped to it. Outside the scope (paper,
+live watchers, forward tests) every query is exactly what it was.
 """
 
 from __future__ import annotations
@@ -18,7 +23,15 @@ from sqlalchemy import text
 
 from app.ingestion.klines import TIMEFRAME_MS
 from app.research.query_utils import normalize_research_symbol, normalize_research_timeframe
+from app.services import seal
 from app.services.database import db_manager
+
+
+def _sealed_end(end_exclusive: datetime | None) -> datetime | None:
+    """``end_exclusive`` as given outside a sealed backtest; clamped to the seal inside one."""
+    if seal.seal_active():
+        return seal.clamp_end_exclusive(end_exclusive)
+    return end_exclusive
 
 
 async def list_symbols_with_ohlcv(timeframe: str | None = None) -> list[str]:
@@ -71,6 +84,9 @@ async def load_ohlcv_series(
         raise RuntimeError("DATABASE unavailable")
     sym = normalize_research_symbol(symbol)
     tf = normalize_research_timeframe(timeframe)
+    if seal.seal_active():
+        # A full-series load inside a backtest is the range up to the seal.
+        return await load_ohlcv_series_range(sym, tf, start=None, end_exclusive=None)
     async with db_manager.engine.begin() as conn:
         result = await conn.execute(
             text(
@@ -92,14 +108,40 @@ async def load_ohlcv_series_tail(
     timeframe: str,
     *,
     limit: int,
+    end_exclusive: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    """Load the most recent `limit` candles ascending (for unbounded compare)."""
+    """Load the most recent `limit` candles ascending (for unbounded compare).
+
+    With ``end_exclusive`` (always the seal inside a sealed backtest) the tail is the
+    `limit` bars before it, counted back from that instant rather than from today.
+    """
     if db_manager.engine is None:
         raise RuntimeError("DATABASE unavailable")
     if limit <= 0:
         return []
     sym = normalize_research_symbol(symbol)
     tf = normalize_research_timeframe(timeframe)
+    end_ts = _sealed_end(end_exclusive) if (end_exclusive is not None or seal.seal_active()) else None
+    if end_ts is not None:
+        async with db_manager.engine.begin() as conn:
+            result = await conn.execute(
+                text(
+                    """
+                    SELECT time, open, high, low, close, volume
+                    FROM (
+                        SELECT time, open, high, low, close, volume
+                        FROM ohlcv
+                        WHERE symbol = :symbol AND timeframe = :tf AND time < :end_ts
+                        ORDER BY time DESC
+                        LIMIT :lim
+                    ) recent
+                    ORDER BY time ASC
+                    """
+                ),
+                {"symbol": sym, "tf": tf, "lim": int(limit), "end_ts": end_ts},
+            )
+            rows = result.fetchall()
+        return _rows_to_candles(rows)
     async with db_manager.engine.begin() as conn:
         result = await conn.execute(
             text(
@@ -134,6 +176,7 @@ async def load_ohlcv_series_range(
         raise RuntimeError("DATABASE unavailable")
     sym = normalize_research_symbol(symbol)
     tf = normalize_research_timeframe(timeframe)
+    end_exclusive = _sealed_end(end_exclusive)
     start_bound = start
     if start is not None and warmup_bars > 0:
         step_ms = TIMEFRAME_MS.get(tf) or 60_000
@@ -176,6 +219,7 @@ async def load_ohlcv_range_with_quote(
         raise RuntimeError("DATABASE unavailable")
     sym = normalize_research_symbol(symbol)
     tf = normalize_research_timeframe(timeframe)
+    end_exclusive = _sealed_end(end_exclusive)
     clauses = ["symbol = :symbol", "timeframe = :tf"]
     params: dict[str, Any] = {"symbol": sym, "tf": tf}
     if start is not None:

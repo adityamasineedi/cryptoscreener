@@ -1345,27 +1345,30 @@ async def loss_analysis_for_current_job(
     if last_exit is not None:
         end = max(end, last_exit + timedelta(seconds=bar_s * (hindsight + 1)))
     sid = row.get("combination_id") or getattr(job, "combination_id", None)
-    if str(row.get("engine_family") or "") == "daily_trend" or _is_daily_trend(sid):
-        # Sealed holdout from 2026-07-15: hindsight past the exit stops at 2026-07-14.
-        from app.research.engine_backtest import DAILY_TREND_HOLDOUT_START
+    # Sealed holdout from 2026-07-15 (app.services.seal, owner D202), for every strategy:
+    # hindsight past the exit stops at 2026-07-14.
+    from app.services import seal
 
-        last_day = DAILY_TREND_HOLDOUT_START - timedelta(days=1)
-        end = min(end, last_day)
-        if start > last_day:
+    last_day = seal.SEAL_END_EXCLUSIVE - timedelta(days=1)
+    end = min(end, last_day)
+    if start > last_day:
+        if str(row.get("engine_family") or "") == "daily_trend" or _is_daily_trend(sid):
             raise LossAnalysisUnavailable("daily trend books: holdout from 2026-07-15 is sealed.")
+        raise LossAnalysisUnavailable(seal.SEALED_MESSAGE)
 
     if candle_loader is None:
         from app.research.service import _load_research_candles as candle_loader
-    candles, _eval_start, _meta = await candle_loader(
-        str(row.get("symbol") or symbol),
-        tf,
-        limit=1,
-        start_date=start.date().isoformat(),
-        end_date=end.date().isoformat(),
-        warmup_bars=CANDLE_WARMUP_BARS,
-        use_research_cache=False,
-        tail_warmup=True,
-    )
+    with seal.sealed_scope():
+        candles, _eval_start, _meta = await candle_loader(
+            str(row.get("symbol") or symbol),
+            tf,
+            limit=1,
+            start_date=start.date().isoformat(),
+            end_date=end.date().isoformat(),
+            warmup_bars=CANDLE_WARMUP_BARS,
+            use_research_cache=False,
+            tail_warmup=True,
+        )
     if not candles:
         raise LossAnalysisUnavailable("No candles could be loaded for this cell.")
     out = await asyncio.to_thread(analyze_row, row, candles, hindsight_bars=hindsight, strategy_id=sid)

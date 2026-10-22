@@ -99,9 +99,10 @@ def test_missing_fees_use_defaults(missing):
     started, final, calls = asyncio.run(_start_via_route(body))
     assert started["status"] == "STARTED", started
     job = started["job"]
-    assert job["taker_fee_pct"] == pytest.approx(0.04)
+    # Owner D144 / D202 defaults: taker 0.05%, maker 0.02%.
+    assert job["taker_fee_pct"] == pytest.approx(0.05)
     assert job["maker_fee_pct"] == pytest.approx(0.02)
-    assert calls[0]["taker_fee"] == pytest.approx(0.0004)
+    assert calls[0]["taker_fee"] == pytest.approx(0.0005)
     assert calls[0]["maker_fee"] == pytest.approx(0.0002)
 
 

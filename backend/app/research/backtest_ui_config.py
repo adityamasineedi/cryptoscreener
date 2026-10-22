@@ -79,6 +79,11 @@ V1_DIRECTION = "LONG"
 V1_DEFAULT_LEVERAGE = 2.0
 V1_DEFAULT_TAKER_FEE_PCT = 0.04
 V1_DEFAULT_MAKER_FEE_PCT = 0.02
+# Backtest-tab default costs (owner D144 / D202): taker 0.05%, maker 0.02% of notional.
+# The frozen v1 profile above stays the comparison reference (0.04%), so a D144 run says
+# custom_fee_model; paper's own fees (trade_fees.DEFAULT_TAKER_FEE) are not touched.
+BACKTEST_TAB_TAKER_FEE_PCT = 0.05
+BACKTEST_TAB_MAKER_FEE_PCT = 0.02
 
 # The Backtest screen shows the next-open book for every non-SD combo,
 # COMBO_02 v1 included (service.strategy_matrix sets DUAL_LEGACY_AND_CAUSAL).
