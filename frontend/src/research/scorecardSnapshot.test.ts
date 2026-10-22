@@ -4,7 +4,10 @@ import {
   SCORECARD_SNAPSHOT_DATE,
   SCORECARD_SNAPSHOT_SOURCE,
   LATER_STUDY_KEYS,
+  PASSED_BOOK_VERDICT_TEXT,
   hasBacktestLookaheadD3,
+  paperCardVerdict,
+  verdictText,
   researchVerdictFor,
 } from "./scorecardSnapshot";
 
@@ -56,6 +59,28 @@ describe("scorecardSnapshot", () => {
     expect(hit?.note).toContain("all variants");
     expect(researchVerdictFor("SMALL_CAP_VOLUME_BOS", "LONG")?.entry.reason).toContain("UNTESTABLE");
     expect(researchVerdictFor("GTB-ARI-4", "LONG")).toBeNull();
+  });
+
+  it("carries the owner D200 wording for V1 and CANDLE12_V2", () => {
+    expect(verdictText(SCORECARD_SNAPSHOT["COMBO_02_V1|LONG"])).toBe(
+      "KILLED (OOS_FAIL archived; COMBO_02 LONG killed in DISCOVERY)"
+    );
+    expect(SCORECARD_SNAPSHOT["CANDLE12_V2|LONG"]).toMatchObject({ verdict: "KILLED", stage: "DISCOVERY" });
+    expect(verdictText(SCORECARD_SNAPSHOT["CANDLE12_V2|LONG"])).toBe("KILLED (Gate 2: below random p90)");
+    expect(SCORECARD_SNAPSHOT["CANDLE12_V2|LONG"].source).toContain("KILLED.md");
+    expect(verdictText(SCORECARD_SNAPSHOT["COMBO_01|LONG"])).toBe("KILLED");
+  });
+
+  it("gives the dashboard cards their research verdicts", () => {
+    expect(paperCardVerdict("V1")?.text).toBe("KILLED (OOS_FAIL archived; COMBO_02 LONG killed in DISCOVERY)");
+    expect(paperCardVerdict("COMBO_02 v1")?.text).toBe(paperCardVerdict("V1")?.text);
+    expect(paperCardVerdict("CANDLE12_V2")?.text).toBe("KILLED (Gate 2: below random p90)");
+    expect(paperCardVerdict("PASSED")).toMatchObject({ verdict: "KILLED", text: PASSED_BOOK_VERDICT_TEXT });
+    expect(PASSED_BOOK_VERDICT_TEXT).toBe("KILLED strategies (research) · parity test");
+    expect(paperCardVerdict("FWD-1")).toMatchObject({ verdict: "INCONCLUSIVE", text: "INCONCLUSIVE" });
+    expect(paperCardVerdict("FWD-1 book 16")?.text).toBe("INCONCLUSIVE");
+    expect(paperCardVerdict("LEGACY")).toBeNull();
+    expect(paperCardVerdict("FWD-3")).toBeNull();
   });
 
   it("flags only the two V2 ids named in D3", () => {

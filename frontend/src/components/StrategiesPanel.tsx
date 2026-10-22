@@ -13,6 +13,7 @@ import {
   type StrategyRankRow,
 } from "../api/client";
 import { StrategyRankBoard, StrategyRankDetail } from "./StrategyRankBoard";
+import { CatalogVerdictPills } from "./ResearchScorecard";
 
 function statusClass(status: string): string {
   switch (status.toUpperCase()) {
@@ -67,6 +68,7 @@ function StrategyCard({
         >
           {item.status}
         </span>
+        <CatalogVerdictPills id={item.id} direction={item.direction} />
         {item.setup_timeframe ? (
           <span className="font-mono text-[10px] text-terminal-muted">
             {item.setup_timeframe}

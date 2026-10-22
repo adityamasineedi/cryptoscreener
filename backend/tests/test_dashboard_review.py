@@ -130,3 +130,25 @@ def test_candle12_v2_heartbeat_is_the_state_write_not_the_watermark(tmp_path):
     assert abs(c12["realized_pnl"] - (-21.35)) < 1e-9
     assert abs(c12["net_r"] - (-21.35 / 20.0)) < 1e-9
     assert abs(c12["equity"] - 978.65) < 1e-9
+
+
+def test_v1_card_lists_only_the_watcher_symbols(tmp_path):
+    """Owner D200 (DECISIONS D233): the card follows paper_v1_watcher_symbols, as the watcher does."""
+    from app.research.v1_production import V1_BOOKS
+    from app.services.dashboard_review import v1_watcher_symbols
+
+    every = [b.symbol for b in V1_BOOKS if b.timeframe == "1h" and b.enabled_by_default]
+    assert {"BTCUSDT", "ETHUSDT", "SOLUSDT"} <= set(every) and len(every) > 3
+
+    def v1(settings):
+        snap = build_dashboard_review(root=tmp_path, settings=settings, engine=None)
+        return snap, [c["symbol"] for c in next(w for w in snap["watchers"] if w["id"] == "V1")["coins"]]
+
+    snap, coins = v1(_settings(paper_v1_telegram_enabled=True, paper_v1_watcher_symbols=" btcusdt, ETHUSDT ,SOLUSDT,"))
+    assert coins == [s for s in every if s in {"BTCUSDT", "ETHUSDT", "SOLUSDT"}]
+    assert "COMBO_02 v1 (3 1h books)" in snap["telegram_text"]
+
+    # Empty or missing setting: the watcher keeps every book, so the card does too.
+    assert v1(_settings(paper_v1_watcher_symbols=""))[1] == every
+    assert v1(_settings())[1] == every
+    assert v1_watcher_symbols(_settings(paper_v1_watcher_symbols="BTCUSDT,,")) == frozenset({"BTCUSDT"})

@@ -212,6 +212,15 @@ describe("StrategiesPanel ranked board", () => {
     );
   });
 
+  it("shows the owner D200 verdict on the COMBO_02_V1 catalog card", async () => {
+    vi.mocked(fetchStrategyRank).mockResolvedValue(RANK);
+    renderPanel();
+    const card = await screen.findByTestId("strategy-card-COMBO_02_V1");
+    expect(within(card).getByTestId("catalog-verdict-COMBO_02_V1|LONG").textContent).toBe(
+      "Research: KILLED (OOS_FAIL archived; COMBO_02 LONG killed in DISCOVERY)"
+    );
+  });
+
   it("shows an error for a missing rank file and keeps the catalog", async () => {
     vi.mocked(fetchStrategyRank).mockResolvedValue({
       status: "MISSING",

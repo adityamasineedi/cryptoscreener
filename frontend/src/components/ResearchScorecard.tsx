@@ -11,6 +11,9 @@ import {
   SCORECARD_SNAPSHOT,
   SCORECARD_SNAPSHOT_DATE,
   SCORECARD_SNAPSHOT_SOURCE,
+  paperCardVerdict,
+  researchVerdictFor,
+  verdictText,
   type ResearchVerdict,
 } from "../research/scorecardSnapshot";
 
@@ -33,6 +36,55 @@ export function verdictClass(verdict: string): string {
     default:
       return "border-terminal-border bg-white/5 text-terminal-muted";
   }
+}
+
+/** One research verdict pill. `text` is shown as written (no upper-casing). */
+export function VerdictPill({
+  verdict,
+  text,
+  title,
+  testId = "research-verdict-pill",
+}: {
+  verdict: string;
+  text: string;
+  title?: string;
+  testId?: string;
+}) {
+  return (
+    <span className={`${badge} normal-case ${verdictClass(verdict)}`} title={title} data-testid={testId}>
+      {text}
+    </span>
+  );
+}
+
+/** Research verdict of a dashboard paper / forward-test card (owner D200). Nothing for cards without one. */
+export function PaperCardVerdictPill({ cardId }: { cardId: string }) {
+  const hit = paperCardVerdict(cardId);
+  if (!hit) return null;
+  return <VerdictPill verdict={hit.verdict} text={`Research: ${hit.text}`} title={hit.title} testId={`paper-verdict-${cardId}`} />;
+}
+
+/** Research verdicts of a catalog card, one per researched side (LONG / SHORT / BOTH). */
+export function CatalogVerdictPills({ id, direction }: { id: string; direction?: string }) {
+  const named = (direction || "").toUpperCase().match(/LONG|SHORT|BOTH/g);
+  const sides = named && named.length ? [...new Set(named)] : ["LONG", "SHORT", "BOTH"];
+  const hits = sides
+    .map((side) => researchVerdictFor(id, side))
+    .filter((hit): hit is NonNullable<typeof hit> => hit != null);
+  if (!hits.length) return null;
+  return (
+    <>
+      {hits.map(({ key, entry, note }) => (
+        <VerdictPill
+          key={key}
+          verdict={entry.verdict}
+          text={`Research: ${verdictText(entry)}${hits.length > 1 ? ` (${key.split("|")[1].toLowerCase()})` : ""}`}
+          title={`${key} · ${entry.stage}: ${entry.reason} (${entry.source})${note ? `; ${note}` : ""}`}
+          testId={`catalog-verdict-${key}`}
+        />
+      ))}
+    </>
+  );
 }
 
 function splitKey(key: string): [string, string] {
@@ -82,7 +134,9 @@ function ScorecardTable({ rows, testId }: { rows: Entry[]; testId: string }) {
                 </td>
                 <td className="py-1 pr-3 text-terminal-muted">{sideLabel(side)}</td>
                 <td className="py-1 pr-3">
-                  <span className={`${badge} ${verdictClass(entry.verdict)}`}>{entry.verdict}</span>
+                  <span className={`${badge} ${entry.display ? "normal-case " : ""}${verdictClass(entry.verdict)}`}>
+                    {verdictText(entry)}
+                  </span>
                 </td>
                 <td className="py-1 pr-3 font-mono text-[10px] text-terminal-muted">{entry.stage}</td>
                 <td className="py-1 pr-3 leading-relaxed text-terminal-muted">{entry.reason}</td>

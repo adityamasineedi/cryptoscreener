@@ -33,6 +33,12 @@ D218_ALLOWED = {
     "frontend/src/components/StrategiesPanel.test.tsx",
     "frontend/src/research/scorecardSnapshot.ts",
     "frontend/src/research/scorecardSnapshot.test.ts",
+    # Owner D200 (DECISIONS D233): V1 coin list and research verdicts on the dashboard cards.
+    "backend/app/services/dashboard_review.py",
+    "backend/tests/test_dashboard_review.py",
+    "frontend/src/components/PaperDashboardReview.tsx",
+    "frontend/src/components/PaperDashboardReview.test.tsx",
+    "frontend/src/components/StrategiesPanel.tsx",
 }
 
 PAPER_ENGINE_FILES = (

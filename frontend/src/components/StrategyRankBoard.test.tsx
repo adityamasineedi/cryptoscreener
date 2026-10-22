@@ -194,7 +194,7 @@ describe("Strategies page: old in-sample ranking", () => {
     renderBoard();
     const badgeOf = (key: string) =>
       within(screen.getByTestId(`rank-row-${key}`)).getByTestId("research-verdict-badge");
-    expect(badgeOf("day|CANDLE12_V2|LONG|1h").textContent).toBe("Research: KILLED · DISCOVERY");
+    expect(badgeOf("day|CANDLE12_V2|LONG|1h").textContent).toBe("Research: KILLED (Gate 2: below random p90)");
     expect(badgeOf("day|COMBO_05|SHORT|1h").textContent).toBe("Research: KILLED · DISCOVERY");
     expect(badgeOf("day|COMBO_05|SHORT|1h").getAttribute("title")).toContain("COMBO_05+PBFIX|SHORT");
     expect(badgeOf("day|CANDLE12_V2|SHORT|1h").textContent).toBe("Research: no verdict (not in scorecard)");
@@ -259,6 +259,6 @@ describe("Strategies page: old in-sample ranking", () => {
     render(<StrategyRankDetail row={RANK.groups[0].rows[0]} window={RANK.window} />);
     const detail = screen.getByTestId("strategy-rank-detail");
     expect(detail.textContent).toContain("Old in-sample rank 1");
-    expect(within(detail).getByTestId("research-verdict-badge").textContent).toBe("Research: KILLED · DISCOVERY");
+    expect(within(detail).getByTestId("research-verdict-badge").textContent).toBe("Research: KILLED (Gate 2: below random p90)");
   });
 });

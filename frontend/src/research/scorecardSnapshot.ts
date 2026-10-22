@@ -22,6 +22,13 @@
  *      shown as NOT RUN with the UNTESTABLE reason.
  * `family` names the later study an entry belongs to (FINAL_VERDICT / KILLED.md names).
  *
+ * Owner D200 (DECISIONS D233), from KILLED.md, INVENTORY.md and out/gates_DISCOVERY.json:
+ *   - COMBO_02_V1 (V1) = "KILLED (OOS_FAIL archived; COMBO_02 LONG killed in DISCOVERY)";
+ *   - CANDLE12_V2 = "KILLED (Gate 2: below random p90)": KILLED.md's DISCOVERY kill overrides
+ *     SCORECARD.csv's stale NOT_RUN row; above_baseline_p90 is its only failed Gate 2 rule.
+ * `display` is that exact wording, shown wherever the verdict appears (status and dashboard
+ * cards, the Strategies page).
+ *
  * The live app cannot read the research worktree at runtime. This file does not refresh
  * itself: regenerate it when the research verdicts change. Display only; nothing else
  * may read it.
@@ -38,11 +45,14 @@ export type ResearchVerdict = {
   source: string;
   /** Later study name (N1, N2, HD-2, HR-1, HD-1, H-COMBO, H-F1X, XS-MOM); unset for tournament rows. */
   family?: string;
+  /** The owner's wording for this verdict where one was ruled (D200); else `verdict` is shown. */
+  display?: string;
 };
 
 export const SCORECARD_SNAPSHOT: Readonly<Record<string, ResearchVerdict>> = {
-  "CANDLE12_V2|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 56 trades; +0.297 R/trade", source: "KILLED.md" },
+  "CANDLE12_V2|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2: below random p90 (E9; baseline pct 0.82, the only Gate 2 rule failed); 56 trades; +0.297 R/trade; KILLED.md overrides SCORECARD.csv's stale NOT_RUN row", source: "KILLED.md (owner D200, DECISIONS D233)", display: "KILLED (Gate 2: below random p90)" },
   "CANDLE12_V3_EXEC_FIX|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 48 trades; +0.291 R/trade", source: "KILLED.md" },
+  "COMBO_02_V1|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "OOS_FAIL archived (INVENTORY.md); its strategy side COMBO_02 LONG killed in DISCOVERY (Gate 2, E9; 940 trades; −0.134 R/trade)", source: "KILLED.md, INVENTORY.md (owner D200, DECISIONS D233)", display: "KILLED (OOS_FAIL archived; COMBO_02 LONG killed in DISCOVERY)" },
   "COMBO_01|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 2,989 trades; −0.131 R/trade", source: "KILLED.md" },
   "COMBO_01|SHORT": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 2,483 trades; −0.139 R/trade", source: "KILLED.md" },
   "COMBO_02_CLOSED_HTF|LONG": { verdict: "KILLED", stage: "DISCOVERY", reason: "Gate 2, E9; 940 trades; −0.124 R/trade", source: "KILLED.md" },
@@ -199,6 +209,43 @@ export function researchVerdictFor(combinationId: string, direction: string): Re
     if (baseEntry) return { key: baseKey, entry: baseEntry, note: `research verdict for ${base} (all variants)` };
   }
   return null;
+}
+
+/** The verdict wording to show: the owner's `display` text where ruled, else the verdict. */
+export function verdictText(entry: ResearchVerdict): string {
+  return entry.display ?? entry.verdict;
+}
+
+export type PaperCardVerdict = { verdict: string; text: string; title: string };
+
+/**
+ * Research verdict for a paper / forward-test card on the dashboard (owner D200, DECISIONS D233).
+ * The passed book is a parity test of KILLED strategies (KILLED_BOOKS.md, owner D40); FWD-1
+ * mirrors book 16 (INCONCLUSIVE, D96). Cards with no research row return null.
+ */
+const PAPER_CARD_KEYS: Readonly<Record<string, string>> = {
+  V1: "COMBO_02_V1|LONG",
+  "COMBO_02 v1": "COMBO_02_V1|LONG",
+  CANDLE12_V2: "CANDLE12_V2|LONG",
+  "FWD-1": "MTF_4H_16_BREAKOUT252|LONG",
+  "FWD-1 book 16": "MTF_4H_16_BREAKOUT252|LONG",
+  V21A: "COMBO_02_V2_1_A|LONG",
+};
+const PASSED_CARD_IDS = new Set(["PASSED", "passed book", "passed-book parity test"]);
+export const PASSED_BOOK_VERDICT_TEXT = "KILLED strategies (research) · parity test";
+
+export function paperCardVerdict(cardId: string): PaperCardVerdict | null {
+  if (PASSED_CARD_IDS.has(cardId)) {
+    return {
+      verdict: "KILLED",
+      text: PASSED_BOOK_VERDICT_TEXT,
+      title: "The passed book as one unit was KILLED at DISCOVERY Gate 2 (KILLED_BOOKS.md); live paper keeps it only as a parity test (owner D40).",
+    };
+  }
+  const key = PAPER_CARD_KEYS[cardId];
+  const entry = key ? SCORECARD_SNAPSHOT[key] : undefined;
+  if (!key || !entry) return null;
+  return { verdict: entry.verdict, text: verdictText(entry), title: `${key} · ${entry.stage}: ${entry.reason} (${entry.source})` };
 }
 
 export function hasBacktestLookaheadD3(combinationId: string): boolean {

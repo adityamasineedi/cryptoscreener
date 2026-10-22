@@ -1,6 +1,7 @@
 import type { DashboardReview, PaperLedgerBook, PaperPosition } from "../api/client";
 import { rollupBooks } from "../paper/bookStats";
 import { formatIst, formatUtc } from "../paper/zoneTime";
+import { PaperCardVerdictPill } from "./ResearchScorecard";
 
 function money(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -57,7 +58,7 @@ export function BookConfigHeader({ review }: { review: DashboardReview | null })
       <div className="mt-2 flex flex-col gap-1">
         {review.watchers.map((row) => (
           <p key={row.id}>
-            <span className="text-terminal-text">{row.id}</span>{" "}
+            <span className="text-terminal-text">{row.id}</span> <PaperCardVerdictPill cardId={row.id} />{" "}
             {row.can_open ? "can open" : "cannot open"} · {row.risk}. Coins: {coinLine(row.coins)}.
           </p>
         ))}
@@ -107,6 +108,9 @@ export function BookRollupPanel({
             <div className="text-terminal-text">
               {row.id} · {row.label}
             </div>
+            <div className="mt-1">
+              <PaperCardVerdictPill cardId={row.id} />
+            </div>
             <div className="mt-1 text-terminal-muted" title={row.forward_start_cite}>
               {row.forward_start ? (
                 <>
@@ -130,6 +134,9 @@ export function BookRollupPanel({
         ))}
         <article className="rounded border border-terminal-border bg-white/[0.02] p-2 text-[11px]" data-testid="paper-candle12-rollup">
           <div className="text-terminal-text">CANDLE12_V2 · BTC 1h LONG</div>
+          <div className="mt-1">
+            <PaperCardVerdictPill cardId="CANDLE12_V2" />
+          </div>
           <div className="mt-1 text-terminal-muted">Equity {money(candle12?.equity)}</div>
           <div className="text-terminal-muted">Realized PnL {money(candle12?.realized_pnl)}</div>
           <div className="text-terminal-muted">Net R {num(candle12?.net_r)}</div>
@@ -216,7 +223,7 @@ export function RunnerHealthPanel({ review }: { review: DashboardReview | null }
           {(review?.runners || []).map((row) => (
             <tr key={row.runner} className="border-t border-terminal-border/60">
               <td className="py-1" title={row.detail}>
-                {row.runner}
+                {row.runner} <PaperCardVerdictPill cardId={row.runner} />
               </td>
               <td className="py-1" title={formatUtc(row.last_heartbeat)}>
                 {formatIst(row.last_heartbeat)}

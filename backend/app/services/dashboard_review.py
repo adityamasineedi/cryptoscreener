@@ -14,7 +14,7 @@ from typing import Any
 
 from app.config import ROOT
 from app.research.passed_cap_book import LARGE, MID, PASSED_SIDES, cap_group
-from app.research.v1_production import V1_BOOKS
+from app.research.v1_production import V1_BOOKS, normalize_symbol
 
 RESTART_UTC = datetime(2026, 10, 21, 3, 48, tzinfo=timezone.utc)
 FRESH_SECONDS = 90 * 60
@@ -287,6 +287,12 @@ def _candle12_summary(path: Path) -> dict[str, Any]:
     }
 
 
+def v1_watcher_symbols(settings: Any) -> frozenset[str]:
+    """The V1 watcher's symbol filter, parsed as orchestrator.py and V1PaperWatcher parse it."""
+    raw = str(getattr(settings, "paper_v1_watcher_symbols", "") or "")
+    return frozenset(normalize_symbol(s) for s in raw.split(",") if s.strip())
+
+
 def build_dashboard_review(
     *,
     root: Path | None = None,
@@ -318,10 +324,14 @@ def build_dashboard_review(
     if engine is not None:
         legacy_open = bool(getattr(engine, "legacy_auto_entry_enabled", legacy_open))
 
+    # Owner D200 (DECISIONS D233): list only the books the V1 watcher really runs. The
+    # orchestrator passes paper_v1_watcher_symbols to the watcher, which keeps only those
+    # symbols; an empty setting means every book, as in the watcher. Read from settings only.
+    v1_symbols = v1_watcher_symbols(settings)
     v1_coins = [
         {"symbol": b.symbol, "timeframe": b.timeframe, "tier": b.tier, "risk_percent": b.risk_percent}
         for b in V1_BOOKS
-        if b.timeframe == "1h" and b.enabled_by_default
+        if b.timeframe == "1h" and b.enabled_by_default and (not v1_symbols or b.symbol in v1_symbols)
     ]
     passed_coins = [
         {"symbol": sym, "group": cap_group(sym), "risk_percent": 0.02 if cap_group(sym) == "large" else 0.01}

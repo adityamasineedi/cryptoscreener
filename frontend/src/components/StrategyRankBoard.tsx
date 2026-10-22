@@ -104,11 +104,11 @@ export function ResearchVerdictBadge({
   const { entry, key, note } = hit;
   return (
     <span
-      className={`${badge} ${verdictClass(entry.verdict)}`}
+      className={`${badge} ${entry.display ? "normal-case " : ""}${verdictClass(entry.verdict)}`}
       title={`Research row ${key} (${entry.source})${note ? `; ${note}` : ""}. See the scorecard above.`}
       data-testid="research-verdict-badge"
     >
-      Research: {entry.verdict} · {entry.stage}
+      Research: {entry.display ?? `${entry.verdict} · ${entry.stage}`}
     </span>
   );
 }
