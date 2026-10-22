@@ -26,7 +26,7 @@ const locked: Omit<
   grid_count: 8,
   capital: 1000,
   max_capital: 100000,
-  fee_bps: 4,
+  fee_bps: 2,
   slippage_bps: 1,
   max_drawdown: 0.35,
   max_open_orders: 20,

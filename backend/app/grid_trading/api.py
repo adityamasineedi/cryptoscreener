@@ -64,8 +64,8 @@ class GridRunRequest(BaseModel):
     grid_count: int
     capital: float
     max_capital: float = 1_000_000.0
-    fee_bps: float = 4.0
-    taker_fee_bps: float | None = None
+    fee_bps: float = 2.0
+    taker_fee_bps: float | None = 5.0
     slippage_bps: float = 1.0
     leverage: float = 1.0
     maintenance_margin_rate: float = 0.005
@@ -94,7 +94,7 @@ class ScanRequest(BaseModel):
     timeframe: str = "1h"
     symbols: list[str] = Field(default_factory=list)
     limit: int = Field(default=400, ge=30, le=2000)
-    fee_bps: float = 4.0
+    fee_bps: float = 2.0
     slippage_bps: float = 1.0
     grid_count: int = 8
 

@@ -40,8 +40,8 @@ class GridConfig(BaseModel):
     grid_count: int
     capital: float
     max_capital: float = 1_000_000.0
-    fee_bps: float = Field(default=4.0, ge=0)
-    taker_fee_bps: float | None = None
+    fee_bps: float = Field(default=2.0, ge=0)
+    taker_fee_bps: float | None = 5.0
     slippage_bps: float = Field(default=1.0, ge=0)
     leverage: float = 1.0
     maintenance_margin_rate: float = 0.005
