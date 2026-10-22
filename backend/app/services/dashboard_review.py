@@ -256,12 +256,22 @@ def _candle12_summary(path: Path) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {"present": False, "equity": None, "realized_pnl": None, "net_r": None, "trades": 0, "open_risk": None}
     closed = [r for r in (raw.get("closed") or []) if isinstance(r, dict)]
+    risk = float(raw.get("risk_usd") or 0.0)
     pnl = 0.0
     net_r = 0.0
     for row in closed:
-        pnl += float(row.get("net_pnl") or row.get("pnl_usd") or 0.0)
-        net_r += float(row.get("r_multiple") or row.get("r_net") or 0.0)
+        # candle12_v2_paper books closed trades with net_pnl_usd and no R field: R = net PnL / the book's risk.
+        row_pnl = float(row.get("net_pnl_usd") or row.get("net_pnl") or row.get("pnl_usd") or 0.0)
+        pnl += row_pnl
+        r = row.get("r_multiple") if row.get("r_multiple") is not None else row.get("r_net")
+        net_r += float(r) if r is not None else (row_pnl / risk if risk > 0 else 0.0)
     open_row = raw.get("open") if isinstance(raw.get("open"), dict) else None
+    # The watermark is the forward start (fixed); the state file is rewritten after every new closed bar,
+    # so its modification time is the runner's heartbeat.
+    try:
+        written = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        written = None
     return {
         "present": True,
         "symbol": raw.get("symbol"),
@@ -273,6 +283,7 @@ def _candle12_summary(path: Path) -> dict[str, Any]:
         "trades": len(closed),
         "open_risk": float(raw.get("risk_usd") or 0.0) if open_row else 0.0,
         "watermark": raw.get("watermark"),
+        "written_at": written.isoformat() if written else None,
     }
 
 
@@ -377,9 +388,9 @@ def build_dashboard_review(
         _runner("COMBO_02 v1", last_v1, now=wall, detail="last COMBO_02_V1 line in decision_journal.jsonl"),
         _runner(
             "CANDLE12_V2",
-            _utc(c12_state.get("watermark")) if c12_state.get("present") else None,
+            _utc(c12_state.get("written_at")) if c12_state.get("present") else None,
             now=wall,
-            detail="candle12_v2_paper/btcusdt_long.json watermark",
+            detail="candle12_v2_paper/btcusdt_long.json last write (rewritten after each closed bar)",
         ),
         _runner(
             "FWD-1 book 16",

@@ -104,3 +104,29 @@ def test_missed_breakdown_keeps_unknown_rows_unknown(tmp_path):
     assert missed["after_restart_unknown"] == []
     assert missed["after_restart"][0]["bucket"] == "ohlcv_catchup"
     assert missed_breakdown([], {"missed_signals": 3, "recent_missed": []})["unretained"] == 3
+
+
+def test_candle12_v2_heartbeat_is_the_state_write_not_the_watermark(tmp_path):
+    """The watermark is the fixed forward start; the state file's last write is the heartbeat."""
+    import os
+
+    state_dir = tmp_path / "backend" / "data" / "candle12_v2_paper"
+    state_dir.mkdir(parents=True)
+    path = state_dir / "btcusdt_long.json"
+    path.write_text(json.dumps({
+        "symbol": "BTCUSDT", "risk_usd": 20.0, "account_equity": 1000.0,
+        "watermark": "2026-10-19T17:00:00+00:00", "open": None,
+        "closed": [{"net_pnl_usd": -21.35, "outcome": "SL"}],
+    }), encoding="utf-8")
+    written = datetime(2026, 10, 22, 7, 0, tzinfo=timezone.utc)
+    os.utime(path, (written.timestamp(), written.timestamp()))
+    now = datetime(2026, 10, 22, 7, 30, tzinfo=timezone.utc)
+    snap = build_dashboard_review(root=tmp_path, settings=_settings(), engine=None, now=now)
+    row = next(r for r in snap["runners"] if r["runner"] == "CANDLE12_V2")
+    assert row["status"] == "FRESH"
+    assert row["age_seconds"] == 1800.0
+    c12 = snap["candle12_v2"]
+    assert c12["trades"] == 1
+    assert abs(c12["realized_pnl"] - (-21.35)) < 1e-9
+    assert abs(c12["net_r"] - (-21.35 / 20.0)) < 1e-9
+    assert abs(c12["equity"] - 978.65) < 1e-9
