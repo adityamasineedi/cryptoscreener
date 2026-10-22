@@ -4,10 +4,13 @@ import {
   disablePaperTrade,
   enablePaperTrade,
   fetchDashboardReview,
+  fetchPaperLedgerView,
   fetchPaperOpportunities,
   fetchPaperPositions,
   resetPaperTrade,
   type DashboardReview,
+  type PaperLedgerRow,
+  type PaperLedgerView,
   type PaperOpportunity,
   type PaperPosition,
   type PaperStatus,
@@ -23,7 +26,7 @@ import {
   StopStatePanel,
 } from "./PaperDashboardReview";
 import { recordPaperAction, readPaperActions, type PaperActionEntry } from "../paper/actionLog";
-import { splitCancelled } from "../paper/bookStats";
+import { hiddenSummary, ledgerTables, tagTone } from "../paper/ledgerView";
 import { formatIst, formatUtc } from "../paper/zoneTime";
 import {
   CLOSED_LIMIT,
@@ -99,7 +102,9 @@ export function PaperTradePanel() {
   const [actions, setActions] = useState<PaperActionEntry[]>(() => readPaperActions());
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [typedAction, setTypedAction] = useState("");
-  const [showDuplicateFills, setShowDuplicateFills] = useState(false);
+  const [ledger, setLedger] = useState<PaperLedgerView | null>(null);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const warmOnce = useRef(false);
 
   const refreshBook = useCallback(async () => {
@@ -168,6 +173,30 @@ export function PaperTradePanel() {
         if (alive) setReview(next);
       } catch {
         /* The safety lock stays on until a review payload arrives. */
+      }
+    };
+    load();
+    const id = window.setInterval(load, 15000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const next = await fetchPaperLedgerView();
+        if (!alive) return;
+        if (next && next.available === false) {
+          setLedgerError(next.error || "Ledger view unavailable");
+        } else if (next) {
+          setLedger(next);
+          setLedgerError(null);
+        }
+      } catch (e) {
+        if (alive) setLedgerError(e instanceof Error ? e.message : "Ledger view unavailable");
       }
     };
     load();
@@ -248,6 +277,18 @@ export function PaperTradePanel() {
   const telegram = status?.telegram;
   const watcher = status?.v1_watcher;
   const monitor = status?.monitor;
+  const tables = ledgerTables(ledger, showAllHistory);
+  const hidden = hiddenSummary(ledger);
+  // Ledger view not loaded: the default view shows nothing; "show all" falls back to the engine rows, untagged.
+  const fallback = ledger == null && showAllHistory;
+  const closedRows: Array<PaperPosition | PaperLedgerRow> = fallback
+    ? closed.filter((r) => String(r.status || "").toUpperCase() !== "CANCELLED")
+    : tables.closed;
+  const cancelledRows: Array<PaperPosition | PaperLedgerRow> = fallback
+    ? closed.filter((r) => String(r.status || "").toUpperCase() === "CANCELLED")
+    : tables.cancelled;
+  const forwardStart =
+    ledger?.books.find((b) => b.id === "PASSED")?.forward_start ?? "2026-10-21T00:00:00+00:00";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4 text-terminal-text">
@@ -372,7 +413,8 @@ export function PaperTradePanel() {
       <Book16PaperPanel />
       <BookRollupPanel
         open={open}
-        closed={closed}
+        ledgerBooks={ledger?.books ?? null}
+        ledgerError={ledgerError}
         startingEquity={status?.starting_equity ?? 1000}
         combined={{
           equity: status?.equity ?? null,
@@ -454,48 +496,69 @@ export function PaperTradePanel() {
         />
       </section>
 
+      <section data-testid="paper-ledger-history">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="max-w-3xl text-[11px] text-terminal-muted" data-testid="paper-ledger-scope">
+            {showAllHistory
+              ? `All ledger history: every closed and cancelled row, each with its evidence tag${
+                  ledger ? ` (${ledger.total_rows ?? ledger.rows.length} rows)` : ""
+                }.`
+              : `Default view: VALID trades from each book's forward start (PASSED and V1: ${formatUtc(forwardStart)}).${
+                  hidden.hidden ? ` Hidden: ${hidden.hidden} rows (${hidden.text}).` : ""
+                }`}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowAllHistory((on) => !on)}
+            aria-pressed={showAllHistory}
+            data-testid="paper-history-toggle"
+            className={`rounded border px-2 py-1 text-[10px] uppercase tracking-wide ${
+              showAllHistory
+                ? "border-sky-500/50 bg-sky-500/10 text-sky-200"
+                : "border-terminal-border text-terminal-muted hover:bg-white/5"
+            }`}
+          >
+            {showAllHistory ? "Show default view" : "Show all history"}
+          </button>
+        </div>
+        {ledgerError ? (
+          <p className="mb-2 text-[11px] text-amber-200/90" data-testid="paper-ledger-error">
+            Ledger view unavailable: {ledgerError}
+            {showAllHistory && ledger == null ? " Showing the engine's recent rows, untagged." : ""}
+          </p>
+        ) : ledger == null ? (
+          <p className="mb-2 text-[11px] text-terminal-muted">Reading the ledger view…</p>
+        ) : null}
+      </section>
+
       <section>
         <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
           Closed trades
         </h2>
-        {closedTruncationNote(closed.length, CLOSED_LIMIT) ? (
+        {fallback && closedTruncationNote(closed.length, CLOSED_LIMIT) ? (
           <p className="mb-2 text-[11px] text-amber-200/90" data-testid="paper-closed-truncated">
             {closedTruncationNote(closed.length, CLOSED_LIMIT)}
           </p>
         ) : null}
         <TradeTable
-          rows={closed.filter((r) => String(r.status || "").toUpperCase() !== "CANCELLED")}
-          empty="No closed paper trades yet."
+          rows={closedRows}
+          empty={showAllHistory ? "No closed paper trades yet." : "No VALID closed trades since the forward start."}
           mode="closed"
+          showTag
         />
       </section>
 
       <section>
-        {(() => {
-          const split = splitCancelled(closed);
-          const rows = showDuplicateFills ? [...split.visible, ...split.duplicates] : split.visible;
-          return (
-            <>
-              <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
-                Cancelled
-                <span className="ml-2 font-mono normal-case text-terminal-muted/80">({rows.length})</span>
-              </h2>
-              {split.duplicates.length ? (
-                <p className="mb-2 text-[11px] text-terminal-muted" data-testid="paper-duplicate-fills">
-                  duplicate_fill {split.duplicates.length}{" "}
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => setShowDuplicateFills((on) => !on)}
-                  >
-                    {showDuplicateFills ? "hide" : "show"}
-                  </button>
-                </p>
-              ) : null}
-              <TradeTable rows={rows} empty="No cancelled paper trades." mode="cancelled" />
-            </>
-          );
-        })()}
+        <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
+          Cancelled
+          <span className="ml-2 font-mono normal-case text-terminal-muted/80">({cancelledRows.length})</span>
+        </h2>
+        <TradeTable
+          rows={cancelledRows}
+          empty={showAllHistory ? "No cancelled paper trades." : "No VALID cancelled rows since the forward start."}
+          mode="cancelled"
+          showTag
+        />
       </section>
     </div>
   );
@@ -830,10 +893,12 @@ function TradeTable({
   rows,
   empty,
   mode,
+  showTag = false,
 }: {
-  rows: PaperPosition[];
+  rows: Array<PaperPosition | PaperLedgerRow>;
   empty: string;
   mode: "open" | "closed" | "cancelled";
+  showTag?: boolean;
 }) {
   if (!rows.length) {
     return (
@@ -847,6 +912,7 @@ function TradeTable({
       <table className="min-w-full text-left font-mono text-[11px]">
         <thead className="bg-black/20 text-[10px] uppercase tracking-wide text-terminal-muted">
           <tr>
+            {showTag ? <th className="px-2 py-1.5">Tag</th> : null}
             <th className="px-2 py-1.5">Symbol</th>
             <th className="px-2 py-1.5">Stream</th>
             <th className="px-2 py-1.5">Side</th>
@@ -919,8 +985,24 @@ function TradeTable({
                 : "—";
             const riskPct = snippet.risk_percent as number | null | undefined;
             const riskLabel = paperRiskLabel(riskPct, r.risk_usd, snippet.paper_execution);
+            const evidence = "evidence_tag" in r ? (r as PaperLedgerRow) : null;
             return (
-            <tr key={r.id} className="border-t border-terminal-border/70">
+            <tr key={r.id} className="border-t border-terminal-border/70" data-testid="paper-trade-row">
+              {showTag ? (
+                <td
+                  className={`px-2 py-1.5 whitespace-nowrap ${tagTone(evidence?.evidence_tag)}`}
+                  title={
+                    evidence
+                      ? [evidence.evidence_reason, `matches: ${evidence.evidence_matches.join(", ") || "none"}`]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "Ledger view not loaded: no tag"
+                  }
+                  data-testid="paper-evidence-tag"
+                >
+                  {evidence?.evidence_tag ?? "—"}
+                </td>
+              ) : null}
               <td className="px-2 py-1.5 text-terminal-text">{r.symbol}</td>
               <td
                 className={`px-2 py-1.5 whitespace-nowrap ${

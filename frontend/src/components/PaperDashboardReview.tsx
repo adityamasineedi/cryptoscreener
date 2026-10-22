@@ -1,4 +1,4 @@
-import type { DashboardReview, PaperPosition } from "../api/client";
+import type { DashboardReview, PaperLedgerBook, PaperPosition } from "../api/client";
 import { rollupBooks } from "../paper/bookStats";
 import { formatIst, formatUtc } from "../paper/zoneTime";
 
@@ -68,32 +68,64 @@ export function BookConfigHeader({ review }: { review: DashboardReview | null })
 
 export function BookRollupPanel({
   open,
-  closed,
+  ledgerBooks,
+  ledgerError,
   startingEquity,
   combined,
   candle12,
 }: {
   open: PaperPosition[];
-  closed: PaperPosition[];
+  ledgerBooks: PaperLedgerBook[] | null;
+  ledgerError?: string | null;
   startingEquity: number;
   combined: { equity: number | null; realized: number | null; openRisk: number | null; trades: number | null };
   candle12: DashboardReview["candle12_v2"] | null;
 }) {
-  const rows = rollupBooks(open, closed, startingEquity);
+  // Open risk comes from the engine's open rows; every other number is the ledger view's default view (D187).
+  const openRisk = new Map(rollupBooks(open, [], startingEquity).map((row) => [row.id, row.openRisk]));
+  const books = ledgerBooks ?? [];
   return (
     <section data-testid="paper-book-rollups">
       <h2 className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">Per book</h2>
+      <p className="mb-2 text-[11px] text-terminal-muted" data-testid="paper-rollup-scope">
+        VALID closed trades from each book&apos;s forward start (the default view). Nominal R is PnL over the
+        risk the book meant to take (equity at open × risk %); R on actual risk is PnL over the risk the position
+        really carried after the 2× leverage cap.
+      </p>
+      {ledgerBooks == null ? (
+        <p className="mb-2 text-[11px] text-terminal-muted" data-testid="paper-rollup-pending">
+          {ledgerError ? `Ledger view unavailable: ${ledgerError}` : "Reading the ledger view…"}
+        </p>
+      ) : null}
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {rows.map((row) => (
-          <article key={row.id} className="rounded border border-terminal-border bg-white/[0.02] p-2 text-[11px]">
+        {books.map((row) => (
+          <article
+            key={row.id}
+            className="rounded border border-terminal-border bg-white/[0.02] p-2 text-[11px]"
+            data-testid={`paper-book-${row.id}`}
+          >
             <div className="text-terminal-text">
               {row.id} · {row.label}
             </div>
-            <div className="mt-1 text-terminal-muted">Equity {money(row.equity)}</div>
-            <div className="text-terminal-muted">Realized PnL {money(row.realized)}</div>
-            <div className="text-terminal-muted">Net R {num(row.netR)}</div>
+            <div className="mt-1 text-terminal-muted" title={row.forward_start_cite}>
+              {row.forward_start ? (
+                <>
+                  From <span title={formatUtc(row.forward_start)}>{formatIst(row.forward_start)}</span>
+                </>
+              ) : (
+                "Disabled: history only"
+              )}
+            </div>
+            <div className="text-terminal-muted">Equity {money(row.equity)}</div>
+            <div className="text-terminal-muted">Realized PnL {money(row.pnl_usd)}</div>
+            <div className="text-terminal-muted" data-testid={`paper-book-${row.id}-r`}>
+              Nominal R {num(row.r_nominal)} · R on actual risk {num(row.r_actual)}
+            </div>
             <div className="text-terminal-muted">Trades {row.trades}</div>
-            <div className="text-terminal-muted">Open risk {money(row.openRisk)}</div>
+            <div className="text-terminal-muted" data-testid={`paper-book-${row.id}-capped`}>
+              Shrunk by 2× leverage cap {row.capped}
+            </div>
+            <div className="text-terminal-muted">Open risk {money(openRisk.get(row.id) ?? 0)}</div>
           </article>
         ))}
         <article className="rounded border border-terminal-border bg-white/[0.02] p-2 text-[11px]" data-testid="paper-candle12-rollup">

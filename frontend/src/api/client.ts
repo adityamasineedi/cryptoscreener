@@ -2410,6 +2410,68 @@ export function fetchDashboardReview(signal?: AbortSignal) {
   return getJson<DashboardReview>("/api/paper/dashboard-review", { signal });
 }
 
+/** Evidence tag of one closed/cancelled ledger row (owner D187), computed at read time. */
+export type PaperEvidenceTag =
+  | "LEGACY"
+  | "PRE_REWRITE"
+  | "PRE_COUNTERS"
+  | "CATCHUP_CLOSE"
+  | "DUPLICATE_FILL"
+  | "VALID";
+
+export type PaperLedgerRow = PaperPosition & {
+  book: "PASSED" | "V1" | "LEGACY";
+  evidence_tag: PaperEvidenceTag | null;
+  evidence_reason: string;
+  evidence_matches: PaperEvidenceTag[];
+  in_default_view: boolean;
+  capped_by_leverage: boolean;
+  equity_at_open: number;
+  nominal_risk_usd: number | null;
+  r_nominal: number | null;
+  r_actual: number | null;
+};
+
+export type PaperLedgerBook = {
+  id: "PASSED" | "V1" | "LEGACY";
+  label: string;
+  forward_start: string | null;
+  forward_start_cite: string;
+  equity: number;
+  trades: number;
+  pnl_usd: number;
+  r_actual: number;
+  r_nominal: number;
+  r_ledger: number;
+  capped: number;
+  nominal_fallback: number;
+};
+
+export type PaperLedgerView = {
+  read_only: true;
+  available: boolean;
+  error?: string;
+  as_of: string;
+  starting_equity?: number;
+  precedence?: PaperEvidenceTag[];
+  cutoffs?: { rewrite_utc: string; rewrite_cite: string; counters_utc: string; counters_cite: string };
+  other_books?: Array<{ id: string; forward_start: string; source: string; cite: string }>;
+  tag_counts?: {
+    overall: Record<PaperEvidenceTag, number>;
+    by_book: Record<string, Record<PaperEvidenceTag, number>>;
+    rule_matches: Record<PaperEvidenceTag, number>;
+  };
+  books: PaperLedgerBook[];
+  rows: PaperLedgerRow[];
+  total_rows?: number;
+  default_rows?: number;
+};
+
+/** Read-only: every paper_trades row with its evidence tag, plus per-book stats on the default view. */
+export function fetchPaperLedgerView(signal?: AbortSignal) {
+  return getJson<PaperLedgerView>("/api/paper/ledger-view", { signal });
+}
+
 export function fetchPaperPositions(closedLimit = 50) {
   return getJson<{
     open: PaperPosition[];

@@ -4,10 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   disablePaperTrade,
   fetchDashboardReview,
+  fetchPaperLedgerView,
   fetchPaperOpportunities,
   fetchPaperPositions,
   resetPaperTrade,
   type DashboardReview,
+  type PaperLedgerRow,
+  type PaperLedgerView,
   type PaperPosition,
   type PaperStatus,
 } from "../api/client";
@@ -20,6 +23,7 @@ vi.mock("../api/client", async (importOriginal) => {
     fetchPaperPositions: vi.fn(),
     fetchPaperOpportunities: vi.fn(),
     fetchDashboardReview: vi.fn(async () => REVIEW),
+    fetchPaperLedgerView: vi.fn(async () => EMPTY_LEDGER),
     resetPaperTrade: vi.fn(),
     disablePaperTrade: vi.fn(),
     // Mounted PassedRegimePanel: never resolves, so it stays in its loading state.
@@ -81,6 +85,103 @@ const REVIEW: DashboardReview = {
   ],
   candle12_v2: { present: true, equity: 1000, realized_pnl: 0, net_r: 0, trades: 0, open_risk: 0 },
 };
+
+const LEDGER_BOOKS: PaperLedgerView["books"] = [
+  {
+    id: "PASSED",
+    label: "PARITY TEST",
+    forward_start: "2026-10-21T00:00:00+00:00",
+    forward_start_cite: "owner D187",
+    equity: 1020.7,
+    trades: 1,
+    pnl_usd: 20.7,
+    r_actual: 2.26,
+    r_nominal: 2.26,
+    r_ledger: 2.26,
+    capped: 0,
+    nominal_fallback: 0,
+  },
+  {
+    id: "V1",
+    label: "PAPER",
+    forward_start: "2026-10-21T00:00:00+00:00",
+    forward_start_cite: "owner D187",
+    equity: 964.73,
+    trades: 2,
+    pnl_usd: -35.27,
+    r_actual: -2.23,
+    r_nominal: -1.93,
+    r_ledger: -2.23,
+    capped: 1,
+    nominal_fallback: 0,
+  },
+  {
+    id: "LEGACY",
+    label: "LEGACY (disabled)",
+    forward_start: null,
+    forward_start_cite: "disabled stream",
+    equity: 1000,
+    trades: 0,
+    pnl_usd: 0,
+    r_actual: 0,
+    r_nominal: 0,
+    r_ledger: 0,
+    capped: 0,
+    nominal_fallback: 0,
+  },
+];
+
+const EMPTY_LEDGER: PaperLedgerView = {
+  read_only: true,
+  available: true,
+  as_of: "2026-10-22T06:00:00+00:00",
+  books: LEDGER_BOOKS,
+  rows: [],
+  total_rows: 0,
+  default_rows: 0,
+};
+
+function ledgerRow(
+  id: string,
+  symbol: string,
+  tag: PaperLedgerRow["evidence_tag"],
+  extra: Partial<PaperLedgerRow> = {},
+): PaperLedgerRow {
+  return {
+    id,
+    symbol,
+    side: "SHORT",
+    status: "CLOSED",
+    entry_price: 1,
+    stop_price: 1.02,
+    tp1_price: 0.96,
+    quantity: 500,
+    risk_usd: 10,
+    opened_at: "2026-10-21T19:00:47+00:00",
+    closed_at: "2026-10-22T03:00:00+00:00",
+    exit_price: 0.98,
+    exit_reason: "TP1",
+    pnl_usd: 20.7,
+    r_multiple: 2.07,
+    mark_price: null,
+    unrealized_pnl_usd: null,
+    unrealized_r: null,
+    source_candle_ts: "2026-10-21T18:00:00+00:00",
+    timeframe: "1h",
+    signal_snippet: { source: "PASSED_CAP_BOOK", stream: "PASSED|COMBO_02_V2|SHORT" },
+    book: "PASSED",
+    evidence_tag: tag,
+    evidence_reason: tag === "VALID" ? "" : `rule ${tag}`,
+    evidence_matches: tag && tag !== "VALID" ? [tag] : [],
+    in_default_view: tag === "VALID",
+    capped_by_leverage: false,
+    equity_at_open: 1000,
+    nominal_risk_usd: 10,
+    r_nominal: 2.07,
+    r_actual: 2.07,
+    ...extra,
+  };
+}
 
 const STATUS: PaperStatus = {
   enabled: true,
@@ -189,6 +290,7 @@ async function renderOpenTable() {
 
 describe("PaperTradePanel positions table", () => {
   beforeEach(() => {
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue(EMPTY_LEDGER);
     vi.mocked(fetchPaperPositions).mockResolvedValue({
       open: OPEN_ROWS,
       closed: [],
@@ -263,25 +365,16 @@ describe("PaperTradePanel positions table", () => {
   });
 
   it("shows closed time and realized profit on closed rows", async () => {
-    vi.mocked(fetchPaperPositions).mockResolvedValue({
-      open: [],
-      closed: [
-        position(
-          "closed-bnb",
-          "BNBUSDT",
-          "SHORT",
-          { source: "PASSED_CAP_BOOK", stream: "PASSED|COMBO_02_V2|SHORT" },
-          {
-            status: "CLOSED",
-            closed_at: "2026-10-12T17:28:46+00:00",
-            exit_price: 748.2,
-            exit_reason: "TP1",
-            pnl_usd: 17.9,
-            r_multiple: 2.05,
-          },
-        ),
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue({
+      ...EMPTY_LEDGER,
+      rows: [
+        ledgerRow("closed-bnb", "BNBUSDT", "VALID", {
+          closed_at: "2026-10-22T17:28:46+00:00",
+          exit_price: 748.2,
+          pnl_usd: 17.9,
+          r_multiple: 2.05,
+        }),
       ],
-      status: STATUS,
     });
     render(<PaperTradePanel />);
     const closedAt = await screen.findByTestId("paper-closed-at");
@@ -394,6 +487,7 @@ describe("PaperTradePanel watcher last-skip chip", () => {
 
 describe("PaperTradePanel open risk stat", () => {
   beforeEach(() => {
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue(EMPTY_LEDGER);
     vi.mocked(fetchPaperPositions).mockResolvedValue({
       open: OPEN_ROWS,
       closed: [],
@@ -453,6 +547,7 @@ describe("PaperTradePanel Auto control before status loads (P6)", () => {
 
 describe("Paper dashboard safety and copy", () => {
   beforeEach(() => {
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue(EMPTY_LEDGER);
     vi.mocked(fetchPaperPositions).mockResolvedValue({ open: [], closed: [], status: STATUS });
     vi.mocked(fetchPaperOpportunities).mockResolvedValue({
       rows: [],
@@ -516,44 +611,96 @@ describe("Paper dashboard safety and copy", () => {
     expect(vi.mocked(resetPaperTrade)).toHaveBeenCalledTimes(1);
   });
 
-  it("hides duplicate_fill cancellations until show is clicked", async () => {
-    const cancelled = {
-      ...STATUS,
-      id: "dup",
-    };
-    vi.mocked(fetchPaperPositions).mockResolvedValue({
-      open: [],
-      closed: [
-        {
-          id: "dup-1",
-          symbol: "TRXUSDT",
-          side: "LONG",
-          status: "CANCELLED",
-          entry_price: 0.1,
-          stop_price: 0.09,
-          tp1_price: 0.12,
-          quantity: 1,
-          risk_usd: 1,
-          opened_at: "2026-10-13T12:00:00+00:00",
-          closed_at: "2026-10-13T19:03:00+00:00",
-          exit_price: 0.1,
-          exit_reason: "duplicate_fill",
-          pnl_usd: 0,
-          r_multiple: 0,
-          mark_price: null,
-          unrealized_pnl_usd: null,
-          unrealized_r: null,
-          source_candle_ts: "2026-10-13T12:00:00+00:00",
-          timeframe: "1h",
-        },
+  it("shows only VALID rows from the forward start by default", async () => {
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue({
+      ...EMPTY_LEDGER,
+      rows: [
+        ledgerRow("valid", "SUIUSDT", "VALID"),
+        ledgerRow("old", "ARBUSDT", "PRE_COUNTERS", { opened_at: "2026-10-20T18:05:31+00:00" }),
+        ledgerRow("legacy", "NEARUSDT", "LEGACY", { opened_at: "2026-10-09T07:45:02+00:00" }),
+        ledgerRow("dup", "TRXUSDT", "DUPLICATE_FILL", { status: "CANCELLED", exit_reason: "duplicate_fill" }),
       ],
-      status: { ...STATUS, ...cancelled },
+      total_rows: 4,
+      default_rows: 1,
     });
     render(<PaperTradePanel />);
-    const line = await screen.findByTestId("paper-duplicate-fills");
-    expect(line).toHaveTextContent("duplicate_fill 1");
+    expect(await screen.findByText("SUIUSDT")).toBeTruthy();
+    expect(screen.queryByText("ARBUSDT")).toBeNull();
+    expect(screen.queryByText("NEARUSDT")).toBeNull();
     expect(screen.queryByText("TRXUSDT")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "show" }));
+    const scope = screen.getByTestId("paper-ledger-scope");
+    expect(scope).toHaveTextContent("VALID trades from each book's forward start");
+    expect(scope).toHaveTextContent("Hidden: 3 rows (LEGACY 1 · PRE_COUNTERS 1 · DUPLICATE_FILL 1)");
+    const tags = screen.getAllByTestId("paper-evidence-tag").map((cell) => cell.textContent);
+    expect(tags).toEqual(["VALID"]);
+    expect(screen.getByTestId("paper-history-toggle")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("shows every row with its tag when show all history is on, and back", async () => {
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue({
+      ...EMPTY_LEDGER,
+      rows: [
+        ledgerRow("valid", "SUIUSDT", "VALID"),
+        ledgerRow("old", "ARBUSDT", "PRE_COUNTERS", {
+          opened_at: "2026-10-20T18:05:31+00:00",
+          closed_at: "2026-10-20T18:05:31+00:00",
+          evidence_matches: ["PRE_COUNTERS", "CATCHUP_CLOSE"],
+        }),
+        ledgerRow("dup", "TRXUSDT", "DUPLICATE_FILL", { status: "CANCELLED", exit_reason: "duplicate_fill" }),
+      ],
+      total_rows: 3,
+      default_rows: 1,
+    });
+    render(<PaperTradePanel />);
+    await screen.findByText("SUIUSDT");
+    fireEvent.click(screen.getByTestId("paper-history-toggle"));
+    expect(screen.getByTestId("paper-history-toggle")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("paper-ledger-scope")).toHaveTextContent("All ledger history");
+    expect(screen.getByText("ARBUSDT")).toBeTruthy();
     expect(screen.getByText("TRXUSDT")).toBeTruthy();
+    const tagOf = (symbol: string) =>
+      within(screen.getByText(symbol).closest("tr") as HTMLElement).getByTestId("paper-evidence-tag");
+    expect(tagOf("SUIUSDT")).toHaveTextContent("VALID");
+    expect(tagOf("ARBUSDT")).toHaveTextContent("PRE_COUNTERS");
+    expect(tagOf("ARBUSDT").getAttribute("title")).toContain("CATCHUP_CLOSE");
+    expect(tagOf("TRXUSDT")).toHaveTextContent("DUPLICATE_FILL");
+    fireEvent.click(screen.getByTestId("paper-history-toggle"));
+    expect(screen.queryByText("ARBUSDT")).toBeNull();
+    expect(screen.queryByText("TRXUSDT")).toBeNull();
+  });
+
+  it("shows nothing in the default view until the ledger view loads", async () => {
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue({
+      read_only: true,
+      available: false,
+      error: "ledger read failed: RuntimeError: database not connected",
+      as_of: "2026-10-22T06:00:00+00:00",
+      books: [],
+      rows: [],
+    });
+    vi.mocked(fetchPaperPositions).mockResolvedValue({
+      open: [],
+      closed: [position("engine-row", "LTCUSDT", "SHORT", { source: "PASSED_CAP_BOOK" }, { status: "CLOSED" })],
+      status: STATUS,
+    });
+    render(<PaperTradePanel />);
+    expect(await screen.findByTestId("paper-ledger-error")).toHaveTextContent("database not connected");
+    expect(screen.queryByText("LTCUSDT")).toBeNull();
+    fireEvent.click(screen.getByTestId("paper-history-toggle"));
+    expect(screen.getByText("LTCUSDT")).toBeTruthy();
+    const cell = within(screen.getByText("LTCUSDT").closest("tr") as HTMLElement).getByTestId("paper-evidence-tag");
+    expect(cell).toHaveTextContent("—");
+  });
+
+  it("per-book cards read the ledger view: nominal R, R on actual risk and the cap count", async () => {
+    vi.mocked(fetchPaperLedgerView).mockResolvedValue(EMPTY_LEDGER);
+    render(<PaperTradePanel />);
+    const v1 = await screen.findByTestId("paper-book-V1");
+    expect(v1).toHaveTextContent("Trades 2");
+    expect(v1).toHaveTextContent(/Equity \$964[.,]73/);
+    expect(screen.getByTestId("paper-book-V1-r")).toHaveTextContent(/Nominal R -1[.,]93 · R on actual risk -2[.,]23/);
+    expect(screen.getByTestId("paper-book-V1-capped")).toHaveTextContent("Shrunk by 2× leverage cap 1");
+    expect(screen.getByTestId("paper-book-PASSED")).toHaveTextContent("Trades 1");
+    expect(screen.getByTestId("paper-book-LEGACY")).toHaveTextContent("Disabled: history only");
   });
 });
