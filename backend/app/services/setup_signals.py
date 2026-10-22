@@ -15,6 +15,7 @@ from app.signals.config import SignalConfig
 from app.signals.signal_engine import SignalEngine
 from app.services.engine_store import engine_store
 from app.services.ohlcv_store import ohlcv_store
+from app.services.screener_pullback import SCREENER_PULLBACK_RULE, ScreenerSignalEngine, screener_view
 
 
 _SCREENER_ENTRY_STATUSES = frozenset({"LONG_ENTRY_CANDIDATE", "SHORT_ENTRY_CANDIDATE", "ENTRY_CANDIDATE"})
@@ -28,11 +29,13 @@ def screener_signal_detail(symbol: str, payload: dict[str, Any]) -> Any:
     """
 
     def build() -> tuple[str, dict[str, Any]] | None:
-        status = str(payload.get("status") or "")
-        direction = str(payload.get("direction") or "").upper()
+        # The screener's own view (episode impulse, D220); older cached payloads have none.
+        view = payload.get("screener_setup") or payload
+        status = str(view.get("status") or "")
+        direction = str(view.get("direction") or "").upper()
         if status not in _SCREENER_ENTRY_STATUSES or direction not in ("LONG", "SHORT"):
             return None
-        stop = payload.get("stop") or {}
+        stop = view.get("stop") or {}
         final_stop = stop.get("final_stop") if isinstance(stop, dict) else None
         if final_stop is None or stop.get("provisional"):
             return None
@@ -40,8 +43,8 @@ def screener_signal_detail(symbol: str, payload: dict[str, Any]) -> Any:
         bar = (payload.get("source_candle_timestamps") or {}).get(tf)
         if not tf or not bar:
             return None
-        targets = [t for t in (payload.get("targets") or []) if isinstance(t, dict)]
-        entry = payload.get("entry") or {}
+        targets = [t for t in (view.get("targets") or []) if isinstance(t, dict)]
+        entry = view.get("entry") or {}
         sym = str(symbol).upper()
         fields = {
             "source": "SETUP_SIGNAL_SERVICE",
@@ -58,6 +61,7 @@ def screener_signal_detail(symbol: str, payload: dict[str, Any]) -> Any:
             "signal_entry_price": entry.get("entry_price") if isinstance(entry, dict) else None,
             "calculated_at": payload.get("calculated_at"),
             "detail_version": 1,
+            "pullback_rule": view.get("pullback_rule"),
         }
         return f"{sym}|{tf}|{direction}|{bar}", fields
 
@@ -78,6 +82,9 @@ class SetupSignalService:
             self.settings.research_gate_block_htf_conflict
         )
         self.engine = SignalEngine(self.config)
+        # Screener-only engine (D220): same config, impulse from the BOS episode. Its result goes to
+        # payload["screener_setup"]; the shared engine's payload above stays what paper reads.
+        self.screener_engine = ScreenerSignalEngine(self.config)
         # Performance counters (process-local)
         self.calc_latencies_ms: list[float] = []
         self.symbols_recomputed = 0
@@ -190,9 +197,7 @@ class SetupSignalService:
                 oi_status = "WAITING"
             liq_status = orch.liquidations.liquidation_status().value
 
-        analysis = self.engine.analyze(
-            sym,
-            candles_by_tf,
+        analyze_kwargs: dict[str, Any] = dict(
             rvol_by_tf=rvol_by_tf,
             demand_zone=demand,
             supply_zone=supply,
@@ -204,7 +209,9 @@ class SetupSignalService:
             risk_percent=risk_percent,
             leverage=leverage,
         )
+        analysis = self.engine.analyze(sym, candles_by_tf, **analyze_kwargs)
         payload = analysis.to_dict()
+        payload["screener_setup"] = self._screener_setup(sym, candles_by_tf, payload, analyze_kwargs)
         # Mark STALE only via is_stale() after a newer candle arrives without recompute
         if payload.get("signal_status") != "WAITING":
             payload["signal_status"] = "LIVE"
@@ -244,6 +251,25 @@ class SetupSignalService:
             pass
 
         return payload
+
+    def _screener_setup(
+        self,
+        symbol: str,
+        candles_by_tf: dict[str, list],
+        payload: dict[str, Any],
+        analyze_kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Screener view of the setup (D220). Equal to the shared result unless the setup BOS is
+        confirmed, which is the only case where the episode impulse can change anything."""
+        bos = payload.get("bos") or {}
+        if bos.get("state") != "CONFIRMED":
+            return screener_view(payload, fixed=False)
+        try:
+            fixed = self.screener_engine.analyze(symbol, candles_by_tf, **analyze_kwargs).to_dict()
+        except Exception:  # noqa: BLE001 - the screener view must never break the shared payload
+            return screener_view(payload, fixed=False)
+        used = (fixed.get("impulse") or {}).get("pullback_rule") == SCREENER_PULLBACK_RULE
+        return screener_view(fixed, fixed=used)
 
     def ensure_computed(
         self,
@@ -377,13 +403,15 @@ class SetupSignalService:
         setup_tf = self.config.mtf_setup
         trend_label = trend.get(setup_tf) or trend.get("15m")
         bos = cached.get("bos") or {}
-        impulse = cached.get("impulse") or {}
-        pullback = cached.get("pullback") or {}
-        entry = cached.get("entry") or {}
-        stop = cached.get("stop") or {}
-        targets = cached.get("targets") or []
-        rr = cached.get("risk_reward") or {}
-        status = cached.get("status")
+        # Setup gates come from the screener view (episode impulse, D220) when present.
+        view = cached.get("screener_setup") or cached
+        impulse = view.get("impulse") or {}
+        pullback = view.get("pullback") or {}
+        entry = view.get("entry") or {}
+        stop = view.get("stop") or {}
+        targets = view.get("targets") or []
+        rr = view.get("risk_reward") or {}
+        status = view.get("status")
         calc_at = cached.get("calculated_at")
         calc_dt = None
         if isinstance(calc_at, str):
