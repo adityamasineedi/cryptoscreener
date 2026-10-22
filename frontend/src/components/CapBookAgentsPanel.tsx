@@ -5,6 +5,16 @@ import {
   type CapBookRow,
 } from "../api/client";
 import { isBlacklistedStrategySide } from "../backtest/strategyBlacklist";
+import {
+  RESEARCH_RESULTS_PAGE_PATH,
+  SCORECARD_SNAPSHOT_DATE,
+  SCORECARD_SNAPSHOT_SOURCE,
+  hasBacktestLookaheadD3,
+  researchVerdictFor,
+} from "../research/scorecardSnapshot";
+
+/** User-facing text for the internal "PASS" verdict (owner D201). */
+export const PASS_LABEL = "net > $0 (window)";
 
 type LiveRow = CapBookRow & { shard: string; agentName: string };
 
@@ -35,6 +45,10 @@ type StrategyCheck = {
   coinsUp: number;
   coinsDown: number;
   verdict: "PASS" | "FAIL";
+  /** Per-coin trades and net, used only to spot identical results. */
+  signature: string;
+  /** "<strategy> <tf> <side>" of the first row with identical results, if any. */
+  duplicateOf: string | null;
 };
 
 type CoinVerdict = "PASS" | "LOSS" | "FAILED";
@@ -57,11 +71,17 @@ function coinVerdict(net: number, trades: number): CoinVerdict {
   return "FAILED";
 }
 
+function strategyLabel(row: Pick<StrategyCheck, "combinationId" | "timeframe" | "direction">): string {
+  return `${row.combinationId} ${row.timeframe} ${row.direction}`;
+}
+
+type StrategyAccumulator = Omit<StrategyCheck, "signature" | "duplicateOf"> & { cells: string[] };
+
 function strategyChecks(rows: LiveRow[]): StrategyCheck[] {
-  const grouped = new Map<string, StrategyCheck>();
+  const grouped = new Map<string, StrategyAccumulator>();
   for (const row of rows) {
     const key = `${row.combination_id}|${row.timeframe}|${row.direction}`;
-    const current = grouped.get(key) ?? {
+    const current: StrategyAccumulator = grouped.get(key) ?? {
       combinationId: row.combination_id,
       timeframe: row.timeframe,
       direction: row.direction,
@@ -70,6 +90,7 @@ function strategyChecks(rows: LiveRow[]): StrategyCheck[] {
       coinsUp: 0,
       coinsDown: 0,
       verdict: "FAIL",
+      cells: [],
     };
     const net = Number(row.pnl_usd_net) || 0;
     const trades = Number(row.sample_size) || 0;
@@ -77,11 +98,27 @@ function strategyChecks(rows: LiveRow[]): StrategyCheck[] {
     current.net += net;
     if (trades > 0 && net > 0) current.coinsUp += 1;
     if (trades > 0 && net < 0) current.coinsDown += 1;
+    if (trades > 0) current.cells.push(`${compactSymbol(row.symbol)}:${trades}:${net.toFixed(6)}`);
     grouped.set(key, current);
   }
-  return [...grouped.values()]
-    .map((row) => ({ ...row, verdict: row.net > 0 && row.trades >= 5 ? "PASS" as const : "FAIL" as const }))
+  const sorted: StrategyCheck[] = [...grouped.values()]
+    .map(({ cells, ...row }) => ({
+      ...row,
+      verdict: row.net > 0 && row.trades >= 5 ? "PASS" as const : "FAIL" as const,
+      signature: cells.sort().join("|"),
+      duplicateOf: null,
+    }))
     .sort((a, b) => Number(b.verdict === "PASS") - Number(a.verdict === "PASS") || b.net - a.net);
+  // Identical per-coin trades and net: keep the first row as shown and mark the later ones.
+  // Rows with no trades all look identical, so they are not marked.
+  const firstBySignature = new Map<string, string>();
+  for (const row of sorted) {
+    if (!row.trades) continue;
+    const first = firstBySignature.get(row.signature);
+    if (first) row.duplicateOf = first;
+    else firstBySignature.set(row.signature, strategyLabel(row));
+  }
+  return sorted;
 }
 
 function coinChecks(rows: LiveRow[]): CoinCheck[] {
@@ -207,6 +244,7 @@ export function CapBookAgentsPanel() {
   const passedCoins = coinTotals.filter((row) => row.verdict === "PASS");
   const lossCoins = coinTotals.filter((row) => row.verdict === "LOSS").sort((a, b) => a.net - b.net);
   const failedCoins = coinTotals.filter((row) => row.verdict === "FAILED");
+  const duplicateCount = strategies.filter((row) => row.duplicateOf).length;
 
   return (
     <section
@@ -243,12 +281,23 @@ export function CapBookAgentsPanel() {
 
       <div className="mt-4" data-testid="profit-checker">
         <h3 className="text-sm font-semibold text-terminal-text">Profit checker</h3>
+        <div
+          role="note"
+          data-testid="profit-checker-banner"
+          className="mt-2 rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1.5 text-[11px] font-semibold text-amber-200"
+        >
+          Short-window in-sample screen. Not evidence. See the research results page.{" "}
+          <span className="font-normal text-amber-100/80">
+            (<code className="font-mono">{RESEARCH_RESULTS_PAGE_PATH}</code> in the research worktree)
+          </span>
+        </div>
         <p className="mt-1 text-[11px] text-terminal-muted">
           Whole window, one $1,000 account per coin. 1h is 20 Sep–10 Oct 2026. 4h is 31 Aug–10 Oct 2026.
-          A strategy passes when its combined net is above $0 and it has at least 5 trades.
+          A strategy side is labelled “{PASS_LABEL}” when its combined net is above $0 and it has at least 5 trades.
           Loss coins finished the window below $0. Failed coins took fewer than 5 trades, so they are not a measured loss.
           Worst measured sides are blacklisted and stay hidden.
-          {strategies.length ? ` ${passedStrategies.length} of ${strategies.length} strategy sides passed. ${lossCoins.length} loss coins, ${failedCoins.length} failed coins.` : ""}
+          {strategies.length ? ` ${passedStrategies.length} of ${strategies.length} strategy sides ${PASS_LABEL}. ${lossCoins.length} loss coins, ${failedCoins.length} failed coins.` : ""}
+          {duplicateCount ? ` ${duplicateCount} strategy sides repeat an earlier row's per-coin results and are marked duplicate.` : ""}
         </p>
         <button
           type="button"
@@ -258,7 +307,7 @@ export function CapBookAgentsPanel() {
           {showFailedSides ? "Hide failed strategy sides" : `Show failed strategy sides (${strategies.length - passedStrategies.length})`}
         </button>
         <div className="mt-2 max-h-72 overflow-auto rounded border border-terminal-border/60">
-          <table className="w-full min-w-[760px] border-collapse text-left text-[11px]">
+          <table className="w-full min-w-[1100px] border-collapse text-left text-[11px]">
             <thead className="sticky top-0 bg-black/90 text-[10px] uppercase tracking-wide text-terminal-muted">
               <tr>
                 <th className="px-2 py-2">Check</th>
@@ -269,6 +318,8 @@ export function CapBookAgentsPanel() {
                 <th className="px-2 py-2">Coins up</th>
                 <th className="px-2 py-2">Coins down</th>
                 <th className="px-2 py-2">Combined net</th>
+                <th className="px-2 py-2">Research verdict</th>
+                <th className="px-2 py-2">Notes</th>
               </tr>
             </thead>
             <tbody data-testid="profit-checker-rows">
@@ -282,13 +333,26 @@ export function CapBookAgentsPanel() {
                   <td className="px-2 py-1.5 font-mono">{row.coinsUp}</td>
                   <td className="px-2 py-1.5 font-mono">{row.coinsDown}</td>
                   <td className={`px-2 py-1.5 font-mono ${row.net > 0 ? "text-emerald-400" : "text-red-400"}`}>{netMoney(row.net)}</td>
+                  <td className="px-2 py-1.5" data-testid="research-verdict"><ResearchVerdictCell combinationId={row.combinationId} direction={row.direction} /></td>
+                  <td className="px-2 py-1.5" data-testid="strategy-notes"><StrategyNotes row={row} /></td>
                 </tr>
               ))}
-              {!strategies.length ? <tr><td colSpan={8} className="px-3 py-4 text-center text-terminal-muted">Waiting for completed cells.</td></tr> : null}
+              {!strategies.length ? <tr><td colSpan={10} className="px-3 py-4 text-center text-terminal-muted">Waiting for completed cells.</td></tr> : null}
             </tbody>
           </table>
         </div>
-        <div className="mt-3 max-h-72 overflow-auto rounded border border-terminal-border/60">
+        <p className="mt-1 text-[10px] text-terminal-muted" data-testid="research-snapshot-note">
+          Research verdicts: static snapshot of research/SCORECARD.csv, with final outcomes from KILLED.md and DECISIONS.md,
+          dated {SCORECARD_SNAPSHOT_DATE}, source {SCORECARD_SNAPSHOT_SOURCE}. It does not update by itself.
+        </p>
+        <div
+          role="note"
+          data-testid="coin-checker-banner"
+          className="mt-3 rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1.5 text-[11px] font-semibold text-amber-200"
+        >
+          One 3-week window; coin results here are mostly the coin&apos;s own price move, not evidence. Do not select coins from this table.
+        </div>
+        <div className="mt-2 max-h-72 overflow-auto rounded border border-terminal-border/60">
           <table className="w-full min-w-[860px] border-collapse text-left text-[11px]">
             <thead className="sticky top-0 bg-black/90 text-[10px] uppercase tracking-wide text-terminal-muted">
               <tr>
@@ -299,12 +363,12 @@ export function CapBookAgentsPanel() {
                 <th className="px-2 py-2">4h net</th>
                 <th className="px-2 py-2">Window net</th>
                 <th className="px-2 py-2">Trades</th>
-                <th className="px-2 py-2">Passed cells</th>
+                <th className="px-2 py-2">Cells {PASS_LABEL}</th>
                 <th className="px-2 py-2">Best cell</th>
               </tr>
             </thead>
             <tbody data-testid="coin-checker-rows">
-              <CoinGroup title="Passed coins" rows={passedCoins} />
+              <CoinGroup title={`Coins ${PASS_LABEL}`} rows={passedCoins} />
               <CoinGroup title="Loss coins" rows={lossCoins} />
               <CoinGroup title="Failed coins" rows={failedCoins} />
             </tbody>
@@ -417,9 +481,37 @@ function Verdict({ verdict }: { verdict: "PASS" | "FAIL" | CoinVerdict }) {
         ? "border-amber-500/40 text-amber-200"
         : "border-red-500/40 text-red-300";
   return (
-    <span className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${tone}`}>
-      {verdict}
+    <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[10px] ${tone}`}>
+      {verdict === "PASS" ? PASS_LABEL : verdict}
     </span>
+  );
+}
+
+function ResearchVerdictCell({ combinationId, direction }: { combinationId: string; direction: string }) {
+  const lookup = researchVerdictFor(combinationId, direction);
+  if (!lookup) return <span className="text-terminal-muted">not in research</span>;
+  const { entry, key, note } = lookup;
+  const tone = entry.verdict === "KILLED"
+    ? "border-red-500/40 text-red-300"
+    : "border-amber-500/40 text-amber-200";
+  return (
+    <div className="max-w-[340px]">
+      <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[10px] ${tone}`}>{entry.verdict}</span>
+      <span className="ml-1 text-[10px] text-terminal-muted">{entry.stage}</span>
+      <div className="mt-0.5 text-[10px] text-terminal-muted" title={`${key} · ${entry.source}`}>{entry.reason}</div>
+      {note ? <div className="mt-0.5 text-[10px] text-amber-200/80">{note}</div> : null}
+    </div>
+  );
+}
+
+function StrategyNotes({ row }: { row: StrategyCheck }) {
+  const lookahead = hasBacktestLookaheadD3(row.combinationId);
+  if (!lookahead && !row.duplicateOf) return <span className="text-terminal-muted">—</span>;
+  return (
+    <div className="flex flex-col gap-0.5 text-[10px]">
+      {lookahead ? <span className="text-red-300">lookahead in backtest (D3)</span> : null}
+      {row.duplicateOf ? <span className="text-amber-200">duplicate of {row.duplicateOf}</span> : null}
+    </div>
   );
 }
 
