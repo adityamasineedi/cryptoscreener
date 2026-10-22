@@ -55,6 +55,8 @@
  },
  "cost_stop_entry_ref": "near_edge",
  "_cost_stop_entry_ref_doc": "Entry price the D145 entry-to-stop filter measures from: 'near_edge' = the entry-zone edge nearest the stop (the smallest distance, the worst fill inside the zone), or 'mid' = the entry-zone mid. Default near_edge. Conflict in the owner's text (D145): it says 'entry mid', but also says the second SOL alert of 2026-10-21 (bar 17:00 UTC, zone 108.54-108.12, SL 107.70, stop about 0.4%) must be skipped. At the mid (108.33) that stop is 0.58% away, above the 0.42% cutoff, so 'mid' would NOT skip it; at the near edge (108.12) it is 0.39%, below the cutoff, so 'near_edge' does. near_edge is the more conservative reading and matches the owner's stated expectation; set 'mid' to follow the literal text.",
+ "screener_cost_ok_only": false,
+ "_screener_cost_ok_only_doc": "Owner ruling D188 part 3: true sends a SCREENER alert only when its cost as R is OK, the same rule as the screener's Trade chances column: cost as R = 2 x (taker 0.05% + slippage 0.02%, 0.05% on AAVE/APT/ARB/DOT/ETC/OP/FIL) x entry / |entry - stop| <= 0.25, entry = the screener's entry price (the signal close when the row has none). Otherwise the signal is a SKIPPED_COST_R skip, never sent. Default false (no change). Other sources are not affected; every alert keeps the UNPROVEN line.",
  "validity_bars": 3,
  "late_minutes": 15,
  "forward_runner": {

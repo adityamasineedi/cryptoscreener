@@ -200,7 +200,8 @@ def _journal_item(book, event, row, ref, data, cfg, outcomes):  # noqa: ANN001
             side=str(row["direction"]), timeframe=str(row["timeframe"]), signal_bar=row["setup_bar_time"],
             decided_at=row["ts"], journal_ref=ref, stop=_f(row.get("stop_price")), tested_target=_f(row.get("tp1")),
             target_tested=False,
-            extra={"live_outcome": "screener_signal", "screener_status": row.get("status"), "engine_values": "journal"},
+            extra={"live_outcome": "screener_signal", "screener_status": row.get("status"), "engine_values": "journal",
+                   "signal_entry_price": _f(row.get("signal_entry_price"))},
         )
         enrich_market(sig, data, cfg)
         return sig

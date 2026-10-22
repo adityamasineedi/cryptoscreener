@@ -14,6 +14,7 @@ from app.api.routes import router, ws_router
 from app.grid_trading.api import router as grid_trading_router
 from app.research.intraday_bos_sd.api import router as intraday_bos_sd_router
 from app.research.regime_lab.api import router as regime_lab_router
+from app.screener_tool.api import router as screener_tool_router
 from app.config import ROOT, get_settings
 from app.core.logging import get_logger, setup_logging
 from app.ingestion import service as ingestion_mod
@@ -125,6 +126,8 @@ def create_app() -> FastAPI:
     app.include_router(intraday_bos_sd_router, prefix="/api")
     app.include_router(regime_lab_router, prefix="/api")
     app.include_router(grid_trading_router, prefix="/api")
+    # Owner D188: screener context columns and the My Trades journal (display and journal only).
+    app.include_router(screener_tool_router, prefix="/api")
     app.include_router(ws_router, prefix="/ws")
     return app
 

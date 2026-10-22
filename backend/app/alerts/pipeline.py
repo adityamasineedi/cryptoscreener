@@ -3,7 +3,8 @@ daily summary. Every alert, skip and follow-up is one row in ``alerts.jsonl``.
 
 Order of the not-sent codes (the first that applies is the row's ``code``; every one that applies is in
 ``flags``): SUPPRESSED_KILLED, LATE, NOT_OPENED, plan errors (NO_TICK_SIZE, NO_ENGINE_STOP, NO_MARKET_DATA,
-INVALID_STOP, NO_TESTED_TARGET, INVALID_TARGET), SKIPPED_COST, SKIPPED_COST_STOP, RATE_LIMITED. Duplicates
+INVALID_STOP, NO_TESTED_TARGET, INVALID_TARGET), SKIPPED_COST, SKIPPED_COST_STOP, SKIPPED_COST_R (SCREENER only,
+with ``screener_cost_ok_only`` true; owner D188), RATE_LIMITED. Duplicates
 are DUPLICATE. Before all of them, a source's excluded symbol (D108/D120: no directional BTC alert) is
 EXCLUDED_SYMBOL.
 
@@ -56,6 +57,8 @@ EXCLUDED_SYMBOL = "EXCLUDED_SYMBOL"
 # Owner ruling D145.
 NOT_OPENED = "NOT_OPENED"
 SKIPPED_COST_STOP = "SKIPPED_COST_STOP"
+# Owner ruling D188 part 3: with screener_cost_ok_only true, a SCREENER signal whose cost as R > 0.25 is not sent.
+SKIPPED_COST_R = "SKIPPED_COST_R"
 # Owner ruling D149: paper_trades signal_snippet sources per alert source (the books whose trades live there).
 LEDGER_SNIPPET_SOURCES: dict[str, list[str]] = {}
 for _snip, _src in BOOK_SOURCE.items():
@@ -211,10 +214,14 @@ class AlertPipeline:
         plan, err = build_plan(sig, cfg)
         cost = bool(plan and plan["cost_skip"])
         cost_stop = bool(plan and plan["cost_stop_skip"])
+        cost_r = bool(plan and cfg.screener_cost_ok_only and sig.source == "SCREENER"
+                      and plan.get("screener_cost_too_high"))
         flags = {"killed": killed, "late": late, "not_opened": not_opened, "plan_error": err,
                  "cost": cost if plan else None, "cost_stop": cost_stop if plan else None}
         if exception:
             flags["killed_opened_exception"] = True
+        if cfg.screener_cost_ok_only and sig.source == "SCREENER":
+            flags["cost_r"] = cost_r if plan else None
         if killed:
             code = "SUPPRESSED_KILLED"
         elif late:
@@ -227,6 +234,8 @@ class AlertPipeline:
             code = "SKIPPED_COST"
         elif cost_stop:
             code = SKIPPED_COST_STOP
+        elif cost_r:
+            code = SKIPPED_COST_R
         else:
             code = None
         if code is None:
@@ -528,7 +537,8 @@ def _plan_log(plan: Mapping[str, Any] | None) -> dict[str, Any] | None:
             "targets", "t2_tested", "rr_tested", "rr_raw", "t2_below_min_r", "stop_pct", "leverage",
             "leverage_needed", "leverage_cap_bound", "risk_pct_shown", "round_trip_cost", "stop_frac",
             "span_frac", "cost_floor_frac", "cost_band", "cost_skip", "cost_stop_entry_ref", "cost_stop_entry_price",
-            "cost_stop_frac", "cost_stop_round_trip", "cost_stop_floor_frac", "cost_stop_skip", "rounded")
+            "cost_stop_frac", "cost_stop_round_trip", "cost_stop_floor_frac", "cost_stop_skip", "screener_cost_r",
+            "screener_cost_r_max", "screener_cost_too_high", "rounded")
     return {k: plan[k] for k in keys}
 
 

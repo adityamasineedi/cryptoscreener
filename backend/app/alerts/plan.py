@@ -194,6 +194,15 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
     cost_stop_frac = (entry_ref - stop) * sgn / entry_ref
     cost_stop_floor = cfg.cost_stop_floor()
 
+    # Owner ruling D188 part 3: the screener's cost-as-R rule (D144 round trip / stop distance, thin coins at
+    # 5 bp), measured from the screener's own entry price (the signal close when the row has none).
+    screener_cost = None
+    if sig.source == "SCREENER":
+        from app.screener_tool.costs import cost_as_r
+
+        ref = sig.extra.get("signal_entry_price")
+        screener_cost = cost_as_r(ref if ref is not None else close, stop, sig.symbol, side=sig.side)
+
     zone_lo, zone_hi = (far, close) if long else (close, far)
     plan = {
         "tick": tick,
@@ -227,6 +236,10 @@ def build_plan(sig: Signal, cfg: AlertConfig) -> tuple[dict[str, Any] | None, st
         "cost_stop_round_trip": cfg.cost_stop_round_trip(),
         "cost_stop_floor_frac": cost_stop_floor,
         "cost_stop_skip": cost_stop_frac + 1e-15 < cost_stop_floor,
+        "screener_cost_r": screener_cost["cost_r"] if screener_cost else None,
+        "screener_cost_r_max": screener_cost["cost_r_max"] if screener_cost else None,
+        # True also when the levels are unusable for the rule: no cost as R means no cost-OK.
+        "screener_cost_too_high": (screener_cost["cost_ok"] is not True) if screener_cost else None,
         "rounded": {
             "zone_a": fmt_price(close, tick),
             "zone_b": fmt_price(far, tick),

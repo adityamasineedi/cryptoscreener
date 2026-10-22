@@ -155,6 +155,12 @@ class AlertConfig:
         cs = {**COST_STOP_DEFAULTS, **(self.raw.get("cost_stop") or {})}
         return float(cs["multiple"]) * self.cost_stop_round_trip()
 
+    # --- owner ruling D188 part 3 ------------------------------------------------------------------
+    @property
+    def screener_cost_ok_only(self) -> bool:
+        """SCREENER alerts go out only when cost as R <= 0.25 (the screener's D144 rule). Off unless explicitly true."""
+        return self.raw.get("screener_cost_ok_only", False) is True
+
     @property
     def cost_stop_entry_ref(self) -> str:
         ref = str(self.raw.get("cost_stop_entry_ref", "near_edge"))
