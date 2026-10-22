@@ -16,6 +16,9 @@ import { ResearchScorecard, verdictClass } from "./ResearchScorecard";
 
 export const OLD_RANKING_TITLE =
   "Old in-sample ranking (window 2026-02-14 to 2026-10-12 overlaps the sealed holdout; not evidence)";
+/** Tab count text (owner D197, DECISIONS D225): cells that passed merge_rank.py's four-part rule. */
+export const OLD_RULE_CELLS_TEXT =
+  "cells passed the old rule (net > 0, PF > 1.2, >= 15 trades, fees < gross; in-sample, overlaps the holdout)";
 /** Current default taker fee (owner D144; grid and backtest defaults since e4e389e). */
 export const CURRENT_DEFAULT_TAKER_PCT = 0.05;
 
@@ -386,7 +389,7 @@ export function StrategyRankBoard({
                 >
                   {groupTitle(g)}
                   <span className="ml-1.5 font-mono text-[10px] text-terminal-muted">
-                    {g.cells_net_positive ?? 0} of {g.cells ?? 0} cells net &gt; 0 (old rule)
+                    {g.cells_passing ?? 0} of {g.cells ?? 0} {OLD_RULE_CELLS_TEXT}
                   </span>
                 </button>
               ))}

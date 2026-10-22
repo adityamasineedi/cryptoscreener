@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { StrategyRankResponse, StrategyRankRow } from "../api/client";
 import { RESEARCH_RESULTS_PAGE_PATH } from "../research/scorecardSnapshot";
 import { NO_PASS_BANNER } from "./ResearchScorecard";
-import { OLD_RANKING_TITLE, StrategyRankBoard, StrategyRankDetail, withoutSmallRun } from "./StrategyRankBoard";
+import { OLD_RANKING_TITLE, OLD_RULE_CELLS_TEXT, StrategyRankBoard, StrategyRankDetail, withoutSmallRun } from "./StrategyRankBoard";
 
 function row(over: Partial<StrategyRankRow>): StrategyRankRow {
   return {
@@ -98,6 +98,8 @@ const RANK: StrategyRankResponse = {
       caveats: [],
       rows: [row({ key: "scalp|INTRADAY_BOS_SD_V1.C|LONG|5m", strategy_id: "INTRADAY_BOS_SD_V1.C", variant: "C" })],
     },
+    { id: "swing", label: "Swing", timeframes: "4h · 1d", cells: 780, cells_net_positive: 92, cells_passing: 0, caveats: [], rows: [] },
+    { id: "grid", label: "Grid", timeframes: "grid engines", cells: 340, cells_net_positive: 179, cells_passing: 41, caveats: [], rows: [] },
   ],
 };
 
@@ -122,6 +124,9 @@ describe("Strategies page: research scorecard on top", () => {
     expect(screen.getByTestId("scorecard-pointer").textContent).toContain(RESEARCH_RESULTS_PAGE_PATH);
     expect(RESEARCH_RESULTS_PAGE_PATH).toBe("research/out/report/index.html");
     expect(screen.getByTestId("scorecard-snapshot").textContent).toContain("7e92b67");
+    expect(screen.getByTestId("scorecard-harness").textContent).toContain(
+      "with 0.04% taker and 0.02% maker. D142 showed this changes no verdict."
+    );
   });
 
   it("lists the later families with their final verdicts", () => {
@@ -206,11 +211,26 @@ describe("Strategies page: old in-sample ranking", () => {
     );
   });
 
-  it("labels the tab count as cells net > 0 under the old rule", () => {
+  it("counts the cells that passed the old four-part rule, never the net > 0 counts", () => {
     renderBoard();
-    expect(screen.getByTestId("rank-tab-day").textContent).toContain("88 of 406 cells net > 0 (old rule)");
-    expect(screen.getByTestId("rank-tab-scalp").textContent).toContain("35 of 340 cells net > 0 (old rule)");
-    expect(screen.getByTestId("strategy-rank-board").textContent).not.toMatch(/cells pass\b/);
+    const rule =
+      "cells passed the old rule (net > 0, PF > 1.2, >= 15 trades, fees < gross; in-sample, overlaps the holdout)";
+    expect(OLD_RULE_CELLS_TEXT).toBe(rule);
+    const tabs: Array<[string, string]> = [
+      ["day", `37 of 406 ${rule}`],
+      ["scalp", `3 of 340 ${rule}`],
+      ["swing", `0 of 780 ${rule}`],
+      ["grid", `41 of 340 ${rule}`],
+    ];
+    for (const [id, text] of tabs) {
+      const count = screen.getByTestId(`rank-tab-${id}`).querySelector("span");
+      expect(count?.textContent).toBe(text);
+    }
+    const board = screen.getByTestId("strategy-rank-board").textContent ?? "";
+    for (const netPositive of ["88 of 406", "35 of 340", "92 of 780", "179 of 340"]) {
+      expect(board).not.toContain(netPositive);
+    }
+    expect(board).not.toMatch(/cells pass\b|cells net > 0/);
   });
 
   it("shows only ranking numbers on a card and leaves the small run off", () => {

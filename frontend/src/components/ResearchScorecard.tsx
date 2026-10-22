@@ -145,7 +145,7 @@ export function ResearchScorecard() {
         These verdicts come from the research harness, not from the old ranking further down. The
         tournament ran each engine as coded (the COMBO family on its next-bar-open book with
         adverse slippage; the multicap engine still at the signal close, flagged in DESIGN_FLAWS)
-        with 0.04% taker and 0.02% maker. N1, N2, HD-2, HR-1, HD-1 and H-COMBO used the D144 costs:
+        with 0.04% taker and 0.02% maker. D142 showed this changes no verdict. N1, N2, HD-2, HR-1, HD-1 and H-COMBO used the D144 costs:
         0.05% taker, 2 bp slippage (5 bp on seven thinner coins), no zero-slippage fills.
       </p>
 
