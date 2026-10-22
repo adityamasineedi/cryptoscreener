@@ -70,3 +70,6 @@ backend/scripts/smc_monthly/btc_ohlcv.csv
 # Trade-alert sidecar output (dry-run previews, alert log, state)
 data/alerts/
 data/alerts_*/
+
+# Runtime data written by the live backend (owner D207); nothing under it is tracked on 1286ee7.
+backend/data/
