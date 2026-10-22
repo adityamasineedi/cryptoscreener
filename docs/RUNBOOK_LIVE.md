@@ -7,6 +7,7 @@ What to do when something breaks in live paper. Proposal on branch `live/d128e-r
 - **D53.** Only the **owner** starts, stops or restarts a live process: the backend, the frontend, the forward runners (FWD-1, FWD-3, CANDLE12 V3 OOS-2) and their scheduled tasks. A Claude session only diagnoses (read-only), writes the exact steps into `research/OWNER_QUEUE.md`, and verifies afterwards.
 - **C2.** Nothing here changes live paper behaviour: no edits to `.env`, armed sides, stops, risk or engine code as a "fix". A real fix is a `live/*` branch with a replay test, merged by the owner.
 - **Frozen files.** Never edit, move or restore by hand anything listed in `docs/candle12_v3_oos_contract.lock.json` (37 files) or the CANDLE12 V3 OOS-2 store. The OOS-2 runner re-fingerprints them every 5 minutes and halts on drift.
+- **Never checkout or switch branches in `D:\cryptoscreener`** (owner D189). Owner branch work happens in a separate worktree (`git -C D:\cryptoscreener worktree add D:\cryptoscreener-worktrees\<name> <branch>`). A checkout in the live folder deletes or overwrites runtime files that a branch tracks or untracks (2026-10-22: it reset the CANDLE12_V2 virtual store, D207). Merges into live stay `--ff-only` from a worktree-built branch.
 - **Secrets.** Never paste `.env` values into a chat, a log, a ticket or this repo. Commands below that need the database password prompt for it (`psql` asks).
 
 Each step is tagged with who does it: **[Owner]** or **[Claude]** (any Claude session, read-only unless stated).
