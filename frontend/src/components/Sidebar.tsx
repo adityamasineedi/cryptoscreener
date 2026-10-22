@@ -12,6 +12,7 @@ const items = [
   { to: "/bos-strategy-research", label: "BOS Strategies", short: "BS" },
   { to: "/intraday-bos-sd", label: "Intraday BOS SD", short: "IB" },
   { to: "/paper", label: "Paper Trade", short: "Pt" },
+  { to: "/my-trades", label: "My Trades", short: "MT" },
   { to: "/watchlist", label: "Watchlist", short: "Wl" },
   { to: "/alerts", label: "Alerts", short: "Al" },
   { to: "/charts", label: "Charts", short: "Ch" },

@@ -17,6 +17,7 @@ import { OhlcvExpandBanner } from "./components/OhlcvExpandBanner";
 import { OhlcvHistoryPanel } from "./components/OhlcvHistoryPanel";
 import { PaperTradePanel } from "./components/PaperTradePanel";
 import { LivePaperPanel } from "./components/LivePaperPanel";
+import { MyTradesPage } from "./myTrades/MyTradesPage";
 import { ScreenerTable } from "./components/ScreenerTable";
 import { Sidebar } from "./components/Sidebar";
 import { StrategiesPanel } from "./components/StrategiesPanel";
@@ -169,6 +170,7 @@ export default function App() {
           <Route path="/grid-trading" element={<GridTradingPanel />} />
           <Route path="/paper" element={<PaperTradePanel />} />
           <Route path="/live-paper" element={<LivePaperPanel />} />
+          <Route path="/my-trades" element={<MyTradesPage />} />
           <Route path="/watchlist" element={<Placeholder title="Watchlist" />} />
           <Route path="/alerts" element={<AlertsPanel />} />
           <Route path="/charts" element={<ChartsPage />} />

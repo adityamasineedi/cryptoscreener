@@ -18,6 +18,7 @@ import {
 } from "../api/client";
 import { PassedRegimePanel } from "./PassedRegimePanel";
 import { Book16PaperPanel } from "./Book16PaperPanel";
+import { TradeChancesTable } from "./TradeChancesTable";
 import {
   BookConfigHeader,
   BookRollupPanel,
@@ -31,7 +32,6 @@ import { formatIst, formatUtc } from "../paper/zoneTime";
 import {
   CLOSED_LIMIT,
   closedTruncationNote,
-  opportunityAction,
   paperRiskLabel,
 } from "../paper/paperLabels";
 
@@ -476,7 +476,7 @@ export function PaperTradePanel() {
         {oppMeta.note ? (
           <p className="mb-2 text-[11px] text-amber-200/90">{oppMeta.note}</p>
         ) : null}
-        <OpportunityTable
+        <TradeChancesTable
           rows={tierFilter === "ALL" ? opps : opps.filter((r) => r.tier === tierFilter)}
           empty="No setups in cache yet — open Screener so symbols warm, then refresh."
           autoOn={autoOn}
@@ -808,83 +808,6 @@ function Stat({
     >
       <div className="text-[10px] uppercase tracking-wide text-terminal-muted">{label}</div>
       <div className={`mt-1 font-mono text-sm ${color}`}>{value}</div>
-    </div>
-  );
-}
-
-function tierClass(tier: string): string {
-  if (tier === "READY") return "text-emerald-300";
-  if (tier === "NEAR") return "text-amber-300";
-  if (tier === "FORMING") return "text-sky-300";
-  if (tier === "BLOCKED") return "text-rose-300";
-  if (tier === "WAITING") return "text-terminal-muted";
-  return "text-terminal-muted";
-}
-
-function OpportunityTable({
-  rows,
-  empty,
-  autoOn,
-  watcherOwns,
-  legacyAutoOn,
-}: {
-  rows: PaperOpportunity[];
-  empty: string;
-  autoOn: boolean;
-  watcherOwns: boolean;
-  legacyAutoOn: boolean;
-}) {
-  if (!rows.length) {
-    return (
-      <div className="rounded border border-dashed border-terminal-border px-3 py-6 text-center text-[12px] text-terminal-muted">
-        {empty}
-      </div>
-    );
-  }
-  return (
-    <div className="overflow-x-auto rounded border border-terminal-border">
-      <table className="min-w-full text-left font-mono text-[11px]">
-        <thead className="bg-black/20 text-[10px] uppercase tracking-wide text-terminal-muted">
-          <tr>
-            <th className="px-2 py-1.5">Tier</th>
-            <th className="px-2 py-1.5">Symbol</th>
-            <th className="px-2 py-1.5">Status</th>
-            <th className="px-2 py-1.5">Trend</th>
-            <th className="px-2 py-1.5">BOS</th>
-            <th className="px-2 py-1.5">Impulse</th>
-            <th className="px-2 py-1.5">Pullback</th>
-            <th className="px-2 py-1.5">Entry</th>
-            <th className="px-2 py-1.5">Stop</th>
-            <th className="px-2 py-1.5">TP1</th>
-            <th className="px-2 py-1.5">Pass</th>
-            <th className="px-2 py-1.5">Chance</th>
-            <th className="px-2 py-1.5">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={`${r.symbol}-${r.tier}-${r.status}`} className="border-t border-terminal-border/70">
-              <td className={`px-2 py-1.5 font-semibold ${tierClass(r.tier)}`}>{r.tier}</td>
-              <td className="px-2 py-1.5 text-terminal-text">{r.symbol}</td>
-              <td className="px-2 py-1.5">{r.status}</td>
-              <td className="px-2 py-1.5">{r.setup_trend || "—"}</td>
-              <td className="px-2 py-1.5">{r.bos || "—"}</td>
-              <td className="px-2 py-1.5">{r.impulse || "—"}</td>
-              <td className="px-2 py-1.5">{r.pullback || "—"}</td>
-              <td className="px-2 py-1.5">{fmt(r.entry_price, 4)}</td>
-              <td className="px-2 py-1.5">{fmt(r.stop_price, 4)}</td>
-              <td className="px-2 py-1.5">{fmt(r.tp1_price, 4)}</td>
-              <td className="px-2 py-1.5">{r.pass_count}/8</td>
-              <td className="max-w-[14rem] truncate px-2 py-1.5 text-terminal-muted" title={r.chance}>
-                {r.chance}
-              </td>
-              <td className="px-2 py-1.5" data-testid="opportunity-action">
-                {opportunityAction(r, { autoOn, watcherOwns, legacyAutoOn })}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
