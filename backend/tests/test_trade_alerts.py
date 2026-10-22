@@ -367,10 +367,16 @@ def test_pipeline_followups_and_daily_summary(tmp_path):
     p.state["last_summary_day"] = (T0.date() - timedelta(days=1)).isoformat()
     assert p.update_trackers(t + timedelta(hours=3)) == 3
     out = p.maybe_daily_summary(datetime(2026, 10, 21, 0, 0, 30, tzinfo=timezone.utc))
+    # Owner ruling D149: CANDLE12_V2 trades are not in paper_trades, so its opened alert has no ledger row.
     assert out == [
         PREFIX + "📅 DAILY SUMMARY - 2026-10-20 UTC\n"
-        "Alerts sent: 1 | Filled: 1\n"
-        "Wins: 0 | Losses: 1 | Total R: -1.1\n"
+        "Paper trades from sent alerts (paper ledger): 1\n"
+        "PAPER: 1 alerts, open 0, closed 0, W/L 0/0, R +0.00, pnl +$0.00, ledger: not found 1\n"
+        "- CANDLE12_V2 BTC LONG 1h bar 10-20 17:00: ledger: not found\n"
+        "\n"
+        "alert levels touched (not paper trades)\n"
+        "Alerts sent: 1 | Entry filled: 1\n"
+        "TP/SL hit: wins 0 | losses 1 | Tracked R: -1.1\n"
         "PAPER: sent 1, filled 1, W/L 0/1, R -1.1, not sent 0"
     ]
     kinds = [(r["kind"], r.get("event")) for r in rows(tmp_path)]
@@ -1149,3 +1155,129 @@ def test_d145_fwd1_trades_and_backfilled_positions_are_opened(tmp_path):
               "signal_snippet": {"source": "V1_PAPER_WATCHER"}}]
     (b,) = paper_trade_items(rows_, data=MemoryData(), cfg=cfg())
     assert b.source == "COMBO_02_V1" and b.extra["live_outcome"] == "opened"
+
+
+# --- owner ruling D149: the daily summary counts paper trades the book opened, from the paper ledger ----------
+D149_LABEL = "alert levels touched (not paper trades)"
+SUMMARY_AT = datetime(2026, 10, 21, 0, 0, 30, tzinfo=timezone.utc)
+
+
+def _eth_sig(**kw) -> Signal:
+    base = dict(source="COMBO_02_V1", strategy_id="COMBO_02_V1", symbol="ETHUSDT", side="LONG", timeframe="1h",
+                signal_bar=T0, decided_at=T0 + timedelta(hours=1, minutes=1), stop=2450.0, tested_target=2612.5,
+                signal_close=2500.0, atr=25.0, journal_ref={"file": "decision_journal.jsonl", "line": 3},
+                extra={"live_outcome": "opened"})
+    base.update(kw)
+    return Signal(**base)
+
+
+def _eth_bars():
+    t = T0 + timedelta(hours=1)
+    return [bar(t, 2500.0, 2505.0, 2490.0, 2495.0),        # fills the entry zone
+            bar(t + timedelta(hours=1), 2495.0, 2496.0, 2400.0, 2420.0)]  # through the SL
+
+
+def _v1_trade(**kw):
+    base = {"id": "pt-1", "symbol": "ETHUSDT", "side": "LONG", "status": "CLOSED", "entry_price": 2500.0,
+            "stop_price": 2450.0, "tp1_price": 2612.5, "opened_at": (T0 + timedelta(hours=1)).isoformat(),
+            "closed_at": (T0 + timedelta(hours=3)).isoformat(), "exit_price": 2446.0, "exit_reason": "STOP",
+            "pnl_usd": -19.72, "r_multiple": -1.08, "source_candle_ts": T0.isoformat(), "timeframe": "1h",
+            "signal_snippet": {"source": "V1_PAPER_WATCHER"}}
+    base.update(kw)
+    return base
+
+
+def _summary(p):
+    t = T0 + timedelta(hours=1)
+    p.state["last_summary_day"] = (T0.date() - timedelta(days=1)).isoformat()
+    p.update_trackers(t + timedelta(hours=3))
+    (out,) = p.maybe_daily_summary(SUMMARY_AT)
+    return out
+
+
+GOLDEN_D149 = PREFIX + """📅 DAILY SUMMARY - 2026-10-20 UTC
+Paper trades from sent alerts (paper ledger): 1
+PAPER: 1 alerts, open 0, closed 1, W/L 0/1, R -1.08, pnl -$19.72
+- COMBO_02_V1 ETH LONG 1h bar 10-20 17:00: CLOSED, STOP, R -1.08, pnl -$19.72
+
+alert levels touched (not paper trades)
+Alerts sent: 2 | Entry filled: 2
+TP/SL hit: wins 0 | losses 2 | Tracked R: -2.3
+PAPER: sent 1, filled 1, W/L 0/1, R -1.1, not sent 0
+UNPROVEN: sent 1, filled 1, W/L 0/1, R -1.1, not sent 0
+SCREENER (no paper book): sent 1"""
+
+
+def test_d149_golden_daily_summary(tmp_path):
+    """One opened V1 alert whose ledger trade closed -1.08 R, and one screener alert the tracker followed only."""
+    data = MemoryData({("ETHUSDT", "1h"): _eth_bars()}, [_v1_trade()])
+    p = pipe(tmp_path, data=data)
+    v1 = _eth_sig(position_id="pt-1")
+    scr = _eth_sig(source="SCREENER", strategy_id="SCREENER_SETUP", extra={"live_outcome": "screener_signal"},
+                   journal_ref={"file": "decision_journal.jsonl", "line": 4})
+    assert p.handle(v1, v1.bar_close + timedelta(minutes=1))["code"] == "DRY_RUN"
+    assert p.handle(scr, scr.bar_close + timedelta(minutes=1))["code"] == "DRY_RUN"
+    out = _summary(p)
+    assert out == GOLDEN_D149
+    row = rows(tmp_path)[-1]
+    assert row["kind"] == "SUMMARY" and row["alerts"][0]["ledger"]["r_multiple"] == -1.08
+    assert row["alerts"][1]["paper_book"] is False and "ledger" not in row["alerts"][1]
+    assert p.state["summary_alerts"] == {}
+
+
+def test_d149_not_opened_signals_are_excluded_from_the_main_section(tmp_path):
+    data = MemoryData({("ETHUSDT", "1h"): _eth_bars()}, [_v1_trade()])
+    p = pipe(tmp_path, cfg(send_not_opened=True), data=data)
+    s = _eth_sig(extra={"live_outcome": "not_opened", "skip_reason": "sticky_bos_skip"})
+    row = p.handle(s, s.bar_close + timedelta(minutes=1))
+    assert row["kind"] == "ALERT" and row["flags"]["not_opened"] == "sticky_bos_skip"
+    out = _summary(p).split("\n")
+    assert "Paper trades from sent alerts (paper ledger): 0" in out
+    assert not any(x.startswith("- ") for x in out)  # no ledger line for the not-opened signal
+    main, touched = out[:out.index(D149_LABEL)], out[out.index(D149_LABEL):]
+    assert not any(x.startswith("PAPER:") for x in main)
+    assert "Alerts sent: 1 | Entry filled: 1" in touched
+
+
+def test_d149_label_text_is_exact():
+    from app.alerts.plan import TOUCHED_LABEL, render_summary
+
+    assert TOUCHED_LABEL == D149_LABEL
+    assert D149_LABEL in render_summary("2026-10-21", {}).split("\n")
+    assert D149_LABEL in render_summary("2026-10-21", {"FORWARD-PASSED": {"sent": 1}}).split("\n")
+
+
+def test_d149_missing_ledger_row_is_shown_as_not_found(tmp_path):
+    data = MemoryData({("ETHUSDT", "1h"): _eth_bars()}, [])
+    p = pipe(tmp_path, data=data)
+    s = _eth_sig(position_id="pt-missing")
+    p.handle(s, s.bar_close + timedelta(minutes=1))
+    out = _summary(p).split("\n")
+    assert "- COMBO_02_V1 ETH LONG 1h bar 10-20 17:00: ledger: not found" in out
+    assert "PAPER: 1 alerts, open 0, closed 0, W/L 0/0, R +0.00, pnl +$0.00, ledger: not found 1" in out
+
+
+def test_d149_ledger_match_by_symbol_side_and_open_time_within_the_book(tmp_path):
+    """No position_id: the book's own trade on the symbol and side opened near the signal bar; another book's
+    trade on the same bar is not taken, nor a trade opened two bars later."""
+    trades = [_v1_trade(id="other", signal_snippet={"source": "PASSED_CAP_BOOK"}, r_multiple=3.0),
+              _v1_trade(id="late", opened_at=(T0 + timedelta(hours=3)).isoformat(), r_multiple=2.0),
+              _v1_trade(id="open", status="OPEN", closed_at=None, exit_price=None, exit_reason=None, pnl_usd=None,
+                        r_multiple=None, opened_at=(T0 + timedelta(hours=1, seconds=4)).isoformat())]
+    p = pipe(tmp_path, data=MemoryData({("ETHUSDT", "1h"): _eth_bars()}, trades))
+    s = _eth_sig()
+    p.handle(s, s.bar_close + timedelta(minutes=1))
+    out = _summary(p).split("\n")
+    assert "- COMBO_02_V1 ETH LONG 1h bar 10-20 17:00: OPEN, R -, pnl -" in out
+    assert "PAPER: 1 alerts, open 1, closed 0, W/L 0/0, R +0.00, pnl +$0.00" in out
+
+
+def test_d149_ledger_read_failure_is_marked_and_the_summary_still_goes_out(tmp_path):
+    class Broken(MemoryData):
+        def paper_trade(self, position_id):
+            raise ConnectionError("db down")
+
+    p = pipe(tmp_path, data=Broken({("ETHUSDT", "1h"): _eth_bars()}))
+    s = _eth_sig(position_id="pt-1")
+    p.handle(s, s.bar_close + timedelta(minutes=1))
+    assert "- COMBO_02_V1 ETH LONG 1h bar 10-20 17:00: ledger: read failed (ConnectionError)" in _summary(p).split("\n")

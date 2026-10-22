@@ -9,6 +9,10 @@ EXCLUDED_SYMBOL.
 
 Owner ruling D145: NOT_OPENED = a paper-book signal whose paper outcome is not "opened" (sent anyway, marked,
 only with ``send_not_opened`` true); SKIPPED_COST_STOP = entry-to-stop distance under 3x the D144 round trip.
+
+Owner ruling D149: the daily summary's main section counts only sent alerts for trades a paper book OPENED and
+shows the paper ledger's result for each (paper_trades, read only); the tracker's numbers follow under
+"alert levels touched (not paper trades)".
 """
 
 from __future__ import annotations
@@ -19,11 +23,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Mapping
 
-from app.alerts.config import AlertConfig
+from app.alerts.config import AlertConfig, timeframe_minutes
 from app.alerts.data import MarketData
 from app.alerts.plan import Signal, base_asset, build_plan, render_alert, render_followup, render_summary, utc
 from app.alerts.sender import PreviewWriter, ReplyingTelegramSender
-from app.alerts.sources import SkipRecord
+from app.alerts.sources import BOOK_SOURCE, SkipRecord
 from app.alerts.tracker import DONE, expire_if_due, new_tracker, step
 
 STATE_VERSION = 1
@@ -32,6 +36,10 @@ EXCLUDED_SYMBOL = "EXCLUDED_SYMBOL"
 # Owner ruling D145.
 NOT_OPENED = "NOT_OPENED"
 SKIPPED_COST_STOP = "SKIPPED_COST_STOP"
+# Owner ruling D149: paper_trades signal_snippet sources per alert source (the books whose trades live there).
+LEDGER_SNIPPET_SOURCES: dict[str, list[str]] = {}
+for _snip, _src in BOOK_SOURCE.items():
+    LEDGER_SNIPPET_SOURCES.setdefault(_src, []).append(_snip)
 
 
 def not_opened_reason(sig: Signal, cfg: AlertConfig) -> str | None:
@@ -55,6 +63,7 @@ def fresh_state() -> dict[str, Any]:
         "message_ids": {},
         "stats": {},
         "last_summary_day": None,
+        "summary_alerts": {},
         "offsets": {"journal_offset": 0, "journal_lines": 0, "fwd1_seq": -1, "fwd3_line": 0},
         "fwd1_seen": [],
         "fwd3_seen": [],
@@ -218,6 +227,7 @@ class AlertPipeline:
             tr = new_tracker(sig, plan, cfg, sent=True)
             tr.update(status=status, journal_ref=sig.journal_ref, strategy_id=sig.strategy_id)
             self.state["trackers"][sig.alert_id] = tr
+            self._record_sent(sig, status, now, not_opened)
             row.update(kind="ALERT", code=code)
         else:
             self._stats(now, status)["not_sent"] += 1
@@ -232,6 +242,51 @@ class AlertPipeline:
                     self.state["trackers"][sig.alert_id] = tr
         self._log(now, row)
         return row
+
+    def _record_sent(self, sig: Signal, status: str, now: datetime, not_opened: str | None) -> None:
+        """Owner ruling D149: every sent alert, for the daily summary (only ``opened`` paper-book ones count
+        in its main section; a not-opened one sent under send_not_opened does not)."""
+        paper_book = self.cfg.has_paper_outcome(sig.source, sig.extra.get("live_outcome"))
+        day = now.date().isoformat()
+        self.state.setdefault("summary_alerts", {}).setdefault(day, []).append({
+            "alert_id": sig.alert_id, "source": sig.source, "strategy_id": sig.strategy_id, "status": status,
+            "symbol": sig.symbol, "side": sig.side, "timeframe": sig.timeframe,
+            "signal_bar": sig.signal_bar.isoformat(), "bar_close": sig.bar_close.isoformat(),
+            "position_id": sig.position_id, "paper_book": paper_book,
+            "opened": bool(paper_book and not_opened is None),
+        })
+
+    def ledger_trade(self, a: Mapping[str, Any]) -> dict[str, Any] | None:
+        """The paper ledger's trade for an opened alert: by position_id, else the book's trade on the same
+        symbol and side opened from the signal bar's open to one bar after its close (nearest that close)."""
+        led = None
+        if a.get("position_id"):
+            led = self.data.paper_trade(str(a["position_id"]))
+        sources = LEDGER_SNIPPET_SOURCES.get(str(a.get("source")), [])
+        if led is None and sources:
+            close = utc(a["bar_close"])
+            tf = timedelta(minutes=timeframe_minutes(str(a["timeframe"])))
+            led = self.data.paper_trade_near(str(a["symbol"]), str(a["side"]), utc(a["signal_bar"]), close + tf,
+                                             close, sources)
+        return led
+
+    def summary_alerts(self, alerts: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """The day's sent alerts, each opened paper-book one with its ledger result (read at summary time)."""
+        out = []
+        for a in alerts:
+            a = dict(a)
+            if a.get("paper_book") and a.get("opened"):
+                try:
+                    t = self.ledger_trade(a)
+                except Exception as exc:  # noqa: BLE001 - the summary still goes out, marked
+                    t, a["ledger_error"] = None, type(exc).__name__
+                a["ledger"] = None if t is None else {
+                    k: (t.get(k).isoformat() if isinstance(t.get(k), datetime) else t.get(k))
+                    for k in ("id", "status", "exit_reason", "r_multiple", "pnl_usd", "entry_price", "exit_price",
+                              "opened_at", "closed_at")
+                }
+            out.append(a)
+        return out
 
     # --- follow-ups --------------------------------------------------------------------------------
     def update_trackers(self, now: datetime) -> int:
@@ -302,14 +357,19 @@ class AlertPipeline:
         out = []
         day = datetime.fromisoformat(last).date() + timedelta(days=1)
         while day <= due_day:
-            out.append(self.emit_summary(day.isoformat(), self.state["stats"].get(day.isoformat(), {}), now))
-            self.state["last_summary_day"] = day.isoformat()
+            d = day.isoformat()
+            out.append(self.emit_summary(d, self.state["stats"].get(d, {}), now,
+                                         alerts=self.state.setdefault("summary_alerts", {}).get(d, [])))
+            self.state["last_summary_day"] = d
+            self.state["summary_alerts"].pop(d, None)
             day += timedelta(days=1)
         return out
 
-    def emit_summary(self, label: str, groups: Mapping[str, Any], now: datetime, *, title: str = "DAILY SUMMARY") -> str:
-        text = render_summary(label, groups, title=title)
-        row: dict[str, Any] = {"kind": "SUMMARY", "day": label, "groups": groups, "text": text}
+    def emit_summary(self, label: str, groups: Mapping[str, Any], now: datetime, *, title: str = "DAILY SUMMARY",
+                     alerts: list[Mapping[str, Any]] | None = None) -> str:
+        rows_ = self.summary_alerts(list(alerts or []))
+        text = render_summary(label, groups, title=title, alerts=rows_)
+        row: dict[str, Any] = {"kind": "SUMMARY", "day": label, "groups": groups, "alerts": rows_, "text": text}
         if self.delivering:
             msg_id = self.sender.send(text) if self.sender else None
             row.update(code="SENT" if msg_id is not None else "SEND_FAILED", telegram_message_id=msg_id)
@@ -329,6 +389,12 @@ def _plan_log(plan: Mapping[str, Any] | None) -> dict[str, Any] | None:
             "span_frac", "cost_floor_frac", "cost_band", "cost_skip", "cost_stop_entry_ref", "cost_stop_entry_price",
             "cost_stop_frac", "cost_stop_round_trip", "cost_stop_floor_frac", "cost_stop_skip", "rounded")
     return {k: plan[k] for k in keys}
+
+
+def all_summary_alerts(state: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Every day's recorded sent alerts, oldest day first (the backfill summary)."""
+    days = state.get("summary_alerts") or {}
+    return [a for d in sorted(days) for a in days[d]]
 
 
 def merge_stats(stats: Mapping[str, Mapping[str, Mapping[str, float]]]) -> dict[str, dict[str, float]]:

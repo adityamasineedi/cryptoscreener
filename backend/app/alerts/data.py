@@ -15,6 +15,12 @@ from typing import Any, Mapping, Protocol, Sequence
 from app.alerts.config import timeframe_minutes
 from app.alerts.plan import utc
 
+# paper_trades columns the sidecar reads (read only): the engine values and the ledger's result.
+LEDGER_COLS = (
+    "id, symbol, side, status, entry_price, stop_price, tp1_price, opened_at, closed_at, exit_price, exit_reason, "
+    "pnl_usd, r_multiple, source_candle_ts, timeframe, signal_snippet"
+)
+
 
 class MarketData(Protocol):
     def bars_upto(self, symbol: str, timeframe: str, bar_time: datetime, limit: int) -> list[dict[str, Any]]: ...
@@ -26,6 +32,9 @@ class MarketData(Protocol):
     def v1_trade(self, symbol: str, bar_iso: str) -> dict[str, Any] | None: ...
 
     def paper_trades_opened(self, start: datetime, end: datetime) -> list[dict[str, Any]]: ...
+
+    def paper_trade_near(self, symbol: str, side: str, start: datetime, end: datetime, around: datetime,
+                         snippet_sources: Sequence[str]) -> dict[str, Any] | None: ...
 
 
 def _row(r: Mapping[str, Any]) -> dict[str, Any]:
@@ -95,16 +104,14 @@ class PostgresReadOnly:
 
     def paper_trade(self, position_id: str) -> dict[str, Any] | None:
         rows = self.fetch(
-            "SELECT id, symbol, side, status, entry_price, stop_price, tp1_price, opened_at, source_candle_ts, "
-            "timeframe, signal_snippet FROM paper_trades WHERE id=$1",
+            "SELECT " + LEDGER_COLS + " FROM paper_trades WHERE id=$1",
             str(position_id),
         )
         return _row(rows[0]) if rows else None
 
     def v1_trade(self, symbol: str, bar_iso: str) -> dict[str, Any] | None:
         rows = self.fetch(
-            "SELECT id, symbol, side, status, entry_price, stop_price, tp1_price, opened_at, source_candle_ts, "
-            "timeframe, signal_snippet FROM paper_trades WHERE symbol=$1 AND source_candle_ts=$2 "
+            "SELECT " + LEDGER_COLS + " FROM paper_trades WHERE symbol=$1 AND source_candle_ts=$2 "
             "AND signal_snippet->>'source'='V1_PAPER_WATCHER' ORDER BY opened_at LIMIT 1",
             symbol.upper(), str(bar_iso),
         )
@@ -112,12 +119,24 @@ class PostgresReadOnly:
 
     def paper_trades_opened(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         rows = self.fetch(
-            "SELECT id, symbol, side, status, entry_price, stop_price, tp1_price, opened_at, source_candle_ts, "
-            "timeframe, signal_snippet FROM paper_trades WHERE opened_at >= $1 AND opened_at < $2 "
+            "SELECT " + LEDGER_COLS + " FROM paper_trades WHERE opened_at >= $1 AND opened_at < $2 "
             "AND status IN ('OPEN','CLOSED') ORDER BY opened_at",
             utc(start), utc(end),
         )
         return [_row(r) for r in rows]
+
+    def paper_trade_near(self, symbol: str, side: str, start: datetime, end: datetime, around: datetime,
+                         snippet_sources: Sequence[str]) -> dict[str, Any] | None:
+        """The book's trade on this symbol and side opened in [start, end], nearest to ``around``."""
+        if not snippet_sources:
+            return None
+        rows = self.fetch(
+            "SELECT " + LEDGER_COLS + " FROM paper_trades WHERE symbol=$1 AND side=$2 AND opened_at >= $3 "
+            "AND opened_at <= $4 AND signal_snippet->>'source' = ANY($5::text[]) "
+            "ORDER BY abs(extract(epoch FROM (opened_at - $6::timestamptz))), opened_at LIMIT 1",
+            symbol.upper(), side.upper(), utc(start), utc(end), list(snippet_sources), utc(around),
+        )
+        return _row(rows[0]) if rows else None
 
 
 class MemoryData:
@@ -152,6 +171,14 @@ class MemoryData:
     def paper_trades_opened(self, start: datetime, end: datetime) -> list[dict[str, Any]]:
         return [t for t in self.trades if utc(start) <= utc(t["opened_at"]) < utc(end)
                 and t.get("status") in ("OPEN", "CLOSED")]
+
+    def paper_trade_near(self, symbol: str, side: str, start: datetime, end: datetime, around: datetime,
+                         snippet_sources: Sequence[str]) -> dict[str, Any] | None:
+        hits = [t for t in self.trades if t.get("symbol") == symbol.upper() and str(t.get("side")) == side.upper()
+                and utc(start) <= utc(t["opened_at"]) <= utc(end)
+                and (t.get("signal_snippet") or {}).get("source") in set(snippet_sources)]
+        hits.sort(key=lambda t: (abs((utc(t["opened_at"]) - utc(around)).total_seconds()), utc(t["opened_at"])))
+        return hits[0] if hits else None
 
 
 def read_json(path: Path) -> dict[str, Any] | None:

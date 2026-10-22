@@ -310,14 +310,92 @@ def _followup_text(event: Mapping[str, Any], tracker: Mapping[str, Any]) -> str:
     raise ValueError(f"unknown follow-up kind {kind!r}")
 
 
-def render_summary(day: str, groups: Mapping[str, Mapping[str, Any]], *, title: str = "DAILY SUMMARY") -> str:
+# Owner ruling D149: the tracker's numbers are about the alert's own levels, not about any paper trade.
+TOUCHED_LABEL = "alert levels touched (not paper trades)"
+LEDGER_NOT_FOUND = "ledger: not found"
+
+
+def _usd(x: float) -> str:
+    return f"{'-' if x < 0 else '+'}${abs(x):.2f}"
+
+
+def _fmt_ledger(a: Mapping[str, Any]) -> str:
+    """One opened alert and its paper ledger trade (status, exit reason, R, pnl_usd)."""
+    try:
+        bar = utc(a.get("signal_bar")).strftime("%m-%d %H:%M")
+    except (TypeError, ValueError):
+        bar = str(a.get("signal_bar"))
+    head = f"- {a.get('strategy_id')} {base_asset(str(a.get('symbol')))} {a.get('side')} {a.get('timeframe')} bar {bar}: "
+    led = a.get("ledger")
+    if a.get("ledger_error"):
+        return head + f"ledger: read failed ({a['ledger_error']})"
+    if not led:
+        return head + LEDGER_NOT_FOUND
+    parts = [str(led.get("status") or "?")]
+    if led.get("exit_reason"):
+        parts.append(str(led["exit_reason"]))
+    r, pnl = led.get("r_multiple"), led.get("pnl_usd")
+    parts.append(f"R {float(r):+.2f}" if r is not None else "R -")
+    parts.append(f"pnl {_usd(float(pnl))}" if pnl is not None else "pnl -")
+    return head + ", ".join(parts)
+
+
+def _ledger_groups(opened: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for a in opened:
+        g = out.setdefault(str(a.get("status")), {"count": 0, "open": 0, "closed": 0, "wins": 0, "losses": 0,
+                                                   "total_r": 0.0, "pnl_usd": 0.0, "not_found": 0})
+        g["count"] += 1
+        led = a.get("ledger")
+        if not led:
+            g["not_found"] += 1
+            continue
+        if str(led.get("status")) == "CLOSED":
+            g["closed"] += 1
+            r = float(led.get("r_multiple") or 0.0)
+            g["total_r"] += r
+            g["pnl_usd"] += float(led.get("pnl_usd") or 0.0)
+            if r > 0:
+                g["wins"] += 1
+            elif r < 0:
+                g["losses"] += 1
+        else:
+            g["open"] += 1
+    return out
+
+
+def render_summary(day: str, groups: Mapping[str, Mapping[str, Any]], *, title: str = "DAILY SUMMARY",
+                   alerts: Sequence[Mapping[str, Any]] | None = None) -> str:
+    """Owner ruling D149: the main section counts only the alerts for trades a paper book OPENED, with the paper
+    ledger's result for each; the tracker's numbers come after, under ``TOUCHED_LABEL``.
+
+    ``alerts`` are the day's sent alerts (pipeline ``summary_alerts`` rows, each with ``paper_book``, ``opened``
+    and, for opened ones, ``ledger``); ``groups`` are the tracker stats by status.
+    """
     def tot(key: str) -> float:
         return sum(float(g.get(key) or 0) for g in groups.values())
 
+    alerts = list(alerts or [])
+    opened = [a for a in alerts if a.get("paper_book") and a.get("opened")]
+    no_book = [a for a in alerts if not a.get("paper_book")]
+    lg = _ledger_groups(opened)
     lines = [
         f"📅 {title} - {day} UTC",
-        f"Alerts sent: {int(tot('sent'))} | Filled: {int(tot('filled'))}",
-        f"Wins: {int(tot('wins'))} | Losses: {int(tot('losses'))} | Total R: {tot('total_r'):+.1f}",
+        f"Paper trades from sent alerts (paper ledger): {len(opened)}",
+    ]
+    for name in sorted(lg):
+        g = lg[name]
+        line = (f"{name}: {g['count']} alerts, open {g['open']}, closed {g['closed']}, "
+                f"W/L {g['wins']}/{g['losses']}, R {g['total_r']:+.2f}, pnl {_usd(g['pnl_usd'])}")
+        if g["not_found"]:
+            line += f", {LEDGER_NOT_FOUND} {g['not_found']}"
+        lines.append(line)
+    lines += [_fmt_ledger(a) for a in opened]
+    lines += [
+        "",
+        TOUCHED_LABEL,
+        f"Alerts sent: {int(tot('sent'))} | Entry filled: {int(tot('filled'))}",
+        f"TP/SL hit: wins {int(tot('wins'))} | losses {int(tot('losses'))} | Tracked R: {tot('total_r'):+.1f}",
     ]
     for name in sorted(groups):
         g = groups[name]
@@ -326,9 +404,15 @@ def render_summary(day: str, groups: Mapping[str, Mapping[str, Any]], *, title: 
             f"W/L {int(g.get('wins') or 0)}/{int(g.get('losses') or 0)}, R {float(g.get('total_r') or 0):+.1f}"
             f", not sent {int(g.get('not_sent') or 0)}"
         )
+    by_src: dict[str, int] = {}
+    for a in no_book:
+        by_src[str(a.get("source"))] = by_src.get(str(a.get("source")), 0) + 1
+    for src in sorted(by_src):
+        lines.append(f"{src} (no paper book): sent {by_src[src]}")
     # Groups are keyed by status: the D117 prefix unless every group is FORWARD-PASSED (an empty summary has it).
     text = "\n".join(lines)
-    if groups and not any(needs_observation_prefix(name) for name in groups):
+    statuses = set(groups) | {str(a.get("status")) for a in alerts}
+    if statuses and not any(needs_observation_prefix(name) for name in statuses):
         return text
     return with_observation_prefix(text, None)
 

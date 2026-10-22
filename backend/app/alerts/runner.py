@@ -25,7 +25,7 @@ from typing import Any
 from app.alerts import sources as src
 from app.alerts.config import AlertConfig, load_config
 from app.alerts.data import MarketData, PostgresReadOnly, read_env_values
-from app.alerts.pipeline import AlertPipeline, load_state, merge_stats, save_state
+from app.alerts.pipeline import AlertPipeline, all_summary_alerts, load_state, merge_stats, save_state
 from app.alerts.plan import utc
 from app.alerts.sender import ReplyingTelegramSender, is_private_chat_id
 
@@ -220,7 +220,8 @@ def backfill(cfg: AlertConfig, data: MarketData, paths: dict[str, Path], out_dir
         codes[row["code"]] += 1
     followups = pipe.update_trackers(now)
     groups = merge_stats(pipe.state["stats"])
-    pipe.emit_summary(f"{start.isoformat()} -> {now.isoformat()}", groups, now, title="BACKFILL SUMMARY")
+    pipe.emit_summary(f"{start.isoformat()} -> {now.isoformat()}", groups, now, title="BACKFILL SUMMARY",
+                      alerts=all_summary_alerts(pipe.state))
     return {"codes": dict(codes), "followups": followups, "groups": groups, "start": start.isoformat(), "now": now.isoformat()}
 
 
