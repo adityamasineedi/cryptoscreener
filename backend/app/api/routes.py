@@ -1006,8 +1006,9 @@ async def research_ohlcv_candles(
     range_end_excl = end_dt + pad + timedelta(milliseconds=step_ms)
     # Seal (owner D202, SEALS.md S0): Backtest-tab charts never load a candle at or after
     # 2026-07-15, even as padding, for every strategy and timeframe.
-    range_end_excl = seal.clamp_end_exclusive(range_end_excl)
-    range_start = min(range_start, range_end_excl)
+    if not seal.dev_mode_active():
+        range_end_excl = seal.clamp_end_exclusive(range_end_excl)
+        range_start = min(range_start, range_end_excl)
 
     if db_manager.engine is None:
         return {
@@ -1030,7 +1031,8 @@ async def research_ohlcv_candles(
                 end_exclusive=range_end_excl,
                 warmup_bars=0,
             )
-        raw = seal.clamp_candles(raw)
+        if not seal.dev_mode_active():
+            raw = seal.clamp_candles(raw)
     except Exception as exc:  # noqa: BLE001
         return {
             "status": "ERROR",
@@ -1232,7 +1234,13 @@ async def regime_backtest_start(body: dict[str, Any] = Body(default_factory=dict
     """
     from app.research.regime_backtest_job import start
 
-    _refuse_sealed_dates(body.get("start_date"), body.get("end_date"))
+    # Owner D212: dev mode needs the owner's BACKTEST_DEV_MODE_ALLOWED AND dev_mode=true.
+    with seal.dev_mode_scope(seal.dev_mode_granted(body.get("dev_mode"))):
+        _refuse_sealed_dates(body.get("start_date"), body.get("end_date"))
+        return await _regime_backtest_start(body, start)
+
+
+async def _regime_backtest_start(body: dict[str, Any], start: Any) -> dict[str, Any]:
     symbols = body.get("symbols") or []
     if isinstance(symbols, str):
         symbols = [part for part in symbols.split(",") if part.strip()]
@@ -1278,6 +1286,20 @@ async def regime_backtest_status() -> dict[str, Any]:
     from app.research.regime_backtest_job import status
 
     return status()
+
+
+@router.get("/research/backtest-dev-mode")
+async def research_backtest_dev_mode() -> dict[str, Any]:
+    """Whether the owner-only dev mode can be switched on (owner D212). The setting's value is
+    reported as allowed true/false only; nothing else from .env."""
+    allowed = seal.dev_mode_allowed()
+    return {
+        "allowed": allowed,
+        "hint": None if allowed else seal.DEV_MODE_DISABLED_HINT,
+        "banner": seal.DEV_MODE_BANNER,
+        "label": seal.DEV_MODE_LABEL,
+        "sealed_through": seal.SEAL_LAST_DAY,
+    }
 
 
 @router.get("/research/regime-backtest/plan")
@@ -1335,7 +1357,20 @@ async def research_long_strategy_backtest_start(
         BacktestConfigError,
     )
 
-    _refuse_sealed_dates(body.get("start_date"), body.get("end_date"))
+    # Owner D212: dev mode needs the owner's BACKTEST_DEV_MODE_ALLOWED AND dev_mode=true.
+    dev_granted = seal.dev_mode_granted(body.get("dev_mode"))
+    with seal.dev_mode_scope(dev_granted):
+        _refuse_sealed_dates(body.get("start_date"), body.get("end_date"))
+        return await _long_strategy_backtest_start(body)
+
+
+async def _long_strategy_backtest_start(body: dict[str, Any]) -> dict[str, Any]:
+    from app.research.backtest_job import backtest_job_service
+    from app.research.backtest_ui_config import (
+        BACKTEST_TAB_MAKER_FEE_PCT,
+        BACKTEST_TAB_TAKER_FEE_PCT,
+        BacktestConfigError,
+    )
 
     def _as_list(v: Any) -> list[str]:
         if v is None:
@@ -2139,8 +2174,28 @@ async def research_long_strategy_backtest(
                 rows.append(enriched)
 
     identity = job_identity_payload(resolved)
+    dev = seal.dev_mode_active()
+    if dev:
+        # Owner D212: every dev-mode run is logged, append-only.
+        firsts = [r.get("data_first_bar") for r in rows if r.get("data_first_bar")]
+        lasts = [r.get("data_last_bar") for r in rows if r.get("data_last_bar")]
+        try:
+            seal.log_holdout_usage(
+                endpoint="GET /api/research/long-strategy/backtest",
+                strategy=f"{resolved.combination_id} {resolved.direction}",
+                symbols=syms,
+                timeframes=tfs,
+                start=start_date or f"tail {limit} bars",
+                end=end_date,
+                first_bar=min(firsts) if firsts else None,
+                last_bar=max(lasts) if lasts else None,
+            )
+        except OSError:
+            pass
     return {
         "status": "OK",
+        "dev_mode": dev,
+        "run_label": seal.DEV_MODE_LABEL if dev else None,
         "label": label,
         "playbook": playbook,
         "combination_id": resolved.combination_id,

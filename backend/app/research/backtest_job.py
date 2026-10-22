@@ -137,6 +137,8 @@ class BacktestJob:
     # Run record (owner D202): earliest first bar and latest last bar any cell loaded.
     data_first_bar: str | None = None
     data_last_bar: str | None = None
+    # Owner D212: started with the owner-only dev mode (data after the seal allowed).
+    dev_mode: bool = False
     _resolved: ResolvedBacktestConfig | None = field(default=None, repr=False)
     _t0: float = field(default=0.0, repr=False)
     # Start of the running cell: the timeout is per cell, so a large matrix is not cut off.
@@ -282,8 +284,10 @@ class BacktestJob:
             "data_window": {
                 "first_bar": self.data_first_bar,
                 "last_bar": self.data_last_bar,
-                "sealed_through": seal.SEAL_LAST_DAY,
+                "sealed_through": seal.DEV_MODE_LABEL if self.dev_mode else seal.SEAL_LAST_DAY,
             },
+            "dev_mode": self.dev_mode,
+            "run_label": seal.DEV_MODE_LABEL if self.dev_mode else None,
             **identity,
         }
         if self.vectorbt_execution:
@@ -540,6 +544,7 @@ class BacktestJobService:
                 _resolved=resolved,
                 _t0=time.perf_counter(),
                 _cancel_event=new_cancel_event(),
+                dev_mode=seal.dev_mode_active(),
             )
             job.heartbeat(phase=JOB_CREATED)
             emit_phase(
@@ -679,7 +684,24 @@ class BacktestJobService:
     async def _run(self, job: BacktestJob) -> None:
         """The job body inside the seal (owner D202): no cell loads a bar after 2026-07-14."""
         with seal.sealed_scope():
-            await self._run_sealed(job)
+            try:
+                await self._run_sealed(job)
+            finally:
+                if job.dev_mode:
+                    # Owner D212: every dev-mode run is logged, append-only.
+                    try:
+                        seal.log_holdout_usage(
+                            endpoint="POST /api/research/long-strategy/backtest/start",
+                            strategy=f"{job.combination_id} {job.direction} ({job.status})",
+                            symbols=job.symbols,
+                            timeframes=job.timeframes,
+                            start=job.start_date or f"tail {job.limit} bars",
+                            end=job.end_date,
+                            first_bar=job.data_first_bar,
+                            last_bar=job.data_last_bar,
+                        )
+                    except OSError:
+                        pass
 
     async def _run_sealed(self, job: BacktestJob) -> None:
         from app.research.service import get_bos_research_service

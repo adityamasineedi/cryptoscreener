@@ -13,6 +13,12 @@ multi-cap research runs) loads OHLCV only up to ``SEAL_LAST_DAY`` 23:59 UTC:
 * An explicit calendar date after the seal is refused, never clamped: ``check_request_dates``
   raises ``SealedRangeError`` and the routes answer HTTP 400 with ``SEALED_MESSAGE``.
 * Outside the scope (paper trading, the live watchers, the forward tests, scripts) nothing changes.
+* Owner-only dev mode (owner D212): a Backtest-tab run may read data after the seal ONLY when the
+  setting ``BACKTEST_DEV_MODE_ALLOWED`` is true (the owner sets it in .env; default false) AND the
+  request carries ``dev_mode=true``. Such a run is labelled ``DEV_MODE_LABEL`` and logged,
+  append-only, to ``HOLDOUT_USAGE_PATH`` (research/HOLDOUT_USAGE.md under the repo root).
+  Otherwise the 400 / clamp is exactly as above. The daily trend books and book 16 keep their
+  own pre-registered holdout guard (engine_backtest) even in dev mode.
 
 The frozen CANDLE12 V3 OOS-2 files (docs/candle12_v3_oos_contract.lock.json) still spell the
 date on their own and are not edited.
@@ -87,6 +93,7 @@ from __future__ import annotations
 import contextvars
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
 # --- the seal ----------------------------------------------------------------------------------
@@ -107,6 +114,49 @@ PROFIT_CHECKER_WINDOW = {"1h": ("2026-09-20", "2026-10-10"), "4h": ("2026-08-31"
 PROFIT_CHECKER_SEALED_LABEL = (
     "Inside the sealed holdout window; already used before the seal (SEALS.md). Not evidence."
 )
+
+# --- owner-only dev mode (D212) ---------------------------------------------------------------
+
+DEV_MODE_LABEL = "DEV MODE (holdout data)"
+DEV_MODE_BANNER = "Uses holdout data; results are not evidence"
+DEV_MODE_DISABLED_HINT = "owner-only: set BACKTEST_DEV_MODE_ALLOWED=true in .env"
+#: Append-only log of every dev-mode run (copied into the research audit by the research session).
+HOLDOUT_USAGE_PATH = Path(__file__).resolve().parents[3] / "research" / "HOLDOUT_USAGE.md"
+HOLDOUT_USAGE_HEADER = (
+    "# Holdout usage (Backtest tab dev mode)\n\n"
+    "Owner D212. One line per Backtest-tab run that read OHLCV after 2026-07-14 (SEALS.md S0)\n"
+    "with the owner-only dev mode on. Append-only; written by app.services.seal. Not evidence.\n\n"
+    "| UTC time | endpoint | strategy | coins | timeframe | requested start | requested end "
+    "| first bar | last bar |\n"
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+)
+#: Paths whose dev mode comes in the query string (``?dev_mode=true``); POST bodies are read by the route.
+DEV_MODE_QUERY_PREFIXES: tuple[str, ...] = (
+    "/api/research/long-strategy/backtest",
+    "/api/research/ohlcv-candles",
+)
+
+
+def dev_mode_allowed() -> bool:
+    """The owner's setting BACKTEST_DEV_MODE_ALLOWED (default false). The value is never printed."""
+    try:
+        from app.config import get_settings
+
+        return bool(getattr(get_settings(), "backtest_dev_mode_allowed", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def dev_mode_requested(value: Any) -> bool:
+    if value is True:
+        return True
+    return str(value).strip().lower() in ("true", "1", "yes", "on")
+
+
+def dev_mode_granted(value: Any) -> bool:
+    """True only when the request asks for dev mode AND the owner's setting allows it."""
+    return dev_mode_requested(value) and dev_mode_allowed()
+
 
 #: HTTP paths that run a backtest. ``SealGuardMiddleware`` opens ``sealed_scope`` for each.
 SEALED_PATH_PREFIXES: tuple[str, ...] = (
@@ -161,8 +211,10 @@ def check_request_dates(start_date: Any = None, end_date: Any = None) -> None:
 
     ``end_date`` is the inclusive UI day; a day after 2026-07-14 is refused. A start day after
     2026-07-14 is refused too (the whole window would be sealed). Missing dates pass: a missing
-    end is closed at the seal by the loaders.
+    end is closed at the seal by the loaders. Inside a granted dev-mode scope nothing is refused.
     """
+    if dev_mode_active():
+        return
     end = _day(end_date)
     if end is not None and end > SEAL_LAST_DATE:
         raise SealedRangeError()
@@ -256,11 +308,82 @@ def merge_spans(spans: Sequence[Mapping[str, Any] | None]) -> dict[str, Any]:
 # --- scope --------------------------------------------------------------------------------------
 
 _SEALED: contextvars.ContextVar[bool] = contextvars.ContextVar("backtest_sealed", default=False)
+_DEV_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("backtest_dev_mode", default=False)
 
 
 def seal_active() -> bool:
-    """True inside ``sealed_scope`` (a backtest request or job)."""
+    """True inside ``sealed_scope`` (a backtest request or job), unless dev mode was granted."""
+    return _SEALED.get() and not _DEV_MODE.get()
+
+
+def in_backtest_scope() -> bool:
+    """True inside ``sealed_scope`` whether or not dev mode was granted (for the run record)."""
     return _SEALED.get()
+
+
+def dev_mode_active() -> bool:
+    return _DEV_MODE.get()
+
+
+@contextmanager
+def dev_mode_scope(granted: bool = True) -> Iterator[None]:
+    """Lift the seal for this task (and the jobs it starts) when ``granted``; else a no-op.
+
+    Callers pass ``dev_mode_granted(request value)``: the owner's setting AND the request flag.
+    """
+    if not granted:
+        yield
+        return
+    token = _DEV_MODE.set(True)
+    try:
+        yield
+    finally:
+        _DEV_MODE.reset(token)
+
+
+def log_holdout_usage(
+    *,
+    endpoint: str,
+    strategy: Any,
+    symbols: Sequence[Any] | Any,
+    timeframes: Sequence[Any] | Any,
+    start: Any,
+    end: Any,
+    first_bar: Any,
+    last_bar: Any,
+    path: Path | None = None,
+) -> Path:
+    """Append one line for a dev-mode run (owner D212). Creates the file with its header."""
+    target = Path(path) if path is not None else HOLDOUT_USAGE_PATH
+
+    def cell(value: Any) -> str:
+        if value is None or value == "":
+            return "-"
+        if isinstance(value, (list, tuple, set)):
+            value = ",".join(str(v) for v in value) or "-"
+        return str(value).replace("|", "/").replace("\n", " ")
+
+    line = "| " + " | ".join(
+        cell(v)
+        for v in (
+            datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            endpoint,
+            strategy,
+            symbols,
+            timeframes,
+            start,
+            end,
+            first_bar,
+            last_bar,
+        )
+    ) + " |\n"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    new = not target.exists()
+    with target.open("a", encoding="utf-8", newline="\n") as fh:
+        if new:
+            fh.write(HOLDOUT_USAGE_HEADER)
+        fh.write(line)
+    return target
 
 
 @contextmanager
@@ -299,8 +422,15 @@ class SealGuardMiddleware:
         self.app = app
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
-        if scope.get("type") == "http" and is_sealed_path(str(scope.get("path") or "")):
-            with sealed_scope():
+        path = str(scope.get("path") or "")
+        if scope.get("type") == "http" and is_sealed_path(path):
+            granted = False
+            if any(path == p or path.startswith(p + "/") for p in DEV_MODE_QUERY_PREFIXES):
+                from urllib.parse import parse_qs
+
+                qs = parse_qs(bytes(scope.get("query_string") or b"").decode("latin-1"))
+                granted = dev_mode_granted((qs.get("dev_mode") or [""])[-1])
+            with sealed_scope(), dev_mode_scope(granted):
                 await self.app(scope, receive, send)
             return
         await self.app(scope, receive, send)

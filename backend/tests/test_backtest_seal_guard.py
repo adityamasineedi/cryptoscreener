@@ -729,3 +729,97 @@ def test_frozen_oos2_files_unchanged_since_1286ee7():
         now = subprocess.run(["git", "-C", str(REPO), "hash-object", rel],
                              check=True, capture_output=True, text=True).stdout.strip()
         assert now == base, rel
+
+
+# --- owner-only dev mode (D212) -----------------------------------------------------------------
+
+
+def test_dev_mode_setting_defaults_false_and_is_read_from_settings(monkeypatch):
+    from app.config import Settings
+
+    assert Settings.model_fields["backtest_dev_mode_allowed"].default is False
+    assert Settings.model_fields["backtest_dev_mode_allowed"].alias == "BACKTEST_DEV_MODE_ALLOWED"
+
+    class S:
+        backtest_dev_mode_allowed = True
+
+    monkeypatch.setattr("app.config.get_settings", lambda: S())
+    assert seal.dev_mode_allowed() is True
+    assert seal.dev_mode_granted("true") is True
+    assert seal.dev_mode_granted(False) is False
+    S.backtest_dev_mode_allowed = False
+    assert seal.dev_mode_granted(True) is False
+
+
+@pytest.mark.asyncio
+async def test_dev_mode_refused_while_the_setting_is_off(fake_db, loader_spy, stub_cpu, fresh_job_service, tmp_path, monkeypatch):
+    monkeypatch.setattr(seal, "dev_mode_allowed", lambda: False)
+    monkeypatch.setattr(seal, "HOLDOUT_USAGE_PATH", tmp_path / "HOLDOUT_USAGE.md")
+    async with _client() as client:
+        flag = (await client.get("/api/research/backtest-dev-mode")).json()
+        bad = await client.post("/api/research/long-strategy/backtest/start",
+                                json={**START_BODY, "start_date": "2026-07-01", "end_date": "2026-10-01", "dev_mode": True})
+        sync = await client.get("/api/research/long-strategy/backtest",
+                                params={"symbols": "BTCUSDT", "timeframes": "1h", "direction": "SHORT",
+                                        "end_date": "2026-10-01", "dev_mode": "true"})
+        regime = await client.post("/api/research/regime-backtest/start",
+                                   json={"symbols": ["BTCUSDT"], "timeframe": "1h", "end_date": "2026-10-01", "dev_mode": True})
+        tail = await client.post("/api/research/long-strategy/backtest/start", json={**START_BODY, "limit": 500, "dev_mode": True})
+        assert tail.status_code == 200
+        final = await _wait_job(client)
+    assert flag["allowed"] is False and flag["hint"] == "owner-only: set BACKTEST_DEV_MODE_ALLOWED=true in .env"
+    for resp in (bad, sync, regime):
+        assert resp.status_code == 400 and resp.json()["detail"] == seal.SEALED_MESSAGE
+    assert final["status"] == "done" and final["dev_mode"] is False and final["run_label"] is None
+    assert_sealed(fake_db, loader_spy)  # the tail still counts back from the seal
+    assert not (tmp_path / "HOLDOUT_USAGE.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_dev_mode_needs_the_request_flag_too(fake_db, loader_spy, stub_cpu, fresh_job_service, monkeypatch):
+    monkeypatch.setattr(seal, "dev_mode_allowed", lambda: True)
+    async with _client() as client:
+        bad = await client.post("/api/research/long-strategy/backtest/start",
+                                json={**START_BODY, "start_date": "2026-07-01", "end_date": "2026-10-01"})
+    assert bad.status_code == 400 and bad.json()["detail"] == seal.SEALED_MESSAGE
+    assert fake_db.ohlcv_queries() == []
+
+
+@pytest.mark.asyncio
+async def test_dev_mode_allows_post_seal_data_labels_and_logs_the_run(
+    fake_db, loader_spy, stub_cpu, fresh_job_service, tmp_path, monkeypatch, regime_job
+):
+    log = tmp_path / "research" / "HOLDOUT_USAGE.md"
+    monkeypatch.setattr(seal, "dev_mode_allowed", lambda: True)
+    monkeypatch.setattr(seal, "HOLDOUT_USAGE_PATH", log)
+    body = {**START_BODY, "start_date": "2026-07-01", "end_date": "2026-10-01", "dev_mode": True}
+    async with _client() as client:
+        flag = (await client.get("/api/research/backtest-dev-mode")).json()
+        r = await client.post("/api/research/long-strategy/backtest/start", json=body)
+        assert r.status_code == 200 and r.json()["status"] == "STARTED", r.text
+        final = await _wait_job(client)
+        rg = await client.post("/api/research/regime-backtest/start",
+                               json={"symbols": ["BTCUSDT"], "timeframe": "1h", "directions": ["SHORT"],
+                                     "start_date": "2026-07-01", "end_date": "2026-10-01", "dev_mode": True})
+        assert rg.status_code == 200 and rg.json()["status"] == "STARTED", rg.text
+        regime = await _wait_regime(client)
+        chart = (await client.get("/api/research/ohlcv-candles",
+                                  params={"symbol": "BTCUSDT", "timeframe": "1h", "start": "2026-09-01",
+                                          "end": "2026-09-02", "dev_mode": "true"})).json()
+    assert flag["allowed"] is True and flag["banner"] == "Uses holdout data; results are not evidence"
+    assert final["status"] == "done", final.get("error")
+    assert final["dev_mode"] is True and final["run_label"] == "DEV MODE (holdout data)"
+    assert final["data_window"]["sealed_through"] == "DEV MODE (holdout data)"
+    assert datetime.fromisoformat(final["data_window"]["last_bar"]) > SEAL
+    ranges = [c for c in loader_spy.calls if c["loader"] == "load_ohlcv_series_range"]
+    assert any(c["kwargs"]["end_exclusive"] > SEAL for c in ranges)
+    assert regime["status"] == "done" and regime["dev_mode"] is True
+    assert max(datetime.fromisoformat(c["open_time"]) for c in chart["candles"]) > SEAL
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "# Holdout usage (Backtest tab dev mode)"
+    runs = [ln for ln in lines if ln.startswith("| 20")]
+    assert len(runs) == 2
+    assert "POST /api/research/long-strategy/backtest/start" in runs[0] and "COMBO_02 SHORT (done)" in runs[0]
+    assert "| BTCUSDT | 1h | 2026-07-01 | 2026-10-01 |" in runs[0]
+    assert final["data_window"]["last_bar"] in runs[0]
+    assert "POST /api/research/regime-backtest/start" in runs[1]

@@ -294,6 +294,9 @@ class Settings(BaseSettings):
     backtest_heartbeat_timeout_seconds: float = Field(
         default=120.0, alias="BACKTEST_HEARTBEAT_TIMEOUT_SECONDS"
     )
+    # Owner D212: the owner-only Backtest-tab "Dev mode: allow data after 2026-07-14" switch.
+    # Off unless the owner sets BACKTEST_DEV_MODE_ALLOWED=true in .env (app.services.seal).
+    backtest_dev_mode_allowed: bool = Field(default=False, alias="BACKTEST_DEV_MODE_ALLOWED")
     backtest_db_timeout_seconds: float = Field(
         default=60.0, alias="BACKTEST_DB_TIMEOUT_SECONDS"
     )

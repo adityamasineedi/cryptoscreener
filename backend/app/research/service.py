@@ -233,12 +233,13 @@ async def _load_research_candles(
         "limit": limit,
         "warmup_bars_requested": apply_warmup,
     }
-    if sealed:
+    if sealed or seal.in_backtest_scope():
         # Run record: the bars actually loaded (warm-up included).
         span = seal.bar_span(window)
         meta["data_first_bar"] = span["first_bar"]
         meta["data_last_bar"] = span["last_bar"]
-        meta["sealed_through"] = seal.SEAL_LAST_DAY
+        meta["sealed_through"] = seal.SEAL_LAST_DAY if sealed else seal.DEV_MODE_LABEL
+        meta["dev_mode"] = seal.dev_mode_active()
     logger.info(
         "bos_research_candles_loaded",
         symbol=sym,

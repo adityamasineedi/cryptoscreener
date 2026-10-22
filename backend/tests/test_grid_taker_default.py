@@ -33,7 +33,7 @@ def test_explicit_fees_still_win():
 
 def test_a_known_market_exit_pays_0_05_pct_taker():
     cfg = GridConfig(**BASE, slippage_bps=0.0)
-    state = {"base": 2.0, "quote": 0.0, "realized": 0.0, "cost_basis": 190.0, "fills": []}
+    state = {"base": 2.0, "quote": 0.0, "realized": 0.0, "cost_basis": 190.0, "fills": [], "events": [], "slots": []}
     _flatten(state, cfg, 100.0, datetime(2026, 7, 1, tzinfo=timezone.utc), "stop")
     fill = state["fills"][-1]
     assert fill["side"] == "sell"

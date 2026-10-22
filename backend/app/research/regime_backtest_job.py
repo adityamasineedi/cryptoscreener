@@ -132,6 +132,8 @@ def _idle_state() -> dict[str, Any]:
         "trades": [],
         "skipped_symbols": [],
         "error": None,
+        "dev_mode": False,
+        "run_label": None,
         "_t0": 0.0,
     }
 
@@ -629,7 +631,26 @@ def _evaluated(per_symbol: dict[str, dict[str, Any]]) -> dict[str, Any]:
 async def _run(job: dict[str, Any]) -> None:
     """The run inside the seal (owner D202): no load reaches a bar after 2026-07-14."""
     with seal.sealed_scope():
-        await _run_sealed(job)
+        try:
+            await _run_sealed(job)
+        finally:
+            if job.get("dev_mode"):
+                # Owner D212: every dev-mode run is logged, append-only.
+                evaluated = (job.get("window") or {}).get("evaluated") or {}
+                req = (job.get("window") or {}).get("requested") or {}
+                try:
+                    seal.log_holdout_usage(
+                        endpoint="POST /api/research/regime-backtest/start",
+                        strategy=f"regime book {'+'.join(job.get('directions') or [])} ({job.get('status')})",
+                        symbols=job.get("symbols"),
+                        timeframes=[RUN_TIMEFRAME],
+                        start=req.get("start_date") or f"tail {req.get('limit')} bars",
+                        end=req.get("end_date"),
+                        first_bar=evaluated.get("data_first_bar"),
+                        last_bar=evaluated.get("data_last_bar"),
+                    )
+                except OSError:
+                    pass
 
 
 async def _run_sealed(job: dict[str, Any]) -> None:
@@ -826,6 +847,9 @@ async def start(
                 "symbol_allowlist": _allowlist_view(allowlist, chosen, scope, apply_allowlist),
                 "_symbol_allowlist": allowlist,
                 "total_symbols": len(chosen),
+                # Owner D212: started with the owner-only dev mode (data after the seal allowed).
+                "dev_mode": seal.dev_mode_active(),
+                "run_label": seal.DEV_MODE_LABEL if seal.dev_mode_active() else None,
                 "started_at": datetime.now(timezone.utc).isoformat(),
                 "_t0": time.perf_counter(),
             }

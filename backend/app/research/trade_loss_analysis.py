@@ -1349,16 +1349,19 @@ async def loss_analysis_for_current_job(
     # hindsight past the exit stops at 2026-07-14.
     from app.services import seal
 
+    # A dev-mode job (owner D212) is analysed on the same data it ran on, only while allowed.
+    dev = bool(getattr(job, "dev_mode", False)) and seal.dev_mode_allowed()
     last_day = seal.SEAL_END_EXCLUSIVE - timedelta(days=1)
-    end = min(end, last_day)
-    if start > last_day:
+    if not dev:
+        end = min(end, last_day)
+    if not dev and start > last_day:
         if str(row.get("engine_family") or "") == "daily_trend" or _is_daily_trend(sid):
             raise LossAnalysisUnavailable("daily trend books: holdout from 2026-07-15 is sealed.")
         raise LossAnalysisUnavailable(seal.SEALED_MESSAGE)
 
     if candle_loader is None:
         from app.research.service import _load_research_candles as candle_loader
-    with seal.sealed_scope():
+    with seal.sealed_scope(), seal.dev_mode_scope(dev):
         candles, _eval_start, _meta = await candle_loader(
             str(row.get("symbol") or symbol),
             tf,
