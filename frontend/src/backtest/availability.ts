@@ -14,7 +14,8 @@ export type MaxLookback = {
 
 /**
  * How many bars Max can request for the selected symbol × timeframe cells.
- * The run applies one N to every cell, so the smallest cell decides.
+ * The run applies one N to every cell, so the smallest cell decides. Only bars before the
+ * seal (2026-07-15) count when the coverage row reports them (`sealed_bars`).
  */
 export function maxLookbackBars(
   coverage: OhlcvRangeRow[],
@@ -30,7 +31,8 @@ export function maxLookbackBars(
 
   const byCell = new Map<string, number>();
   for (const row of coverage) {
-    byCell.set(`${row.symbol}|${row.timeframe}`, Number(row.bars));
+    // Max ends at the seal (owner D202): only the bars before it count.
+    byCell.set(`${row.symbol}|${row.timeframe}`, Number(row.sealed_bars ?? row.bars));
   }
   let min = Infinity;
   for (const symbol of symbols) {

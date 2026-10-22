@@ -79,6 +79,19 @@ vi.mock("../api/client", async (importOriginal) => {
     cancelBacktestJob: vi.fn(async () => ({ status: "idle" })),
     startRegimeBacktest: vi.fn(async () => ({ status: "STARTED" })),
     fetchRegimeBacktest: vi.fn(async () => ({ status: "idle" })),
+    // The sides a regime run walks, as backend run_plan returns them (PASSED_SIDES 1h rows).
+    fetchRegimeBacktestPlan: vi.fn(async (dirs: string[]) => {
+      const short = ["COMBO_02_V2", "COMBO_02", "COMBO_02_CLOSED_HTF", "COMBO_03_TRANSITION",
+        "COMBO_03_TRANSITION_B", "COMBO_01", "COMBO_02_LOCAL"];
+      const side = dirs[0] === "LONG" ? "LONG" : "SHORT";
+      const ids = side === "LONG" ? ["COMBO_03_TRANSITION_B"] : short;
+      return {
+        directions: [side],
+        timeframe: "1h",
+        sides_in_scope: ids.map((strategy_id) => ({ strategy_id, timeframe: "1h", direction: side })),
+        fixed_config: { principal_usd: 1000, leverage: 2, taker_fee_pct: 0.05, maker_fee_pct: 0.02 },
+      };
+    }),
     cancelRegimeBacktest: vi.fn(async () => ({ status: "CANCELLED", job: { status: "cancelled" } })),
     fetchBacktestLossAnalysis: vi.fn(async () => {
       throw new Error("not mocked for this test");
@@ -127,6 +140,18 @@ async function selectFrozenV1(
 ) {
   await user.click(root.getByRole("tab", { name: "Long trades" }));
   await user.selectOptions(root.getByRole("combobox", { name: /^Strategy/i }), "COMBO_02_V1");
+  // The tab defaults to D144's 0.05% taker (owner D202); the frozen v1 profile is 0.04%.
+  await setTakerFee(user, root, "0.04");
+}
+
+async function setTakerFee(
+  user: ReturnType<typeof setupUser>,
+  root: ReturnType<typeof within>,
+  value: string,
+) {
+  const taker = root.getByLabelText("Taker fee % (exit + market entry)") as HTMLInputElement;
+  await user.clear(taker);
+  await user.type(taker, value);
 }
 
 async function selectOnlySymbol(
@@ -234,7 +259,7 @@ describe("BacktestPanel interaction paths", () => {
       expect(Number(riskUsd.value)).toBe(20);
     });
 
-    expect(root.getByText(/BTCUSDT core — 2% \/ \$20/i)).toBeTruthy();
+    expect(root.getByTestId("run-sizing").textContent).toMatch(/BTCUSDT v1 production profile — 2% \/ \$20/);
     expect(root.getAllByText(/BTCUSDT — v1 CORE/i).length).toBeGreaterThan(0);
     expect(container.textContent).toMatch(
       /Production comparable:\s*NO\s*\(next-open fill book; v1 production profile was signal-close\)/,
@@ -258,7 +283,7 @@ describe("BacktestPanel interaction paths", () => {
       expect(riskPct.disabled).toBe(true);
     });
     expect(root.getAllByText(/ETHUSDT — v1 SECONDARY/i).length).toBeGreaterThan(0);
-    expect(root.getByText(/ETHUSDT secondary — 2% \/ \$20/i)).toBeTruthy();
+    expect(root.getByTestId("run-sizing").textContent).toMatch(/ETHUSDT v1 production profile — 2% \/ \$20/);
   });
 
   it("3. SOL v1 risk rendering", async () => {
@@ -275,7 +300,7 @@ describe("BacktestPanel interaction paths", () => {
       expect(Number(riskUsd.value)).toBe(20);
     });
     expect(root.getAllByText(/SOLUSDT — v1 SECONDARY/i).length).toBeGreaterThan(0);
-    expect(root.getByText(/SOLUSDT secondary — 2% \/ \$20/i)).toBeTruthy();
+    expect(root.getByTestId("run-sizing").textContent).toMatch(/SOLUSDT v1 production profile — 2% \/ \$20/);
   });
 
   it("4. Research override banner", async () => {
@@ -436,10 +461,11 @@ describe("BacktestPanel interaction paths", () => {
     const root = within(container);
 
     expect(root.getByDisplayValue("Passed strategies (auto)")).toBeTruthy();
-    expect(root.queryByRole("button", { name: /^COMBO_02_V2/ })).toBeNull();
-    expect(root.getByRole("button", { name: "COMBO_01 · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
-    expect(root.getByRole("button", { name: "COMBO_03_TRANSITION_B · 1h SHORT" }).getAttribute("aria-pressed")).toBe("true");
-    expect(root.queryByRole("button", { name: "COMBO_02 V2.1-A" })).toBeNull();
+    // Owner D202: the chips are the sides the regime run walks (backend plan), COMBO_02_V2 included.
+    await waitFor(() => expect(root.getByTestId("run-chip-COMBO_02_V2").textContent).toMatch(/^COMBO_02_V2 1h SHORT/));
+    expect(root.getByTestId("run-chip-COMBO_01").getAttribute("aria-pressed")).toBe("true");
+    expect(root.getByTestId("run-chip-COMBO_03_TRANSITION_B").getAttribute("aria-pressed")).toBe("true");
+    expect(root.queryByRole("button", { name: /^COMBO_02 V2\.1-A/ })).toBeNull();
 
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
     await waitFor(() => {
@@ -496,8 +522,8 @@ describe("BacktestPanel interaction paths", () => {
 
     const select = root.getByRole("combobox", { name: /^Strategy/i }) as HTMLSelectElement;
     expect(root.queryByRole("option", { name: /^COMBO_02_V2/ })).toBeNull();
-    expect(root.getByRole("option", { name: "COMBO_01 · 1h SHORT" })).toBeTruthy();
-    expect(root.getByRole("option", { name: "COMBO_03_TRANSITION_B · 1h SHORT" })).toBeTruthy();
+    expect(root.getByRole("option", { name: /^COMBO_01 · 1h SHORT — / })).toBeTruthy();
+    expect(root.getByRole("option", { name: /^COMBO_03_TRANSITION_B · 1h SHORT — / })).toBeTruthy();
     await user.selectOptions(select, "COMBO_01");
 
     expect(root.getAllByText(/COMBO_01 · 1h SHORT/i).length).toBeGreaterThan(0);
@@ -626,7 +652,7 @@ describe("BacktestPanel interaction paths", () => {
     const { container } = renderPanel();
     const root = within(container);
     expect(root.getAllByText(/DB-tail mode/i).length).toBeGreaterThan(0);
-    expect(root.getByText(/Uses the latest N available candles/i)).toBeTruthy();
+    expect(root.getByText(/Counts N candles back from 2026-07-14 23:59 UTC \(the seal\), not from today/i)).toBeTruthy();
     expect(
       root.getByText(/Does not represent a calendar-year filter/i)
     ).toBeTruthy();
@@ -730,6 +756,8 @@ describe("BacktestPanel interaction paths", () => {
     expect(root.getByText(/RESEARCH-ONLY CONFIGURATION/i)).toBeTruthy();
 
     await user.click(root.getByRole("checkbox", { name: /Research risk override/i }));
+    // The regime run does not use Leverage (owner D202: greyed out); pick one strategy to edit it.
+    await user.selectOptions(root.getByRole("combobox", { name: /^Strategy/i }), "COMBO_01");
     const lev = root.getByLabelText(/Leverage/i) as HTMLInputElement;
     await user.clear(lev);
     await user.type(lev, "5");
@@ -1321,17 +1349,17 @@ describe("BacktestPanel interaction paths", () => {
     const root = within(container);
 
     expect(root.getByRole("tab", { name: "Short trades" }).getAttribute("aria-selected")).toBe("true");
-    expect(root.queryByRole("button", { name: "COMBO_02 V2.1-A" })).toBeNull();
+    expect(root.queryByRole("button", { name: /^COMBO_02 V2\.1-A/ })).toBeNull();
     expect(root.queryByRole("option", { name: "SD + CHoCH + BOS" })).toBeNull();
 
     await user.click(root.getByRole("tab", { name: "Long trades" }));
     expect(root.getByDisplayValue("Passed long strategies (auto)")).toBeTruthy();
-    expect(root.getByRole("button", { name: "COMBO_03_TRANSITION_B · 1h LONG" })).toBeTruthy();
+    await waitFor(() => expect(root.getByTestId("run-chip-COMBO_03_TRANSITION_B").textContent).toMatch(/^COMBO_03_TRANSITION_B 1h LONG/));
     expect(root.queryByRole("button", { name: "COMBO_02_V2 · 1h SHORT" })).toBeNull();
     expect(root.getAllByText(/Direction:\s*LONG/i).length).toBeGreaterThan(0);
 
     await user.click(root.getByRole("tab", { name: "Hedge trades" }));
-    expect(root.getByRole("button", { name: "COMBO_02 V2.1-A" })).toBeTruthy();
+    expect(root.getByRole("button", { name: /^COMBO_02 V2\.1-A/ })).toBeTruthy();
     expect(root.getByText(/LONG and SHORT together/i)).toBeTruthy();
     expect(root.queryByRole("button", { name: "COMBO_02_V2 · 1h SHORT" })).toBeNull();
 
@@ -1742,10 +1770,10 @@ describe("BacktestPanel interaction paths", () => {
       expect(values()).toEqual(
         expect.arrayContaining(["PASSED_AUTO", "COMBO_02_V2_1_A", "COMBO_02_V2", "COMBO_02_V2_1B"]),
       );
-      expect(root.getByRole("option", { name: "COMBO_02_V2 · 1h LONG+SHORT" })).toBeTruthy();
-      expect(root.getByRole("option", { name: "COMBO_02_V2_1B · 1h LONG+SHORT" })).toBeTruthy();
+      expect(root.getByRole("option", { name: /^COMBO_02_V2 · 1h LONG\+SHORT — / })).toBeTruthy();
+      expect(root.getByRole("option", { name: /^COMBO_02_V2_1B · 1h LONG\+SHORT — / })).toBeTruthy();
       // Only V2.1-A is the hedge book's passed run.
-      expect(root.getByRole("button", { name: "COMBO_02 V2.1-A" })).toBeTruthy();
+      expect(root.getByRole("button", { name: /^COMBO_02 V2\.1-A/ })).toBeTruthy();
       expect(root.queryByRole("button", { name: /^COMBO_02_V2/ })).toBeNull();
     });
 
@@ -2114,7 +2142,7 @@ describe("BacktestPanel regime-book run", () => {
     const scope = within(container).getByTestId("regime-run-scope");
     expect(scope.textContent).toMatch(/Not used by this run: the Principal, Risk, Leverage and Fee fields/);
     expect(scope.textContent).toMatch(/principal \$1,000/);
-    expect(scope.textContent).toMatch(/latest 5,760 1h bars ≈ 240 days/);
+    expect(scope.textContent).toMatch(/5,760 1h bars ≈ 240 days ending 2026-07-14/);
   });
 
   it("R4 a refused regime run shows the server's reason and unlocks Run", async () => {

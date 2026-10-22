@@ -162,7 +162,9 @@ describe("daily trend books in the Backtest tab", () => {
       expect(group, tab).not.toBeNull();
       const opts = Array.from(group!.querySelectorAll("option"));
       expect(opts.map((o) => o.value)).toEqual([...DAILY_TREND_STRATEGY_IDS]);
-      expect(opts.map((o) => o.textContent)).toEqual(Object.values(DAILY_LABELS));
+      // Each option ends with its research verdict (owner D202), e.g. " — KILLED".
+      expect(opts.map((o) => (o.textContent || "").replace(/ — .*$/, ""))).toEqual(Object.values(DAILY_LABELS));
+      expect(opts.every((o) => / — (KILLED|INCONCLUSIVE|NOT RUN)$/.test(o.textContent || ""))).toBe(true);
       const research = strategySelect(root).querySelector('optgroup[label="Research"]');
       const researchIds = Array.from(research?.querySelectorAll("option") ?? []).map((o) => o.value);
       expect(researchIds.filter((v) => v.startsWith("DAILY_TREND_"))).toEqual([]);
@@ -275,10 +277,19 @@ describe("daily trend books in the Backtest tab", () => {
     expect(body?.start_date).toBe("2025-01-01");
     expect(body?.end_date).toBe("2025-12-31");
 
+    // Owner D202: an explicit day after the seal is never clamped; Run refuses it.
     fireEvent.change(endInput, { target: { value: "2026-09-30" } });
-    expect(endInput.value).toBe("2026-07-14");
-    body = await runAndGetBody(user, root);
-    expect(body?.end_date).toBe("2026-07-14");
+    expect(endInput.value).toBe("2026-09-30");
+    expect(root.getByTestId("sealed-date-error").textContent).toBe(
+      "Sealed: data after 2026-07-14 is reserved for the holdout (SEALS.md)",
+    );
+    vi.mocked(startBacktestJob).mockClear();
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(useBacktestJobStore.getState().error).toMatch(/^Sealed: data after 2026-07-14/));
+    expect(startBacktestJob).not.toHaveBeenCalled();
+    await act(async () => {
+      useBacktestJobStore.setState({ error: null });
+    });
 
     // Start only: the end still defaults to the cap, never "today".
     fireEvent.change(endInput, { target: { value: "" } });

@@ -1,5 +1,7 @@
 /** COMBO_02 v1 Strategy Backtest configuration helpers (UI-only). */
 
+import { SEAL_LAST_DAY } from "./seal";
+
 export const V1_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"] as const;
 export const V1_SETUP_TF = "1h";
 export const SHORT_STATUS = "PAUSED" as const;
@@ -150,7 +152,7 @@ export const DAILY_TREND_OPTGROUP_LABEL = "Daily trend (research, in-sample)";
  * Last UTC day a daily trend book may load (inclusive end_date). Bars from
  * 2026-07-15 on are the sealed holdout and must never be requested.
  */
-export const DAILY_TREND_LAST_DAY = "2026-07-14";
+export const DAILY_TREND_LAST_DAY = SEAL_LAST_DAY;
 
 export const DAILY_TREND_HOLDOUT_BANNER =
   "Holdout sealed: data from 2026-07-15 is not loaded for daily trend books. Results 2022-10 → 2026-07-14 are in-sample (already read by the pre-registered screen) — for inspection, not confirmation. Funding not charged; fixed-$ risk sizing (the screen compounds 0.5%). Research only — not tradable.";

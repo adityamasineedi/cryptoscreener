@@ -4,10 +4,13 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   cancelRegimeBacktest,
   fetchRegimeBacktest,
+  fetchRegimeBacktestPlan,
+  fetchBacktestDevMode,
   fetchResearchOhlcvRange,
   fetchStrategyRank,
   startRegimeBacktest,
   type OhlcvRangeRow,
+  type RegimeBacktestPlan,
   type RegimeBacktestStartBody,
   type RegimeBacktestStatus,
   type StrategyRankResponse,
@@ -18,6 +21,27 @@ import {
   type StrategyTradeRow,
 } from "../api/client";
 import { pickAutoSetupTimeframe } from "../backtest/autoTimeframe";
+import {
+  researchSides,
+  strategyVerdicts,
+  verdictSuffix,
+  type SideVerdict,
+} from "../backtest/researchVerdicts";
+import {
+  BACKTEST_TAB_BANNER,
+  barLabel,
+  DEV_MODE_BANNER,
+  DEV_MODE_DISABLED_HINT,
+  DEV_MODE_LABEL,
+  DEV_MODE_SWITCH_LABEL,
+  isPastSeal,
+  last365DaysToSeal,
+  NOT_USED_LABEL,
+  SEAL_LAST_DAY,
+  SEALED_MESSAGE,
+  TAB_MAKER_FEE_PCT,
+  TAB_TAKER_FEE_PCT,
+} from "../backtest/seal";
 import {
   API_BAR_CAP,
   coverageRowLabel,
@@ -86,6 +110,7 @@ import {
 } from "../research/symbols";
 import { useBacktestHandoffStore } from "../store/backtestHandoffStore";
 import { useBacktestJobStore } from "../store/backtestJobStore";
+import { moneyTone } from "../utils/moneyTone";
 import { BacktestDataMap } from "./BacktestDataMap";
 import { BacktestLossAnalysis } from "./BacktestLossAnalysis";
 import { BacktestTradeChart } from "./BacktestTradeChart";
@@ -209,7 +234,9 @@ function num(v: number | null | undefined, digits = 2): string {
 
 function money(v: number | null | undefined): string {
   if (v == null || Number.isNaN(v) || !Number.isFinite(v)) return "—";
-  const sign = v >= 0 ? "+" : "";
+  // Zero is neither gain nor loss (owner D206): "$0.00", no sign, neutral colour.
+  if (Math.round(v * 100) === 0) return "$0.00";
+  const sign = v > 0 ? "+" : "";
   return `${sign}$${v.toFixed(2)}`;
 }
 
@@ -334,8 +361,8 @@ function toggleInList<T extends string>(list: T[], value: T): T[] {
 const REGIME_BOOK_FIXED = {
   principalUsd: 1000,
   leverage: 2,
-  takerFeePct: 0.04,
-  makerFeePct: 0.02,
+  takerFeePct: TAB_TAKER_FEE_PCT,
+  makerFeePct: TAB_MAKER_FEE_PCT,
   risk: "2% large cap / 1% mid cap of principal, halved when the side is against the BTC daily trend",
 } as const;
 
@@ -347,6 +374,39 @@ function formatDuration(ms: number): string {
   if (m < 60) return `${m}m ${s}s`;
   const h = Math.floor(m / 60);
   return `${h}h ${m % 60}m`;
+}
+
+/** Research verdict badges (SCORECARD snapshot); the hover text is the kill reason. */
+function VerdictBadges({ verdicts }: { verdicts: readonly SideVerdict[] }) {
+  return (
+    <>
+      {verdicts.map((v) => (
+        <span
+          key={`${v.side}-${v.verdict}`}
+          data-testid="research-verdict-badge"
+          title={v.reason}
+          className={`ml-1 rounded border px-1 text-[9px] font-semibold uppercase ${
+            v.verdict === "KILLED"
+              ? "border-red-500/50 bg-red-500/10 text-red-200"
+              : v.verdict === "INCONCLUSIVE"
+                ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
+                : "border-terminal-border bg-white/5 text-terminal-muted"
+          }`}
+        >
+          {verdicts.length > 1 ? `${v.side} ${v.verdict}` : v.verdict}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/** Label on a sizing field the current run ignores (the regime book sizes trades itself). */
+function NotUsed({ field }: { field: string }) {
+  return (
+    <span className="ml-1 text-[10px] font-semibold text-amber-200" data-testid={`not-used-${field}`}>
+      · {NOT_USED_LABEL}
+    </span>
+  );
 }
 
 function passedAutoLabel(book: TradeBook): string {
@@ -395,8 +455,28 @@ export function BacktestPanel() {
     "Passed short strategies stay selected. The regime run uses them only while BTC daily is bearish."
   );
   const [leverage, setLeverage] = useState(2);
-  const [takerFeePct, setTakerFeePct] = useState(0.04);
-  const [makerFeePct, setMakerFeePct] = useState(0.02);
+  /** Owner-only dev mode (D212): off by default; usable only when the server allows it. */
+  const [devMode, setDevMode] = useState(false);
+  const [devAllowed, setDevAllowed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    Promise.resolve()
+      .then(() => fetchBacktestDevMode())
+      .then((r) => {
+        if (alive) setDevAllowed(r?.allowed === true);
+      })
+      .catch(() => {
+        if (alive) setDevAllowed(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  /** Dev mode counts only when the switch is on AND the server allows it. */
+  const devOn = devMode && devAllowed;
+  // Owner D144: taker 0.05%, maker 0.02% by default.
+  const [takerFeePct, setTakerFeePct] = useState(TAB_TAKER_FEE_PCT);
+  const [makerFeePct, setMakerFeePct] = useState(TAB_MAKER_FEE_PCT);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [preferredSymbol, setPreferredSymbol] = useState<string | null>(null);
@@ -524,6 +604,38 @@ export function BacktestPanel() {
   const regimeRunning = regimeStarting || regimeJob?.status === "running";
   /** Any run in flight: the Run button, Cancel, and progress follow it. */
   const busy = loading || regimeRunning;
+  /** The side of the passed book the regime run walks: the Long book LONG, else SHORT. */
+  const regimeSide: "LONG" | "SHORT" = book === "long" ? "LONG" : "SHORT";
+  /** What the regime run executes, from the backend's own code path (run_plan). */
+  const [regimePlan, setRegimePlan] = useState<RegimeBacktestPlan | null>(null);
+  const [regimePlanError, setRegimePlanError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!regimeMode) return;
+    let alive = true;
+    setRegimePlanError(null);
+    Promise.resolve()
+      .then(() => fetchRegimeBacktestPlan([regimeSide]))
+      .then((plan) => {
+        if (alive && plan?.sides_in_scope) setRegimePlan(plan);
+      })
+      .catch((err) => {
+        if (alive) setRegimePlanError(err instanceof Error ? err.message : "plan request failed");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [regimeMode, regimeSide]);
+  const regimePlanSides =
+    regimePlan && (regimePlan.directions ?? []).join(",") === regimeSide ? regimePlan.sides_in_scope : null;
+  const regimeFixed = {
+    principalUsd: regimePlan?.fixed_config?.principal_usd ?? REGIME_BOOK_FIXED.principalUsd,
+    leverage: regimePlan?.fixed_config?.leverage ?? REGIME_BOOK_FIXED.leverage,
+    takerFeePct: regimePlan?.fixed_config?.taker_fee_pct ?? REGIME_BOOK_FIXED.takerFeePct,
+    makerFeePct: regimePlan?.fixed_config?.maker_fee_pct ?? REGIME_BOOK_FIXED.makerFeePct,
+    risk: REGIME_BOOK_FIXED.risk,
+  };
+  /** The regime run sizes every trade itself: the form's sizing fields are not used. */
+  const sizingNotUsed = regimeMode;
 
   // A regime run still going after a reload or route change is the current run.
   useEffect(() => {
@@ -707,12 +819,14 @@ export function BacktestPanel() {
    */
   const requestWindow = useMemo((): { start?: string; end?: string } => {
     if (!isHoldoutGuarded) {
+      // A start with no end ends at the seal; an explicit end is sent as typed (the run
+      // refuses one after the seal, owner D202).
       return periodMode === "dates"
-        ? { start: start || undefined, end: end || undefined }
+        ? { start: start || undefined, end: end || (start ? SEAL_LAST_DAY : undefined) }
         : { start: undefined, end: undefined };
     }
     if (periodMode === "dates") {
-      return { start: start || undefined, end: capDailyTrendDay(end || DAILY_TREND_LAST_DAY) };
+      return { start: start || undefined, end: end || DAILY_TREND_LAST_DAY };
     }
     const toMax = !customLimit && lookbackId === "max";
     return {
@@ -1049,6 +1163,11 @@ export function BacktestPanel() {
       setStoreError("Custom dates mode needs a start and/or end day (UTC)");
       return;
     }
+    if (!devOn && periodMode === "dates" && (isPastSeal(effectiveEnd) || isPastSeal(effectiveStart))) {
+      // Owner D202: the backend refuses it with HTTP 400; nothing is sent.
+      setStoreError(SEALED_MESSAGE);
+      return;
+    }
     if (engineSymbols) {
       // The engine refuses other coins (engine_request_unsupported); say so before the request.
       const refused = symbols.filter((s) => !engineSymbols.includes(s));
@@ -1111,10 +1230,11 @@ export function BacktestPanel() {
           ? "Long book: passed long strategies only. COMBO_03_TRANSITION_B LONG opens while BTC daily is bullish; nothing opens otherwise. Fills at the next bar's open."
           : "Short book: passed short strategies only. They open while BTC daily is bearish; nothing opens otherwise. Fills at the next bar's open."
       );
-      const body: RegimeBacktestStartBody =
+      const base: RegimeBacktestStartBody =
         periodMode === "dates"
           ? { symbols, timeframe: "1h", start_date: effectiveStart, end_date: effectiveEnd, directions: [side] }
           : { symbols, timeframe: "1h", limit, directions: [side] };
+      const body: RegimeBacktestStartBody = devOn ? { ...base, dev_mode: true } : base;
       const optimistic: RegimeBacktestStatus = {
         status: "running",
         phase: "starting",
@@ -1221,8 +1341,10 @@ export function BacktestPanel() {
       vectorbt_execution: vectorbtExecution,
       start_date: effectiveStart,
       end_date: effectiveEnd,
+      ...(devOn ? { dev_mode: true } : {}),
     });
   }, [
+    devOn,
     vectorbtExecution,
     symbols,
     timeframes,
@@ -1260,15 +1382,9 @@ export function BacktestPanel() {
     setStoreError,
   ]);
 
-  // A daily or 4h trend book's "last 365 days" ends at the holdout cap, not today.
-  const last365 = isHoldoutGuarded
-    ? { start: shiftUtcDay(DAILY_TREND_LAST_DAY, -365), end: DAILY_TREND_LAST_DAY }
-    : lastNDaysUtc(365);
-  const yearPresets = YEAR_PRESETS.map((y) =>
-    isHoldoutGuarded
-      ? { ...y, end: capDailyTrendDay(y.end || DAILY_TREND_LAST_DAY) }
-      : { ...y },
-  );
+  // "Last 365 days" ends at the seal (2026-07-14), not today, for every strategy (owner D202).
+  const last365 = last365DaysToSeal();
+  const yearPresets = YEAR_PRESETS.map((y) => ({ ...y, end: capDailyTrendDay(y.end || SEAL_LAST_DAY) }));
 
   const rows = shownResult?.rows ?? [];
   const selected = rows.find(
@@ -1381,6 +1497,22 @@ export function BacktestPanel() {
       setStoreError(err instanceof Error ? err.message : "Cancel failed");
     }
   }
+
+  /** What the form's run executes, for the data map (owner D206). */
+  const regimeRunLabel = (() => {
+    const shown = regimeActive && regimeJob?.status && regimeJob.status !== "idle" ? regimeJob : null;
+    const dirs = shown?.directions?.length ? shown.directions : regimePlan?.directions;
+    const sides = shown?.sides_in_scope?.length ? shown.sides_in_scope : regimePlanSides;
+    if (!dirs?.length) return null;
+    const n = sides?.length ?? 0;
+    return `auto regime book · 1h ${dirs.join("+")}${n ? ` · ${n} side${n === 1 ? "" : "s"}` : ""}`;
+  })();
+  const formRunLabel =
+    (regimeActive || regimeMode) && regimeRunLabel
+      ? regimeRunLabel
+      : regimeMode
+        ? `auto regime book · 1h ${regimeSide}`
+        : `${bookChipLabel(strategyId, book)} · ${isV21A ? "LONG+SHORT" : direction}${autoPassed ? " (auto)" : ""}`;
 
   function openTradeBook(next: TradeBook) {
     const bookChanged = next !== book;
@@ -1518,6 +1650,22 @@ export function BacktestPanel() {
           regime on each 1h bar and show that book's results. Picking one strategy runs that
           strategy alone. Same engines as the research scripts.
         </p>
+        <div
+          className="mt-2 max-w-3xl rounded border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-[12px] font-semibold text-amber-100"
+          data-testid="backtest-tab-banner"
+          role="note"
+        >
+          {BACKTEST_TAB_BANNER}
+        </div>
+        {devOn ? (
+          <div
+            className="mt-2 max-w-3xl rounded border border-red-500 bg-red-500/20 px-3 py-2 text-[12px] font-bold text-red-100"
+            data-testid="dev-mode-banner"
+            role="alert"
+          >
+            {DEV_MODE_BANNER}
+          </div>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Trade book">
           {(
             [
@@ -1560,48 +1708,63 @@ export function BacktestPanel() {
             >
               {workingStrategies.length ? (
                 <optgroup label="Working">
-                  {workingStrategies.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {bookChipLabel(opt.id, book)}
-                    </option>
-                  ))}
+                  {workingStrategies.map((opt) => {
+                    const verdicts = strategyVerdicts(opt.combinationId, researchSides(opt, book));
+                    return (
+                      <option key={opt.id} value={opt.id} title={verdicts.map((v) => v.reason).join("\n")}>
+                        {`${bookChipLabel(opt.id, book)}${verdictSuffix(verdicts)}`}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               ) : null}
               <option value="PASSED_AUTO">{passedAutoLabel(book)}</option>
               {passedStrategies.length ? (
                 <optgroup label="Passed">
-                  {passedStrategies.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {bookChipLabel(opt.id, book)}
-                    </option>
-                  ))}
+                  {passedStrategies.map((opt) => {
+                    const verdicts = strategyVerdicts(opt.combinationId, researchSides(opt, book));
+                    return (
+                      <option key={opt.id} value={opt.id} title={verdicts.map((v) => v.reason).join("\n")}>
+                        {`${bookChipLabel(opt.id, book)}${verdictSuffix(verdicts)}`}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               ) : null}
               {researchStrategies.length ? (
                 <optgroup label="Research">
-                  {researchStrategies.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {bookChipLabel(opt.id, book)}
-                    </option>
-                  ))}
+                  {researchStrategies.map((opt) => {
+                    const verdicts = strategyVerdicts(opt.combinationId, researchSides(opt, book));
+                    return (
+                      <option key={opt.id} value={opt.id} title={verdicts.map((v) => v.reason).join("\n")}>
+                        {`${bookChipLabel(opt.id, book)}${verdictSuffix(verdicts)}`}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               ) : null}
               {dailyTrendStrategies.length ? (
                 <optgroup label={DAILY_TREND_OPTGROUP_LABEL}>
-                  {dailyTrendStrategies.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
+                  {dailyTrendStrategies.map((opt) => {
+                    const verdicts = strategyVerdicts(opt.combinationId, researchSides(opt, book));
+                    return (
+                      <option key={opt.id} value={opt.id} title={verdicts.map((v) => v.reason).join("\n")}>
+                        {`${opt.label}${verdictSuffix(verdicts)}`}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               ) : null}
               {mtfTrendStrategies.length ? (
                 <optgroup label={MTF_TREND_OPTGROUP_LABEL}>
-                  {mtfTrendStrategies.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
+                  {mtfTrendStrategies.map((opt) => {
+                    const verdicts = strategyVerdicts(opt.combinationId, researchSides(opt, book));
+                    return (
+                      <option key={opt.id} value={opt.id} title={verdicts.map((v) => v.reason).join("\n")}>
+                        {`${opt.label}${verdictSuffix(verdicts)}`}
+                      </option>
+                    );
+                  })}
                 </optgroup>
               ) : null}
             </select>
@@ -1639,17 +1802,62 @@ export function BacktestPanel() {
                     ? "Hedge strategy stays selected. Run uses COMBO_02 V2.1-A LONG and SHORT together."
                     : "Passed short strategies stay selected. Run uses them only while BTC daily is bearish."}
               </span>
-              {passedIds.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed="true"
-                  onClick={() => chooseStrategy(id)}
-                  className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] text-emerald-100"
-                >
-                  {bookChipLabel(id, book)}
-                </button>
-              ))}
+              {regimeMode ? (
+                regimePlanSides ? (
+                  // Every side the regime run walks, from the backend's run_plan (PASSED_SIDES).
+                  regimePlanSides.map((side) => {
+                    const pickable = bookStrategies.some((opt) => opt.id === side.strategy_id);
+                    const chip = (
+                      <>
+                        {side.strategy_id} {side.timeframe} {side.direction}
+                        <VerdictBadges verdicts={strategyVerdicts(side.strategy_id, [side.direction])} />
+                      </>
+                    );
+                    return pickable ? (
+                      <button
+                        key={`${side.strategy_id}-${side.direction}`}
+                        type="button"
+                        aria-pressed="true"
+                        data-testid={`run-chip-${side.strategy_id}`}
+                        onClick={() => chooseStrategy(side.strategy_id)}
+                        className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] text-emerald-100"
+                      >
+                        {chip}
+                      </button>
+                    ) : (
+                      <span
+                        key={`${side.strategy_id}-${side.direction}`}
+                        data-testid={`run-chip-${side.strategy_id}`}
+                        title={`${side.strategy_id} runs inside this regime run; it is not on this book's menu to run alone.`}
+                        className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] text-emerald-100"
+                      >
+                        {chip}
+                      </span>
+                    );
+                  })
+                ) : (
+                  <span className="text-[10px] text-terminal-muted" data-testid="regime-plan-loading">
+                    {regimePlanError
+                      ? `Could not load the strategies this run executes (${regimePlanError}).`
+                      : "Loading the strategies this run executes…"}
+                  </span>
+                )
+              ) : (
+                // Hedge auto: the run sends exactly this strategy.
+                [strategyMeta].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    aria-pressed="true"
+                    data-testid={`run-chip-${opt.combinationId}`}
+                    onClick={() => chooseStrategy(opt.id)}
+                    className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] text-emerald-100"
+                  >
+                    {bookChipLabel(opt.id, book)}
+                    <VerdictBadges verdicts={strategyVerdicts(opt.combinationId, researchSides(opt, book))} />
+                  </button>
+                ))
+              )}
             </div>
           ) : null}
           {isSd ? (
@@ -1674,6 +1882,14 @@ export function BacktestPanel() {
             {isSd
               ? ` · ${SD_VARIANT_OPTIONS.find((opt) => opt.id === sdVariant)?.label ?? sdVariant}`
               : ""}
+            {autoPassed ? null : (
+              <VerdictBadges
+                verdicts={strategyVerdicts(
+                  isSd ? sdVariant : strategyMeta.combinationId,
+                  researchSides(strategyMeta, book, direction),
+                )}
+              />
+            )}
           </span>
           <span
             data-testid="backtest-status-chip"
@@ -2097,59 +2313,88 @@ export function BacktestPanel() {
             ) : null}
           </div>
 
-          <label className="text-xs">
-            <span className="mb-1 block text-terminal-muted">Principal $ (starting equity)</span>
+          <label className={`text-xs ${sizingNotUsed ? "opacity-50" : ""}`}>
+            <span className="mb-1 block text-terminal-muted">
+              Principal $ (starting equity)
+              {sizingNotUsed ? <NotUsed field="principal" /> : null}
+            </span>
             <input
               type="number"
               min={1}
               step={100}
               value={principalUsd}
+              disabled={sizingNotUsed}
+              aria-label="Principal $ (starting equity)"
               onChange={(e) =>
                 applyRiskFromPrincipal(Number(e.target.value) || 0, riskPct)
               }
-              className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
+              className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none disabled:cursor-not-allowed"
             />
           </label>
         </div>
 
-        <div className="mt-3 rounded border border-terminal-border/60 bg-black/20 px-3 py-2 text-[11px] text-terminal-muted">
+        <div
+          className="mt-3 rounded border border-terminal-border/60 bg-black/20 px-3 py-2 text-[11px] text-terminal-muted"
+          data-testid="run-sizing"
+        >
           <div className="mb-1 font-semibold uppercase tracking-wide text-terminal-text">
-            Effective production risk
+            Sizing this run uses
           </div>
-          <div className="font-mono text-[11px] text-terminal-text">
-            BTCUSDT core — 2% / ${Math.round((principalUsd * 2) / 100)}
-          </div>
-          <div className="font-mono text-[11px] text-terminal-text">
-            ETHUSDT secondary — 2% / ${Math.round((principalUsd * 2) / 100)}
-          </div>
-          <div className="font-mono text-[11px] text-terminal-text">
-            SOLUSDT secondary — 2% / ${Math.round((principalUsd * 2) / 100)}
-          </div>
+          {regimeMode ? (
+            <div className="font-mono text-[11px] text-terminal-text">
+              Regime book: principal ${regimeFixed.principalUsd.toLocaleString()} · risk {regimeFixed.risk} ·
+              leverage {regimeFixed.leverage}× · taker {regimeFixed.takerFeePct}% / maker {regimeFixed.makerFeePct}%
+            </div>
+          ) : lockV1Risk ? (
+            symbols
+              .filter((s) => s in V1_PRODUCTION_RISK)
+              .map((s) => {
+                const r = v1RiskForSymbol(s, principalUsd);
+                return (
+                  <div key={s} className="font-mono text-[11px] text-terminal-text">
+                    {s} v1 production profile — {r ? `${r.riskPercent}% / $${r.riskUsd}` : "—"}
+                  </div>
+                );
+              })
+          ) : (
+            <div className="font-mono text-[11px] text-terminal-text">
+              {riskPct}% of principal / ${riskUsd} per trade (1R) · principal ${principalUsd.toLocaleString()} ·
+              leverage {leverage}× · taker {takerFeePct}% / maker {makerFeePct}%
+            </div>
+          )}
         </div>
 
         <div className="mt-3 grid gap-3 term-md:grid-cols-4">
-          <label className="text-xs">
-            <span className="mb-1 block text-terminal-muted">Risk % of principal (1R)</span>
+          <label className={`text-xs ${sizingNotUsed ? "opacity-50" : ""}`}>
+            <span className="mb-1 block text-terminal-muted">
+              Risk % of principal (1R)
+              {sizingNotUsed ? <NotUsed field="risk-pct" /> : null}
+            </span>
             <input
               type="number"
               min={0.1}
               step={0.1}
               value={riskPct}
-              disabled={lockV1Risk}
+              aria-label="Risk % of principal (1R)"
+              disabled={lockV1Risk || sizingNotUsed}
               onChange={(e) =>
                 applyRiskFromPrincipal(principalUsd, Number(e.target.value) || 0)
               }
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none disabled:opacity-50"
             />
           </label>
-          <label className="text-xs">
-            <span className="mb-1 block text-terminal-muted">Risk $ per trade (1R)</span>
+          <label className={`text-xs ${sizingNotUsed ? "opacity-50" : ""}`}>
+            <span className="mb-1 block text-terminal-muted">
+              Risk $ per trade (1R)
+              {sizingNotUsed ? <NotUsed field="risk-usd" /> : null}
+            </span>
             <input
               type="number"
               min={1}
               step={1}
               value={riskUsdText ?? riskUsd}
-              disabled={lockV1Risk}
+              aria-label="Risk $ per trade (1R)"
+              disabled={lockV1Risk || sizingNotUsed}
               onChange={(e) => {
                 const raw = e.target.value;
                 setRiskUsdText(raw);
@@ -2162,14 +2407,19 @@ export function BacktestPanel() {
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none disabled:opacity-50"
             />
           </label>
-          <label className="text-xs">
-            <span className="mb-1 block text-terminal-muted">Leverage (x)</span>
+          <label className={`text-xs ${sizingNotUsed ? "opacity-50" : ""}`}>
+            <span className="mb-1 block text-terminal-muted">
+              Leverage (x)
+              {sizingNotUsed ? <NotUsed field="leverage" /> : null}
+            </span>
             <input
               type="number"
               min={1}
               max={125}
               step={1}
               value={leverage}
+              aria-label="Leverage (x)"
+              disabled={sizingNotUsed}
               onChange={(e) =>
                 // An empty field falls back to the 2x default; any typed value below 1 (0 included) is 1.
                 setLeverage(e.target.value === "" ? 2 : Math.max(1, Number(e.target.value) || 1))
@@ -2221,28 +2471,34 @@ export function BacktestPanel() {
         ) : null}
 
         <div className="mt-3 grid gap-3 term-md:grid-cols-3">
-          <label className="text-xs">
+          <label className={`text-xs ${sizingNotUsed ? "opacity-50" : ""}`}>
             <span className="mb-1 block text-terminal-muted">
               Taker fee % (exit + market entry)
+              {sizingNotUsed ? <NotUsed field="taker-fee" /> : null}
             </span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={takerFeePct}
+              aria-label="Taker fee % (exit + market entry)"
+              disabled={sizingNotUsed}
               onChange={(e) => setTakerFeePct(Number(e.target.value) || 0)}
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
             />
           </label>
-          <label className="text-xs">
+          <label className={`text-xs ${sizingNotUsed ? "opacity-50" : ""}`}>
             <span className="mb-1 block text-terminal-muted">
               Maker fee % (LIMIT_RETEST entry)
+              {sizingNotUsed ? <NotUsed field="maker-fee" /> : null}
             </span>
             <input
               type="number"
               min={0}
               step={0.01}
               value={makerFeePct}
+              aria-label="Maker fee % (LIMIT_RETEST entry)"
+              disabled={sizingNotUsed}
               onChange={(e) => setMakerFeePct(Number(e.target.value) || 0)}
               className="w-full rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
             />
@@ -2262,6 +2518,27 @@ export function BacktestPanel() {
             <span className="text-[11px] uppercase tracking-wide text-terminal-muted">
               Period
             </span>
+            <label
+              className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] ${
+                devAllowed ? "border-red-500/50 text-red-200" : "border-terminal-border text-terminal-muted opacity-60"
+              }`}
+              title={devAllowed ? DEV_MODE_BANNER : DEV_MODE_DISABLED_HINT}
+            >
+              <input
+                type="checkbox"
+                data-testid="dev-mode-switch"
+                aria-label={DEV_MODE_SWITCH_LABEL}
+                checked={devOn}
+                disabled={!devAllowed}
+                onChange={(e) => setDevMode(e.target.checked)}
+              />
+              {DEV_MODE_SWITCH_LABEL}
+              {devAllowed ? null : (
+                <span className="text-[10px]" data-testid="dev-mode-hint">
+                  ({DEV_MODE_DISABLED_HINT})
+                </span>
+              )}
+            </label>
             <button
               type="button"
               onClick={() => {
@@ -2278,7 +2555,7 @@ export function BacktestPanel() {
                   : "border-terminal-border text-terminal-muted"
               }`}
             >
-              {isHoldoutGuarded ? `Last 365 days to ${DAILY_TREND_LAST_DAY}` : "Last 365 days"}
+              {`Last 365 days to ${SEAL_LAST_DAY}`}
             </button>
           </div>
           <div className="mb-2 flex flex-wrap gap-1">
@@ -2310,7 +2587,9 @@ export function BacktestPanel() {
             <>
               <div className="mb-1 rounded border border-terminal-border/50 bg-black/15 px-2 py-1.5 text-[11px] text-terminal-muted">
                 <div className="font-semibold text-terminal-text">DB-tail mode</div>
-                <div>Uses the latest N available candles</div>
+                <div data-testid="db-tail-seal-note">
+                  Counts N candles back from {SEAL_LAST_DAY} 23:59 UTC (the seal), not from today
+                </div>
                 <div>Does not represent a calendar-year filter</div>
               </div>
               <div className="flex flex-wrap gap-1">
@@ -2325,10 +2604,10 @@ export function BacktestPanel() {
                       : l.id !== "max"
                       ? lookbackLabelForTf(l.limit, primaryTf)
                       : maxLookback.source === "api-cap"
-                        ? `Max (${bars.toLocaleString()} bars · API cap, DB has ${(maxLookback.dbBars ?? 0).toLocaleString()})`
+                        ? `Max (${bars.toLocaleString()} bars · API cap, DB has ${(maxLookback.dbBars ?? 0).toLocaleString()} → ${SEAL_LAST_DAY})`
                         : maxLookback.source === "fallback"
-                          ? `Max (${bars.toLocaleString()} bars · DB size unknown)`
-                          : `Max (${bars.toLocaleString()} bars in DB)`;
+                          ? `Max (${bars.toLocaleString()} bars · DB size unknown → ${SEAL_LAST_DAY})`
+                          : `Max (${bars.toLocaleString()} bars in DB → ${SEAL_LAST_DAY})`;
                   return (
                     <button
                       key={l.id}
@@ -2413,7 +2692,7 @@ export function BacktestPanel() {
                     type="date"
                     aria-label="Start day (UTC)"
                     value={start}
-                    max={isHoldoutGuarded ? DAILY_TREND_LAST_DAY : undefined}
+                    max={SEAL_LAST_DAY}
                     onChange={(e) => setStart(e.target.value)}
                     className="rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
                   />
@@ -2424,14 +2703,26 @@ export function BacktestPanel() {
                     type="date"
                     aria-label="End day (UTC, inclusive)"
                     value={end}
-                    max={isHoldoutGuarded ? DAILY_TREND_LAST_DAY : undefined}
-                    onChange={(e) =>
-                      setEnd(isHoldoutGuarded && e.target.value ? capDailyTrendDay(e.target.value) : e.target.value)
-                    }
+                    max={SEAL_LAST_DAY}
+                    // An explicit day is never clamped: a day after the seal is refused at Run.
+                    onChange={(e) => setEnd(e.target.value)}
                     className="rounded border border-terminal-border bg-transparent px-2 py-1.5 font-mono text-sm focus:border-terminal-accent focus:outline-none"
                   />
                 </label>
               </div>
+              {!devOn && (isPastSeal(end) || isPastSeal(start)) ? (
+                <div
+                  className="mt-2 rounded border border-red-500/50 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-200"
+                  data-testid="sealed-date-error"
+                  role="alert"
+                >
+                  {SEALED_MESSAGE}
+                </div>
+              ) : (
+                <div className="mt-1 text-[10px] text-terminal-muted" data-testid="sealed-date-note">
+                  Last day a backtest can read: {SEAL_LAST_DAY} (sealed holdout after it, SEALS.md).
+                </div>
+              )}
             </>
           )}
 
@@ -2475,6 +2766,8 @@ export function BacktestPanel() {
                     direction === "SHORT" ? " · impulse + pullback required" : ""
                   }`}
             </div>
+            {regimeMode ? null : (
+            <>
             <div>
               Effective risk:{" "}
               {lockV1Risk
@@ -2495,13 +2788,15 @@ export function BacktestPanel() {
                   ? "V1 production profile"
                   : "Research fallback"}
             </div>
+            </>
+            )}
             <div>Entry model: MARKET or LIMIT_RETEST</div>
             {regimeMode ? (
               <div>
                 Regime book sizing (form risk, principal, leverage and fees not used): principal $
-                {REGIME_BOOK_FIXED.principalUsd.toLocaleString()} · risk {REGIME_BOOK_FIXED.risk} · fees taker{" "}
-                {REGIME_BOOK_FIXED.takerFeePct}% / maker {REGIME_BOOK_FIXED.makerFeePct}% · leverage{" "}
-                {REGIME_BOOK_FIXED.leverage}×
+                {regimeFixed.principalUsd.toLocaleString()} · risk {regimeFixed.risk} · fees taker{" "}
+                {regimeFixed.takerFeePct}% / maker {regimeFixed.makerFeePct}% · leverage{" "}
+                {regimeFixed.leverage}×
               </div>
             ) : (
               <>
@@ -2520,7 +2815,7 @@ export function BacktestPanel() {
                   ? `Daily ${effectiveStart ?? "first stored bar"} → ${effectiveEnd} (tail ends at the holdout cap)`
                   : isMtfTrend
                     ? `4h ${limit.toLocaleString()} bars · ${effectiveStart ?? "first stored bar"} → ${effectiveEnd} (tail ends at the holdout cap)`
-                    : `DB-tail ${limit.toLocaleString()} bars ≈ ${approxDays ?? "—"} days at ${primaryTf}`}
+                    : `DB-tail ${limit.toLocaleString()} bars ≈ ${approxDays ?? "—"} days at ${primaryTf}, ending ${SEAL_LAST_DAY}`}
             </div>
             <div>
               Production comparable:{" "}
@@ -2565,7 +2860,7 @@ export function BacktestPanel() {
           <div className="mt-1 font-mono text-[11px] text-terminal-muted">
             {periodMode === "dates"
               ? `Calendar-range mode ${effectiveStart || "…"} → ${effectiveEnd || "…"} · ${symbols.length}×${timeframes.length} cells · runs in background`
-              : `DB-tail mode · Bars requested: ${limit.toLocaleString()} · ≈ ${approxDays ?? "—"} days at ${primaryTf} · ${symbols.length}×${timeframes.length} cells`}
+              : `DB-tail mode · Bars requested: ${limit.toLocaleString()} · ≈ ${approxDays ?? "—"} days at ${primaryTf}, ending ${SEAL_LAST_DAY} · ${symbols.length}×${timeframes.length} cells`}
           </div>
           {regimeMode ? (
             <div
@@ -2577,7 +2872,7 @@ export function BacktestPanel() {
                 Sends: {symbols.length} coin{symbols.length === 1 ? "" : "s"} · 1h bars ·{" "}
                 {periodMode === "dates"
                   ? `calendar ${effectiveStart || "…"} → ${effectiveEnd || "…"} (UTC, end inclusive)`
-                  : `latest ${limit.toLocaleString()} 1h bars ≈ ${barsToApproxDays(limit, "1h") ?? "—"} days`}
+                  : `${limit.toLocaleString()} 1h bars ≈ ${barsToApproxDays(limit, "1h") ?? "—"} days ending ${SEAL_LAST_DAY}`}
                 . Warm-up bars load in front and are not traded.
               </div>
               {timeframes.length !== 1 || timeframes[0] !== "1h" ? (
@@ -2587,9 +2882,9 @@ export function BacktestPanel() {
               ) : null}
               <div className="mt-1">
                 Not used by this run: the Principal, Risk, Leverage and Fee fields. The book uses principal $
-                {REGIME_BOOK_FIXED.principalUsd.toLocaleString()}, risk {REGIME_BOOK_FIXED.risk}, leverage{" "}
-                {REGIME_BOOK_FIXED.leverage}×, taker {REGIME_BOOK_FIXED.takerFeePct}% / maker{" "}
-                {REGIME_BOOK_FIXED.makerFeePct}%.
+                {regimeFixed.principalUsd.toLocaleString()}, risk {regimeFixed.risk}, leverage{" "}
+                {regimeFixed.leverage}×, taker {regimeFixed.takerFeePct}% / maker{" "}
+                {regimeFixed.makerFeePct}%.
               </div>
             </div>
           ) : null}
@@ -2789,12 +3084,8 @@ export function BacktestPanel() {
                     : "Net profit (summed over cells)"}
               </div>
               <div
-                className={`font-mono text-lg ${
-                  (selected ? selectedCapital.net : pooled.pnlNet) != null &&
-                  ((selected ? selectedCapital.net : pooled.pnlNet) as number) >= 0
-                    ? "text-emerald-400"
-                    : "text-red-400"
-                }`}
+                data-testid="net-profit-value"
+                className={`font-mono text-lg ${moneyTone(selected ? selectedCapital.net : pooled.pnlNet)}`}
               >
                 {money(selected ? selectedCapital.net : pooled.pnlNet)}
               </div>
@@ -2944,7 +3235,7 @@ export function BacktestPanel() {
               <span className="text-terminal-text">
                 {job?.start_date || job?.end_date
                   ? `Calendar ${job.start_date || "…"} → ${job.end_date || "…"}`
-                  : `DB-tail ${job?.limit ?? "—"} bars (evaluated window; warm-up bars are loaded in addition)`}
+                  : `DB-tail ${job?.limit ?? "—"} bars ending ${SEAL_LAST_DAY} (evaluated window; warm-up bars are loaded in addition)`}
               </span>
             </div>
             <div>
@@ -2954,6 +3245,22 @@ export function BacktestPanel() {
                   ? `${String(selected.period_start || "—").slice(0, 10)} → ${String(selected.period_end || "—").slice(0, 10)}`
                   : "—"}
               </span>
+            </div>
+            {job?.dev_mode ? (
+              <div className="font-semibold text-red-300 term-md:col-span-2" data-testid="dev-mode-run-label">
+                {job.run_label || DEV_MODE_LABEL}
+              </div>
+            ) : null}
+            <div data-testid="backtest-data-window">
+              Data loaded (warm-up included):{" "}
+              <span className="text-terminal-text">
+                {selected?.data_first_bar || selected?.data_last_bar
+                  ? `${barLabel(selected.data_first_bar)} → ${barLabel(selected.data_last_bar)}`
+                  : job?.data_window?.last_bar
+                    ? `${barLabel(job.data_window.first_bar)} → ${barLabel(job.data_window.last_bar)}`
+                    : "—"}
+              </span>
+              {" · "}sealed through {job?.data_window?.sealed_through ?? SEAL_LAST_DAY}
             </div>
             <div>
               Bars used:{" "}
@@ -3210,16 +3517,14 @@ export function BacktestPanel() {
                       )}
                     </td>
                     <td
-                      className={`px-2 py-2 font-mono ${
-                        (row.pnl_usd ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
-                      }`}
+                      className={`px-2 py-2 font-mono ${row.sample_size ? moneyTone(row.pnl_usd) : "text-terminal-muted"}`}
+                      data-testid="row-gross-pnl"
                     >
                       {row.sample_size ? money(row.pnl_usd) : "—"}
                     </td>
                     <td
-                      className={`px-2 py-2 font-mono ${
-                        (row.pnl_usd_net ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
-                      }`}
+                      className={`px-2 py-2 font-mono ${row.sample_size ? moneyTone(row.pnl_usd_net) : "text-terminal-muted"}`}
+                      data-testid="row-net-pnl"
                     >
                       {row.sample_size ? money(row.pnl_usd_net) : "—"}
                       {row.pnl_model === "CAUSAL_NEXT_OPEN" ? (
@@ -3257,6 +3562,11 @@ export function BacktestPanel() {
                         Actual: {String(row.period_start || "—").slice(0, 10)} →{" "}
                         {String(row.period_end || "—").slice(0, 10)}
                       </div>
+                      {row.data_first_bar || row.data_last_bar ? (
+                        <div className="text-[10px]" data-testid="row-data-period">
+                          Data: {barLabel(row.data_first_bar)} → {barLabel(row.data_last_bar)}
+                        </div>
+                      ) : null}
                       <div className="text-[10px]">
                         {row.bars_evaluated != null ? "Bars evaluated" : "Bars loaded"}:{" "}
                         {row.bars_evaluated ?? row.bars_loaded ?? "—"}
@@ -3281,11 +3591,12 @@ export function BacktestPanel() {
       </div>
 
       <BacktestDataMap
-        // Describes the job whose rows it counts; the form only before any run.
+        // Describes the run it counts (owner D206): the job's strategy, the regime run's
+        // plan (the same backend run_plan as the chips), or the form's single strategy.
         strategyLabel={
-          job && job.status !== "idle" && job.strategy_id
+          !regimeActive && job && job.status !== "idle" && job.strategy_id
             ? `${jobStrategyLabel(job.strategy_id)} · ${directionLabel(job)}`
-            : backtestStrategyLabel(strategyId)
+            : formRunLabel
         }
         symbols={
           job && job.status !== "idle"
@@ -3796,8 +4107,7 @@ function TradeRow({
 }) {
   const net = t.net_pnl_usd;
   const separateFill = hasSeparateFillBar(t);
-  const netCls =
-    net == null ? "text-terminal-muted" : net >= 0 ? "text-emerald-400" : "text-red-400";
+  const netCls = moneyTone(net);
   const marginTitle = [
     t.leverage != null
       ? `${t.leverage}x · notional $${(t.notional_entry_usd ?? 0).toFixed(2)} · approx liq ${t.liquidation_price ?? "—"}`
@@ -3875,11 +4185,7 @@ function TradeRow({
       {showFunding ? (
         <td
           className={`px-2 py-1.5 font-mono ${
-            t.funding_usd == null
-              ? "text-terminal-muted"
-              : t.funding_usd >= 0
-                ? "text-emerald-400/80"
-                : "text-red-400/80"
+            moneyTone(t.funding_usd, { gain: "text-emerald-400/80", loss: "text-red-400/80" })
           }`}
           title={
             [
@@ -3906,7 +4212,7 @@ function TradeRow({
       ) : null}
       <td
         className={`px-2 py-1.5 font-mono ${
-          (t.gross_pnl_usd ?? 0) >= 0 ? "text-emerald-400/80" : "text-red-400/80"
+          moneyTone(t.gross_pnl_usd, { gain: "text-emerald-400/80", loss: "text-red-400/80" })
         }`}
       >
         {money(t.gross_pnl_usd)}

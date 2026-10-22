@@ -706,6 +706,11 @@ export type StrategyMatrixRow = {
   live_trade_created?: boolean;
   telegram_sent?: boolean;
   market_structure?: MarketStructureAnalytics | null;
+  /** Run record (owner D202): first and last bar this cell loaded, warm-up included. */
+  data_first_bar?: string | null;
+  data_last_bar?: string | null;
+  /** Last UTC day any backtest may read (the seal, 2026-07-14). */
+  sealed_through?: string | null;
 };
 
 export type MarketStructureTableRow = {
@@ -858,6 +863,9 @@ export type OhlcvRangeRow = {
   bars: number;
   start?: string | null;
   end?: string | null;
+  /** Bars a backtest may use: those before the seal (2026-07-15 00:00 UTC). Metadata only. */
+  sealed_bars?: number;
+  sealed_end?: string | null;
 };
 
 export function fetchResearchOhlcvRange(params?: {
@@ -1500,6 +1508,8 @@ export async function advanceDynamicCandidates(body?: {
 export type BacktestJob = {
   job_id?: string | null;
   status: string;
+  /** Run record (owner D202): earliest first bar and latest last bar any cell loaded. */
+  data_window?: { first_bar?: string | null; last_bar?: string | null; sealed_through?: string | null };
   symbols?: string[];
   timeframes?: string[];
   direction?: string;
@@ -1516,6 +1526,9 @@ export type BacktestJob = {
   include_trades?: boolean;
   vectorbt_execution?: boolean;
   vectorbt_mismatch_total?: number;
+  /** Owner D212: the run read data after the seal (owner-only dev mode). */
+  dev_mode?: boolean;
+  run_label?: string | null;
   start_date?: string | null;
   end_date?: string | null;
   total_cells?: number;
@@ -1748,6 +1761,12 @@ export type CapBookAgentsResponse = {
   poll_interval_seconds: number;
   timestamp?: string;
   shards: CapBookShard[];
+  /** Owner D202: the Profit checker window lies inside the seal; it cannot be re-run. */
+  sealed?: boolean;
+  sealed_label?: string;
+  rerun_allowed?: boolean;
+  rerun_refused_reason?: string;
+  window?: Record<string, { start: string; end: string }>;
 };
 
 export function fetchCapBookAgents(signal?: AbortSignal) {
@@ -1984,13 +2003,24 @@ export type RegimeBacktestWindow = {
     limit?: number | null;
   };
   /** What the book walked: warm-up bars are loaded in front and never traded. */
-  evaluated?: (RegimeBacktestPeriod & { symbols?: Record<string, RegimeBacktestPeriod> }) | null;
+  evaluated?: (RegimeBacktestPeriod & {
+    symbols?: Record<string, RegimeBacktestPeriod>;
+    /** Run record (owner D202): first and last 1h bar loaded, warm-up included. */
+    data_first_bar?: string | null;
+    data_last_bar?: string | null;
+    sealed_through?: string | null;
+  }) | null;
+  /** BTC daily bars the regime clock read. */
+  btc_daily?: { first_bar?: string | null; last_bar?: string | null };
   /** Per-symbol cap on evaluated 1h bars; the latest bars are kept when it applies. */
   cap?: { max_eval_bars?: number; applied?: boolean; symbols?: string[] };
 };
 
 export type RegimeBacktestStatus = {
   status: "idle" | "running" | "done" | "error" | "cancelled" | string;
+  /** Owner D212: the run read data after the seal (owner-only dev mode). */
+  dev_mode?: boolean;
+  run_label?: string | null;
   job_id?: string | null;
   phase?: string;
   current?: string;
@@ -2069,7 +2099,7 @@ export type RegimeBacktestStartBody = {
   symbols: string[];
   /** The book runs on 1h bars only; the server rejects anything else. */
   timeframe: "1h";
-  /** Lookback mode: number of 1h bars ending at the latest bar. */
+  /** Lookback mode: number of 1h bars ending at the seal (2026-07-14 23:00 UTC). */
   limit?: number;
   /** Calendar mode: UTC days, end inclusive. */
   start_date?: string;
@@ -2078,6 +2108,8 @@ export type RegimeBacktestStartBody = {
   directions?: Array<"LONG" | "SHORT">;
   /** Default true. False runs every passed side on every coin (per-coin pass/fail study). */
   apply_symbol_allowlist?: boolean;
+  /** Owner-only dev mode (D212): honoured only when the server allows it. */
+  dev_mode?: boolean;
 };
 
 export type RegimeBacktestStartResponse = {
@@ -2099,6 +2131,33 @@ export function startRegimeBacktest(body: RegimeBacktestStartBody) {
 
 export function fetchRegimeBacktest() {
   return getJson<RegimeBacktestStatus>("/api/research/regime-backtest");
+}
+
+/** Owner-only dev mode (D212): whether the server lets the switch be turned on. */
+export type BacktestDevMode = {
+  allowed: boolean;
+  hint?: string | null;
+  banner?: string;
+  label?: string;
+  sealed_through?: string;
+};
+
+export function fetchBacktestDevMode(signal?: AbortSignal) {
+  return getJson<BacktestDevMode>("/api/research/backtest-dev-mode", { signal });
+}
+
+/** What a regime-book run executes (backend run_plan: its PASSED_SIDES rows and sizing). */
+export type RegimeBacktestPlan = {
+  directions: Array<"LONG" | "SHORT">;
+  timeframe: string;
+  sides_in_scope: Array<{ strategy_id: string; timeframe: string; direction: string }>;
+  fixed_config?: RegimeBacktestStatus["fixed_config"];
+  sealed_through?: string;
+};
+
+export function fetchRegimeBacktestPlan(directions: Array<"LONG" | "SHORT">, signal?: AbortSignal) {
+  const q = new URLSearchParams({ directions: directions.join(",") });
+  return getJson<RegimeBacktestPlan>(`/api/research/regime-backtest/plan?${q.toString()}`, { signal });
 }
 
 export function cancelRegimeBacktest() {
@@ -2134,6 +2193,8 @@ export async function startBacktestJob(body: {
   start_date?: string;
   /** Inclusive UTC day: the backend loads bars with timestamp < end_date + 1 day. */
   end_date?: string;
+  /** Owner-only dev mode (D212): honoured only when the server's BACKTEST_DEV_MODE_ALLOWED is true. */
+  dev_mode?: boolean;
 }) {
   const res = await fetch(`${API_BASE}/api/research/long-strategy/backtest/start`, {
     method: "POST",

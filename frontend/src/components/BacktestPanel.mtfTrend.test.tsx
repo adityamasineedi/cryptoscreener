@@ -258,7 +258,7 @@ describe("4h book 16 in the Backtest tab", () => {
     expect(group).not.toBeNull();
     const opts = Array.from(group!.querySelectorAll("option"));
     expect(opts.map((o) => o.value)).toEqual([MTF_ID]);
-    expect(opts.map((o) => o.textContent)).toEqual([MTF_LABEL]);
+    expect(opts.map((o) => o.textContent)).toEqual([`${MTF_LABEL} — INCONCLUSIVE`]);
     for (const label of ["Research", DAILY_TREND_OPTGROUP_LABEL]) {
       const other = strategySelect(root).querySelector(`optgroup[label="${label}"]`);
       const ids = Array.from(other?.querySelectorAll("option") ?? []).map((o) => o.value);
@@ -373,10 +373,19 @@ describe("4h book 16 in the Backtest tab", () => {
     expect(body?.start_date).toBe("2026-01-01");
     expect(body?.end_date).toBe("2026-07-14");
 
+    // Owner D202: an explicit day after the seal is never clamped; Run refuses it.
     fireEvent.change(endInput, { target: { value: "2026-09-30" } });
-    expect(endInput.value).toBe("2026-07-14");
-    body = await runAndGetBody(user, root);
-    expect(body?.end_date).toBe("2026-07-14");
+    expect(endInput.value).toBe("2026-09-30");
+    expect(root.getByTestId("sealed-date-error").textContent).toBe(
+      "Sealed: data after 2026-07-14 is reserved for the holdout (SEALS.md)",
+    );
+    vi.mocked(startBacktestJob).mockClear();
+    await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
+    await waitFor(() => expect(useBacktestJobStore.getState().error).toMatch(/^Sealed: data after 2026-07-14/));
+    expect(startBacktestJob).not.toHaveBeenCalled();
+    await act(async () => {
+      useBacktestJobStore.setState({ error: null });
+    });
 
     await user.click(root.getByRole("button", { name: "Last 365 days to 2026-07-14" }));
     body = await runAndGetBody(user, root);
@@ -387,7 +396,7 @@ describe("4h book 16 in the Backtest tab", () => {
     fireEvent.change(endInput, { target: { value: "" } });
     vi.mocked(startBacktestJob).mockClear();
     await user.click(root.getByRole("button", { name: /^Run backtest$/i }));
-    await waitFor(() => expect(useBacktestJobStore.getState().error).toMatch(/4h book 16 loads data through 2026-07-14/));
+    await waitFor(() => expect(useBacktestJobStore.getState().error).toMatch(/^Sealed: data after 2026-07-14/));
     expect(startBacktestJob).not.toHaveBeenCalled();
   });
 

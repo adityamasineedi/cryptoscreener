@@ -4,7 +4,9 @@ import {
   type CapBookAgentsResponse,
   type CapBookRow,
 } from "../api/client";
+import { PROFIT_CHECKER_SEALED_LABEL, SEALED_MESSAGE } from "../backtest/seal";
 import { isBlacklistedStrategySide } from "../backtest/strategyBlacklist";
+import { moneyTone } from "../utils/moneyTone";
 import {
   RESEARCH_RESULTS_PAGE_PATH,
   SCORECARD_SNAPSHOT_DATE,
@@ -24,8 +26,23 @@ function compactSymbol(symbol: string): string {
 
 function netMoney(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  return `${value >= 0 ? "+" : ""}$${value.toFixed(2)}`;
+  // Zero is neither gain nor loss (owner D206): "$0.00", no sign.
+  if (Math.round(value * 100) === 0) return "$0.00";
+  return `${value > 0 ? "+" : ""}$${value.toFixed(2)}`;
 }
+
+/**
+ * Sticky table header (owner D206): a solid background above the rows, so no row shows
+ * through or sits under it while the table scrolls.
+ */
+const STICKY_HEAD = "sticky top-0 z-20 bg-terminal-bg text-[10px] uppercase tracking-wide text-terminal-muted shadow-[0_1px_0_0_rgba(255,255,255,0.12)]";
+const STICKY_TH = "bg-terminal-bg px-2 py-2";
+/**
+ * A column kept in view at the table's right edge (owner D206: least invasive way to see
+ * Combined net / Best cell without scrolling sideways; the column order is unchanged).
+ */
+const PIN_RIGHT_TH = "sticky right-0 z-30 bg-terminal-bg px-2 py-2 shadow-[-1px_0_0_0_rgba(255,255,255,0.12)]";
+const PIN_RIGHT_TD = "sticky right-0 z-10 bg-terminal-bg shadow-[-1px_0_0_0_rgba(255,255,255,0.12)]";
 
 function seconds(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "0.0s";
@@ -283,6 +300,22 @@ export function CapBookAgentsPanel() {
         <h3 className="text-sm font-semibold text-terminal-text">Profit checker</h3>
         <div
           role="note"
+          data-testid="profit-checker-sealed"
+          className="mt-2 rounded border border-red-500/50 bg-red-500/10 px-2 py-1.5 text-[11px] font-semibold text-red-200"
+        >
+          {snapshot?.sealed_label ?? PROFIT_CHECKER_SEALED_LABEL}
+        </div>
+        <button
+          type="button"
+          disabled
+          data-testid="profit-checker-rerun"
+          title={`${snapshot?.rerun_refused_reason ?? SEALED_MESSAGE}. ${snapshot?.sealed_label ?? PROFIT_CHECKER_SEALED_LABEL}`}
+          className="mt-2 cursor-not-allowed rounded border border-terminal-border px-2 py-1 text-[11px] text-terminal-muted opacity-50"
+        >
+          Re-run profit checker (disabled: {snapshot?.rerun_refused_reason ?? SEALED_MESSAGE})
+        </button>
+        <div
+          role="note"
           data-testid="profit-checker-banner"
           className="mt-2 rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1.5 text-[11px] font-semibold text-amber-200"
         >
@@ -308,18 +341,18 @@ export function CapBookAgentsPanel() {
         </button>
         <div className="mt-2 max-h-72 overflow-auto rounded border border-terminal-border/60">
           <table className="w-full min-w-[1100px] border-collapse text-left text-[11px]">
-            <thead className="sticky top-0 bg-black/90 text-[10px] uppercase tracking-wide text-terminal-muted">
+            <thead className={STICKY_HEAD} data-testid="profit-checker-head">
               <tr>
-                <th className="px-2 py-2">Check</th>
-                <th className="px-2 py-2">Strategy</th>
-                <th className="px-2 py-2">TF</th>
-                <th className="px-2 py-2">Side</th>
-                <th className="px-2 py-2">Trades</th>
-                <th className="px-2 py-2">Coins up</th>
-                <th className="px-2 py-2">Coins down</th>
-                <th className="px-2 py-2">Combined net</th>
-                <th className="px-2 py-2">Research verdict</th>
-                <th className="px-2 py-2">Notes</th>
+                <th className={STICKY_TH}>Check</th>
+                <th className={STICKY_TH}>Strategy</th>
+                <th className={STICKY_TH}>TF</th>
+                <th className={STICKY_TH}>Side</th>
+                <th className={STICKY_TH}>Trades</th>
+                <th className={STICKY_TH}>Coins up</th>
+                <th className={STICKY_TH}>Coins down</th>
+                <th className={PIN_RIGHT_TH} data-testid="pinned-combined-net-head">Combined net</th>
+                <th className={STICKY_TH}>Research verdict</th>
+                <th className={STICKY_TH}>Notes</th>
               </tr>
             </thead>
             <tbody data-testid="profit-checker-rows">
@@ -332,7 +365,7 @@ export function CapBookAgentsPanel() {
                   <td className="px-2 py-1.5 font-mono">{row.trades}</td>
                   <td className="px-2 py-1.5 font-mono">{row.coinsUp}</td>
                   <td className="px-2 py-1.5 font-mono">{row.coinsDown}</td>
-                  <td className={`px-2 py-1.5 font-mono ${row.net > 0 ? "text-emerald-400" : "text-red-400"}`}>{netMoney(row.net)}</td>
+                  <td className={`${PIN_RIGHT_TD} px-2 py-1.5 font-mono ${moneyTone(row.net)}`} data-testid="combined-net">{netMoney(row.net)}</td>
                   <td className="px-2 py-1.5" data-testid="research-verdict"><ResearchVerdictCell combinationId={row.combinationId} direction={row.direction} /></td>
                   <td className="px-2 py-1.5" data-testid="strategy-notes"><StrategyNotes row={row} /></td>
                 </tr>
@@ -354,17 +387,17 @@ export function CapBookAgentsPanel() {
         </div>
         <div className="mt-2 max-h-72 overflow-auto rounded border border-terminal-border/60">
           <table className="w-full min-w-[860px] border-collapse text-left text-[11px]">
-            <thead className="sticky top-0 bg-black/90 text-[10px] uppercase tracking-wide text-terminal-muted">
+            <thead className={STICKY_HEAD} data-testid="coin-checker-head">
               <tr>
-                <th className="px-2 py-2">Check</th>
-                <th className="px-2 py-2">Coin</th>
-                <th className="px-2 py-2">Cap</th>
-                <th className="px-2 py-2">1h net</th>
-                <th className="px-2 py-2">4h net</th>
-                <th className="px-2 py-2">Window net</th>
-                <th className="px-2 py-2">Trades</th>
-                <th className="px-2 py-2">Cells {PASS_LABEL}</th>
-                <th className="px-2 py-2">Best cell</th>
+                <th className={STICKY_TH}>Check</th>
+                <th className={STICKY_TH}>Coin</th>
+                <th className={STICKY_TH}>Cap</th>
+                <th className={STICKY_TH}>1h net</th>
+                <th className={STICKY_TH}>4h net</th>
+                <th className={STICKY_TH}>Window net</th>
+                <th className={STICKY_TH}>Trades</th>
+                <th className={STICKY_TH}>Cells {PASS_LABEL}</th>
+                <th className={PIN_RIGHT_TH} data-testid="pinned-best-cell-head">Best cell</th>
               </tr>
             </thead>
             <tbody data-testid="coin-checker-rows">
@@ -399,7 +432,7 @@ export function CapBookAgentsPanel() {
 
       <div className="mt-2 max-h-[520px] overflow-auto rounded border border-terminal-border/60">
         <table className="w-full min-w-[1050px] border-collapse text-left text-[11px]">
-          <thead className="sticky top-0 z-10 bg-black/90 text-[10px] uppercase tracking-wide text-terminal-muted">
+          <thead className={STICKY_HEAD}>
             <tr>
               <th className="px-2 py-2">Shard</th><th className="px-2 py-2">Strategy</th>
               <th className="px-2 py-2">Coin</th><th className="px-2 py-2">TF</th>
@@ -425,7 +458,7 @@ export function CapBookAgentsPanel() {
                   <td className="px-2 py-1.5 font-mono">{row.sample_size}</td>
                   <td className="px-2 py-1.5 font-mono">{row.average_R == null ? "—" : row.average_R.toFixed(3)}</td>
                   <td className="px-2 py-1.5 font-mono">{row.average_R_net == null ? "—" : row.average_R_net.toFixed(3)}</td>
-                  <td className={`px-2 py-1.5 font-mono ${Number(row.pnl_usd_net) > 0 ? "text-emerald-400" : "text-red-400"}`}>{netMoney(row.pnl_usd_net)}</td>
+                  <td className={`px-2 py-1.5 font-mono ${moneyTone(row.pnl_usd_net)}`}>{netMoney(row.pnl_usd_net)}</td>
                   <td className="px-2 py-1.5 font-mono">{row.max_drawdown_R == null ? "—" : row.max_drawdown_R.toFixed(2)}</td>
                   <td className="px-2 py-1.5 font-mono">{seconds(row.cell_seconds)}</td>
                 </tr>
@@ -455,12 +488,12 @@ function CoinGroup({ title, rows }: { title: string; rows: CoinCheck[] }) {
           <td className="px-2 py-1.5"><Verdict verdict={row.verdict} /></td>
           <td className="px-2 py-1.5 font-mono">{row.symbol}</td>
           <td className="px-2 py-1.5">{row.cap}</td>
-          <td className={`px-2 py-1.5 font-mono ${row.net1h > 0 ? "text-emerald-400" : "text-red-400"}`}>{netMoney(row.net1h)}</td>
-          <td className={`px-2 py-1.5 font-mono ${row.net4h > 0 ? "text-emerald-400" : "text-red-400"}`}>{netMoney(row.net4h)}</td>
-          <td className={`px-2 py-1.5 font-mono ${row.net > 0 ? "text-emerald-400" : row.net < 0 ? "text-red-400" : "text-terminal-muted"}`}>{netMoney(row.net)}</td>
+          <td className={`px-2 py-1.5 font-mono ${moneyTone(row.net1h)}`} data-testid="coin-net-1h">{netMoney(row.net1h)}</td>
+          <td className={`px-2 py-1.5 font-mono ${moneyTone(row.net4h)}`} data-testid="coin-net-4h">{netMoney(row.net4h)}</td>
+          <td className={`px-2 py-1.5 font-mono ${moneyTone(row.net)}`} data-testid="coin-net-window">{netMoney(row.net)}</td>
           <td className="px-2 py-1.5 font-mono">{row.trades}</td>
           <td className="px-2 py-1.5 font-mono">{row.passCells}</td>
-          <td className="px-2 py-1.5 font-mono">{row.best}</td>
+          <td className={`${PIN_RIGHT_TD} px-2 py-1.5 font-mono`} data-testid="best-cell">{row.best}</td>
         </tr>
       ))}
       {!rows.length ? (

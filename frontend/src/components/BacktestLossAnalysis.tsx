@@ -1,3 +1,4 @@
+import { moneyTone } from "../utils/moneyTone";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   fetchBacktestLossAnalysis,
@@ -102,9 +103,9 @@ function fmtTime(v: string | null | undefined): string {
   return v.replace("T", " ").replace(/\+00:00$/, " UTC").replace(/Z$/, " UTC");
 }
 
+/** Gain green, loss red, $0.00 neutral grey (owner D206). */
 function moneyCls(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return "text-terminal-muted";
-  return v >= 0 ? "text-emerald-400" : "text-red-400";
+  return moneyTone(v);
 }
 
 const PAGE_SIZE = 50;

@@ -1,4 +1,5 @@
 import type { RegimeBacktestStatus } from "../api/client";
+import { barLabel, SEAL_LAST_DAY } from "../backtest/seal";
 import { SymbolAllowlistLines } from "./SymbolAllowlistLines";
 
 /** One line saying which passed sides the run had in scope. */
@@ -39,7 +40,7 @@ function requestedLabel(job: RegimeBacktestStatus): string {
   const req = job.window?.requested;
   if (!req) return "—";
   if (req.mode === "dates") return `Calendar ${req.start_date || "…"} → ${req.end_date || "…"} (UTC, end inclusive)`;
-  return `Latest ${(req.limit ?? 0).toLocaleString()} ${req.timeframe || "1h"} bars`;
+  return `${(req.limit ?? 0).toLocaleString()} ${req.timeframe || "1h"} bars ending ${SEAL_LAST_DAY} (the seal)`;
 }
 
 /** Results of the regime-book run. The panel only shows the job it is given. */
@@ -52,6 +53,11 @@ export function RegimeBookResults({ job }: { job: RegimeBacktestStatus | null })
   return (
     <section className="mb-4 rounded border border-emerald-500/30 bg-emerald-500/5 p-3" data-testid="regime-backtest">
       <h2 className="text-[11px] uppercase tracking-wide text-terminal-muted">Regime book results · current run</h2>
+      {job.dev_mode ? (
+        <p className="mt-1 text-[12px] font-semibold text-red-300" data-testid="regime-dev-mode-label">
+          {job.run_label || "DEV MODE (holdout data)"}
+        </p>
+      ) : null}
       <p className="mt-1 text-[12px] text-terminal-text" data-testid="regime-backtest-scope">
         {regimeScopeText(job)}
       </p>
@@ -78,6 +84,14 @@ export function RegimeBookResults({ job }: { job: RegimeBacktestStatus | null })
             ? ` · ${evaluated.bars_evaluated.toLocaleString()} 1h bars evaluated · ${(evaluated.warmup_bars ?? 0).toLocaleString()} warm-up bars not traded`
             : ""}
           {job.symbols?.length ? ` · ${job.symbols.length} coin${job.symbols.length === 1 ? "" : "s"}` : ""}
+        </div>
+        <div data-testid="regime-backtest-data-period">
+          Data loaded (warm-up included):{" "}
+          {evaluated?.data_first_bar || evaluated?.data_last_bar
+            ? `${barLabel(evaluated.data_first_bar)} → ${barLabel(evaluated.data_last_bar)}`
+            : "…"}
+          {job.window?.btc_daily?.last_bar ? ` · BTC daily regime to ${barLabel(job.window.btc_daily.last_bar)}` : ""}
+          {` · sealed through ${evaluated?.sealed_through ?? SEAL_LAST_DAY}`}
         </div>
         {cap?.applied ? (
           <div className="text-amber-200" data-testid="regime-backtest-cap">
