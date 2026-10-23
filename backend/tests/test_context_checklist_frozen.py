@@ -11,7 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = ROOT / "docs" / "candle12_v3_oos_contract.lock.json"
-BASE = "a766fcdd6f9c87db89d5f92b5630968d3dfc3c0e"
+BASE = "99763bd53dc3bab5c5e66736044a00bedb3a9401"
 
 PAPER_ENGINE_FILES = (
     "backend/app/services/paper_trade.py",
