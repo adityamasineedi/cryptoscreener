@@ -1,0 +1,22 @@
+{
+ "code_combined": "396dceac387d1da34e829cb23f35360612cb5fc6ec72c5cd5c4ec61c1128dc8e",
+ "contract_id": "LIQ_FLUSH_E34",
+ "files": {
+  "backend/app/research/liq_flush/__init__.py": "5254b63086e77f479ccd42cb80f6227986df32b2919eb52cfae8adda74e70351",
+  "backend/app/research/liq_flush/__main__.py": "d4625cc81c16b4a385984472fef7d3cf0085f9dda2a3aa5de30f13db85cbc0d0",
+  "backend/app/research/liq_flush/atr.py": "dc2a743d1eecf95a98419e881955b2370e8d3db1a26987614f23b1544bdba03f",
+  "backend/app/research/liq_flush/book.py": "cffb0d0a0de0f816b4426baf9099c5972a7e2afbe571ca9abcd56f7eed3c56a8",
+  "backend/app/research/liq_flush/cli.py": "bde5efd4d1430814b70850b9728be9bf8ddbc774579ae042a4829dbf32ce0487",
+  "backend/app/research/liq_flush/contract.py": "34f4ac9753c9f831c54d45d987de1bee8e5d6610921af41dfcece7b3f4036795",
+  "backend/app/research/liq_flush/costs.py": "a52974e3155bb4f5118bb9d5fbafaa40682b81c016b5d0704b53d6638c4c4b27",
+  "backend/app/research/liq_flush/execute.py": "f68cc3d92d6eacd017eb5129be4fbdc1506176c4e1e8bb8c3cfda769366c9c37",
+  "backend/app/research/liq_flush/feeds.py": "96ee96d39d6caeb4f384b04058682fe4422261366a404d54eff651b6a5e8392f",
+  "backend/app/research/liq_flush/ledger.py": "0d04403517b23a4d7ed2ed34a29e95957e072baa715260499215dbe1859e783e",
+  "backend/app/research/liq_flush/recorder.py": "bb46c68ca6a18c68a621b817a80410466a747c4a05aafd831033640d9b7e18f1",
+  "backend/app/research/liq_flush/signal.py": "60342d1ef046cef7fbb53fcf8e42a2a1a5569e89aa815e1442e97aaf2c08ac95",
+  "backend/app/research/liq_flush/stream.py": "f9132d6f526f43ecda64717c0591d32f1b501efddc4fc25468504c32dfed0c46",
+  "backend/app/research/liq_flush/universe.py": "e040c5c1944924bcc0e7e8a97a19a65f55745ae6f80034a88a764efa5ce33729",
+  "docs/liq_flush_e34_contract.md": "144b02948c809446acd0769e4473dc5b42695098876e4a1fc01e439b350aecaa"
+ },
+ "lock_hash": "048a17e68a7424be2a01217c631a1694ab2af0e89373940ffe8660257a6fdafb"
+}

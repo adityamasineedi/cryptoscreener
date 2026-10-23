@@ -73,4 +73,7 @@ data/alerts_*/
 
 # Runtime data written by the live backend (owner D207); nothing under it is tracked on 1286ee7.
 backend/data/
+
+# E34 LIQ-FLUSH forward paper store (owner D203B). Created only when the owner starts the runner.
+data/liq_flush/
 research/HOLDOUT_USAGE.md
