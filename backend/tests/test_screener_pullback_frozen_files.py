@@ -1,10 +1,11 @@
-"""Owner D193(b) / D220 hard rules for the screener pullback fix (live/screener-pullback-fix).
+"""Owner D193(b) / D220 and D199 / D230 hard rules for the screener pullback fix (live/screener-pullback-fix).
 
 1. Every file in docs/candle12_v3_oos_contract.lock.json hashes to its locked sha256 (working-copy bytes, as the
    CANDLE12 V3 OOS-2 drift guard reads them).
-2. Those 37 files, the paper engine files and the shared signal engine files are byte-identical to the live base
-   commit 1251e57 (git blob ids, so the check does not depend on the checkout's line-ending setting).
-3. The branch changes only the screener files listed in ALLOWED_CHANGES.
+2. Those 37 files, the paper engine files, the shared signal engine files and the alert pipeline (no new alert
+   source, D230) are byte-identical to the live base commit BASE (git blob ids, so the check does not depend on
+   the checkout's line-ending setting). BASE moves with each rebase onto live.
+3. The branch changes only the screener and display files listed in ALLOWED_CHANGES.
 Checks 2 and 3 are skipped outside a git checkout that holds the base commit.
 """
 
@@ -20,7 +21,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = ROOT / "docs" / "candle12_v3_oos_contract.lock.json"
-BASE = "1251e579a084b20c4fc35030238592741487f303"
+BASE = "8b730cde5ff4d28093aa86e5d9d67ddf1e9aa4e7"
 
 PAPER_ENGINE_FILES = (
     "backend/app/services/paper_trade.py",
@@ -57,11 +58,32 @@ SHARED_SIGNAL_FILES = tuple(
     )
 )
 
+ALERT_FILES = (
+    "backend/app/alerts/sources.py",
+    "backend/app/alerts/pipeline.py",
+    "backend/app/alerts/plan.py",
+    "backend/app/alerts/config.py",
+    "backend/app/alerts/trade_alerts_config.json",
+    "backend/app/services/alerts.py",
+)
+
 ALLOWED_CHANGES = {
     "backend/app/services/setup_signals.py",
     "backend/app/services/screener_pullback.py",
+    "backend/app/services/screener_display.py",
+    "backend/app/services/screener.py",
+    "backend/app/api/routes.py",
     "backend/tests/test_screener_pullback_fix.py",
+    "backend/tests/test_screener_pullback_display.py",
+    "backend/tests/test_paper_opportunities_note.py",  # stub the display list the route now calls
     "backend/tests/test_screener_pullback_frozen_files.py",
+    "frontend/src/components/CoinDetailPanel.tsx",  # D234 15m note; D204 invalid-plan copy
+    "frontend/src/components/CoinDetailPanel.setup15m.test.tsx",
+    "frontend/src/components/BottomCharts.tsx",  # D204 chart Signal/Trade Plan overlay
+    "frontend/src/components/TradePlanTab.tsx",  # D204: hide a wrong-side plan
+    "frontend/src/api/client.ts",
+    "frontend/src/chart/chartAnnotations.ts",
+    "frontend/src/chart/chartAnnotations.test.ts",
 }
 
 
@@ -89,13 +111,14 @@ def _need_base() -> None:
         pytest.skip(f"base commit {BASE[:7]} not in this clone")
 
 
-@pytest.mark.parametrize("group", ["frozen_37", "paper_engine", "shared_signal"])
+@pytest.mark.parametrize("group", ["frozen_37", "paper_engine", "shared_signal", "alerts"])
 def test_byte_identical_to_live_base_commit(group):
     _need_base()
     paths = {
         "frozen_37": sorted(_locked()),
         "paper_engine": list(PAPER_ENGINE_FILES),
         "shared_signal": list(SHARED_SIGNAL_FILES),
+        "alerts": list(ALERT_FILES),
     }[group]
     if group == "frozen_37":
         assert len(paths) == 37

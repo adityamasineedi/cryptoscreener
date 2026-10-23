@@ -699,8 +699,12 @@ async def list_setup_signals(
     from app.services.engine_store import engine_store
     from app.services.setup_signals import get_setup_signal_service
 
+    from app.services.screener_display import display_payload
+
     rows: list[dict[str, Any]] = []
-    for sym, payload in engine_store.setup_signals.items():
+    for sym, raw in engine_store.setup_signals.items():
+        # Display (owner D199/D230): the screener view; paper reads ``raw``, not this list.
+        payload = display_payload(raw, symbol=sym)
         st = payload.get("status")
         if status and st != status:
             continue
@@ -709,6 +713,7 @@ async def list_setup_signals(
                 "symbol": sym,
                 "status": st,
                 "setup_status": st,
+                "setup_view": payload.get("setup_view"),
                 "signal_status": payload.get("signal_status"),
                 "market_signal": payload.get("market_signal"),
                 "market_signal_reason": payload.get("market_signal_reason"),
@@ -721,6 +726,7 @@ async def list_setup_signals(
                     "bearish_conditions"
                 ),
                 "direction": payload.get("direction"),
+                "plan_notice": payload.get("plan_notice"),
                 "trend": payload.get("trend"),
                 "risk_reward": payload.get("risk_reward"),
                 "entry": payload.get("entry"),
@@ -750,11 +756,16 @@ async def signal_risk(
 ) -> dict[str, Any]:
     from app.services.setup_signals import get_setup_signal_service
 
-    payload = get_setup_signal_service().analyze_symbol(
-        symbol,
-        account_equity=account_equity,
-        risk_percent=risk_percent,
-        leverage=leverage,
+    from app.services.screener_display import display_payload
+
+    payload = display_payload(
+        get_setup_signal_service().analyze_symbol(
+            symbol,
+            account_equity=account_equity,
+            risk_percent=risk_percent,
+            leverage=leverage,
+        ),
+        symbol=symbol,
     )
     return {
         "symbol": symbol.upper(),
@@ -762,6 +773,7 @@ async def signal_risk(
         "risk_management": payload.get("risk_management"),
         "risk_reward": payload.get("risk_reward"),
         "stop": payload.get("stop"),
+        "plan_notice": payload.get("plan_notice"),
         "disclaimer": "Risk calculator only — does not place trades.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -771,10 +783,13 @@ async def signal_risk(
 async def signal_targets(symbol: str) -> dict[str, Any]:
     from app.services.setup_signals import get_setup_signal_service
 
-    payload = get_setup_signal_service().analyze_symbol(symbol)
+    from app.services.screener_display import display_payload
+
+    payload = display_payload(get_setup_signal_service().analyze_symbol(symbol), symbol=symbol)
     return {
         "symbol": symbol.upper(),
         "status": payload.get("status"),
+        "plan_notice": payload.get("plan_notice"),
         "targets": payload.get("targets") or [],
         "risk_reward": payload.get("risk_reward"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -785,10 +800,13 @@ async def signal_targets(symbol: str) -> dict[str, Any]:
 async def signal_explanation(symbol: str) -> dict[str, Any]:
     from app.services.setup_signals import get_setup_signal_service
 
-    payload = get_setup_signal_service().analyze_symbol(symbol)
+    from app.services.screener_display import display_payload
+
+    payload = display_payload(get_setup_signal_service().analyze_symbol(symbol), symbol=symbol)
     return {
         "symbol": symbol.upper(),
         "status": payload.get("status"),
+        "plan_notice": payload.get("plan_notice"),
         "direction": payload.get("direction"),
         "explanation": payload.get("explanation") or [],
         "conditions": payload.get("conditions") or [],
@@ -803,15 +821,16 @@ async def signal_annotations(symbol: str) -> dict[str, Any]:
     """Chart annotation payload for Lightweight Charts toggles."""
     from app.services.setup_signals import get_setup_signal_service
     from app.services.engine_store import engine_store as es
-    from app.signals.signal_engine import ensure_trade_plan_entry_annotation
 
-    payload = es.get_setup_signal(symbol) or get_setup_signal_service().analyze_symbol(
-        symbol
-    )
+    from app.services.screener_display import chart_annotations
+
+    raw = es.get_setup_signal(symbol) or get_setup_signal_service().analyze_symbol(symbol)
+    annotations, plan_notice, status = chart_annotations(raw, symbol=symbol)
     return {
         "symbol": symbol.upper(),
-        "annotations": ensure_trade_plan_entry_annotation(payload or {}),
-        "status": payload.get("status") if payload else None,
+        "annotations": annotations,
+        "plan_notice": plan_notice,
+        "status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -2886,8 +2905,11 @@ async def signal_for_symbol(
         leverage=leverage,
     )
     # Read-only: this GET never opens a paper position (no on_setup_signal here).
+    # Display (owner D199/D230): the screener view of the setup.
+    from app.services.screener_display import display_payload
+
     return {
-        **payload,
+        **display_payload(payload, symbol=symbol),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -3308,7 +3330,7 @@ async def paper_opportunities(
     warm: int = Query(default=25, ge=0, le=80),
 ) -> dict[str, Any]:
     """List setups across many coins — READY/NEAR plus WAITING/WATCH so the book is visible."""
-    from app.services.paper_trade import get_paper_trade_engine, list_trade_opportunities
+    from app.services.paper_trade import get_paper_trade_engine
     from app.services.setup_signals import get_setup_signal_service
     from app.services.market_store import market_store
 
@@ -3351,7 +3373,10 @@ async def paper_opportunities(
 
     # Any stream: a symbol held by V1 or the passed book is open, not an "Auto open" row.
     open_syms = eng.open_symbols()
-    rows = list_trade_opportunities(limit=limit, open_symbols=open_syms, include_waiting=True)
+    # Display (owner D199/D230): Trade chances shows the screener view; paper decisions are unchanged.
+    from app.services.screener_display import list_display_opportunities
+
+    rows = list_display_opportunities(limit=limit, open_symbols=open_syms, include_waiting=True)
     by_tier: dict[str, int] = {}
     for r in rows:
         t = str(r.get("tier") or "?")
@@ -3504,7 +3529,11 @@ async def signal_for_symbol_tf(symbol: str, timeframe: str) -> dict[str, Any]:
             "reason": f"{timeframe.upper()}: WAITING FOR OHLCV",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-    engine = SignalEngine(svc.config)
+    # Display (owner D199/D230): the screener engine (episode impulse on the setup timeframe;
+    # every other timeframe is the shared engine's result).
+    from app.services.screener_pullback import ScreenerSignalEngine
+
+    engine: SignalEngine = ScreenerSignalEngine(svc.config)
     rvol = es.get_rvol(symbol.upper(), timeframe)
     tf_analysis = engine.analyze_timeframe(
         symbol.upper(),

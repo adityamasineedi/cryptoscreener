@@ -19,6 +19,8 @@ import {
   sanitizeLiquidationEvents,
   snapTimeToCandle,
   thinCrowdedMarkers,
+  INVALID_PLAN_NOTICE,
+  tradePlanLevelText,
 } from "./chartAnnotations";
 
 const togglesAllOn: AnnToggle = {
@@ -397,5 +399,25 @@ describe("timeframe snap + buy/sell markers", () => {
     expect(placed).toHaveLength(1);
     expect(placed[0].text).toBe("SELL");
     expect(placed[0].time).toBe(2_000);
+  });
+});
+
+describe("D204 trade-plan overlay text", () => {
+  it("uses the tick-rounded price text", () => {
+    expect(tradePlanLevelText("STOP", 1209.684, "1209.68")).toBe("STOP 1209.68");
+    expect(tradePlanLevelText("SELL", 1216.25)).toBe("SELL 1216.25");
+  });
+
+  it("names the invalid plan with the owner text", () => {
+    expect(INVALID_PLAN_NOTICE).toBe("invalid plan: stop on wrong side");
+  });
+
+  it("keeps price_text on the price line", () => {
+    const lines = placePriceLines(
+      [{ kind: "SL", group: "trade_plan", price: 1209.68, price_text: "1209.68", label: "STOP" }],
+      togglesAllOn,
+    );
+    expect(lines[0].priceText).toBe("1209.68");
+    expect(lines[0].title).toBe("STOP");
   });
 });

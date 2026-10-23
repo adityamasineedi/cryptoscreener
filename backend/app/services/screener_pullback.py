@@ -21,8 +21,9 @@ If no such bar exists, the shared engine's result is kept unchanged (WAITING). O
 is used: the frozen engines (bos, impulse, pullback, swings, trend) are called, never edited.
 
 Paper is not affected: ``SetupSignalService`` keeps the shared engine's payload as is (paper,
-Path A validation, trade chances and alerts read those fields) and stores this engine's view under
-``payload["screener_setup"]``, which only the screener columns and the SCREENER journal row read.
+Path A validation and the in-app alert feed read those fields) and stores this engine's view under
+``payload["screener_setup"]``. Screens read a display copy of that view. The SCREENER journal row
+is the only alert path for a screener candidate.
 """
 
 from __future__ import annotations
@@ -147,6 +148,9 @@ _VIEW_KEYS = (
     "conditions",
     "invalidation_reason",
     "explanation",
+    "annotations",
+    "risk_management",
+    "score",
 )
 
 
@@ -156,3 +160,30 @@ def screener_view(analysis: Mapping[str, Any], *, fixed: bool) -> dict[str, Any]
     view["pullback_rule"] = SCREENER_PULLBACK_RULE
     view["episode_impulse_used"] = bool(fixed)
     return view
+
+
+def display_payload(payload: Any) -> Any:
+    """The setup payload as every screen shows it (owner D199 / D230).
+
+    A copy of ``payload`` whose setup fields (status, direction, impulse, pullback, retest, entry,
+    stop, targets, risk_reward, conditions, explanation, annotations, risk_management, score) come
+    from ``payload["screener_setup"]``. Payloads without a screener view are returned as they are.
+    For display only: paper, Path A validation, the in-app alert feed and persistence read the
+    payload itself, never this copy. ``setup_view.paper_status`` keeps the status paper reads.
+    """
+    if not isinstance(payload, Mapping):
+        return payload
+    view = payload.get("screener_setup")
+    if not isinstance(view, Mapping):
+        return payload
+    out = dict(payload)
+    for k in _VIEW_KEYS:
+        if k in view:
+            out[k] = view[k]
+    out["setup_view"] = {
+        "engine": "screener",
+        "pullback_rule": view.get("pullback_rule"),
+        "episode_impulse_used": bool(view.get("episode_impulse_used")),
+        "paper_status": payload.get("status"),
+    }
+    return out

@@ -42,6 +42,11 @@ def _note(monkeypatch, *, owns: bool, legacy: bool, entry_mode: str) -> dict[str
 
     monkeypatch.setattr(paper_mod, "get_paper_trade_engine", lambda: engine)
     monkeypatch.setattr(paper_mod, "list_trade_opportunities", lambda **_kw: [])
+    # Trade chances reads the display list (owner D199). The note tests still force an empty book.
+    monkeypatch.setattr(
+        "app.services.screener_display.list_display_opportunities",
+        lambda **_kw: [],
+    )
     monkeypatch.setattr(
         setup_mod,
         "get_setup_signal_service",

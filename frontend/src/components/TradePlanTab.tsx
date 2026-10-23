@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { ScreenerRow } from "../types/market";
+import { INVALID_PLAN_NOTICE } from "../chart/chartAnnotations";
 import {
   buildTradePlan,
   computePositionSize,
@@ -290,6 +291,9 @@ export function TradePlanTab({
   const [riskPercent, setRiskPercent] = useState(0.5);
   const [currency, setCurrency] = useState<"USD" | "INR">("INR");
 
+  const analysis = (payload?.analysis || {}) as Record<string, unknown>;
+  const planNotice = String(payload?.plan_notice || analysis.plan_notice || "");
+
   const plan = useMemo(
     () =>
       buildTradePlan({
@@ -322,7 +326,7 @@ export function TradePlanTab({
     );
   }
 
-  const hideLevels = !plan.levelsActionable;
+  const hideLevels = Boolean(planNotice) || !plan.levelsActionable;
 
   return (
     <div className="space-y-2">
@@ -401,6 +405,11 @@ export function TradePlanTab({
         <div className="mb-2 text-[11px] uppercase tracking-wide text-terminal-muted">
           Trade Plan
         </div>
+        {planNotice ? (
+          <p data-testid="trade-plan-invalid-notice" className="mb-2 text-amber-300">
+            {planNotice || INVALID_PLAN_NOTICE}
+          </p>
+        ) : null}
         <div className="space-y-1">
           <div className="flex justify-between gap-2">
             <span className="text-terminal-muted">Entry</span>
@@ -428,7 +437,7 @@ export function TradePlanTab({
             <span>{hideLevels || plan.rrLines.length === 0 ? "—" : plan.rrLines.join(" · ")}</span>
           </div>
         </div>
-        {plan.provisionalInvalidation ? (
+        {plan.provisionalInvalidation && !planNotice ? (
           <div className="mt-3 rounded border border-amber-500/35 bg-amber-500/5 px-2 py-2">
             <div className="text-[10px] uppercase tracking-wide text-amber-200/90">
               Provisional Invalidation Reference

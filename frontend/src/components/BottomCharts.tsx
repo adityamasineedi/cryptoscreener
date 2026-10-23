@@ -31,6 +31,7 @@ import {
   sanitizeLiquidationEvents,
   thinCrowdedMarkers,
   tradePlanTitle,
+  tradePlanLevelText,
   colorForKind,
 } from "../chart/chartAnnotations";
 import {
@@ -385,8 +386,9 @@ function PriceVolumeChart({
   const [volumes, setVolumes] = useState<HistogramData[]>([]);
   const [annotations, setAnnotations] = useState<ChartAnnotation[]>([]);
   const [tradeLevels, setTradeLevels] = useState<
-    Array<{ kind: string; title: string; price: number; color: string }>
+    Array<{ kind: string; title: string; price: number; priceText?: string; color: string }>
   >([]);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
   const hasData = candles.length > 0;
   const { containerRef, chartRef } = useChartHost(hasData);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -577,7 +579,10 @@ function PriceVolumeChart({
     }
     priceLinesRef.current = [];
 
-    const deduped = dedupeAnnotations(annotations, { symbol, timeframe });
+    const planAnnotations = planNotice
+      ? annotations.filter((a) => a.group !== "trade_plan")
+      : annotations;
+    const deduped = dedupeAnnotations(planAnnotations, { symbol, timeframe });
     const visible = filterAnnotationsByToggles(deduped, ann);
     const currentPrice =
       candleLikes.length > 0 ? candleLikes[candleLikes.length - 1].close : null;
@@ -598,7 +603,7 @@ function PriceVolumeChart({
       proximity: prox,
     });
 
-    const levels: Array<{ kind: string; title: string; price: number; color: string }> = [];
+    const levels: Array<{ kind: string; title: string; price: number; priceText?: string; color: string }> = [];
     for (const line of lines) {
       const pl = series.createPriceLine({
         price: line.price,
@@ -614,6 +619,7 @@ function PriceVolumeChart({
           kind: line.kind,
           title: line.title || tradePlanTitle({ kind: line.kind, group: "trade_plan" }),
           price: line.price,
+          priceText: line.priceText,
           color: line.color,
         });
       }
@@ -637,7 +643,7 @@ function PriceVolumeChart({
     setTradeLevels(levels);
     applyPriceScale();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotations, ann, hasData, candles, symbol, timeframe]);
+  }, [annotations, ann, hasData, candles, symbol, timeframe, planNotice]);
 
   useEffect(() => {
     if (!symbol) {
@@ -646,6 +652,7 @@ function PriceVolumeChart({
       setVolumes([]);
       setAnnotations([]);
       setTradeLevels([]);
+      setPlanNotice(null);
       return;
     }
     let alive = true;
@@ -660,6 +667,7 @@ function PriceVolumeChart({
         if (!alive) return;
         setStatus(data.status);
         setAnnotations(annData.annotations || []);
+        setPlanNotice(annData.plan_notice ? String(annData.plan_notice) : null);
         const cdata: CandlestickData[] = [];
         const vdata: HistogramData[] = [];
         for (const c of data.candles) {
@@ -730,13 +738,17 @@ function PriceVolumeChart({
       </div>
       {ann.tradePlan ? (
         <div className="pointer-events-none absolute bottom-10 left-2 z-10 flex flex-wrap gap-1.5 rounded border border-terminal-border/70 bg-terminal-panel/90 px-2 py-1.5 text-[10px] font-mono">
-          {tradeLevels.length > 0 ? (
+          {planNotice ? (
+            <span data-testid="chart-invalid-plan" className="text-amber-300">
+              {planNotice}
+            </span>
+          ) : tradeLevels.length > 0 ? (
             tradeLevels.map((lv) => (
               <span
                 key={`${lv.title}-${lv.price}`}
                 style={{ color: lv.color || colorForKind(lv.kind) }}
               >
-                {lv.title} {lv.price}
+                {tradePlanLevelText(lv.title, lv.price, lv.priceText)}
               </span>
             ))
           ) : (

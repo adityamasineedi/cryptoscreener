@@ -860,7 +860,13 @@ class ScreenerService:
         from app.services.setup_signals import get_setup_signal_service
 
         svc = get_setup_signal_service()
-        payload = engine_store.get_setup_signal(symbol) or svc.analyze_symbol(symbol)
+        # Display (owner D199/D230): the Setup tab shows the screener view of the setup.
+        from app.services.screener_display import display_payload
+
+        payload = display_payload(
+            engine_store.get_setup_signal(symbol) or svc.analyze_symbol(symbol),
+            symbol=symbol,
+        )
         ms_payload = payload.get("market_signal_payload") or {}
         return {
             "analysis": payload,
@@ -897,6 +903,7 @@ class ScreenerService:
             "conditions": payload.get("conditions"),
             "explanation": payload.get("explanation"),
             "annotations": payload.get("annotations"),
+            "plan_notice": payload.get("plan_notice"),
             "data_dependencies": payload.get("data_dependencies"),
             "disclaimer": payload.get("disclaimer"),
         }

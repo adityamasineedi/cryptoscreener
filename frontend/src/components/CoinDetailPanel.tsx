@@ -333,7 +333,11 @@ export function CoinDetailPanel({
   );
 }
 
-function SetupTab({
+// Owner D201 / D234: shown on the Setup tab only when the setup timeframe is 15m.
+export const SETUP_15M_NOTE =
+  "15m: research-only; tight stops make costs a large share of R; no tested edge.";
+
+export function SetupTab({
   payload,
   row,
 }: {
@@ -370,6 +374,8 @@ function SetupTab({
   const impulse = (setupState.impulse || analysis.impulse || {}) as Record<string, unknown>;
   const pullback = (setupState.pullback || analysis.pullback || {}) as Record<string, unknown>;
   const retest = (setupState.retest || analysis.retest || {}) as Record<string, unknown>;
+  const setupTimeframe = String(analysis.timeframe ?? payload.timeframe ?? "").toLowerCase();
+  const planNotice = String(payload.plan_notice || analysis.plan_notice || "");
   const marketSignal = String(
     payload.market_signal || analysis.market_signal || row.market_signal?.value || "WAITING"
   );
@@ -442,6 +448,11 @@ function SetupTab({
       </div>
       <div className="rounded border border-terminal-border/60 p-2">
         <div className="mb-1 text-[11px] uppercase text-terminal-muted">SETUP</div>
+        {setupTimeframe === "15m" ? (
+          <p data-testid="setup-15m-note" className="mb-1 text-[10px] text-amber-300/80">
+            {SETUP_15M_NOTE}
+          </p>
+        ) : null}
         <Field label="Setup status" fv={row.setup_signal} />
       </div>
       <div className="rounded border border-terminal-border/60 p-2">
@@ -475,7 +486,12 @@ function SetupTab({
       <div className="rounded border border-terminal-border/60 p-2">
         <div className="mb-1 text-[11px] uppercase text-terminal-muted">BUY / SELL / TAKE PROFIT</div>
         <div className="space-y-1 font-mono text-xs">
-          {(() => {
+          {planNotice ? (
+            <p data-testid="invalid-plan-notice" className="text-amber-300">
+              {planNotice}
+            </p>
+          ) : null}
+          {planNotice ? null : (() => {
             const dir = String(
               entry.direction || trade.direction || analysis.direction || ""
             ).toUpperCase();
@@ -496,16 +512,20 @@ function SetupTab({
               </div>
             );
           })()}
-          <div className="text-terminal-down">
-            STOP: {String(stop.final_stop ?? "—")}
-          </div>
-          {targets.map((t) => (
-            <div key={String(t.name)} style={{ color: "#6cb6ff" }}>
-              TAKE PROFIT {String(t.name)}: {String(t.target_price)} ({String(t.r_multiple)}R) —{" "}
-              {String(t.structural_reason ?? t.target_type)}
-            </div>
-          ))}
-          <div>R:R: {String(rr.best_R ?? "—")} ({String(rr.RISK_REWARD ?? "")})</div>
+          {planNotice ? null : (
+            <>
+              <div className="text-terminal-down">
+                STOP: {String(stop.final_stop ?? "—")}
+              </div>
+              {targets.map((t) => (
+                <div key={String(t.name)} style={{ color: "#6cb6ff" }}>
+                  TAKE PROFIT {String(t.name)}: {String(t.target_price)} ({String(t.r_multiple)}R) —{" "}
+                  {String(t.structural_reason ?? t.target_type)}
+                </div>
+              ))}
+              <div>R:R: {String(rr.best_R ?? "—")} ({String(rr.RISK_REWARD ?? "")})</div>
+            </>
+          )}
         </div>
       </div>
       <div className="rounded border border-terminal-border/60 p-2">

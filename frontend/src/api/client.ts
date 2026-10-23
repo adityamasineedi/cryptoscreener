@@ -144,10 +144,12 @@ export function fetchSetupAnnotations(symbol: string) {
       kind?: string;
       group?: string;
       price?: number | null;
+      price_text?: string | null;
       time?: string | null;
       label?: string | null;
       direction?: string | null;
     }>;
+    plan_notice?: string | null;
     status?: string;
   }>(`/api/signals/${symbol}/annotations`);
 }

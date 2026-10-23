@@ -16,10 +16,15 @@ export type AnnGroup =
   | "trade_plan"
   | "signal";
 
+/** Owner D204. Shown instead of a trade plan whose stop is on the wrong side of BUY/SELL. */
+export const INVALID_PLAN_NOTICE = "invalid plan: stop on wrong side";
+
 export type ChartAnnotation = {
   kind?: string;
   group?: string;
   price?: number | null;
+  /** Tick-rounded text from the API. The overlay prints this when present. */
+  price_text?: string | null;
   time?: string | null;
   label?: string | null;
   direction?: string | null;
@@ -61,6 +66,8 @@ export type PlacedMarker = {
 
 export type PlacedPriceLine = {
   price: number;
+  /** Tick-rounded label. Falls back to the numeric price when absent. */
+  priceText?: string;
   title: string;
   color: string;
   lineWidth: number;
@@ -70,6 +77,10 @@ export type PlacedPriceLine = {
   kind: string;
   group: AnnGroup;
 };
+
+export function tradePlanLevelText(title: string, price: number, priceText?: string | null): string {
+  return `${title} ${priceText || price}`;
+}
 
 export type PriorityBand = {
   price: number;
@@ -517,6 +528,7 @@ export function placePriceLines(
 
     lines.push({
       price,
+      priceText: a.price_text ? String(a.price_text) : undefined,
       title,
       color: colorForKind(kind),
       lineWidth: isTrade ? 2 : 1,
