@@ -8,6 +8,23 @@ export const CHART_RIGHT_OFFSET_BARS = 12;
 export const STRUCTURE_PAD_PCT = 0.05;
 /** Max structure/setup markers kept inside the most recent N bars. */
 export const RECENT_BAR_LABEL_BUDGET = 5;
+/**
+ * Display swing confirmation window. Matches signals TimeframeSwingConfig
+ * defaults (left 3, right 3). Used only to draw labels; it does not detect
+ * trades.
+ */
+export const STRUCTURE_SWING_LEFT = 3;
+export const STRUCTURE_SWING_RIGHT = 3;
+export const LIQUIDATION_UNIT = "USD" as const;
+
+/**
+ * Setup note stays on the left. Volume note stays on the right.
+ * The calc width reserves the volume column so the two do not overlap.
+ */
+export const CHART_SETUP_NOTE_CLASS =
+  "pointer-events-none absolute bottom-9 left-2 z-10 max-w-[calc(100%-11.5rem)] flex flex-wrap gap-1.5 rounded border border-terminal-border/70 bg-terminal-panel/90 px-2 py-1.5 text-[10px] font-mono";
+export const CHART_VOLUME_NOTE_CLASS =
+  "pointer-events-none absolute bottom-9 right-2 z-10 w-40 text-right text-[9px] uppercase leading-tight tracking-wide text-terminal-muted/80";
 
 export type AnnGroup =
   | "structure"
@@ -28,6 +45,8 @@ export type ChartAnnotation = {
   time?: string | null;
   label?: string | null;
   direction?: string | null;
+  /** Display-only. Latest swing whose confirmation bars have not closed. */
+  unconfirmed?: boolean;
 };
 
 export type AnnToggle = {
@@ -62,6 +81,8 @@ export type PlacedMarker = {
   kind: string;
   /** Original event price — never moved for collision */
   price: number;
+  /** Dashed until the swing's confirmation bars close. */
+  dashed?: boolean;
 };
 
 export type PlacedPriceLine = {
@@ -210,17 +231,15 @@ export function tradePlanTitle(a: ChartAnnotation): string {
 
 /**
  * Preferred marker side from structure semantics.
- * Bullish HH/BOS → above; HL → below; bearish LH → below; LL → above (under lows visually via belowBar for LL).
+ * HH and LH sit above swing highs. HL and LL sit below swing lows.
  */
 export function preferredMarkerPosition(a: ChartAnnotation): MarkerPosition {
   const kind = String(a.kind || "").toUpperCase();
   const label = canonicalStructureLabel(a);
   const direction = String(a.direction || a.label || "").toUpperCase();
 
-  if (label === "HH") return "aboveBar";
-  if (label === "HL") return "belowBar";
-  if (label === "LH") return "belowBar";
-  if (label === "LL") return "belowBar";
+  if (label === "HH" || label === "LH") return "aboveBar";
+  if (label === "HL" || label === "LL") return "belowBar";
 
   if (kind === "SWING_HIGH") return "aboveBar";
   if (kind === "SWING_LOW") return "belowBar";
@@ -312,9 +331,171 @@ function priceNear(a: number, b: number, threshold: number): boolean {
   return Math.abs(a - b) <= threshold;
 }
 
+function isStructureSwing(a: ChartAnnotation): boolean {
+  if (String(a.group || "") !== "structure") return false;
+  const kind = String(a.kind || "").toUpperCase();
+  return (
+    kind === "SWING_HIGH" ||
+    kind === "SWING_LOW" ||
+    kind === "HH" ||
+    kind === "LH" ||
+    kind === "HL" ||
+    kind === "LL"
+  );
+}
+
+function swingIsHigh(a: ChartAnnotation): boolean {
+  const kind = String(a.kind || "").toUpperCase();
+  if (kind === "SWING_LOW" || kind === "HL" || kind === "LL") return false;
+  if (kind === "SWING_HIGH" || kind === "HH" || kind === "LH") return true;
+  const label = String(a.label || "").toUpperCase();
+  return label === "HH" || label === "LH";
+}
+
 /**
- * Deterministic label placement: keeps event price fixed; only moves rendered label side/stack.
- * Higher-priority bands (current/entry/SL/TP) force structure labels to the opposite side when near.
+ * Display-only. Each swing high is HH or LH against the previous high;
+ * each swing low is HL or LL against the previous low. Does not mutate inputs.
+ * The first high is HH and the first low is HL (no previous swing of that type).
+ * An equal price is LH / LL, matching the structure label rule (strictly higher).
+ */
+export function recheckStructureLabels(annotations: ChartAnnotation[]): ChartAnnotation[] {
+  const ordered = annotations
+    .map((a, i) => ({ a, i }))
+    .filter(({ a }) => isStructureSwing(a))
+    .sort((x, y) => {
+      const tx = annotationTimeSec(x.a) ?? 0;
+      const ty = annotationTimeSec(y.a) ?? 0;
+      if (tx !== ty) return tx - ty;
+      return x.i - y.i;
+    });
+  const nextLabel = new Map<number, string>();
+  let lastHigh: number | null = null;
+  let lastLow: number | null = null;
+  for (const { a, i } of ordered) {
+    const price = Number(a.price);
+    if (!Number.isFinite(price)) continue;
+    if (swingIsHigh(a)) {
+      const label = lastHigh == null || price > lastHigh ? "HH" : "LH";
+      lastHigh = price;
+      nextLabel.set(i, label);
+    } else {
+      const label = lastLow == null || price > lastLow ? "HL" : "LL";
+      lastLow = price;
+      nextLabel.set(i, label);
+    }
+  }
+  if (nextLabel.size === 0) return annotations;
+  return annotations.map((a, i) => {
+    const label = nextLabel.get(i);
+    if (!label || a.label === label) return a;
+    return { ...a, label };
+  });
+}
+
+function isoFromUnix(sec: number): string {
+  return new Date(sec * 1000).toISOString();
+}
+
+function provisionalExtreme(
+  candles: CandleLike[],
+  index: number,
+  left: number,
+  side: "high" | "low",
+): boolean {
+  const price = side === "high" ? candles[index].high : candles[index].low;
+  if (!Number.isFinite(price)) return false;
+  for (let j = index - left; j < index; j++) {
+    const other = side === "high" ? candles[j].high : candles[j].low;
+    if (side === "high" ? !(price > other) : !(price < other)) return false;
+  }
+  for (let j = index + 1; j < candles.length; j++) {
+    const other = side === "high" ? candles[j].high : candles[j].low;
+    if (side === "high" ? !(price > other) : !(price < other)) return false;
+  }
+  return true;
+}
+
+/**
+ * Latest high and low whose right-side confirmation bars have not closed.
+ * Labelled against the previous confirmed swing of the same type.
+ * Omitted when a structure annotation already marks that bar.
+ */
+export function findUnconfirmedSwings(
+  candles: CandleLike[],
+  annotations: ChartAnnotation[],
+  options?: { left?: number; right?: number },
+): ChartAnnotation[] {
+  const left = options?.left ?? STRUCTURE_SWING_LEFT;
+  const right = options?.right ?? STRUCTURE_SWING_RIGHT;
+  const n = candles.length;
+  if (left < 1 || right < 1 || n <= left) return [];
+  const end = n - 1;
+  const firstOpen = Math.max(left, end - right + 1);
+  if (firstOpen > end) return [];
+
+  const labeled = recheckStructureLabels(annotations);
+  const swings = labeled
+    .map((a, i) => ({ a, i }))
+    .filter(({ a }) => isStructureSwing(a) && !a.unconfirmed)
+    .sort((x, y) => (annotationTimeSec(x.a) ?? 0) - (annotationTimeSec(y.a) ?? 0) || x.i - y.i);
+
+  const taken = new Set<string>();
+  for (const { a } of swings) {
+    const t = annotationTimeSec(a);
+    if (t == null) continue;
+    taken.add(`${t}|${swingIsHigh(a) ? "high" : "low"}`);
+  }
+
+  function previousPrice(side: "high" | "low", before: number): number | null {
+    let prev: number | null = null;
+    for (const { a } of swings) {
+      const t = annotationTimeSec(a) ?? 0;
+      if (t >= before) break;
+      if (swingIsHigh(a) !== (side === "high")) continue;
+      const price = Number(a.price);
+      if (Number.isFinite(price)) prev = price;
+    }
+    return prev;
+  }
+
+  function latest(side: "high" | "low"): ChartAnnotation | null {
+    for (let i = end; i >= firstOpen; i--) {
+      if (!provisionalExtreme(candles, i, left, side)) continue;
+      const time = Number(candles[i].time);
+      if (taken.has(`${time}|${side}`)) return null;
+      const price = side === "high" ? candles[i].high : candles[i].low;
+      const prev = previousPrice(side, time);
+      const label =
+        side === "high"
+          ? prev == null || price > prev
+            ? "HH"
+            : "LH"
+          : prev == null || price > prev
+            ? "HL"
+            : "LL";
+      return {
+        kind: side === "high" ? "SWING_HIGH" : "SWING_LOW",
+        group: "structure",
+        price,
+        time: isoFromUnix(time),
+        label,
+        unconfirmed: true,
+      };
+    }
+    return null;
+  }
+
+  return [latest("high"), latest("low")].filter((a): a is ChartAnnotation => a != null);
+}
+
+function swingSideLocked(label: string): boolean {
+  return label === "HH" || label === "LH" || label === "HL" || label === "LL";
+}
+
+/**
+ * Deterministic label placement: keeps event price fixed.
+ * HH/LH stay above swing highs and HL/LL stay below swing lows.
+ * Other markers may move aside for current price, entry, stop, and target.
  */
 export function placeStructureMarkers(
   annotations: ChartAnnotation[],
@@ -323,15 +504,29 @@ export function placeStructureMarkers(
     maxVisible?: number;
     priorityBands?: PriorityBand[];
     candleTimes?: Set<number>;
+    swingLeft?: number;
+    swingRight?: number;
+    includeUnconfirmed?: boolean;
   },
 ): PlacedMarker[] {
   const maxVisible = options?.maxVisible ?? MAX_VISIBLE_STRUCTURE_LABELS;
   const bands = options?.priorityBands ?? [];
   const timeSet =
     options?.candleTimes ?? new Set(candles.map((c) => Number(c.time)));
+  const display = recheckStructureLabels(annotations);
+  const withForming =
+    options?.includeUnconfirmed === false
+      ? display
+      : [
+          ...display,
+          ...findUnconfirmedSwings(candles, display, {
+            left: options?.swingLeft,
+            right: options?.swingRight,
+          }),
+        ];
 
   const candidates: Array<ChartAnnotation & { _snapTime: number }> = [];
-  for (const a of annotations) {
+  for (const a of withForming) {
     const g = String(a.group || "");
     // Structure / BOS / setup markers + BUY/SELL trade-plan markers (not SL/TP lines)
     const kind = String(a.kind || "").toUpperCase();
@@ -390,16 +585,20 @@ export function placeStructureMarkers(
         ? tradePlanTitle(a)
         : canonicalStructureLabel(a);
     const prio = annotationPriority(a);
+    const locked = swingSideLocked(label);
 
-    // Displace away from high-priority price labels near this candle
-    for (const band of bands) {
-      if (band.priority >= prio) continue;
-      if (!priceNear(price, band.price, prox)) continue;
-      if (!candle) continue;
-      const nearHigh = priceNear(band.price, candle.high, prox) || band.price >= candle.close;
-      const nearLow = priceNear(band.price, candle.low, prox) || band.price <= candle.close;
-      if (nearHigh && preferred === "aboveBar") preferred = "belowBar";
-      else if (nearLow && preferred === "belowBar") preferred = "aboveBar";
+    // Swing labels stay on their semantic side. Other markers yield to
+    // current price, entry, stop, and target when they sit on the same extreme.
+    if (!locked) {
+      for (const band of bands) {
+        if (band.priority >= prio) continue;
+        if (!priceNear(price, band.price, prox)) continue;
+        if (!candle) continue;
+        const nearHigh = priceNear(band.price, candle.high, prox) || band.price >= candle.close;
+        const nearLow = priceNear(band.price, candle.low, prox) || band.price <= candle.close;
+        if (nearHigh && preferred === "aboveBar") preferred = "belowBar";
+        else if (nearLow && preferred === "belowBar") preferred = "aboveBar";
+      }
     }
 
     // CHOCH gets a distinct offset from BOS on the same bar
@@ -414,10 +613,9 @@ export function placeStructureMarkers(
 
     let position = preferred;
     let stack = 0;
-    const tryOrder: MarkerPosition[] = [
-      preferred,
-      preferred === "aboveBar" ? "belowBar" : "aboveBar",
-    ];
+    const tryOrder: MarkerPosition[] = locked
+      ? [preferred]
+      : [preferred, preferred === "aboveBar" ? "belowBar" : "aboveBar"];
 
     let slot = "";
     for (const pos of tryOrder) {
@@ -431,8 +629,7 @@ export function placeStructureMarkers(
       if (slot && !occupied.has(slot)) break;
     }
 
-    // Soft stack: encode stack in text padding for same-side siblings (visual separation cue)
-    const text = stack > 0 ? `${label}` : label;
+    const text = a.unconfirmed ? `${label} unconfirmed` : label;
     occupied.set(slot || `${t}|${position}|0`, text);
 
     // Ensure BOS/CHOCH never share identical position cell
@@ -463,6 +660,7 @@ export function placeStructureMarkers(
       group: String(a.group) as AnnGroup,
       kind: String(a.kind || ""),
       price,
+      dashed: Boolean(a.unconfirmed),
     });
   }
 
@@ -548,6 +746,19 @@ export function placePriceLines(
  * so CHOCH/BOS/current-price stay readable. Does not mutate source annotations.
  */
 export function thinCrowdedMarkers(
+  markers: PlacedMarker[],
+  candles: CandleLike[],
+  options?: { recentBars?: number; budget?: number; priceProximityPct?: number },
+): PlacedMarker[] {
+  if (markers.length === 0) return markers;
+  const pinned = markers.filter((m) => m.dashed);
+  const body = markers.filter((m) => !m.dashed);
+  const thinned = thinCrowdedBody(body, candles, options);
+  if (pinned.length === 0) return thinned;
+  return [...thinned, ...pinned].sort((a, b) => a.time - b.time || a.priority - b.priority);
+}
+
+function thinCrowdedBody(
   markers: PlacedMarker[],
   candles: CandleLike[],
   options?: { recentBars?: number; budget?: number; priceProximityPct?: number },
@@ -709,4 +920,99 @@ export function sanitizeLiquidationEvents(
     const n = Number(e.notional);
     return Number.isFinite(n) && n > 0;
   });
+}
+
+const SHORT_LIQ_COLOR = "rgba(61,214,140,0.75)";
+const LONG_LIQ_COLOR = "rgba(240,113,120,0.75)";
+
+export type LiqHistogramPoint = { time: number; value: number; color: string };
+
+export type LiquidationPanel = {
+  unit: typeof LIQUIDATION_UNIT;
+  /** Both sides have notional, so longs are drawn below zero. */
+  split: boolean;
+  allowNegativeAxis: boolean;
+  /** Short liquidations (force-order BUY). Always >= 0. */
+  short: LiqHistogramPoint[];
+  /** Long liquidations (force-order SELL). Negative only when split. */
+  long: LiqHistogramPoint[];
+  legend: string;
+};
+
+/** Axis label for liquidation notionals. Sign is kept when a real split uses negatives. */
+export function formatLiquidationUsd(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(0)}k`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+  return `${sign}$${Math.round(abs)}`;
+}
+
+/**
+ * Split long vs short liquidation notionals in USD.
+ * Binance force-order SELL is a long liquidation; BUY is a short liquidation.
+ * A negative axis is used only when both sides have notional.
+ */
+export function buildLiquidationPanel(
+  events: Array<Record<string, unknown>>,
+): LiquidationPanel {
+  const buckets = new Map<number, { long: number; short: number }>();
+  for (const e of events) {
+    const notional = Number(e.notional);
+    if (!Number.isFinite(notional) || notional <= 0) continue;
+    const ms = new Date(String(e.timestamp)).getTime();
+    if (!Number.isFinite(ms)) continue;
+    const t = Math.floor(ms / 60000) * 60;
+    const side = String(e.side || "").toUpperCase();
+    const bucket = buckets.get(t) || { long: 0, short: 0 };
+    if (side === "SELL") bucket.long += notional;
+    else if (side === "BUY") bucket.short += notional;
+    else continue;
+    buckets.set(t, bucket);
+  }
+
+  let longTotal = 0;
+  let shortTotal = 0;
+  for (const bucket of buckets.values()) {
+    longTotal += bucket.long;
+    shortTotal += bucket.short;
+  }
+  const split = longTotal > 0 && shortTotal > 0;
+  const short: LiqHistogramPoint[] = [];
+  const long: LiqHistogramPoint[] = [];
+  for (const t of [...buckets.keys()].sort((a, b) => a - b)) {
+    const bucket = buckets.get(t)!;
+    if (bucket.short > 0) {
+      short.push({ time: t, value: bucket.short, color: SHORT_LIQ_COLOR });
+    }
+    if (bucket.long > 0) {
+      long.push({
+        time: t,
+        value: split ? -bucket.long : bucket.long,
+        color: LONG_LIQ_COLOR,
+      });
+    }
+  }
+  return {
+    unit: LIQUIDATION_UNIT,
+    split,
+    allowNegativeAxis: split,
+    short,
+    long,
+    legend: split ? "USD · short above, long below" : "USD",
+  };
+}
+
+/** Clamp a single-sided liquidation scale so it does not invent a negative axis. */
+export function liquidationAxisRange(
+  minValue: number,
+  maxValue: number,
+  allowNegativeAxis: boolean,
+): { minValue: number; maxValue: number } {
+  if (!allowNegativeAxis) {
+    return { minValue: Math.max(0, minValue), maxValue: Math.max(0, maxValue) };
+  }
+  return { minValue, maxValue };
 }

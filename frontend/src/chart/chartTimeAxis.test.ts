@@ -5,7 +5,9 @@ import {
   formatChartTickMark,
   isIntradayTimeframe,
   ensureAscendingByTime,
+  liquidationTimeScaleOptions,
   timeScaleOptionsForTimeframe,
+  LIQ_TICK_MAX_CHARS,
 } from "./chartTimeAxis";
 
 describe("chart time axis", () => {
@@ -46,6 +48,29 @@ describe("chart time axis", () => {
     const t = (Date.UTC(2026, 9, 1, 0, 0, 0) / 1000) as Time;
     expect(formatChartTickMark(t, TickMarkType.Month, "15m", "UTC")).toBe("Oct 1");
     expect(formatChartTickMark(t, TickMarkType.Month, "1d", "UTC")).toBe("Oct 2026");
+  });
+
+  it("keeps liquidation time labels inside the tick character budget", () => {
+    const samples: Array<[Time, TickMarkType]> = [
+      [(Date.UTC(2026, 9, 23, 8, 7, 0) / 1000) as Time, TickMarkType.Time],
+      [(Date.UTC(2026, 9, 23, 0, 0, 0) / 1000) as Time, TickMarkType.Time],
+      [(Date.UTC(2026, 9, 1, 0, 0, 0) / 1000) as Time, TickMarkType.DayOfMonth],
+      [(Date.UTC(2026, 9, 1, 0, 0, 0) / 1000) as Time, TickMarkType.Month],
+      [(Date.UTC(2026, 0, 1, 0, 0, 0) / 1000) as Time, TickMarkType.Year],
+    ];
+    const options = liquidationTimeScaleOptions("IST");
+    expect(options.tickMarkMaxCharacterLength).toBe(LIQ_TICK_MAX_CHARS);
+    expect(options.tickMarkMaxCharacterLength).toBeGreaterThan(8);
+    expect(options.minimumHeight).toBeGreaterThan(0);
+    for (const [time, kind] of samples) {
+      for (const zone of ["UTC", "IST"] as const) {
+        const label = formatChartTickMark(time, kind, "1m", zone);
+        expect(label.length).toBeGreaterThan(0);
+        expect(label.length).toBeLessThanOrEqual(LIQ_TICK_MAX_CHARS);
+      }
+    }
+    const clock = formatChartTickMark(samples[0][0], TickMarkType.Time, "1m", "UTC");
+    expect(clock).toBe("08:07");
   });
 
   it("enables timeVisible for intraday timeframes", () => {

@@ -7,6 +7,7 @@ import {
   type HistogramData,
   type IPriceLine,
   ColorType,
+  LineStyle,
 } from "lightweight-charts";
 import {
   fetchLiquidations,
@@ -17,14 +18,20 @@ import { useMarketStore } from "../store/marketStore";
 import {
   CANDLE_SCALE_MARGINS,
   CHART_RIGHT_OFFSET_BARS,
+  CHART_SETUP_NOTE_CLASS,
+  CHART_VOLUME_NOTE_CLASS,
   MAX_VISIBLE_STRUCTURE_LABELS,
   type AnnToggle,
   type ChartAnnotation,
+  type LiquidationPanel,
+  buildLiquidationPanel,
   buildPriorityBands,
   computeChartPriceRange,
   dedupeAnnotations,
   filterAnnotationsByToggles,
+  formatLiquidationUsd,
   isLiquidationsCompact,
+  liquidationAxisRange,
   liquidationsSubtitle,
   placePriceLines,
   placeStructureMarkers,
@@ -39,6 +46,7 @@ import {
   chartTimeZoneLabel,
   isIntradayTimeframe,
   localizationForTimeframe,
+  liquidationTimeScaleOptions,
   ensureAscendingByTime,
   readStoredChartTimeZone,
   timeScaleOptionsForTimeframe,
@@ -279,7 +287,11 @@ export function BottomCharts({
           autoFollow={autoFollow}
           chartTimeZone={chartTimeZone}
         />
-        <LiqChart symbol={selected} onCompactChange={setLiqCompact} />
+        <LiqChart
+          symbol={selected}
+          chartTimeZone={chartTimeZone}
+          onCompactChange={setLiqCompact}
+        />
       </div>
     </div>
   );
@@ -625,21 +637,34 @@ function PriceVolumeChart({
       }
     }
 
-    const markers = thinCrowdedMarkers(
+    const placed = thinCrowdedMarkers(
       placeStructureMarkers(visible, candleLikes, {
         maxVisible: MAX_VISIBLE_STRUCTURE_LABELS,
         priorityBands: bands,
       }),
       candleLikes,
-    ).map((m) => ({
-      time: m.time as CandlestickData["time"],
-      position: m.position,
-      color: m.color,
-      shape: m.shape,
-      text: m.text,
-    }));
-
-    series.setMarkers(markers);
+    );
+    for (const marker of placed) {
+      if (!marker.dashed) continue;
+      const pl = series.createPriceLine({
+        price: marker.price,
+        color: marker.color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: false,
+        title: marker.text,
+      });
+      priceLinesRef.current.push(pl);
+    }
+    series.setMarkers(
+      placed.map((m) => ({
+        time: m.time as CandlestickData["time"],
+        position: m.position,
+        color: m.color,
+        shape: m.shape,
+        text: m.text,
+      })),
+    );
     setTradeLevels(levels);
     applyPriceScale();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -732,12 +757,11 @@ function PriceVolumeChart({
           ? ` · axis times ${chartTimeZoneLabel(chartTimeZone)}`
           : ""}
       </div>
-      {/* Keep volume note above the time axis so tick labels stay readable */}
-      <div className="pointer-events-none absolute bottom-7 right-14 z-10 max-w-[45%] text-right text-[9px] uppercase tracking-wide text-terminal-muted/80">
+      <div className={CHART_VOLUME_NOTE_CLASS}>
         Vol = base / candle (not 24h quote)
       </div>
       {ann.tradePlan ? (
-        <div className="pointer-events-none absolute bottom-10 left-2 z-10 flex flex-wrap gap-1.5 rounded border border-terminal-border/70 bg-terminal-panel/90 px-2 py-1.5 text-[10px] font-mono">
+        <div className={CHART_SETUP_NOTE_CLASS}>
           {planNotice ? (
             <span data-testid="chart-invalid-plan" className="text-amber-300">
               {planNotice}
@@ -762,46 +786,99 @@ function PriceVolumeChart({
   );
 }
 
+function toHistogram(points: LiquidationPanel["short"]): HistogramData[] {
+  return points.map((p) => ({
+    time: p.time as HistogramData["time"],
+    value: p.value,
+    color: p.color,
+  }));
+}
+
 function LiqChart({
   symbol,
+  chartTimeZone,
   onCompactChange,
 }: {
   symbol: string | null;
+  chartTimeZone: ChartTimeZone;
   onCompactChange?: (compact: boolean) => void;
 }) {
   const [status, setStatus] = useState("WAITING");
-  const [points, setPoints] = useState<HistogramData[]>([]);
-  const hasData = points.length > 0;
-  const compact = isLiquidationsCompact(status, points.length);
+  const [panel, setPanel] = useState<LiquidationPanel | null>(null);
+  const pointCount = (panel?.short.length ?? 0) + (panel?.long.length ?? 0);
+  const hasData = pointCount > 0;
+  const compact = isLiquidationsCompact(status, pointCount);
   const { containerRef, chartRef } = useChartHost(hasData);
-  const seriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const shortRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const longRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const allowNegative = panel?.allowNegativeAxis ?? false;
 
   useEffect(() => {
     onCompactChange?.(compact);
   }, [compact, onCompactChange]);
 
   useEffect(() => {
-    if (!hasData || !chartRef.current) return;
-    const series = chartRef.current.addHistogramSeries({ priceFormat: { type: "volume" } });
-    seriesRef.current = series;
-    series.setData(points);
-    chartRef.current.timeScale().fitContent();
-    return () => {
-      seriesRef.current = null;
+    const chart = chartRef.current;
+    if (!hasData || !chart) return;
+    chart.applyOptions({
+      localization: localizationForTimeframe("1m", chartTimeZone),
+      rightPriceScale: {
+        borderVisible: false,
+        autoScale: true,
+        scaleMargins: { top: 0.16, bottom: allowNegative ? 0.12 : 0.04 },
+      },
+    });
+    chart.timeScale().applyOptions(liquidationTimeScaleOptions(chartTimeZone));
+    const priceFormat = {
+      type: "custom" as const,
+      minMove: 1,
+      formatter: (value: number) => formatLiquidationUsd(value),
     };
+    const autoscaleInfoProvider = (
+      base: () => { priceRange: { minValue: number; maxValue: number } | null } | null,
+    ) => {
+      const info = base();
+      if (!info?.priceRange) return info;
+      return {
+        priceRange: liquidationAxisRange(
+          info.priceRange.minValue,
+          info.priceRange.maxValue,
+          allowNegative,
+        ),
+      };
+    };
+    const short = chart.addHistogramSeries({ priceFormat, autoscaleInfoProvider });
+    const long = chart.addHistogramSeries({ priceFormat, autoscaleInfoProvider });
+    shortRef.current = short;
+    longRef.current = long;
+    short.setData(toHistogram(panel?.short ?? []));
+    long.setData(toHistogram(panel?.long ?? []));
+    chart.timeScale().fitContent();
+    return () => {
+      shortRef.current = null;
+      longRef.current = null;
+      try {
+        chart.removeSeries(short);
+        chart.removeSeries(long);
+      } catch {
+        /* chart already disposed */
+      }
+    };
+    // Series are recreated when the split (negative axis) changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasData, chartRef]);
+  }, [hasData, chartRef, allowNegative, chartTimeZone]);
 
   useEffect(() => {
-    if (!hasData) return;
-    seriesRef.current?.setData(points);
+    if (!hasData || !panel) return;
+    shortRef.current?.setData(toHistogram(panel.short));
+    longRef.current?.setData(toHistogram(panel.long));
     chartRef.current?.timeScale().fitContent();
-  }, [points, hasData, chartRef]);
+  }, [panel, hasData, chartRef]);
 
   useEffect(() => {
     if (!symbol) {
       setStatus("WAITING");
-      setPoints([]);
+      setPanel(null);
       return;
     }
     let alive = true;
@@ -814,31 +891,15 @@ function LiqChart({
           (data.events || []) as Array<Record<string, unknown>>,
           data.status,
         );
-        const buckets = new Map<number, { long: number; short: number }>();
-        for (const e of events) {
-          const t = Math.floor(new Date(String(e.timestamp)).getTime() / 60000) * 60;
-          const b = buckets.get(t) || { long: 0, short: 0 };
-          const notional = Number(e.notional) || 0;
-          if (String(e.side).toUpperCase() === "SELL") b.long += notional;
-          else b.short += notional;
-          buckets.set(t, b);
-        }
-        const next: HistogramData[] = [...buckets.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([t, v]) => ({
-            time: t as HistogramData["time"],
-            value: v.long + v.short,
-            color: v.long >= v.short ? "rgba(240,113,120,0.7)" : "rgba(61,214,140,0.7)",
-          }));
-        setPoints(
-          next.length > 0 && (data.status === "LIVE" || data.status === "STALE")
-            ? next
-            : [],
+        const built = buildLiquidationPanel(events);
+        const count = built.short.length + built.long.length;
+        setPanel(
+          count > 0 && (data.status === "LIVE" || data.status === "STALE") ? built : null,
         );
       } catch {
         if (alive) {
           setStatus("UNAVAILABLE");
-          setPoints([]);
+          setPanel(null);
         }
       }
     }
@@ -852,9 +913,9 @@ function LiqChart({
 
   if (!hasData) {
     return (
-      <ChartShell title="Liquidations" status={status} showHeader={false} compact={compact}>
+      <ChartShell title="Liquidations · USD" status={status} showHeader={false} compact={compact}>
         <ChartEmpty
-          title="Liquidations"
+          title="Liquidations · USD"
           subtitle={liquidationsSubtitle(symbol, status)}
           compact={compact}
         />
@@ -863,8 +924,11 @@ function LiqChart({
   }
 
   return (
-    <ChartShell title="Liquidations" status={status}>
+    <ChartShell title="Liquidations · USD" status={status}>
       <div ref={containerRef} className="chart-canvas" />
+      <div className="pointer-events-none absolute left-2 top-5 z-10 text-[9px] uppercase tracking-wide text-terminal-muted">
+        {panel?.legend ?? "USD"}
+      </div>
     </ChartShell>
   );
 }

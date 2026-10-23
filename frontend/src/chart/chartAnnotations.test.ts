@@ -11,11 +11,18 @@ import {
   dedupeAnnotations,
   filterAnnotationsByToggles,
   groupEnabled,
+  CHART_SETUP_NOTE_CLASS,
+  CHART_VOLUME_NOTE_CLASS,
+  buildLiquidationPanel,
+  findUnconfirmedSwings,
+  formatLiquidationUsd,
   isLiquidationsCompact,
+  liquidationAxisRange,
   liquidationsSubtitle,
   placePriceLines,
   placeStructureMarkers,
   preferredMarkerPosition,
+  recheckStructureLabels,
   sanitizeLiquidationEvents,
   snapTimeToCandle,
   thinCrowdedMarkers,
@@ -78,9 +85,9 @@ describe("collision priority", () => {
       priorityBands: bands,
     });
     expect(placed).toHaveLength(1);
-    // Near current at high → prefer below
+    // HH stays above the swing high even when price is near the high.
     expect(placed[0].text).toBe("HH");
-    expect(placed[0].position).toBe("belowBar");
+    expect(placed[0].position).toBe("aboveBar");
   });
 });
 
@@ -117,7 +124,7 @@ describe("HH/HL/LH/LL deterministic offsets", () => {
   it("uses semantic preferred sides", () => {
     expect(preferredMarkerPosition({ kind: "SWING_HIGH", label: "HH" })).toBe("aboveBar");
     expect(preferredMarkerPosition({ kind: "SWING_LOW", label: "HL" })).toBe("belowBar");
-    expect(preferredMarkerPosition({ kind: "SWING_HIGH", label: "LH" })).toBe("belowBar");
+    expect(preferredMarkerPosition({ kind: "SWING_HIGH", label: "LH" })).toBe("aboveBar");
     expect(preferredMarkerPosition({ kind: "SWING_LOW", label: "LL" })).toBe("belowBar");
   });
 
@@ -137,8 +144,105 @@ describe("HH/HL/LH/LL deterministic offsets", () => {
     const placed = placeStructureMarkers(anns, candles);
     expect(placed.find((m) => m.text === "HH")?.position).toBe("aboveBar");
     expect(placed.find((m) => m.text === "HL")?.position).toBe("belowBar");
-    expect(placed.find((m) => m.text === "LH")?.position).toBe("belowBar");
+    expect(placed.find((m) => m.text === "LH")?.position).toBe("aboveBar");
     expect(placed.find((m) => m.text === "LL")?.position).toBe("belowBar");
+  });
+
+  it("rechecks each label against the previous swing of the same type", () => {
+    const anns: ChartAnnotation[] = [
+      { kind: "SWING_HIGH", group: "structure", label: "LH", price: 10, time: "1970-01-01T00:00:01Z" },
+      { kind: "SWING_HIGH", group: "structure", label: "HH", price: 8, time: "1970-01-01T00:00:02Z" },
+      { kind: "SWING_HIGH", group: "structure", label: "LH", price: 9, time: "1970-01-01T00:00:03Z" },
+      { kind: "SWING_LOW", group: "structure", label: "LL", price: 4, time: "1970-01-01T00:00:01Z" },
+      { kind: "SWING_LOW", group: "structure", label: "HL", price: 3, time: "1970-01-01T00:00:02Z" },
+      { kind: "SWING_LOW", group: "structure", label: "LL", price: 5, time: "1970-01-01T00:00:04Z" },
+    ];
+    const snapshot = JSON.stringify(anns);
+    const labeled = recheckStructureLabels(anns);
+    expect(JSON.stringify(anns)).toBe(snapshot);
+    expect(labeled.map((a) => a.label)).toEqual(["HH", "LH", "HH", "HL", "LL", "HL"]);
+
+    const candles = [candle(1, 4, 10), candle(2, 3, 8), candle(3, 3, 9), candle(4, 5, 6)];
+    const placed = placeStructureMarkers(anns, candles, { includeUnconfirmed: false });
+    expect(placed.find((m) => m.time === 1 && m.kind === "SWING_HIGH")?.text).toBe("HH");
+    expect(placed.find((m) => m.time === 1 && m.kind === "SWING_HIGH")?.position).toBe("aboveBar");
+    expect(placed.find((m) => m.time === 2 && m.kind === "SWING_HIGH")?.text).toBe("LH");
+    expect(placed.find((m) => m.time === 2 && m.kind === "SWING_HIGH")?.position).toBe("aboveBar");
+    expect(placed.find((m) => m.time === 3 && m.kind === "SWING_HIGH")?.text).toBe("HH");
+    expect(placed.find((m) => m.time === 3 && m.kind === "SWING_HIGH")?.position).toBe("aboveBar");
+    expect(placed.find((m) => m.time === 1 && m.kind === "SWING_LOW")?.text).toBe("HL");
+    expect(placed.find((m) => m.time === 1 && m.kind === "SWING_LOW")?.position).toBe("belowBar");
+    expect(placed.find((m) => m.time === 2 && m.kind === "SWING_LOW")?.text).toBe("LL");
+    expect(placed.find((m) => m.time === 2 && m.kind === "SWING_LOW")?.position).toBe("belowBar");
+    expect(placed.find((m) => m.time === 4 && m.kind === "SWING_LOW")?.text).toBe("HL");
+    expect(placed.find((m) => m.time === 4 && m.kind === "SWING_LOW")?.position).toBe("belowBar");
+  });
+});
+
+describe("unconfirmed swings", () => {
+  it("draws the latest open high as dashed unconfirmed until confirmation bars close", () => {
+    // left=2, right=2. The high on the last bar has no confirmation bars yet.
+    const forming = [
+      candle(1, 10, 11),
+      candle(2, 10, 12),
+      candle(3, 9, 13),
+      candle(4, 8, 14),
+      candle(5, 7, 20),
+    ];
+    const open = findUnconfirmedSwings(forming, [], { left: 2, right: 2 });
+    const high = open.find((a) => a.kind === "SWING_HIGH");
+    expect(high?.unconfirmed).toBe(true);
+    expect(high?.label).toBe("HH");
+    expect(high?.price).toBe(20);
+    expect(high?.time).toBe(new Date(5 * 1000).toISOString());
+
+    const confirmed = [
+      ...forming,
+      candle(6, 8, 12),
+      candle(7, 8, 11),
+    ];
+    const afterClose = findUnconfirmedSwings(confirmed, [], { left: 2, right: 2 });
+    expect(afterClose.find((a) => a.price === 20)).toBeUndefined();
+
+    const previous = [
+      { kind: "SWING_HIGH", group: "structure", label: "HH", price: 30, time: "1970-01-01T00:00:01Z" },
+    ];
+    const lower = findUnconfirmedSwings(forming, previous, { left: 2, right: 2 });
+    expect(lower.find((a) => a.kind === "SWING_HIGH")?.label).toBe("LH");
+
+    const placed = placeStructureMarkers([], forming, { swingLeft: 2, swingRight: 2 });
+    const marker = placed.find((m) => m.text.includes("unconfirmed") && m.kind === "SWING_HIGH");
+    expect(marker?.text).toBe("HH unconfirmed");
+    expect(marker?.position).toBe("aboveBar");
+    expect(marker?.dashed).toBe(true);
+    expect(marker?.price).toBe(20);
+  });
+
+  it("keeps an unconfirmed low below the bar and drops it once confirmation bars close", () => {
+    const forming = [
+      candle(1, 12, 15),
+      candle(2, 11, 14),
+      candle(3, 10, 13),
+      candle(4, 9, 14),
+      candle(5, 4, 12),
+    ];
+    const placed = placeStructureMarkers(
+      [{ kind: "SWING_LOW", group: "structure", label: "HL", price: 6, time: "1970-01-01T00:00:01Z" }],
+      forming,
+      { swingLeft: 2, swingRight: 2 },
+    );
+    const marker = placed.find((m) => m.kind === "SWING_LOW" && m.dashed);
+    expect(marker?.text).toBe("LL unconfirmed");
+    expect(marker?.position).toBe("belowBar");
+    expect(marker?.price).toBe(4);
+
+    const closed = [...forming, candle(6, 7, 11), candle(7, 8, 12)];
+    const still = findUnconfirmedSwings(
+      closed,
+      [{ kind: "SWING_LOW", group: "structure", label: "HL", price: 6, time: "1970-01-01T00:00:01Z" }],
+      { left: 2, right: 2 },
+    );
+    expect(still.find((a) => a.price === 4)).toBeUndefined();
   });
 });
 
@@ -198,6 +302,47 @@ describe("auto-scale price range", () => {
     });
     expect(forced.chartMax).toBeGreaterThan(0.29599);
     expect(forced.chartMin).toBeLessThanOrEqual(0.288);
+  });
+});
+
+describe("chart footer notes", () => {
+  it("keeps the setup message and the volume label on opposite sides", () => {
+    expect(CHART_SETUP_NOTE_CLASS).toContain("left-2");
+    expect(CHART_SETUP_NOTE_CLASS).toContain("max-w-[calc(100%-11.5rem)]");
+    expect(CHART_SETUP_NOTE_CLASS).toContain("bottom-9");
+    expect(CHART_VOLUME_NOTE_CLASS).toContain("right-2");
+    expect(CHART_VOLUME_NOTE_CLASS).toContain("bottom-9");
+    expect(CHART_VOLUME_NOTE_CLASS.includes("left-2")).toBe(false);
+  });
+});
+
+describe("liquidation panel", () => {
+  it("shows USD and splits long below zero only when both sides have notional", () => {
+    const both = buildLiquidationPanel([
+      { timestamp: "2026-10-23T08:00:00Z", side: "SELL", notional: 2500 },
+      { timestamp: "2026-10-23T08:00:30Z", side: "BUY", notional: 4000 },
+      { timestamp: "2026-10-23T08:01:00Z", side: "BUY", notional: 1500 },
+    ]);
+    expect(both.unit).toBe("USD");
+    expect(both.split).toBe(true);
+    expect(both.allowNegativeAxis).toBe(true);
+    expect(both.legend).toContain("USD");
+    expect(both.short.every((p) => p.value > 0)).toBe(true);
+    expect(both.long.every((p) => p.value < 0)).toBe(true);
+    expect(both.long[0].value).toBe(-2500);
+    expect(both.short.reduce((s, p) => s + p.value, 0)).toBe(5500);
+    expect(formatLiquidationUsd(2500)).toBe("$2.5k");
+    expect(formatLiquidationUsd(-2500)).toBe("-$2.5k");
+
+    const shortsOnly = buildLiquidationPanel([
+      { timestamp: "2026-10-23T08:00:00Z", side: "BUY", notional: 800 },
+    ]);
+    expect(shortsOnly.split).toBe(false);
+    expect(shortsOnly.allowNegativeAxis).toBe(false);
+    expect(shortsOnly.short[0].value).toBe(800);
+    expect(shortsOnly.long).toHaveLength(0);
+    expect(liquidationAxisRange(-10, 800, false)).toEqual({ minValue: 0, maxValue: 800 });
+    expect(liquidationAxisRange(-2500, 4000, true)).toEqual({ minValue: -2500, maxValue: 4000 });
   });
 });
 

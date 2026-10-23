@@ -186,6 +186,21 @@ export function localizationForTimeframe(
   };
 }
 
+/** Liquidation axis ticks stay complete (the library default cuts labels at 8 characters). */
+export const LIQ_TICK_MAX_CHARS = 12;
+
+export function liquidationTimeScaleOptions(
+  timeZone: ChartTimeZone = DEFAULT_CHART_TIMEZONE,
+) {
+  return {
+    ...timeScaleOptionsForTimeframe("1m", timeZone),
+    rightOffset: 2,
+    minimumHeight: 28,
+    secondsVisible: false,
+    tickMarkMaxCharacterLength: LIQ_TICK_MAX_CHARS,
+  };
+}
+
 type TimedPoint = { time: Time };
 
 /**
