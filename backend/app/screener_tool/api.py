@@ -9,6 +9,7 @@
 - GET  /api/my-trades/{id}/history  every version of one trade
 - GET  /api/my-trades/export.csv    current versions; ?history=1 for every version
 - GET  /api/my-trades/price         the live last price, to pre-fill the entry
+- GET  /api/screener-tool/context-checklist   coin-page context rows, display only
 """
 
 from __future__ import annotations
@@ -189,3 +190,14 @@ async def my_trades_history(trade_id: str) -> dict[str, Any]:
     if not rows:
         raise HTTPException(status_code=404, detail=f"no trade {trade_id}")
     return {"trade_id": trade_id, "versions": rows}
+
+
+@router.get("/screener-tool/context-checklist")
+async def context_checklist(
+    symbol: str = Query(),
+    timeframe: str = Query(default="1h"),
+) -> dict[str, Any]:
+    """Display snapshot for the coin page. Does not write a journal row or send an alert."""
+    from app.screener_tool.context_checklist import load_checklist
+
+    return await load_checklist(symbol, timeframe)

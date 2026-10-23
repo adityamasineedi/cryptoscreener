@@ -3025,3 +3025,18 @@ export function fetchStructureLabels(symbol: string, ruleVersion: string, signal
   const q = new URLSearchParams({ symbol, rule_version: ruleVersion });
   return getJson<StructureLabelSnapshot>(`/api/research/structure-labels?${q.toString()}`, { signal });
 }
+
+export type ContextChecklistResponse = {
+  banner: string;
+  timeframe?: string | null;
+  symbol?: string | null;
+  rows: { category: string; state: string; alignment: string }[];
+  counts: Record<string, number>;
+  read_only?: boolean;
+};
+
+/** Display-only coin context. Does not journal and does not alert. */
+export function fetchContextChecklist(symbol: string, timeframe: string, signal?: AbortSignal) {
+  const q = new URLSearchParams({ symbol, timeframe });
+  return getJson<ContextChecklistResponse>(`/api/screener-tool/context-checklist?${q.toString()}`, { signal });
+}

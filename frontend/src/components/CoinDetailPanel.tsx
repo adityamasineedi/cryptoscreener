@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { fetchCoinDetail } from "../api/client";
+import { fetchCoinDetail, fetchContextChecklist, type ContextChecklistResponse } from "../api/client";
 import { useMarketStore } from "../store/marketStore";
 import type { FreshValue, ScreenerRow } from "../types/market";
 import { FreshCell, StatusBadge } from "./FreshCell";
 import { Spinner } from "./Spinner";
 import { TradePlanTab } from "./TradePlanTab";
+import { ContextChecklist } from "./ContextChecklist";
 import {
   formatRatio,
   normalizeTvlFresh,
@@ -13,6 +14,7 @@ import {
 
 const detailTabs = [
   "Overview",
+  "Context",
   "Performance",
   "Technicals",
   "SETUP",
@@ -61,6 +63,9 @@ export function CoinDetailPanel({
     tabs?: Record<string, unknown>;
     signals?: { entry_exit?: unknown; tech_rating?: unknown };
   } | null>(null);
+  const [contextTf, setContextTf] = useState("1h");
+  const [contextData, setContextData] = useState<ContextChecklistResponse | null>(null);
+  const [contextError, setContextError] = useState<string | null>(null);
 
   function switchTab(next: Tab) {
     if (next === tab) return;
@@ -99,6 +104,25 @@ export function CoinDetailPanel({
       alive = false;
     };
   }, [selected]);
+
+  useEffect(() => {
+    if (!selected || tab !== "Context") return;
+    let alive = true;
+    setContextError(null);
+    fetchContextChecklist(selected, contextTf)
+      .then((payload) => {
+        if (alive) setContextData(payload);
+      })
+      .catch((err: unknown) => {
+        if (alive) {
+          setContextData(null);
+          setContextError(err instanceof Error ? err.message : "unavailable");
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selected, tab, contextTf]);
 
   if (!selected || !liveRow) {
     return (
@@ -203,6 +227,26 @@ export function CoinDetailPanel({
         ) : null}
         {tab === "Overview" && (
           <OverviewTab row={row} entryExit={entryExit} techRating={techRating} />
+        )}
+        {tab === "Context" && (
+          <div className="space-y-2">
+            <div className="flex gap-1">
+              {["15m", "1h", "4h", "1d"].map((tf) => (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => setContextTf(tf)}
+                  className={`rounded px-2 py-0.5 text-[11px] ${
+                    contextTf === tf ? "bg-white/10 text-terminal-text" : "text-terminal-muted"
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+            {contextError ? <p className="text-[12px] text-terminal-muted">{contextError}</p> : null}
+            {contextData ? <ContextChecklist data={contextData} /> : null}
+          </div>
         )}
         {tab === "Performance" && (
           <div className="space-y-2">
