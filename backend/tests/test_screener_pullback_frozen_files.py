@@ -3,8 +3,8 @@
 1. Every file in docs/candle12_v3_oos_contract.lock.json hashes to its locked sha256 (working-copy bytes, as the
    CANDLE12 V3 OOS-2 drift guard reads them).
 2. Those 37 files, the paper engine files, the shared signal engine files and the alert pipeline (no new alert
-   source, D230) are byte-identical to the live base commit BASE (git blob ids, so the check does not depend on
-   the checkout's line-ending setting). BASE moves with each rebase onto live.
+   source, D230) are byte-identical to BASE, the previous stack head (git blob ids, so the check does not
+   depend on the checkout's line-ending setting). BASE moves when this branch is rebased.
 3. The branch changes only the screener and display files listed in ALLOWED_CHANGES.
 Checks 2 and 3 are skipped outside a git checkout that holds the base commit.
 """
@@ -21,7 +21,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK = ROOT / "docs" / "candle12_v3_oos_contract.lock.json"
-BASE = "8b730cde5ff4d28093aa86e5d9d67ddf1e9aa4e7"
+BASE = "1159a271d88b8cf44d4835f2fb41f751fdc4fff3"
 
 PAPER_ENGINE_FILES = (
     "backend/app/services/paper_trade.py",
