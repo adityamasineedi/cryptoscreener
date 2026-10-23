@@ -1,4 +1,4 @@
-import { BANNER } from "./contextChecklist";
+export const BANNER = "Context only; no combination of these is a tested signal (FINAL_VERDICT).";
 
 export type ChecklistRow = {
   category: string;
@@ -14,8 +14,6 @@ export type ContextChecklistPayload = {
   counts: Record<string, number>;
   read_only?: boolean;
 };
-
-export const CONTEXT_BANNER = BANNER;
 
 export function ContextChecklist({ data }: { data: ContextChecklistPayload }) {
   const counts = data.counts || {};

@@ -1,8 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { BANNER } from "./contextChecklist";
-import { ContextChecklist } from "./ContextChecklist";
+import { BANNER, ContextChecklist } from "./ContextChecklist";
 
 const MISSING = {
   banner: BANNER,

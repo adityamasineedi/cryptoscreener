@@ -39,7 +39,6 @@ ALLOWED_CHANGES = {
     "frontend/src/components/CoinDetailPanel.tsx",
     "frontend/src/components/ContextChecklist.tsx",
     "frontend/src/components/ContextChecklist.test.tsx",
-    "frontend/src/components/contextChecklist.ts",
 }
 
 
