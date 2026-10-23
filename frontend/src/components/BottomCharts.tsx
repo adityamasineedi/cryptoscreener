@@ -687,7 +687,11 @@ function PriceVolumeChart({
       try {
         const [data, annData] = await Promise.all([
           fetchOhlcv(symbol!, timeframe, 250),
-          fetchSetupAnnotations(symbol!).catch(() => ({ annotations: [] })),
+          fetchSetupAnnotations(symbol!).catch(() => ({
+            symbol: symbol!,
+            annotations: [],
+            plan_notice: null,
+          })),
         ]);
         if (!alive) return;
         setStatus(data.status);
